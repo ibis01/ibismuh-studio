@@ -192,6 +192,32 @@ test.describe("S123 — motion graphics end-to-end", () => {
     expect(d2.qc?.passed).toBe(true);
     expect(d2.qc?.rows.map((r) => r.id)).toContain("G1-PROJ-1");
 
+    // 6b. S124 — the element-editor wire contract: a z-reordered +
+    //     re-placed doc rides the validated PUT and GETs back in the new
+    //     order with the new placements (the studio's Layout commits).
+    const reordered = handAuthoredDoc("S124 reordered");
+    const rS1 = reordered.scenes[0] as {
+      elements: Array<{ id: string; at: { x: number; y: number; scale: number; rotateDeg: number } }>;
+    };
+    const rH1 = rS1.elements[0];
+    const rCn = rS1.elements[1];
+    rS1.elements = [rCn, rH1]; // h1 to the end = paints on top
+    rH1.at = { x: 1200, y: 380, scale: 1.25, rotateDeg: 0 };
+    rCn.at = { x: 480, y: 720, scale: 0.8, rotateDeg: 0 };
+    const putS124 = await request.put(`/api/videos/${videoId}/graphics`, {
+      headers: { cookie, "Content-Type": "application/json" },
+      data: { doc: reordered },
+    });
+    expect(putS124.status()).toBeLessThan(300);
+    const s124Body = (await putS124.json()) as {
+      doc: { scenes: Array<{ id: string; elements: Array<{ id: string; at: { x: number; scale: number } }> }> };
+    };
+    const s124S1 = s124Body.doc.scenes.find((s) => s.id === "scene-1");
+    expect(s124S1?.elements.map((e) => e.id)).toEqual(["cn", "h1"]);
+    expect(s124S1?.elements.find((e) => e.id === "h1")?.at.x).toBe(1200);
+    expect(s124S1?.elements.find((e) => e.id === "h1")?.at.scale).toBe(1.25);
+    expect(s124S1?.elements.find((e) => e.id === "cn")?.at.scale).toBe(0.8);
+
     // 7. Junk grammar → 400 with the validator's verbatim error (no second
     //    error vocabulary). An illegal motion/kind pair is an ERROR.
     const bad = handAuthoredDoc("Bad");

@@ -12,9 +12,24 @@
 // (voMs) as DISPLAY truth — a longer VO truncates at the scene boundary
 // (the render law), so a scene whose VO overruns its clock is flagged
 // honestly instead of silently re-cutting the doc.
+//
+// S124 — the element editor (the Layout mode): select/drag/scale/z-order
+// on the closed grammar, laws in docs/design/s124-graphics-element-editor
+// .md. The studio owns selection and the working buffer; the canvas
+// reports hits and committed gestures; every commit rides the validated
+// PUT (no client-side validation fork, no second doc writer). The pure
+// laws live in graphics/editor.ts (hit-test, placement math, the slots
+// -law z-order) and are unit-pinned there.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import GraphicsCanvas from "./graphics-canvas";
+import { graphicsGroupClaims } from "@/lib/tubeforge/graphics/compose";
+import {
+  applyZOrder,
+  ELEMENT_EDITOR_LIMITS,
+  type ZOrderAction,
+} from "@/lib/tubeforge/graphics/editor";
+import type { Placement } from "@/lib/tubeforge/whiteboard/svg";
 import type { GraphicsDoc, GraphicsScene } from "@/lib/tubeforge/graphics/types";
 
 interface GraphicsBudgetReport {
@@ -69,6 +84,54 @@ const DRAFT_SCALES = [0.5, 0.75, 1.0] as const;
 
 const fmtSec = (ms: number): string => `${(ms / 1000).toFixed(1)}s`;
 
+/** One numeric placement field (S124) — a local draft committed on
+ *  blur/Enter; the `key` rides the external value so a committed edit (or
+ *  another buffer change) resets the draft without an effect (the house
+ *  set-state-in-effect law). Non-finite input resets honestly; the caller
+ *  owns any band clamps. */
+function PlacementNumber({ label, value, min, max, step, onCommit }: {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  onCommit: (v: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  const commit = (): void => {
+    const v = Number(draft);
+    if (!Number.isFinite(v)) {
+      setDraft(String(value));
+      return;
+    }
+    const clamped = Math.min(max ?? Number.POSITIVE_INFINITY, Math.max(min ?? Number.NEGATIVE_INFINITY, v));
+    if (clamped !== value) onCommit(clamped);
+    setDraft(String(clamped));
+  };
+  return (
+    <label className="flex items-center gap-1">
+      <span className="text-white/50">{label}</span>
+      <input
+        type="number"
+        className={inputCls}
+        value={draft}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            commit();
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        aria-label={`${label} placement`}
+      />
+    </label>
+  );
+}
+
 export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: GraphicsStudioProps) {
   const [data, setData] = useState<GraphicsGetResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +155,12 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
   // Draft controls.
   const [scale, setScale] = useState<(typeof DRAFT_SCALES)[number]>(0.5);
 
+  // S124 — the element editor: the Layout mode (the geometry editing
+  // state) + the selection (the studio owns selection; the canvas reports
+  // hits and committed gestures; the PUT is the wall).
+  const [layoutMode, setLayoutMode] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -108,6 +177,7 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
         setDirty(false);
         setTMs(0);
         setPlaying(false);
+        setSelectedId(null); // a fresh doc ends the selection (S124)
         if (body.doc) {
           const s = SURFACES.find((x) => x.w === body.doc?.width && x.h === body.doc?.height);
           if (s) setSurface(s.id);
@@ -274,6 +344,50 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
     setDirty(true);
   };
 
+  // S124 — the Layout mode (the geometry editing state, friction's
+  // boxTransform mode restated): forces pause, syncs the canvas clock to
+  // the studio's playhead (the scene resolution rides it), clean
+  // selection. Exiting just flips back — playback resumes from the clock.
+  const toggleLayout = (): void => {
+    if (!layoutMode) {
+      setPlaying(false);
+      seekTo(tMs);
+      setSelectedId(null);
+    }
+    setLayoutMode(!layoutMode);
+  };
+
+  // A committed gesture — the working buffer patch (the validated PUT is
+  // the wall; nothing on the client writes a doc directly).
+  const commitPlacement = useCallback((sceneIndex: number, elId: string, at: Placement): void => {
+    setBuffer((b) => {
+      if (!b) return b;
+      const scenes = b.scenes.map((s, i) => {
+        if (i !== sceneIndex) return s;
+        return { ...s, elements: s.elements.map((el) => (el.id === elId ? { ...el, at } : el)) };
+      });
+      return { ...b, scenes };
+    });
+    setDirty(true);
+  }, []);
+
+  // The z-order actions — the PURE law applies (applyZOrder refuses
+  // claimed members and unknown ids); the panel disables proactively, so
+  // a refusal here is belt-and-braces (a silent no-op is honest — the
+  // law's error belongs to the unit suite).
+  const commitZOrder = (sceneIndex: number, elId: string, action: ZOrderAction): void => {
+    setBuffer((b) => {
+      if (!b) return b;
+      const scenes = b.scenes.map((s, i) => {
+        if (i !== sceneIndex) return s;
+        const r = applyZOrder(s, elId, action);
+        return r.ok ? { ...s, elements: r.elements } : s;
+      });
+      return { ...b, scenes };
+    });
+    setDirty(true);
+  };
+
   if (loading) {
     return (
       <div className="rounded-xl border border-white/10 bg-white/3 p-6 text-sm text-white/60">
@@ -362,13 +476,24 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
         seek={seek}
         onTime={setTMs}
         onEnded={() => setPlaying(false)}
+        editable={layoutMode}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        onPlacement={commitPlacement}
       />
       <div className="flex flex-wrap items-center gap-3">
         <button className={btnGhost} onClick={() => { seekTo(0); setPlaying(false); }}>
           ⏮
         </button>
-        <button className={btnSolid} onClick={() => setPlaying((p) => !p)}>
+        <button className={btnSolid} disabled={layoutMode} onClick={() => setPlaying((p) => !p)}>
           {playing ? "Pause" : "Play"}
+        </button>
+        <button
+          className={layoutMode ? btnSolid : btnGhost}
+          onClick={toggleLayout}
+          title="Edit element geometry — drag moves, the white handle scales, the strip reorders"
+        >
+          {layoutMode ? "Layout: on" : "Layout"}
         </button>
         <input
           type="range"
@@ -386,6 +511,106 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
           scene {activeSceneIndex + 1}/{buffer.scenes.length} · {buffer.width}×{buffer.height} @ {buffer.fps}fps
         </span>
       </div>
+
+      {/* S124 — the element strip (Layout mode): doc order (the last row
+          paints on top), the four z-order actions, exact placement fields
+          for the selection. Claimed members render read-only with their
+          owning group — the claims map is the composer's ONE truth. */}
+      {layoutMode && buffer.scenes[activeSceneIndex] && (() => {
+        const scene = buffer.scenes[activeSceneIndex];
+        const claims = graphicsGroupClaims(scene);
+        const selected = selectedId ? scene.elements.find((el) => el.id === selectedId) : undefined;
+        const selectedClaim = selectedId ? claims.get(selectedId) : undefined;
+        return (
+          <div className="rounded-lg border border-white/10 bg-white/3 p-3 text-xs" data-testid="graphics-element-strip">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium text-white/80">Elements · {scene.id}</span>
+              <span className="text-white/40">
+                doc order — the last row paints on top · drag on the canvas moves · the white handle scales
+              </span>
+            </div>
+            <ul className="mt-2 space-y-1">
+              {scene.elements
+                .filter((el) => !claims.has(el.id))
+                .map((el) => {
+                  const isSel = el.id === selectedId;
+                  return (
+                    <li
+                      key={el.id}
+                      className={`flex flex-wrap items-center gap-2 rounded px-2 py-1 ${isSel ? "bg-white/10" : "hover:bg-white/5"}`}
+                    >
+                      <button
+                        type="button"
+                        className="font-medium text-white/85"
+                        onClick={() => setSelectedId(el.id)}
+                        aria-pressed={isSel}
+                      >
+                        {isSel ? "\u25B8 " : ""}{el.kind} · {el.id}
+                      </button>
+                      <span className="tabular-nums text-white/45">
+                        x {Math.round(el.at.x)} · y {Math.round(el.at.y)} · scale {el.at.scale} · {el.at.rotateDeg}°
+                      </span>
+                      {el.kind === "group" && <span className="text-amber-300/80">group — children ride it</span>}
+                      <span className="ml-auto flex flex-wrap items-center gap-1">
+                        {(["top", "raise", "lower", "bottom"] as const).map((a) => (
+                          <button
+                            key={a}
+                            className={btnFaint}
+                            disabled={busy !== null}
+                            onClick={() => commitZOrder(activeSceneIndex, el.id, a)}
+                            aria-label={`${a} ${el.id}`}
+                          >
+                            {a === "top" ? "top" : a === "raise" ? "up" : a === "lower" ? "down" : "bottom"}
+                          </button>
+                        ))}
+                      </span>
+                    </li>
+                  );
+                })}
+              {[...claims.entries()].map(([child, owner]) => (
+                <li key={child} className="flex items-center gap-2 rounded px-2 py-1 text-white/40">
+                  {child}
+                  <span>· member of {owner} — its z-order lives inside the group</span>
+                </li>
+              ))}
+            </ul>
+            {selected && !selectedClaim && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-white/10 pt-2">
+                <span className="text-white/50">placement · {selected.id}</span>
+                <PlacementNumber
+                  key={`x-${selected.id}-${selected.at.x}`}
+                  label="x"
+                  value={selected.at.x}
+                  step={1}
+                  onCommit={(v) => commitPlacement(activeSceneIndex, selected.id, { ...selected.at, x: v })}
+                />
+                <PlacementNumber
+                  key={`y-${selected.id}-${selected.at.y}`}
+                  label="y"
+                  value={selected.at.y}
+                  step={1}
+                  onCommit={(v) => commitPlacement(activeSceneIndex, selected.id, { ...selected.at, y: v })}
+                />
+                <PlacementNumber
+                  key={`s-${selected.id}-${selected.at.scale}`}
+                  label="scale"
+                  value={selected.at.scale}
+                  min={ELEMENT_EDITOR_LIMITS.scaleMin}
+                  max={ELEMENT_EDITOR_LIMITS.scaleMax}
+                  step={0.05}
+                  onCommit={(v) => commitPlacement(activeSceneIndex, selected.id, { ...selected.at, scale: v })}
+                />
+                <span className="text-white/40">rotate {selected.at.rotateDeg}° (display-only this slice)</span>
+              </div>
+            )}
+            {selected && selectedClaim && (
+              <p className="mt-2 text-amber-300/80">
+                {selectedId} is a member of {selectedClaim} — geometry and z-order ride the group (read-only here).
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Evidence: the preflight wall + the QC matrix (what the render click will judge) */}
       {preflight && (
