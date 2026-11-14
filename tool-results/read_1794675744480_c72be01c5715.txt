@@ -1,0 +1,780 @@
+     1→// Post-render quality gate — the "verify the video actually plays" stage.
+     2→//
+     3→// After every FULL render (final.mp4 only, previews are exempt) the job runs
+     4→// this battery and records a JSON report on the video row:
+     5→//   1. playability   — has an H.264 video stream + AAC audio stream
+     6→//   2. duration      — video duration vs the narration length (sync sanity)
+     7→//   3. loudness      — integrated LUFS near the -16 delivery target (audiomix)
+     8→//   4. true peak     — ≤ -1 dBTP (0.2 dB AAC-overshoot tolerance)
+     9→//   5. loudness range— LRA within consistency bounds (no pumping levels)
+    10→//   6. black frames  — zero black intervals ≥ 0.25 s
+    11→//   7. dead air      — no fully-silent run ≥ 1.5 s (voice OR bed always up)
+    12→//   8. frozen frames — freezedetect (exact freezes) AND a sampled static-shot
+    13→//                      pass (visually-unchanged runs — the pacing review's
+    14→//                      "opening scene unchanged for 15 s" class of defect)
+    15→//   9. captions      — SRT cues monotonic, non-overlapping, inside duration
+    16→//  10. tail fade     — ends on a fade, not an abrupt cut
+    17→//  11. flicker       — luminance pumping (S36): brightness oscillating fast
+    18→//                      enough to strobe while no frame is frozen
+    19→//  12. stutter       — uneven frame timing (S36): duplicated presentation
+    20→//                      frames and timestamp gaps the eye reads as judder
+    21→//  13. cut alignment — continuity (S36): scene changes landing where the
+    22→//                      timeline says nothing should cut, hard cuts missing
+    23→//                      from the pixels
+    24→//
+    25→// The render never fails because of QC — the report drives the QC badge in
+    26→// the UI so a human can inspect before export/upload.
+    27→//
+    28→// Every check carries a THREE-STATE status:
+    29→//   "pass"       — measured and within bounds
+    30→//   "fail"       — measured and out of bounds
+    31→//   "unmeasured" — the analysis could not run (ffmpeg crashed, timed out,
+    32→//                  file unreadable, clip too short to sample)
+    33→// A check that never ran must never read as clean: "unmeasured" fails the
+    34→// overall report so the badge keeps asking a human to look. (Before this
+    35→// distinction, a crashed analysis pass silently reported a spotless file.)
+    36→
+    37→import { execFile } from "child_process";
+    38→import fs from "fs";
+    39→import { promisify } from "util";
+    40→import {
+    41→  measureLoudness,
+    42→  detectStaticRuns,
+    43→  staticRunsDetail,
+    44→  LUFS_PASS_WINDOW,
+    45→  LRA_WARN,
+    46→  MIX_TARGETS,
+    47→} from "./audiomix";
+    48→import { planStaticRuns } from "./director-plan";
+    49→import type { DirectorPlan } from "./director-plan";
+    50→import {
+    51→  detectFlicker,
+    52→  detectStutter,
+    53→  detectSceneCuts,
+    54→  alignCuts,
+    55→  STUTTER_LIMITS,
+    56→  CUT_TOL_SEC,
+    57→} from "./render-qc";
+    58→import type { ExpectedCuts } from "./render-qc";
+    59→
+    60→const execFileAsync = promisify(execFile);
+    61→
+    62→export type QcStatus = "pass" | "fail" | "unmeasured";
+    63→
+    64→export interface QcCheck {
+    65→  id: string;
+    66→  label: string;
+    67→  /** Authoritative result: measured-and-ok / measured-and-bad / could-not-run. */
+    68→  status: QcStatus;
+    69→  /** Legacy convenience — true only when status === "pass". Older reports
+    70→   * stored just this flag, and unmeasured checks slipped through as `true`. */
+    71→  pass: boolean;
+    72→  value: string;
+    73→  detail?: string;
+    74→}
+    75→
+    76→/** Build a check with the derived legacy flag (one source of truth). */
+    77→function check(
+    78→  id: string,
+    79→  label: string,
+    80→  status: QcStatus,
+    81→  value: string,
+    82→  detail?: string
+    83→): QcCheck {
+    84→  return {
+    85→    id,
+    86→    label,
+    87→    status,
+    88→    pass: status === "pass",
+    89→    value,
+    90→    ...(detail !== undefined ? { detail } : {}),
+    91→  };
+    92→}
+    93→
+    94→// S116 — the scene-scoped battery (scene-qc.ts) reuses these builders
+    95→// instead of forking private copies (the S113 no-private-copies law, now
+    96→// extended to the QC probe shell: one analyzePass, one ffprobe, one check
+    97→// builder — scene scope re-slices the SAME probes, never re-implements them).
+    98→export { check as qcCheck, analyzePass, ffprobeJson };
+    99→
+   100→export interface QcReport {
+   101→  passed: boolean;
+   102→  checkedAt: string;
+   103→  durationSec: number;
+   104→  checks: QcCheck[];
+   105→  /** S45 — evidence scope. Absent/undefined = the FULL render (final.mp4,
+   106→   * every historical report). "preview" = a first-N-scenes preview render:
+   107→   * honest partial evidence for the badge, NEVER certifying the final
+   108→   * artifact (qc-policy treats a preview-scoped standing report as not
+   109→   * standing for the ship gate). */
+   110→  scope?: "preview";
+   111→}
+   112→
+   113→async function ffprobeJson(file: string) {
+   114→  const { stdout } = await execFileAsync(
+   115→    "ffprobe",
+   116→    [
+   117→      "-v", "error",
+   118→      "-show_entries", "stream=codec_type,codec_name,width,height",
+   119→      "-show_entries", "format=duration",
+   120→      "-of", "json",
+   121→      file,
+   122→    ],
+   123→    { timeout: 60_000, maxBuffer: 8 * 1024 * 1024 }
+   124→  );
+   125→  return JSON.parse(stdout.toString()) as {
+   126→    streams?: { codec_type?: string; codec_name?: string; width?: number; height?: number }[];
+   127→    format?: { duration?: string };
+   128→  };
+   129→}
+   130→
+   131→/** One combined ffmpeg analysis pass: black frames + frozen frames + volume + silence.
+   132→ * `ok: false` means ffmpeg exited non-zero — whatever stderr came back is
+   133→ * PARTIAL, so the detectors below must report "unmeasured", never "clean". */
+   134→async function analyzePass(file: string): Promise<{ stderr: string; ok: boolean }> {
+   135→  try {
+   136→    const { stderr } = await execFileAsync(
+   137→      "ffmpeg",
+   138→      [
+   139→        "-hide_banner", "-nostats",
+   140→        "-i", file,
+   141→        // frozen runs must last a full second. Calibration history: d=0.30
+   142→        // flagged 0.3s sub-noise dips in slow zoom starts; d=0.50 still caught
+   143→        // the ~0.5-0.7s plateau of the smooth ease curve (cos easing has
+   144→        // near-zero slope at each shot's start/end — by-design documentary
+   145→        // motion, perceptually fine). The classes this check exists for —
+   146→        // hold-last-frame artifacts (2.3s, Battle Yamuk) and dead pans
+   147→        // (2.5s, the panEndpoints edge-pin bug) — are seconds long; d=1.0
+   148→        // catches them with margin and ignores ease plateaus.
+   149→        "-vf", "blackdetect=d=0.25:pix_th=0.10,freezedetect=n=0.004:d=1.00",
+   150→        "-af", "volumedetect,silencedetect=n=-40dB:d=1.5",
+   151→        "-f", "null", "-",
+   152→      ],
+   153→      { timeout: 8 * 60 * 1000, maxBuffer: 32 * 1024 * 1024 }
+   154→    );
+   155→    return { stderr: stderr.toString(), ok: true };
+   156→  } catch (err) {
+   157→    const e = err as { stderr?: string };
+   158→    return { stderr: e.stderr ?? "", ok: false };
+   159→  }
+   160→}
+   161→
+   162→/** Mean volume (dBFS) of the file's final 0.4 s — abrupt-ending detector. */
+   163→async function tailVolume(file: string, durationSec: number): Promise<number | null> {
+   164→  if (!Number.isFinite(durationSec) || durationSec < 3) return null;
+   165→  try {
+   166→    const { stderr } = await execFileAsync(
+   167→      "ffmpeg",
+   168→      [
+   169→        "-hide_banner", "-nostats",
+   170→        "-ss", Math.max(0, durationSec - 0.4).toFixed(3),
+   171→        "-i", file,
+   172→        "-af", "volumedetect",
+   173→        "-f", "null", "-",
+   174→      ],
+   175→      { timeout: 3 * 60 * 1000, maxBuffer: 8 * 1024 * 1024 }
+   176→    );
+   177→    const m = stderr.toString().match(/mean_volume:\s*(-?\d+(?:\.\d+)?)\s*dB/);
+   178→    return m ? Number(m[1]) : null;
+   179→  } catch {
+   180→    return null;
+   181→  }
+   182→}
+   183→
+   184→/** EBU R128 loudness of the mixed track (legacy helper kept for callers that
+   185→ * only need the integrated value — the full measurement comes from
+   186→ * audiomix.measureLoudness). */
+   187→export async function loudnessPass(file: string): Promise<number | null> {
+   188→  const m = await measureLoudness(file);
+   189→  return m ? m.integratedLUFS : null;
+   190→}
+   191→
+   192→interface SrtCue { start: number; end: number }
+   193→
+   194→export function parseSrt(text: string): SrtCue[] {
+   195→  const toSec = (ts: string): number => {
+   196→    const m = ts.trim().match(/(\d+):(\d+):(\d+)[,.](\d+)/);
+   197→    if (!m) return -1;
+   198→    return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + Number(m[4]) / 1000;
+   199→  };
+   200→  const cues: SrtCue[] = [];
+   201→  for (const block of text.split(/\n\s*\n/)) {
+   202→    const lines = block.split("\n").filter(Boolean);
+   203→    const tl = lines.find((l) => l.includes("-->"));
+   204→    if (!tl) continue;
+   205→    const [a, b] = tl.split("-->");
+   206→    const start = toSec(a);
+   207→    const end = toSec(b);
+   208→    if (start >= 0 && end > start) cues.push({ start, end });
+   209→  }
+   210→  return cues;
+   211→}
+   212→
+   213→/** Frame geometry expectations — vertical and square are first-class formats. */
+   214→export type QcAspect = "16:9" | "9:16" | "1:1";
+   215→
+   216→const ASPECT_TARGET: Record<QcAspect, { w: number; h: number; label: string }> = {
+   217→  "16:9": { w: 1920, h: 1080, label: "16:9 frame" },
+   218→  "9:16": { w: 1080, h: 1920, label: "9:16 vertical frame" },
+   219→  "1:1": { w: 1080, h: 1080, label: "1:1 square frame" },
+   220→};
+   221→
+   222→/**
+   223→ * Run the QC battery. `opts.videoDuration` is the render's measured duration
+   224→ * (ground truth); `opts.narrationSec` is the voiceover length for the sync
+   225→ * comparison. `opts.expectedAspect` matches the render mode's geometry
+   226→ * (slides mode ships 9:16). Never throws — a crashed check reports as failed.
+   227→ */
+   228→export async function runQcReport(opts: {
+   229→  mp4Path: string;
+   230→  videoDuration: number;
+   231→  narrationSec: number | null;
+   232→  srtPath: string | null;
+   233→  /** Designed black-dip windows (fadeblack transitions) exempt from the black-frame check. */
+   234→  expectedBlack?: [number, number][];
+   235→  /** Frame geometry this render was built for (default "16:9"). */
+   236→  expectedAspect?: QcAspect;
+   237→  /** Stage 5 pacing gate: the APPROVED shot plan (null / absent = no plan).
+   238→   * Only approved plans reach the render, so callers pass null for
+   239→   * proposed/dismissed ones — a plan that never touched the pipeline must
+   240→   * not fail its QC. */
+   241→  shotPlan?: DirectorPlan | null;
+   242→  /** Render-mode blanket motion exemptions: an "animated" (i2v) or "stock"
+   243→   * render moves every scene regardless of plan flags. */
+   244→  shotPlanI2VEverywhere?: boolean;
+   245→  shotPlanStockEverywhere?: boolean;
+   246→  /** S36 continuity lens — where the assembled timeline says cuts and blend
+   247→   * windows sit on the blended clock. null/absent = no reconstruction
+   248→   * possible (doc-less re-run) → the check reports "unmeasured", never
+   249→   * clean. A single-scene render passes { cuts: [], windows: [] }: any
+   250→   * detected cut is then a genuine continuity break. */
+   251→  expectedCuts?: ExpectedCuts | null;
+   252→  /** Frame rate the render shipped at (stutter lens); default 30. */
+   253→  frameRate?: number;
+   254→  /** S49 — the restricted-visual scan outcome (restricted-subjects.ts
+   255→   *  runRestrictedVisualScan). Provided ONLY under a restricted content
+   256→   *  policy — the caller owns the decision (and the fail-closed rule: a
+   257→   *  policy-mode scan that could not run reports "unmeasured", never
+   258→   *  silence). Absent (standard policy) = the check is not emitted, exactly
+   259→   *  as before S49. */
+   260→  restrictedScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string };
+   261→  /** S53 — the subject-continuity scan outcome (visual-qc.ts
+   262→   *  runSubjectContinuityScan). Provided ONLY when the video has a recurring
+   263→   *  cast with an identity anchor (the caller owns applicability). The S51
+   264→   *  benchmark's color-under-lighting finding lands here: lighting-induced
+   265→   *  hue drift reads in the notes, only identity-defining drift fails.
+   266→   *  Absent = the check is not emitted (no cast, no continuity domain). */
+   267→  subjectScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string };
+   268→  /** S53 — the text-artifacts scan outcome (visual-qc.ts
+   269→   *  runTextArtifactScan). Provided for every render (AI imagery is the
+   270→   *  product; gibberish pseudo-text and watermarks are its classic defect).
+   271→   *  Deliberate burned captions are excluded by the judge's contract.
+   272→   *  Absent = the check is not emitted (e.g. a pre-S53 caller). */
+   273→  textScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string };
+   274→}): Promise<QcReport> {
+   275→  const aspect: QcAspect =
+   276→    opts.expectedAspect === "9:16" ? "9:16" : opts.expectedAspect === "1:1" ? "1:1" : "16:9";
+   277→  const aspectSpec = ASPECT_TARGET[aspect];
+   278→  const checks: QcCheck[] = [];
+   279→  const exists = fs.existsSync(opts.mp4Path);
+   280→  const expectedBlack = opts.expectedBlack ?? [];
+   281→
+   282→  const isDesignedBlack = (start: number): boolean =>
+   283→    expectedBlack.some(([lo, hi]) => start >= lo - 0.1 && start <= hi + 0.1);
+   284→
+   285→  // 1) Playability — streams + duration readable.
+   286→  let duration = opts.videoDuration;
+   287→  let dimensions: { width?: number; height?: number } | null = null;
+   288→  if (exists) {
+   289→    try {
+   290→      const info = await ffprobeJson(opts.mp4Path);
+   291→      const hasVideo = Boolean(info.streams?.some((s) => s.codec_type === "video" && s.codec_name === "h264"));
+   292→      const hasAudio = Boolean(info.streams?.some((s) => s.codec_type === "audio" && s.codec_name === "aac"));
+   293→      const probed = Number(info.format?.duration ?? 0);
+   294→      if (Number.isFinite(probed) && probed > 0) duration = probed;
+   295→      dimensions = info.streams?.find((s) => s.codec_type === "video") ?? null;
+   296→      checks.push(
+   297→        check(
+   298→          "playable",
+   299→          "Plays as a valid MP4 (H.264 video + AAC audio)",
+   300→          hasVideo && hasAudio ? "pass" : "fail",
+   301→          hasVideo && hasAudio ? `${duration.toFixed(1)}s readable` : "stream missing"
+   302→        )
+   303→      );
+   304→    } catch (err) {
+   305→      checks.push(
+   306→        check("playable", "Plays as a valid MP4", "fail", "ffprobe failed", String(err).slice(0, 200))
+   307→      );
+   308→    }
+   309→  } else {
+   310→    checks.push(check("playable", "Output file exists", "fail", "final.mp4 missing"));
+   311→  }
+   312→
+   313→  // 2) Duration vs narration — audio/video sync sanity.
+   314→  if (opts.narrationSec && opts.narrationSec > 0) {
+   315→    const drift = duration - opts.narrationSec;
+   316→    // Asymmetric tolerance: the video may run LONGER than the narration
+   317→    // (scene lead-ins, holds, dramatic pauses — up to +20%), but never
+   318→    // meaningfully SHORTER. A video shorter than its narration means words
+   319→    // were cut mid-sentence — the −34 s Battle Yamuk class — and must fail
+   320→    // hard, not ride a ±20% band.
+   321→    const tolerance = Math.max(8, opts.narrationSec * 0.2);
+   322→    checks.push(
+   323→      check(
+   324→        "duration",
+   325→        "Video length matches the narration",
+   326→        drift >= -2 && drift <= tolerance ? "pass" : "fail",
+   327→        `video ${duration.toFixed(1)}s vs narration ${opts.narrationSec.toFixed(1)}s`,
+   328→        `drift ${drift >= 0 ? "+" : ""}${drift.toFixed(1)}s (tolerance ±${tolerance.toFixed(0)}s — scene lead-ins add a few seconds)`
+   329→      )
+   330→    );
+   331→  }
+   332→
+   333→  if (exists) {
+   334→    // 3–6) Combined analysis pass. A crash here (ok=false) leaves partial
+   335→    // stderr — every detector below MUST answer "unmeasured", not "clean".
+   336→    const analysis = await analyzePass(opts.mp4Path);
+   337→    const stderr = analysis.stderr;
+   338→    const analysisRan = analysis.ok;
+   339→
+   340→    // ffmpeg 7.x prefixes these log lines with the frame-metadata key
+   341→    // ("lavfi.blackdetect.") and varies the spacing after the colon — the
+   342→    // pattern tolerates both so the check works across ffmpeg versions.
+   343→    const blacks = [...stderr.matchAll(/\[blackdetect[^\]]*\]\s*(?:lavfi\.blackdetect\.)?black_start:\s*(\d+(?:\.\d+)?)/g)]
+   344→      .map((m) => Number(m[1]));
+   345→    const unexpected = blacks.filter((t) => !isDesignedBlack(t));
+   346→    if (!analysisRan) {
+   347→      checks.push(
+   348→        check("black-frames", "No unexplained black frames", "unmeasured", "analysis failed",
+   349→          "ffmpeg could not complete the scan — this check did not run")
+   350→      );
+   351→    } else {
+   352→      checks.push(
+   353→        check(
+   354→          "black-frames",
+   355→          "No unexplained black frames",
+   356→          unexpected.length === 0 ? "pass" : "fail",
+   357→          unexpected.length === 0
+   358→            ? blacks.length > expectedBlack.length
+   359→              ? `${expectedBlack.length} designed transition dip${expectedBlack.length === 1 ? "" : "s"} only`
+   360→              : "none detected"
+   361→            : `${unexpected.length} unexplained interval${unexpected.length > 1 ? "s" : ""}`,
+   362→          unexpected.slice(0, 5).map((s) => `at ${s}s`).join(", ") ||
+   363→            (blacks.length ? `all ${blacks.length} inside designed fadeblack windows` : "")
+   364→        )
+   365→      );
+   366→    }
+   367→
+   368→    const freezes = [...stderr.matchAll(/\[freezedetect[^\]]*\]\s*(?:lavfi\.freezedetect\.)?freeze_start:\s*(\d+(?:\.\d+)?)/g)]
+   369→      .map((m) => Number(m[1]));
+   370→    if (!analysisRan) {
+   371→      checks.push(
+   372→        check("frozen-frames", "No frozen imagery (motion everywhere)", "unmeasured", "analysis failed",
+   373→          "ffmpeg could not complete the scan — this check did not run")
+   374→      );
+   375→    } else {
+   376→      checks.push(
+   377→        check(
+   378→          "frozen-frames",
+   379→          "No frozen imagery (motion everywhere)",
+   380→          freezes.length === 0 ? "pass" : "fail",
+   381→          freezes.length === 0 ? "none detected" : `${freezes.length} frozen run${freezes.length > 1 ? "s" : ""}`,
+   382→          freezes.slice(0, 4).map((s) => `at ${s}s`).join(", ")
+   383→        )
+   384→      );
+   385→    }
+   386→
+   387→    if (dimensions?.width && dimensions?.height) {
+   388→      const ratio = dimensions.width / dimensions.height;
+   389→      const [tw, th] = [aspectSpec.w, aspectSpec.h];
+   390→      const ok = Math.abs(ratio - tw / th) <= 0.02;
+   391→      checks.push(
+   392→        check(
+   393→          "aspect",
+   394→          `${aspectSpec.label} (no squeeze/crop defects)`,
+   395→          ok ? "pass" : "fail",
+   396→          `${dimensions.width}x${dimensions.height}`
+   397→        )
+   398→      );
+   399→    }
+   400→
+   401→    const maxVol = stderr.match(/max_volume:\s*(-?\d+(?:\.\d+)?)\s*dB/);
+   402→    const samplePeak = maxVol ? Number(maxVol[1]) : null;
+   403→
+   404→    // 3–7) Loudness family — one loudnorm analysis pass (I / true peak / LRA)
+   405→    // replaces the old ebur128 + volumedetect pair, and measures TRUE peak
+   406→    // (inter-sample), not just the sample peak.
+   407→    const lm = await measureLoudness(opts.mp4Path);
+   408→    checks.push(
+   409→      check(
+   410→        "loudness",
+   411→        `Broadcast loudness (${MIX_TARGETS.integratedLUFS} LUFS target)`,
+   412→        lm === null
+   413→          ? "unmeasured"
+   414→          : lm.integratedLUFS >= LUFS_PASS_WINDOW[0] && lm.integratedLUFS <= LUFS_PASS_WINDOW[1] ? "pass" : "fail",
+   415→        lm === null ? "not measured" : `${lm.integratedLUFS.toFixed(1)} LUFS`,
+   416→        lm === null
+   417→          ? (samplePeak !== null ? `sample peak ${samplePeak.toFixed(1)} dBFS (loudness pass failed)` : "loudness analysis failed")
+   418→          : `window ${LUFS_PASS_WINDOW[0]}…${LUFS_PASS_WINDOW[1]} LUFS`
+   419→      )
+   420→    );
+   421→    checks.push(
+   422→      check(
+   423→        "true-peak",
+   424→        "True peak ≤ -1 dBTP (no clipping after encode)",
+   425→        lm === null ? "unmeasured" : lm.truePeakDBTP <= MIX_TARGETS.truePeakDBTP + 0.2 ? "pass" : "fail",
+   426→        lm === null
+   427→          ? samplePeak === null ? "not measured" : `sample ${samplePeak.toFixed(1)} dBFS`
+   428→          : `${lm.truePeakDBTP.toFixed(1)} dBTP`,
+   429→        lm === null ? "loudness analysis failed" : "0.2 dB tolerance covers AAC inter-sample overshoot"
+   430→      )
+   431→    );
+   432→    checks.push(
+   433→      check(
+   434→        "loudness-range",
+   435→        "Consistent volume (loudness range)",
+   436→        lm === null ? "unmeasured" : lm.lra <= LRA_WARN ? "pass" : "fail",
+   437→        lm === null ? "not measured" : `LRA ${lm.lra.toFixed(1)} LU`,
+   438→        lm === null ? "loudness analysis failed" : `flagged above ${LRA_WARN} LU`
+   439→      )
+   440→    );
+   441→
+   442→    // Dead air: silence runs ≥1.5s fully inside the video (ignore lead-in/out).
+   443→    const silences = [...stderr.matchAll(/\[silencedetect[^\]]*\]\s*(?:lavfi\.silencedetect\.)?silence_start:\s*(\d+(?:\.\d+)?)/g)]
+   444→      .map((m) => Number(m[1]))
+   445→      .filter((s) => s > 1 && s < duration - 2);
+   446→    if (!analysisRan) {
+   447→      checks.push(
+   448→        check("dead-air", "No dead air (voice or music always present)", "unmeasured", "analysis failed",
+   449→          "ffmpeg could not complete the scan — this check did not run")
+   450→      );
+   451→    } else {
+   452→      checks.push(
+   453→        check(
+   454→          "dead-air",
+   455→          "No dead air (voice or music always present)",
+   456→          silences.length === 0 ? "pass" : "fail",
+   457→          silences.length === 0 ? "none" : `${silences.length} silent run${silences.length > 1 ? "s" : ""}`,
+   458→          silences.slice(0, 4).map((s) => `at ${s.toFixed(1)}s`).join(", ")
+   459→        )
+   460→      );
+   461→    }
+   462→
+   463→    // 8) Visual pacing — two lenses on the same defect class:
+   464→    //   (a) the APPROVED shot-plan's own rhythm (Stage 5 completion gate):
+   465→    //       3+ consecutive static shots with no motion / i2v / stock
+   466→    //       motivation is flat pacing — deterministic, knowable before a
+   467→    //       single pixel is measured;
+   468→    //   (b) the sampled visual-change scan (freezedetect above only catches
+   469→    //       EXACT freezes; a motionless Ken Burns crop or static stock clip
+   470→    //       reads as "nothing happens" while evading it).
+   471→    const planRuns = planStaticRuns(opts.shotPlan ?? null, {
+   472→      i2vEverywhere: opts.shotPlanI2VEverywhere,
+   473→      stockEverywhere: opts.shotPlanStockEverywhere,
+   474→    });
+   475→    const worstRun = planRuns.find((r) => r.length >= 3) ?? null;
+   476→    const staticPass = await detectStaticRuns(opts.mp4Path);
+   477→    const planFlat = worstRun !== null;
+   478→    checks.push(
+   479→      check(
+   480→        "static-shots",
+   481→        "Visual pacing — no long static stretches",
+   482→        planFlat
+   483→          ? "fail"
+   484→          : !staticPass.measured
+   485→            ? "unmeasured"
+   486→            : staticPass.runs.length === 0
+   487→              ? "pass"
+   488→              : "fail",
+   489→        planFlat
+   490→          ? `${worstRun.length} flat shots in a row (scene${
+   491→              worstRun.fromScene === worstRun.toScene
+   492→                ? ` ${worstRun.fromScene}`
+   493→                : `s ${worstRun.fromScene}–${worstRun.toScene}`
+   494→            })`
+   495→          : !staticPass.measured
+   496→            ? "not measured"
+   497→            : staticPass.runs.length === 0
+   498→              ? "visual change throughout"
+   499→              : `${staticPass.runs.length} static run${staticPass.runs.length > 1 ? "s" : ""}`,
+   500→        planFlat
+   501→          ? "approved direction holds these shots still with no motion, i2v or stock motivation — re-run the director with movement or set motion/animation on those scenes"
+   502→          : staticRunsDetail(staticPass.runs)
+   503→      )
+   504→    );
+   505→
+   506→    // 9) S36 lenses — flicker, stutter, cut alignment. Each is a separate
+   507→    // probe with its own measured flag: one crashed lens must not silence
+   508→    // the others, and every unmeasured lens keeps the report red/amber.
+   509→    const flick = await detectFlicker(opts.mp4Path);
+   510→    checks.push(
+   511→      check(
+   512→        "flicker",
+   513→        "Steady brightness (no flicker or pumping)",
+   514→        !flick.measured
+   515→          ? "unmeasured"
+   516→          : flick.events.length === 0
+   517→            ? "pass"
+   518→            : "fail",
+   519→        !flick.measured
+   520→          ? "not measured"
+   521→          : flick.events.length === 0
+   522→            ? "none detected"
+   523→            : `${flick.events.length} pumping run${flick.events.length > 1 ? "s" : ""}`,
+   524→        !flick.measured
+   525→          ? "luma-sampling probe failed — this check did not run"
+   526→          : flick.events
+   527→              .slice(0, 4)
+   528→              .map((e) => `from ${e.startSec.toFixed(1)}s (${e.alternations} swings)`)
+   529→              .join(", ")
+   530→      )
+   531→    );
+   532→
+   533→    const stut = await detectStutter(opts.mp4Path, opts.frameRate ?? 30);
+   534→    const stutterBad = stut.dupRuns.length > 0 || stut.gaps.length >= STUTTER_LIMITS.gapCountMin;
+   535→    checks.push(
+   536→      check(
+   537→        "stutter",
+   538→        "Even frame timing (no stutter)",
+   539→        !stut.measured
+   540→          ? "unmeasured"
+   541→          : stutterBad
+   542→            ? "fail"
+   543→            : "pass",
+   544→        !stut.measured
+   545→          ? "not measured"
+   546→          : stut.dupRuns.length === 0 && stut.gaps.length === 0
+   547→            ? "even timing throughout"
+   548→            : `${stut.dupRuns.length} duplicate-frame run${stut.dupRuns.length === 1 ? "" : "s"}, ${stut.gaps.length} timestamp gap${stut.gaps.length === 1 ? "" : "s"}`,
+   549→        !stut.measured
+   550→          ? "packet-timing probe failed — this check did not run"
+   551→          : [
+   552→              ...stut.dupRuns
+   553→                .slice(0, 3)
+   554→                .map((r) => `${r.frames} duplicated frames from ${r.startSec.toFixed(1)}s`),
+   555→              ...stut.gaps
+   556→                .slice(0, 3)
+   557→                .map((g) => `timing gap after ${g.toFixed(1)}s`),
+   558→            ].join(", ")
+   559→      )
+   560→    );
+   561→
+   562→    if (opts.expectedCuts) {
+   563→      const sc = await detectSceneCuts(opts.mp4Path);
+   564→      const aligned = sc.measured
+   565→        ? alignCuts(sc.cuts, opts.expectedCuts, CUT_TOL_SEC)
+   566→        : { unexpected: [], missing: [] };
+   567→      const cutBad = aligned.unexpected.length > 0 || aligned.missing.length > 0;
+   568→      checks.push(
+   569→        check(
+   570→          "cut-alignment",
+   571→          "Cuts land where the timeline says (continuity)",
+   572→          !sc.measured
+   573→            ? "unmeasured"
+   574→            : cutBad
+   575→              ? "fail"
+   576→              : "pass",
+   577→          !sc.measured
+   578→            ? "not measured"
+   579→            : cutBad
+   580→              ? `${aligned.unexpected.length} unexpected, ${aligned.missing.length} missing`
+   581→              : opts.expectedCuts.cuts.length === 0
+   582→                ? "no stray cuts"
+   583→                : `all ${opts.expectedCuts.cuts.length} cut${opts.expectedCuts.cuts.length === 1 ? "" : "s"} in place`,
+   584→          !sc.measured
+   585→            ? "scene-change probe failed — this check did not run"
+   586→            : [
+   587→                ...aligned.unexpected
+   588→                  .slice(0, 4)
+   589→                  .map((t) => `stray cut at ${t.toFixed(1)}s`),
+   590→                ...aligned.missing
+   591→                  .slice(0, 4)
+   592→                  .map((t) => `timeline cut missing at ${t.toFixed(1)}s`),
+   593→              ].join(", ")
+   594→        )
+   595→      );
+   596→    } else {
+   597→      checks.push(
+   598→        check(
+   599→          "cut-alignment",
+   600→          "Cuts land where the timeline says (continuity)",
+   601→          "unmeasured",
+   602→          "no timeline reconstruction",
+   603→          "this video has no aligned timeline doc — cuts cannot be checked"
+   604→        )
+   605→      );
+   606→    }
+   607→
+   608→    // 7b) Abrupt ending — the final 0.4 s should sit in a fade/silence, not
+   609→    // mid-beat. Music beds fade out by design; a hard audio cut reads as a
+   610→    // glitch (and YouTube viewers notice).
+   611→    const tail = await tailVolume(opts.mp4Path, duration);
+   612→    checks.push(
+   613→      check(
+   614→        "tail-fade",
+   615→        "Ends on a fade, not an abrupt cut",
+   616→        tail === null ? "unmeasured" : tail <= -25 ? "pass" : "fail",
+   617→        tail === null ? "not measured" : `final 0.4s at ${tail.toFixed(1)} dB mean`,
+   618→        tail === null
+   619→          ? "final 0.4s unreadable or clip too short — fade state unknown"
+   620→          : "flagged above -25 dB mean"
+   621→      )
+   622→    );
+   623→  }
+   624→
+   625→  // 8) Caption sanity — when an SRT ships alongside.
+   626→  if (opts.srtPath && fs.existsSync(opts.srtPath)) {
+   627→    try {
+   628→      const cues = parseSrt(fs.readFileSync(opts.srtPath, "utf8"));
+   629→      let monotonic = cues.length > 0;
+   630→      for (let i = 1; i < cues.length; i++) {
+   631→        if (cues[i].start < cues[i - 1].start - 0.01 || cues[i].start < cues[i - 1].end - 0.01) {
+   632→          monotonic = false;
+   633→          break;
+   634→        }
+   635→      }
+   636→      const inRange = cues.length === 0 || cues[cues.length - 1].end <= duration + 0.5;
+   637→      checks.push(
+   638→        check(
+   639→          "captions",
+   640→          "Captions timed to the video",
+   641→          cues.length > 0 && monotonic && inRange ? "pass" : "fail",
+   642→          `${cues.length} cues`,
+   643→          cues.length === 0 ? "empty SRT" : !monotonic ? "overlapping cues" : !inRange ? "cues run past the end" : "in order"
+   644→        )
+   645→      );
+   646→    } catch {
+   647→      checks.push(check("captions", "Captions timed to the video", "fail", "SRT unreadable"));
+   648→    }
+   649→  }
+   650→
+   651→  // S49 — the restricted-visual check rides the report when (and only when)
+   652→  // the caller ran the policy scan. It counts toward `passed` like every
+   653→  // other check — a fail or unmeasured scan keeps the report red.
+   654→  if (opts.restrictedScan) {
+   655→    checks.push(
+   656→      check(
+   657→        "restricted-visual",
+   658→        "No depiction of restricted religious figures (content policy)",
+   659→        opts.restrictedScan.status,
+   660→        opts.restrictedScan.value,
+   661→        opts.restrictedScan.detail
+   662→      )
+   663→    );
+   664→  }
+   665→
+   666→  // S53 — the advanced visual lenses ride the same law: emitted when (and
+   667→  // only when) the caller ran the scan, counting toward `passed` like every
+   668→  // other check (a fail or unmeasured scan keeps the report from reading
+   669→  // clean — the battery's own never-silently-clean contract).
+   670→  if (opts.subjectScan) {
+   671→    checks.push(
+   672→      check(
+   673→        "subject-continuity",
+   674→        "Recurring subject keeps one identity across scenes",
+   675→        opts.subjectScan.status,
+   676→        opts.subjectScan.value,
+   677→        opts.subjectScan.detail
+   678→      )
+   679→    );
+   680→  }
+   681→  if (opts.textScan) {
+   682→    checks.push(
+   683→      check(
+   684→        "text-artifacts",
+   685→        "No gibberish text or watermarks in the imagery",
+   686→        opts.textScan.status,
+   687→        opts.textScan.value,
+   688→        opts.textScan.detail
+   689→      )
+   690→    );
+   691→  }
+   692→
+   693→  return {
+   694→    // The report is clean only when EVERY check actually ran AND passed —
+   695→    // an unmeasured check keeps the overall badge red/amber for a human.
+   696→    passed: checks.length > 0 && checks.every((c) => c.status === "pass"),
+   697→    checkedAt: new Date().toISOString(),
+   698→    durationSec: Math.round(duration * 10) / 10,
+   699→    checks,
+   700→  };
+   701→}
+   702→
+   703→/** Standard QC for a rendered video (paths under uploads/<videoId>/). */
+   704→export async function qcForVideo(
+   705→  videoId: string,
+   706→  videoDuration: number,
+   707→  narrationSec: number | null,
+   708→  expectedBlack?: [number, number][],
+   709→  expectedAspect?: QcAspect,
+   710→  shotPlan?: DirectorPlan | null,
+   711→  pacingExemptions?: { i2vEverywhere?: boolean; stockEverywhere?: boolean },
+   712→  expectedCuts?: ExpectedCuts | null,
+   713→  frameRate?: number,
+   714→  restrictedScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string },
+   715→  subjectScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string },
+   716→  textScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string }
+   717→): Promise<QcReport> {
+   718→  // Storage seam (T-3.7): ffprobe/readFile need real paths — materialize
+   719→  // returns the uploads path locally, a cached download under s3.
+   720→  const { materialize } = await import("./storage");
+   721→  return runQcReport({
+   722→    mp4Path: await materialize(`${videoId}/final.mp4`),
+   723→    videoDuration,
+   724→    narrationSec,
+   725→    srtPath: await materialize(`${videoId}/subtitles.srt`),
+   726→    expectedBlack,
+   727→    expectedAspect,
+   728→    shotPlan,
+   729→    shotPlanI2VEverywhere: pacingExemptions?.i2vEverywhere,
+   730→    shotPlanStockEverywhere: pacingExemptions?.stockEverywhere,
+   731→    expectedCuts,
+   732→    frameRate,
+   733→    restrictedScan,
+   734→    subjectScan,
+   735→    textScan,
+   736→  });
+   737→}
+   738→
+   739→/**
+   740→ * S45 — scoped QC for a PREVIEW render (the first N scenes, preview.mp4).
+   741→ * Mirrors qcForVideo with preview-honest expectations:
+   742→ *   • no narration-sync check — the preview is a partial artifact; its
+   743→ *     "narration" is scenes 1..N, which no single field carries;
+   744→ *   • no captions check — no SRT ships for previews (the burned captions,
+   745→ *     if on, are measured by the visual lenses like any other pixels);
+   746→ *   • every artifact-local lens (playable, black/frozen frames, aspect,
+   747→ *     loudness family, dead air, static, flicker, stutter, cut alignment,
+   748→ *     tail fade) runs exactly as for a full render.
+   749→ * The report carries scope "preview" so qc-policy can refuse to treat it
+   750→ * as evidence for the final artifact, and the render job persists it ONLY
+   751→ * while no full render stands (preview evidence never overwrites full
+   752→ * evidence — the export gate must never judge final.mp4 on a scene-1 file).
+   753→ */
+   754→export async function qcForPreview(
+   755→  videoId: string,
+   756→  videoDuration: number,
+   757→  expectedBlack?: [number, number][],
+   758→  expectedAspect?: QcAspect,
+   759→  shotPlan?: DirectorPlan | null,
+   760→  pacingExemptions?: { i2vEverywhere?: boolean; stockEverywhere?: boolean },
+   761→  expectedCuts?: ExpectedCuts | null,
+   762→  frameRate?: number
+   763→): Promise<QcReport> {
+   764→  const { materialize } = await import("./storage");
+   765→  const report = await runQcReport({
+   766→    mp4Path: await materialize(`${videoId}/preview.mp4`),
+   767→    videoDuration,
+   768→    narrationSec: null,
+   769→    srtPath: null,
+   770→    expectedBlack,
+   771→    expectedAspect,
+   772→    shotPlan,
+   773→    shotPlanI2VEverywhere: pacingExemptions?.i2vEverywhere,
+   774→    shotPlanStockEverywhere: pacingExemptions?.stockEverywhere,
+   775→    expectedCuts,
+   776→    frameRate,
+   777→  });
+   778→  return { ...report, scope: "preview" };
+   779→}
+   780→

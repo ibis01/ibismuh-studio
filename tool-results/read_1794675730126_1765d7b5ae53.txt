@@ -1,0 +1,732 @@
+     1→// S64 — the Whiteboard Engine: the renderer. chromium rasterizes, FFmpeg
+     2→// assembles — and every frame's state comes from the PURE frame plan
+     3→// (timing.ts), never from CSS animation (the determinism law).
+     4→//
+     5→// Per scene: compose the sanitized asset markup into one page-sized SVG,
+     6→// then per frame apply the plan (dash offsets, text wipes, color reveals,
+     7→// placements, hand transform, camera transform) and screenshot. Scenes
+     8→// encode from the frame sequence (+ narration VO when present), then the
+     9→// concat + the house music bed produce the final MP4.
+    10→//
+    11→// Security posture: chromium launches with ALL network routes aborted —
+    12→// the page can only ever render the markup we wrote into it; the SVG
+    13→// sanitizer is the first line, this is the second.
+    14→import { execFile } from "child_process";
+    15→import fs from "node:fs";
+    16→import path from "node:path";
+    17→import { promisify } from "util";
+    18→
+    19→import type { WhiteboardAsset } from "./assets";
+    20→import { handAssetIdFor, loadLibrary, type AssetRole } from "./assets";
+    21→import { LUFS_PASS_WINDOW, measureLoudness, normalizationFilter } from "../audiomix";
+    22→import { ensureSfx } from "../sfx";
+    23→// W7 — the cue planner (PURE): the SFX event mapping rides the SAME
+    24→// frame-quantized clock the tracks and the render loop read.
+    25→import { whiteboardSfxCues, type SfxCue } from "./sfx-plan";
+    26→// S67 — the compose/applier seam lives in wb-page.ts (PURE), shared with the
+    27→// editor's playback canvas — the design §5 one-source law in both directions.
+    28→import {
+    29→  composeScene,
+    30→  framePayload,
+    31→  APPLY_FRAME_FN,
+    32→} from "./wb-page";
+    33→// W4 slice 3 — the captions lane's alignment feeds the spoken-window
+    34→// schedule: per-scene VO → per-word anchors (voice-anchors.ts), the beat
+    35→// plan's INPUT. Absent anchors (no VO, no speech structure, the flag off)
+    36→// schedule exactly as before — byte-for-byte (the slice-1 hard pin).
+    37→import { sceneVoiceAnchors } from "./voice-anchors";
+    38→import type { WordAnchors } from "./timing";
+    39→import {
+    40→  buildGeometry,
+    41→  estimateProjectFrames,
+    42→  frameAt,
+    43→  resolveCarriedInk,
+    44→  WB_RENDER_FRAME_BUDGET,
+    45→  type FrameState,
+    46→} from "./timing";
+    47→// W2 — the semantic beat compiler: the render seam schedules through the
+    48→// same beatSceneEvents the editor preview runs (the one-source law).
+    49→import { beatSceneEvents } from "./beat-plan";
+    50→// S87 slice 3 — the engine EMITS the timeline contract: the frame plan maps
+    51→// onto whiteboard-kind clips, and the render loop + assembly read the SAME
+    52→// frame-quantized clock the tracks carry (one derivation, pinned equal —
+    53→// peer at the engine level, unified at the contract level).
+    54→import { framePlanClock, whiteboardTracks } from "./tracks";
+    55→import { planFromTracks, type CompositionPlan } from "../composition-plan";
+    56→import type { TimelineTrack } from "../timeline";
+    57→import type { AnimationEvent, BoardMode, WhiteboardProject } from "./storyboard";
+    58→
+    59→const execFileP = promisify(execFile);
+    60→
+    61→/** W7 — the per-kind mix gains for the whiteboard SFX layer. The recipes
+    62→ *  already decay fast and dark; these keep the accents UNDER the voice
+    63→ *  (the −16 LUFS window the unchanged QC gate enforces is the judge —
+    64→ *  the loudness proof rides the real battery). */
+    65→const WB_SFX_MIX_GAIN: Record<SfxCue["kind"], number> = {
+    66→  "pen-stroke": 0.35,
+    67→  "pen-stop": 0.3,
+    68→  "page-turn": 0.5,
+    69→  pop: 0.5,
+    70→};
+    71→
+    72→/**
+    73→ * S76 — the VO-slot loudness contract, enforced at the engine boundary.
+    74→ *
+    75→ * The QC gate measures the final program at the house delivery target
+    76→ * (−16 LUFS, pass window LUFS_PASS_WINDOW). E10's battery passed because
+    77→ * its synthetic slots were normalized at CREATION, while the production
+    78→ * voiceover path (generateSceneVoiceovers) ships RAW TTS WAVs — the S76
+    79→ * real-TTS smoke measured a narration-only render outside the window and
+    80→ * QC failed it correctly. This engine is its own finishing chain (no
+    81→ * audiomix stage runs after renderWhiteboard), so the contract lands
+    82→ * HERE: every VO slot is measured and, when it sits outside the delivery
+    83→ * window, linear two-pass normalized to the house targets — the same
+    84→ * chain every other render kind applies at its finishing stage. In-window
+    85→ * slots pass through untouched (no double processing). Linear mode
+    86→ * preserves duration, so the frame-budget pre-flight probes the
+    87→ * normalized slot with unchanged timing. Exported for the unit pin.
+    88→ */
+    89→export async function normalizeVoSlot(
+    90→  srcPath: string,
+    91→  normDir: string,
+    92→  sceneId: string,
+    93→): Promise<string> {
+    94→  const measurement = await measureLoudness(srcPath);
+    95→  if (
+    96→    measurement &&
+    97→    measurement.integratedLUFS >= LUFS_PASS_WINDOW[0] &&
+    98→    measurement.integratedLUFS <= LUFS_PASS_WINDOW[1]
+    99→  ) {
+   100→    return srcPath;
+   101→  }
+   102→  fs.mkdirSync(normDir, { recursive: true });
+   103→  const outPath = path.join(normDir, `vo-${sceneId}-norm.wav`);
+   104→  await execFileP(
+   105→    "ffmpeg",
+   106→    [
+   107→      "-y", "-v", "error",
+   108→      "-i", srcPath,
+   109→      "-af", normalizationFilter(measurement),
+   110→      "-c:a", "pcm_s16le",
+   111→      outPath,
+   112→    ],
+   113→    { maxBuffer: 32 * 1024 * 1024 },
+   114→  );
+   115→  return outPath;
+   116→}
+   117→
+   118→/** W7 — render one scene's SFX layer to a 48 kHz stereo PCM16 wav of the
+   119→ *  scene's exact delivered duration (concat-homogeneous with its siblings).
+   120→ *  Cue times are ABSOLUTE composition-clock ms; `sceneOffsetMs` re-bases
+   121→ *  them to the scene's own clock. Every cue rides adelay + a per-kind mix
+   122→ *  gain, amixed at normalize=0 (no hidden divider) and padded to the
+   123→ *  scene's exact length. Deterministic: same cues → same file. */
+   124→async function buildSceneSfxFile(
+   125→  cues: SfxCue[],
+   126→  sceneOffsetMs: number,
+   127→  durSec: number,
+   128→  outPath: string
+   129→): Promise<void> {
+   130→  const silent = async (): Promise<void> => {
+   131→    await runFfmpeg([
+   132→      "-y", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+   133→      "-t", durSec.toFixed(3), "-c:a", "pcm_s16le", outPath,
+   134→    ]);
+   135→  };
+   136→  const kindPaths = new Map<string, string>();
+   137→  for (const c of cues) {
+   138→    if (kindPaths.has(c.kind)) continue;
+   139→    const p = await ensureSfx(c.kind);
+   140→    if (!p) continue; // unknown kind — skip silently (the recipe law)
+   141→    kindPaths.set(c.kind, p);
+   142→  }
+   143→  const inputs: string[] = [];
+   144→  const chains: string[] = [];
+   145→  const mixLabels: string[] = [];
+   146→  let idx = 0;
+   147→  for (const c of cues) {
+   148→    const src = kindPaths.get(c.kind);
+   149→    if (!src) continue;
+   150→    inputs.push("-i", src);
+   151→    const relMs = Math.max(0, Math.round(c.atMs - sceneOffsetMs));
+   152→    chains.push(`[${idx}:a]adelay=${relMs}:all=1,volume=${WB_SFX_MIX_GAIN[c.kind]}[c${idx}]`);
+   153→    mixLabels.push(`[c${idx}]`);
+   154→    idx++;
+   155→  }
+   156→  if (idx === 0) {
+   157→    await silent();
+   158→    return;
+   159→  }
+   160→  const filter =
+   161→    chains.join(";") + ";" +
+   162→    mixLabels.join("") +
+   163→    `amix=inputs=${idx}:normalize=0:duration=longest,apad=whole_dur=${durSec.toFixed(3)}[a]`;
+   164→  await runFfmpeg([
+   165→    ...inputs,
+   166→    "-filter_complex", filter,
+   167→    "-map", "[a]",
+   168→    "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2",
+   169→    "-t", durSec.toFixed(3),
+   170→    outPath,
+   171→  ]);
+   172→}
+   173→
+   174→/**
+   175→ * The container-safe chromium launch args (the slides deployment contract,
+   176→ * now inherited by the whiteboard engine — the S75 E10 receipt: on a 4GB
+   177→ * container with the 64MB /dev/shm, a bare launch is SIGKILLed mid-scene
+   178→ * by the OOM killer when chromium's shared memory outgrows /dev/shm;
+   179→ * --disable-dev-shm-usage moves those segments to /tmp. --no-sandbox is
+   180→ * the container user-namespace reality). BOTH whiteboard launch sites
+   181→ * (the asset rasterize probe + the main render) MUST launch through these.
+   182→ */
+   183→export const WB_CHROMIUM_LAUNCH_ARGS = ["--no-sandbox", "--disable-dev-shm-usage"] as const;
+   184→
+   185→export interface RenderWhiteboardOptions {
+   186→  outDir: string;
+   187→  /** Real narration audio per scene id (absolute or cwd-relative path). */
+   188→  voFiles?: Map<string, string>;
+   189→  /** Music bed path (FLAC/WAV); mixed at -16 dB under the final assembly. */
+   190→  musicPath?: string;
+   191→  /** W4 slice 3: build per-word voice anchors from each scene's VO (the
+   192→   *  captions lane's alignment — detectSpeechRuns + the transcript cursor)
+   193→   *  and let the beat plan schedule the strokes INSIDE the spoken window.
+   194→   *  Absent/false keeps the estimator byte-for-byte; the ladder degrades
+   195→   *  (no ASR → silence-run-refined narration timing; no runs → estimator)
+   196→   *  and never fails a render. */
+   197→  asrAnchors?: boolean;
+   198→  onProgress?: (label: string, fraction: number) => void;
+   199→  /** S69 (E9 Phase C): the video's UPLOADED assets, merged into the library
+   200→   *  by the same loadLibrary the built-ins ride — the render sees exactly
+   201→   *  what the editor validated against (one merge law, both sides). */
+   202→  uploadedAssets?: WhiteboardAsset[];
+   203→}
+   204→
+   205→export interface SceneRenderResult {
+   206→  sceneId: string;
+   207→  durationMs: number;
+   208→  frames: number;
+   209→  file: string;
+   210→}
+   211→
+   212→/** The contract artifacts a whiteboard render now returns alongside the
+   213→ * files: the engine-authored tracks (the frame plan in the universal
+   214→ * grammar) and the composition plan read BACK from them through the same
+   215→ * planFromTracks every engine-lane consumer uses — the two-clock pin
+   216→ * (plan ≡ delivered frames) is enforced below, and slices 4–5 consume
+   217→ * these (the legacy collapse + the acceptance battery). */
+   218→export interface WhiteboardRenderResult {
+   219→  scenes: SceneRenderResult[];
+   220→  file: string;
+   221→  /** The frame plan as contract tracks (visual/audio/subtitle). */
+   222→  tracks: TimelineTrack[];
+   223→  /** The composition plan derived FROM those tracks (origin "tracks"). */
+   224→  plan: CompositionPlan;
+   225→  /** W6 — each scene's board mode in scene order (the S117 manifest
+   226→   *  records it; additive observability). */
+   227→  boardModes: BoardMode[];
+   228→}
+   229→
+   230→// ---------------------------------------------------------------------------
+   231→// Scene composition (the page's SVG)
+   232→// ---------------------------------------------------------------------------
+   233→// The renderer
+   234→// ---------------------------------------------------------------------------
+   235→
+   236→async function runFfmpeg(args: string[]): Promise<void> {
+   237→  await execFileP("ffmpeg", args, { maxBuffer: 32 * 1024 * 1024 }).catch((e) => {
+   238→    throw new Error(`ffmpeg failed: ${String(e.stderr ?? e.message).slice(-1200)}`);
+   239→  });
+   240→}
+   241→
+   242→/** ffprobe a media file's duration (seconds). */
+   243→export async function probeDurationSec(file: string): Promise<number | null> {
+   244→  try {
+   245→    const { stdout } = await execFileP("ffprobe", [
+   246→      "-v", "error", "-show_entries", "format=duration", "-of", "json", file,
+   247→    ]);
+   248→    return Number(JSON.parse(stdout).format?.duration ?? NaN) || null;
+   249→  } catch {
+   250→    return null;
+   251→  }
+   252→}
+   253→
+   254→// -------------------------------------------------------------------------
+   255→// S69 (E9 Phase C / E11 §7 gate 5) — rasterize-before-trust.
+   256→//
+   257→// Pathological-but-valid markup can parse fine and explode raster time
+   258→// (the design's exact example). The probe is the SAME renderer, not a
+   259→// separate validator: the sanitized fragment goes into a network-aborted
+   260→// chromium context at the asset's own viewBox and must produce pixels
+   261→// inside the wall-clock budget, or the upload dies with a readable error.
+   262→// -------------------------------------------------------------------------
+   263→
+   264→export interface AssetRasterProbeResult {
+   265→  ok: boolean;
+   266→  ms: number;
+   267→  error?: string;
+   268→}
+   269→
+   270→/** Gate 5 — rasterize a (sanitized) uploaded asset standalone under a
+   271→ * wall-clock budget (default 5 s, design §7.5). NEVER throws — the route
+   272→ * turns a not-ok into a 400 with this error. */
+   273→export async function probeAssetRasterization(
+   274→  asset: WhiteboardAsset,
+   275→  budgetMs = 5_000
+   276→): Promise<AssetRasterProbeResult> {
+   277→  const t0 = Date.now();
+   278→  // The handle lives on a holder object — a plain `let` gets flow-narrowed
+   279→  // to its null initializer across the closure boundary (TS cannot see the
+   280→  // assignment run), and the finally's close would read as `never`.
+   281→  const holder: { browser?: import("playwright").Browser } = {};
+   282→  const timer = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), budgetMs));
+   283→  const work = (async (): Promise<AssetRasterProbeResult> => {
+   284→    const { chromium } = await import("playwright");
+   285→    holder.browser = await chromium.launch({ headless: true, args: [...WB_CHROMIUM_LAUNCH_ARGS] });
+   286→    const context = await holder.browser.newContext({
+   287→      viewport: { width: 512, height: 512 },
+   288→      deviceScaleFactor: 1,
+   289→    });
+   290→    // Security line 2, verbatim: the probe page has no network, period.
+   291→    await context.route("**/*", (route) => route.abort());
+   292→    const page = await context.newPage();
+   293→    const html =
+   294→      `<!doctype html><html><body style="margin:0">` +
+   295→      `<svg id="probe" xmlns="http://www.w3.org/2000/svg" width="512" height="512" ` +
+   296→      `viewBox="0 0 ${asset.viewBox.w} ${asset.viewBox.h}">` +
+   297→      `<g>${asset.svg}</g></svg></body></html>`;
+   298→    await page.setContent(html, { waitUntil: "load" });
+   299→    // Force the raster: a screenshot must come back with real pixels.
+   300→    const shot = await page.screenshot({ type: "jpeg", quality: 60 });
+   301→    if (shot.length < 64) return { ok: false, ms: Date.now() - t0, error: "the probe rasterized to nothing" };
+   302→    return { ok: true, ms: Date.now() - t0 };
+   303→  })();
+   304→  try {
+   305→    const winner = await Promise.race([work, timer]);
+   306→    if (winner === "timeout")
+   307→      return {
+   308→        ok: false,
+   309→        ms: Date.now() - t0,
+   310→        error: `rasterizing this SVG exceeded the ${Math.round(budgetMs / 1000)}s budget — simplify the paths (fewer points, shallower nesting)`,
+   311→      };
+   312→    return winner;
+   313→  } catch (err) {
+   314→    return {
+   315→      ok: false,
+   316→      ms: Date.now() - t0,
+   317→      error: `the raster probe failed: ${err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160)}`,
+   318→    };
+   319→  } finally {
+   320→    // The race's loser must not leak a browser process: close either way.
+   321→    await holder.browser?.close().catch(() => {});
+   322→  }
+   323→}
+   324→
+   325→/** Render one whiteboard project to <outDir>/final.mp4. */
+   326→export async function renderWhiteboard(
+   327→  project: WhiteboardProject,
+   328→  opts: RenderWhiteboardOptions
+   329→): Promise<WhiteboardRenderResult> {
+   330→  // S65 (E1) pre-flight — the frame budget. Compute every scene's duration
+   331→  // the EXACT way the loop below will (explicit > VO-measured > narration
+   332→  // estimate, via the shared pure estimator), then refuse the project
+   333→  // BEFORE chromium launches: a 4GB worker must never learn about an
+   334→  // unbounded render from the OOM killer.
+   335→  const voMsBySceneId = new Map<string, number>();
+   336→  const voResolved = new Map<string, string>();
+   337→  let anyVoAudio = false;
+   338→  const voNormDir = path.join(opts.outDir, "vo-norm");
+   339→  for (const scene of project.scenes) {
+   340→    const voRaw = opts.voFiles?.get(scene.id) ?? null;
+   341→    if (!voRaw) continue;
+   342→    anyVoAudio = true;
+   343→    const voPath = await normalizeVoSlot(voRaw, voNormDir, scene.id);
+   344→    voResolved.set(scene.id, voPath);
+   345→    const voDurSec = await probeDurationSec(voPath);
+   346→    if (voDurSec !== null) voMsBySceneId.set(scene.id, voDurSec * 1000);
+   347→  }
+   348→  const { totalFrames, sceneMs } = estimateProjectFrames(project, voMsBySceneId);
+   349→  if (totalFrames > WB_RENDER_FRAME_BUDGET) {
+   350→    throw new Error(
+   351→      `whiteboard project exceeds the render frame budget: ${totalFrames} frames ` +
+   352→        `(~${(sceneMs.reduce((a, b) => a + b, 0) / 1000).toFixed(0)}s at ${project.fps}fps) ` +
+   353→        `against the ${WB_RENDER_FRAME_BUDGET}-frame wall (18 min at 24fps) — split the project or shorten scenes`
+   354→    );
+   355→  }
+   356→
+   357→  // W4 slice 3 — the voice anchors: for every voiced scene, the captions
+   358→  // lane's alignment (speech runs + the chunk cursor) becomes per-word
+   359→  // spans the beat plan schedules inside. Built BEFORE chromium launches
+   360→  // (the pre-flight owns every clock the loop reads); the ladder never
+   361→  // throws — a scene that degrades just stays on the estimator.
+   362→  const anchorsBySceneId = new Map<string, WordAnchors>();
+   363→  if (opts.asrAnchors) {
+   364→    for (const [si, scene] of project.scenes.entries()) {
+   365→      const voPath = voResolved.get(scene.id);
+   366→      const voMs = voMsBySceneId.get(scene.id);
+   367→      if (!voPath || !voMs) continue;
+   368→      try {
+   369→        const anchors = await sceneVoiceAnchors({
+   370→          narration: scene.narration,
+   371→          voPath,
+   372→          voDurationSec: voMs / 1000,
+   373→          sceneDurationMs: sceneMs[si],
+   374→          asr: true,
+   375→        });
+   376→        if (anchors) anchorsBySceneId.set(scene.id, anchors);
+   377→      } catch {
+   378→        // The ladder is contracted never to throw; this net is the honest
+   379→        // floor — a failed alignment degrades to the estimator, not a dead
+   380→        // render that already survived the frame-budget pre-flight.
+   381→      }
+   382→    }
+   383→  }
+   384→
+   385→  // S87 slice 3 — COMPOSE THROUGH THE CONTRACT. The frame plan maps onto
+   386→  // whiteboard-kind clips (the universal grammar), and the plan is read
+   387→  // back from those tracks through the same planFromTracks the compositor
+   388→  // lane uses. The loop and the assembly below read the frame-quantized
+   389→  // clock the tracks carry — one derivation, so the delivered cut and the
+   390→  // contract projection cannot disagree (a null plan here is an engine
+   391→  // bug: we JUST derived the tracks from a validated project + the
+   392→  // estimator's clamped durations; it is not a user-fixable state).
+   393→  const clock = framePlanClock(sceneMs, project.fps);
+   394→  const tracks = whiteboardTracks(project, sceneMs, {
+   395→    voSceneIds: voResolved.keys(),
+   396→    musicOn: opts.musicPath != null,
+   397→  });
+   398→  const plan = planFromTracks({ tracks }, project.scenes.length);
+   399→  if (!plan) {
+   400→    throw new Error(
+   401→      "the whiteboard frame plan failed the timeline contract — an engine bug, not a project problem"
+   402→    );
+   403→  }
+   404→
+   405→  const { chromium } = await import("playwright");
+   406→  const lib = loadLibrary(opts.uploadedAssets ?? []);
+   407→  // W2 — the matcher's vocabulary: every asset's tags, built once per
+   408→  // render (uploads ride their manifest tags; built-ins their palette).
+   409→  const assetTags = new Map<string, string[]>(
+   410→    [...lib.assets.values()].map((a) => [a.id, a.tags])
+   411→  );
+   412→  const geometry = buildGeometry(
+   413→    [...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths }))
+   414→  );
+   415→  // W7 — the pose selector's vocabulary: the W3 role metadata per asset
+   416→  // (the hand's pose rides the ACTIVE stroke's asset role).
+   417→  const assetRoles = new Map<string, AssetRole>();
+   418→  for (const a of lib.assets.values()) {
+   419→    if (a.role) assetRoles.set(a.id, a.role);
+   420→  }
+   421→  // W7 — the hand family: the project's style + side picks the tool hand
+   422→  // (per-asset left mirrors); the pose sub-assets ride alongside.
+   423→  const toolHand = lib.assets.get(handAssetIdFor(project.hand.style, project.hand.side));
+   424→  const pointHand = lib.assets.get("hand-point");
+   425→  const restHand = lib.assets.get("hand-rest");
+   426→  if (!toolHand || !pointHand || !restHand) {
+   427→    throw new Error("the hand family is missing from the library");
+   428→  }
+   429→
+   430→  fs.mkdirSync(opts.outDir, { recursive: true });
+   431→  const browser = await chromium.launch({ headless: true, args: [...WB_CHROMIUM_LAUNCH_ARGS] });
+   432→
+   433→  const sceneFiles: SceneRenderResult[] = [];
+   434→  // W7 — the per-scene schedules (the SFX cue planner reads them after the
+   435→  // loop; the frame plan itself is untouched — SFX never affects frames).
+   436→  const eventsByScene: AnimationEvent[][] = [];
+   437→  try {
+   438→    for (let si = 0; si < project.scenes.length; si++) {
+   439→      const scene = project.scenes[si];
+   440→      // Pre-flight already probed every VO and computed the durations the
+   441→      // estimator returned — reuse them so budget and render agree by
+   442→      // construction (never re-probe, never diverge). S87 slice 3: the
+   443→      // frames/delivered seconds come from the SHARED frame-quantized clock
+   444→      // (the same derivation the contract tracks carry) — the numbers are
+   445→      // identical to the old inline math by construction (frameCount), and
+   446→      // the clock is now the one source both the render and the contract
+   447→      // read.
+   448→      const durationMs = sceneMs[si];
+   449→      // W2 — the semantic beat schedule: the scene's draws ride the
+   450→      // narration's sentences (the same beatSceneEvents the editor preview
+   451→      // runs — the one-source law). Explicit events stay senior inside;
+   452→      // a degenerate plan falls back to the fill law byte-for-byte.
+   453→      // W4 slice 3 — voiced scenes with sane anchors ride the SPOKEN
+   454→      // window (the strokes land on the words that introduce them);
+   455→      // anchorless scenes keep the estimator byte-for-byte.
+   456→      const events = beatSceneEvents(scene, durationMs, geometry, assetTags, anchorsBySceneId.get(scene.id));
+   457→      eventsByScene.push(events);
+   458→      const frames = clock.scenes[si].frames;
+   459→      // W6 — the carry plan: a continuous scene inherits the PREVIOUS
+   460→      // scene's ink, resolved as DATA at the previous scene's own clock
+   461→      // (the estimator's clamped value — the same one the frame budget
+   462→      // and the tracks read). The carried ink rides the same compose and
+   463→      // the same frame maps; clean scenes resolve null and take today's
+   464→      // path byte-for-byte.
+   465→      const prevScene = si > 0 ? project.scenes[si - 1] : null;
+   466→      const carryPlan =
+   467→        prevScene && scene.board?.mode === "continuous"
+   468→          ? resolveCarriedInk(prevScene, sceneMs[si - 1], scene.board)
+   469→          : null;
+   470→
+   471→      // Per-scene page recycling (the S75 E10 receipt): ONE page held across
+   472→      // the whole project grew until the 4GB worker's OOM killer fired —
+   473→      // two separate runs died mid-project (scene 2 frame 230/378, then
+   474→      // scene 4 frame 1/332) with no JS trace. A fresh context per scene
+   475→      // hands chromium's memory back at every scene boundary; the browser
+   476→      // itself (the expensive launch) is reused.
+   477→      const context = await browser.newContext({
+   478→        viewport: { width: project.width, height: project.height },
+   479→        deviceScaleFactor: 1,
+   480→      });
+   481→      // Security line 2: the page has no network, period.
+   482→      await context.route("**/*", (route) => route.abort());
+   483→      const page = await context.newPage();
+   484→      const apply = async (frame: FrameState): Promise<void> => {
+   485→        await page.evaluate(`(${APPLY_FRAME_FN})(${JSON.stringify(framePayload(frame, project.width, project.height))})`);
+   486→      };
+   487→      try {
+   488→        opts.onProgress?.(`scene ${si + 1}/${project.scenes.length} ("${scene.id}"): composing`, si / project.scenes.length);
+   489→      const composed = composeScene(scene, project, lib.assets, carryPlan);
+   490→      await page.setContent(composed.html, { waitUntil: "load" });
+   491→      // Setup pass: defs root + the hand pose groups + dasharrays from OUR
+   492→      // geometry (the pure module owns the truth about every stroke length).
+   493→      await page.evaluate(
+   494→        ({ hands, handScale }) => {
+   495→          const board = document.getElementById("board");
+   496→          const hand = document.getElementById("hand");
+   497→          if (!board || !hand) return;
+   498→          const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+   499→          defs.id = "defs-root";
+   500→          board.appendChild(defs);
+   501→          for (const [pose, svg] of Object.entries(hands)) {
+   502→            const el = hand.querySelector(`[data-pose="${pose}"]`);
+   503→            if (el) el.innerHTML = svg;
+   504→          }
+   505→          hand.setAttribute("data-scale", String(handScale));
+   506→        },
+   507→        {
+   508→          hands: {
+   509→            write: toolHand.svg,
+   510→            draw: toolHand.svg,
+   511→            point: pointHand.svg,
+   512→            circle: pointHand.svg,
+   513→            rest: restHand.svg,
+   514→          },
+   515→          handScale: project.hand.scale,
+   516→        }
+   517→      );
+   518→      // Register the frame-plan-key → element-id maps the applier resolves
+   519→      // through (fresh per scene — setContent resets the JS context).
+   520→      await page.evaluate(
+   521→        ({ drawIndex, textIndex }) => {
+   522→          const w = window as unknown as {
+   523→            __wbDraw?: Map<string, string>;
+   524→            __wbText?: Map<string, string>;
+   525→          };
+   526→          w.__wbDraw = new Map(drawIndex);
+   527→          w.__wbText = new Map(textIndex);
+   528→        },
+   529→        { drawIndex: [...composed.pathEls], textIndex: [...composed.textEls] }
+   530→      );
+   531→      for (const [key, elId] of composed.pathEls) {
+   532→        const [assetId, pathId] = key.split("::");
+   533→        const segs = geometry.get(assetId)?.paths.get(pathId);
+   534→        if (!segs) continue;
+   535→        let len = 0;
+   536→        for (const g of segs) len += g.lengths[g.lengths.length - 1] ?? 0;
+   537→        await page.evaluate(
+   538→          ({ elId, len }) => {
+   539→            const el = document.getElementById(elId);
+   540→            if (!el) return;
+   541→            el.dataset.len = String(len);
+   542→            el.setAttribute("stroke-dasharray", `${len} ${len}`);
+   543→            el.setAttribute("stroke-dashoffset", String(len));
+   544→            el.style.opacity = "0";
+   545→          },
+   546→          { elId, len }
+   547→        );
+   548→      }
+   549→      for (const [, elId] of composed.textEls) {
+   550→        await page.evaluate((elId) => {
+   551→          const el = document.getElementById(elId);
+   552→          if (el) el.style.opacity = "0";
+   553→        }, elId);
+   554→      }
+   555→
+   556→      const framesDir = path.join(opts.outDir, `scene-${si + 1}-frames`);
+   557→      fs.mkdirSync(framesDir, { recursive: true });
+   558→      for (let f = 0; f < frames; f++) {
+   559→        const tMs = (f / project.fps) * 1000;
+   560→        await apply(frameAt(project, scene, events, geometry, tMs, carryPlan, assetRoles));
+   561→        await page.screenshot({
+   562→          path: path.join(framesDir, `f${String(f).padStart(5, "0")}.jpg`),
+   563→          type: "jpeg",
+   564→          quality: 92,
+   565→          clip: { x: 0, y: 0, width: project.width, height: project.height },
+   566→        });
+   567→        if (f % 24 === 0) {
+   568→          opts.onProgress?.(
+   569→            `scene ${si + 1}/${project.scenes.length} ("${scene.id}"): frame ${f + 1}/${frames}`,
+   570→            (si + (f + 1) / frames) / project.scenes.length
+   571→          );
+   572→        }
+   573→      }
+   574→
+   575→      // Encode the scene: frames (+ VO when present). Music joins at assembly.
+   576→      // voResolved carries the LOUDNESS-CONTRACT slots — see normalizeVoSlot.
+   577→      const voPath = voResolved.get(scene.id) ?? null;
+   578→      // S87 slice 5 (the acceptance battery's find): when ANY scene carries
+   579→      // VO, EVERY scene file must carry an audio stream — the concat
+   580→      // demuxer is stream-homogeneous, and a silent scene ahead of a
+   581→      // voiced one left [0:a] matching no streams at the amix seam (a
+   582→      // mixed-VO project — a user voicing scenes 2..n of n — crashed the
+   583→      // assembly). VO-less scenes fill with anullsrc under the same
+   584→      // apad/-t bounds; a FULLY silent project keeps today's video-only
+   585→      // shape (the silent-draft law unchanged).
+   586→      const silentFill = !voPath && anyVoAudio;
+   587→      const sceneFile = path.join(opts.outDir, `scene-${si + 1}.mp4`);
+   588→      const durSec = clock.scenes[si].deliveredSec;
+   589→      const args: string[] = [
+   590→        "-y",
+   591→        "-framerate", String(project.fps),
+   592→        "-i", path.join(framesDir, "f%05d.jpg"),
+   593→      ];
+   594→      if (voPath) args.push("-i", voPath);
+   595→      else if (silentFill) args.push("-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo");
+   596→      args.push(
+   597→        "-filter_complex", "[0:v]format=yuv420p[v]",
+   598→        "-map", "[v]",
+   599→        // apad (not -shortest): the VO must PAD to the scene duration so the
+   600→        // estimator's 350ms tail survives as the last stroke's hold. -shortest
+   601→        // truncated the video to the VO and ate the tail — the S75 E10
+   602→        // receipt: 1623 budgeted frames, 1578 delivered (every scene 9
+   603→        // frames short; the pre-flight frame budget lied by construction).
+   604→        ...((voPath || silentFill) ? ["-map", "1:a", "-c:a", "aac", "-b:a", "160k", "-af", "apad"] : []),
+   605→        "-c:v", "libx264", "-preset", "veryfast", "-crf", "19",
+   606→        "-t", durSec.toFixed(3),
+   607→        sceneFile,
+   608→      );
+   609→      await runFfmpeg(args);
+   610→      fs.rmSync(framesDir, { recursive: true, force: true });
+   611→      sceneFiles.push({ sceneId: scene.id, durationMs, frames, file: sceneFile });
+   612→      } finally {
+   613→        // The scene's chromium memory goes back to the OS here — the
+   614→        // recycling that keeps the 4GB worker alive across the project.
+   615→        await context.close().catch(() => {});
+   616→      }
+   617→    }
+   618→
+   619→    // Final assembly: concat + the music bed (or stream copy when silent).
+   620→    // S87 slice 3 — the assembly total reads the shared clock (the exact
+   621→    // sum of delivered per-scene seconds) and the CONTRACT assert holds the
+   622→    // plan to it: if anyone ever edits the loop math away from the clock,
+   623→    // the render refuses here instead of shipping a desynced projection.
+   624→    const finalFile = path.join(opts.outDir, "final.mp4");
+   625→    const totalSec = clock.scenes.reduce((a, s) => a + s.deliveredSec, 0);
+   626→    if (Math.abs(plan.totalSec - Math.round(totalSec * 100) / 100) > 0.001) {
+   627→      throw new Error(
+   628→        "the whiteboard assembly clock diverged from the timeline contract — an engine bug, not a project problem"
+   629→      );
+   630→    }
+   631→    const listFile = path.join(opts.outDir, "concat.txt");
+   632→    fs.writeFileSync(listFile, sceneFiles.map((s) => `file '${path.resolve(s.file)}'`).join("\n") + "\n");
+   633→
+   634→    // W7 — the SFX layer (project.sfxOn, decision §10.4): the cue plan is
+   635→    // PURE over the SAME clock the picture used; the layer assembles per
+   636→    // scene (the amix graph's wall), concats, and rides the final mix
+   637→    // under the unchanged contract. Audio-only — frames never depend on it.
+   638→    let sfxFile: string | null = null;
+   639→    if (project.sfxOn) {
+   640→      const { cues, startMsByScene } = whiteboardSfxCues(project, clock, eventsByScene);
+   641→      const sfxDir = path.join(opts.outDir, "sfx");
+   642→      fs.mkdirSync(sfxDir, { recursive: true });
+   643→      const parts: string[] = [];
+   644→      for (let i = 0; i < project.scenes.length; i++) {
+   645→        const part = path.join(sfxDir, `sfx-${i + 1}.wav`);
+   646→        await buildSceneSfxFile(
+   647→          cues.filter((c) => c.sceneIndex === i),
+   648→          startMsByScene[i],
+   649→          clock.scenes[i].deliveredSec,
+   650→          part
+   651→        );
+   652→        parts.push(part);
+   653→      }
+   654→      sfxFile = path.join(opts.outDir, "sfx.wav");
+   655→      await runFfmpeg([
+   656→        ...parts.flatMap((p) => ["-i", p]),
+   657→        "-filter_complex", `concat=n=${parts.length}:v=0:a=1[a]`,
+   658→        "-map", "[a]", "-c:a", "pcm_s16le",
+   659→        sfxFile,
+   660→      ]);
+   661→    }
+   662→    // The SFX input joins LAST (music stays index 1 — the bed chain's
+   663→    // labels below are built off the input order, so the SFX label moves).
+   664→    const sfxArgs = sfxFile ? ["-i", sfxFile] : [];
+   665→    const sfxLabel = opts.musicPath ? "[2:a]" : "[1:a]";
+   666→
+   667→    if (opts.musicPath) {
+   668→      // Bed gain: with narration the bed ducks to 0.16 UNDER THE VOICE; a
+   669→      // SOLO bed (no VO this run — the gateway outage) carries the program
+   670→      // at full level — the house finishing chain already loudnorm'd it to
+   671→      // −16 LUFS, so gain 1.0 lands exactly on the broadcast target (the
+   672→      // S64 receipt: a ducked solo bed measured −32.1 LUFS and failed).
+   673→      //
+   674→      // S75 E10 receipt (the second kill): the mix filter mapped ONLY the
+   675→      // bed — the concatenated VO ([0:a]) never reached final.mp4, and a
+   676→      // narrated render measured −32.0 LUFS (the ducked bed alone). The
+   677→      // amix arm exists only when narration exists; normalize=0 keeps the
+   678→      // voice at its own level instead of amix's default ½ divider.
+   679→      const bedGain = anyVoAudio ? 0.16 : 1.0;
+   680→      const bedChain =
+   681→        "[1:a]volume=" + bedGain +
+   682→        ",afade=t=in:st=0:d=1.5" +
+   683→        ",afade=t=out:st=" + Math.max(0, totalSec - 2).toFixed(3) + ":d=2";
+   684→      await runFfmpeg([
+   685→        "-y",
+   686→        "-f", "concat", "-safe", "0", "-i", listFile,
+   687→        "-stream_loop", "-1", "-t", totalSec.toFixed(3), "-i", opts.musicPath,
+   688→        ...sfxArgs,
+   689→        "-filter_complex",
+   690→          anyVoAudio
+   691→            ? // W7 — the SFX layer amixes in under the same normalize=0 law.
+   692→              "[0:v]format=yuv420p[v];" + bedChain + "[bed];[0:a][bed]" +
+   693→                (sfxFile ? sfxLabel : "") +
+   694→                `amix=inputs=${sfxFile ? 3 : 2}:duration=first:normalize=0[a]`
+   695→            : sfxFile
+   696→              ? "[0:v]format=yuv420p[v];" + bedChain + "[bed];[bed]" + sfxLabel + "amix=inputs=2:duration=first:normalize=0[a]"
+   697→              : "[0:v]format=yuv420p[v];" + bedChain + "[a]",
+   698→        "-map", "[v]", "-map", "[a]",
+   699→        "-c:v", "libx264", "-preset", "veryfast", "-crf", "19",
+   700→        "-c:a", "aac", "-b:a", "160k",
+   701→        // No -shortest here (the S75 E10 receipt: it dropped the final video
+   702→        // frame at the assembly boundary — 1623 planned, 1622 delivered).
+   703→        // Every stream is already bounded: the bed by -t above, the mix by
+   704→        // amix duration=first, the video by the concat's own length.
+   705→        finalFile,
+   706→      ]);
+   707→    } else if (sfxFile) {
+   708→      // W7 — no bed, SFX on: with VO the layer amixes under the voice;
+   709→      // silent drafts map the layer directly (its levels are already tuned).
+   710→      await runFfmpeg([
+   711→        "-y",
+   712→        "-f", "concat", "-safe", "0", "-i", listFile,
+   713→        ...sfxArgs,
+   714→        "-filter_complex",
+   715→          anyVoAudio
+   716→            ? "[0:v]format=yuv420p[v];[0:a]" + sfxLabel + "amix=inputs=2:duration=first:normalize=0[a]"
+   717→            : "[0:v]format=yuv420p[v]",
+   718→        "-map", "[v]",
+   719→        ...(!anyVoAudio ? ["-map", sfxLabel] : ["-map", "[a]"]),
+   720→        "-c:v", "libx264", "-preset", "veryfast", "-crf", "19",
+   721→        "-c:a", "aac", "-b:a", "160k",
+   722→        finalFile,
+   723→      ]);
+   724→    } else {
+   725→      await runFfmpeg(["-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", finalFile]);
+   726→    }
+   727→    return { scenes: sceneFiles, file: finalFile, tracks, plan, boardModes: project.scenes.map((s) => s.board?.mode ?? "clean") };
+   728→  } finally {
+   729→    await browser.close();
+   730→  }
+   731→}
+   732→
