@@ -92,8 +92,9 @@ import {
   validateGraphicsDoc,
   type GraphicsDoc,
 } from "./graphics/types";
-import { graphicsDraftLabel, graphicsDraftMark, graphicsDraftViewport } from "./graphics/draft";
+import { graphicsDraftFps, graphicsDraftLabel, graphicsDraftMark, graphicsDraftViewport } from "./graphics/draft";
 import { runGraphicsQc } from "./graphics/qc";
+import { graphicsDesignedBlackWindows, graphicsDesignedHolds } from "./graphics/frame";
 import { loadVideoLibrary } from "./whiteboard/asset-store";
 import type { WhiteboardAsset } from "./whiteboard/assets";
 import {
@@ -111,6 +112,7 @@ import {
   slideBrandFor,
 } from "./slides";
 import { get, put, remove, materialize, putFromPath } from "./storage";
+import { wavDurationSec } from "./wav";
 import { promoteVariant, pickVariantStyles } from "./ai";
 import { uploadToYouTube } from "./youtube";
 import {
@@ -2180,12 +2182,14 @@ export async function runGraphicsJob(
       }
       const mark = graphicsDraftMark(doc, 0.5);
       const viewport = graphicsDraftViewport(doc, 0.5);
+      const draftFps = graphicsDraftFps(doc, 0.5);
       const draftDoc: GraphicsDoc = { ...doc, scenes: [scene] };
       const voFiles = graphicsVoFilesFor(draftDoc, videoId);
       const result = await renderGraphics(draftDoc, {
         outDir,
         voFiles,
         draftViewport: viewport,
+        draftFps,
         onProgress: gfxProgressGuard(entityId),
       });
       const key = `${videoId}/graphics/preview-${sceneId}.mp4`;
@@ -2372,6 +2376,45 @@ export interface PublishJobOptions {
   publishAt?: string | null;
 }
 
+/** S123 — the graphics lane's DESIGNED QC evidence, re-derived from the row
+ *  (the QC job's own path): the static holds for the frozen-frames lens and
+ *  the black lead-ins for the black-frame lens, both on the render's
+ *  effective clock (measured VO WAVs ride the same mapping the GET and the
+ *  render use). Non-graphics rows read undefined — both lenses run as they
+ *  always have. */
+function graphicsDesignedEvidence(video: Video): {
+  holds: [number, number][] | undefined;
+  black: [number, number][] | undefined;
+} {
+  if (video.renderMode !== "graphics") return { holds: undefined, black: undefined };
+  const env = parseGraphicsProject(video.graphicsProject);
+  if (!env) return { holds: undefined, black: undefined };
+  const voMs = new Map<string, number>();
+  const dir = videoDir(video.id);
+  for (const scene of env.doc.scenes) {
+    const m = /^scene-(\d+)$/.exec(scene.id);
+    if (!m) continue;
+    const index = Number(m[1]);
+    if (!Number.isInteger(index) || index < 1 || index > 999) continue;
+    const wav = path.join(dir, sceneWavFile(index));
+    if (!fs.existsSync(wav)) continue;
+    try {
+      const sec = wavDurationSec(fs.readFileSync(wav));
+      if (sec > 0) voMs.set(scene.id, sec * 1000);
+    } catch {
+      /* unreadable/odd header → the scene rides the estimate */
+    }
+  }
+  return {
+    holds: graphicsDesignedHolds(env.doc, voMs).map(
+      (h) => [h.startSec, h.endSec] as [number, number]
+    ),
+    black: graphicsDesignedBlackWindows(env.doc, voMs).map(
+      (w) => [w.startSec, w.endSec] as [number, number]
+    ),
+  };
+}
+
 /**
  * T-6.2 — re-run the QC battery against the existing final.mp4 without
  * re-rendering. Useful after the user manually edits a scene's narration or
@@ -2459,7 +2502,12 @@ export async function runQcJob(videoId: string): Promise<void> {
       videoId,
       video.videoDuration,
       video.audioDuration,
-      [], // no designed black windows stored — any detected black reads as "unexplained"
+      // S123 — the designed BLACK lead-ins (dark-background scenes sit
+      // essentially black until their first content enters — the doc's own
+      // design, the expectedBlack pattern); any OTHER black interval still
+      // fails. Non-graphics rows: the empty list (any detected black reads
+      // as "unexplained" — the standing rule).
+      graphicsDesignedEvidence(video).black ?? [],
       aspect,
       approvedPlan,
       {
@@ -2470,7 +2518,13 @@ export async function runQcJob(videoId: string): Promise<void> {
       video.frameRate === 24 || video.frameRate === 60 ? video.frameRate : 30,
       restrictedScan,
       subjectScan,
-      textScan
+      textScan,
+      // S123 — the graphics lane's designed static holds: re-derived from
+      // the row's doc on the render's effective clock (explicit > measured
+      // VO + the house tail > estimate — the SAME derivation the render
+      // delivered), so the frozen-frames lens reads the evidence the doc
+      // itself declares (per-evidence, never a lane-wide exemption).
+      graphicsDesignedEvidence(video).holds
     );
     // S123 — THE GRAPHICS QC GROUP: for graphics-mode videos the battery
     // re-proves the doc behind the standing final (the g-* rows are pure,

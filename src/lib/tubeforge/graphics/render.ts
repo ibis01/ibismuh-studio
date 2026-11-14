@@ -64,10 +64,17 @@ export interface GraphicsRenderOptions {
   /** The music bed — joins at assembly under the whiteboard's mix law
    *  (ducked 0.16 under narration; solo bed at program level). */
   musicPath?: string;
-  /** The draft raster (graphics/draft.ts) — scales the VIEWPORT + a CSS
-   *  transform only; the frame truth, the composer and the doc are
-   *  untouched (draft pixels are final pixels at a smaller raster). */
+  /** The draft raster (graphics/draft.ts) — scales the VIEWPORT + the
+   *  board's box (the viewBox scaling law) only; the frame truth, the
+   *  composer and the doc are untouched (draft pixels are final pixels at
+   *  a smaller raster). */
   draftViewport?: { width: number; height: number };
+  /** The draft's render fps (graphicsDraftFps — the b6 time-scale floor).
+   *  Absent = the doc's own fps (every certified render). The draft's
+   *  clock quantizes at THIS rate (same delivered seconds, fewer frames);
+   *  the assembly contract assertion is a certified-render law and is
+   *  skipped for drafts (drafts never enter the assembly). */
+  draftFps?: number;
   onProgress?: (label: string, fraction: number) => void;
 }
 
@@ -119,11 +126,14 @@ export async function renderGraphics(
   const budget = assertGraphicsBudget(effective);
 
   const sceneMs = graphicsSceneDurationsMs(effective);
-  const clock = framePlanWindows(sceneMs, effective.fps);
+  const renderFps = opts.draftFps ?? effective.fps;
+  const clock = framePlanWindows(sceneMs, renderFps);
 
   // Compose through the contract: the engine's own tracks → the compositor's
   // plan read. A null plan here is an engine bug (we JUST derived the tracks
-  // from a validated doc) — the whiteboard's refusal, mirrored.
+  // from a validated doc) — the whiteboard's refusal, mirrored. The
+  // assembly-clock assertion is a CERTIFIED-render law (the draft delivers
+  // at its own fps and never enters the assembly), so drafts skip it.
   const tracks = graphicsTracks(effective);
   const plan = planFromTracks({ tracks }, effective.scenes.length);
   if (!plan) {
@@ -132,7 +142,7 @@ export async function renderGraphics(
     );
   }
   const deliveredSec = clock.scenes.reduce((a, s) => a + s.deliveredSec, 0);
-  if (Math.abs(plan.totalSec - quantizeClock(deliveredSec)) > 0.001) {
+  if (!opts.draftFps && Math.abs(plan.totalSec - quantizeClock(deliveredSec)) > 0.001) {
     throw new Error(
       "the graphics assembly clock diverged from the timeline contract — an engine bug, not a doc problem"
     );
@@ -174,6 +184,15 @@ export async function renderGraphics(
       // network, period.
       await context.route("**/*", (route) => route.abort());
       const page = await context.newPage();
+      // The skip-identical law (S123): the applier is IDEMPOTENT BY
+      // CONSTRUCTION (apply twice ≡ once — the compose.ts law), so a frame
+      // whose payload is byte-identical to the applied one needs no round
+      // trip at all. Graphics docs hold their composition between motion
+      // windows by design — on a dense doc the hold frames are the
+      // majority, and the protocol roundtrip is the loop's fixed floor.
+      // Deterministic: the skip depends only on the payload bytes (the
+      // frame truth), never on timing.
+      let lastPayload: string | null = null;
       try {
         opts.onProgress?.(
           `scene ${si + 1}/${effective.scenes.length} ("${scene.id}"): composing`,
@@ -182,19 +201,48 @@ export async function renderGraphics(
         const composed = composeGraphicsScene(scene, effective);
         await page.setContent(composed.html, { waitUntil: "load" });
         if (fitScale !== 1) {
-          // The draft raster: scale the page, never the truth.
+          // The draft raster: the BOARD's box sizes to the draft viewport
+          // through the composer's own viewBox — SVG's native scaling law,
+          // so chromium lays out and rasters at the draft's real pixel
+          // count (a CSS transform would still raster the full-size layer
+          // and only shrink the JPEG — measured 1.4× where the honest pixel
+          // ratio should be ~4×). The frame truth is untouched: same
+          // coordinates, same applier, same payload bytes.
           await page.addStyleTag({
-            content: `html,body{transform:scale(${fitScale});transform-origin:0 0}`,
+            content: `svg#board{width:${rasterW}px !important;height:${rasterH}px !important}`,
           });
         }
+        // The applier installs ONCE per page build (the render3d __CAMERA__
+        // pattern — the page declares, the renderer drives): a script tag
+        // defines window.__gfxApply from the ONE applier source, then every
+        // frame calls it through the documented function+serialized-arg
+        // evaluate form. (The inline-string IIFE form — the whiteboard's
+        // seam — is version-fragile: playwright 1.65's string-evaluate
+        // changed semantics and the arg arrives double-encoded. The script
+        // tag parses in the BROWSER, no playwright expression layer, and
+        // the per-frame call is the stable contract both versions honor.)
+        await page.evaluate((src: string) => {
+          const script = document.createElement("script");
+          script.textContent = `window.__gfxApply = (${src});`;
+          document.body.appendChild(script);
+        }, APPLY_GRAPHICS_FRAME_FN);
         const framesDir = path.join(opts.outDir, `scene-${si + 1}-frames`);
         fs.mkdirSync(framesDir, { recursive: true });
         for (let f = 0; f < frames; f++) {
-          const tMs = sceneStartMs + (f / effective.fps) * 1000;
+          const tMs = sceneStartMs + (f / renderFps) * 1000;
           const frame = frameAt(effective, tMs);
-          await page.evaluate(
-            `(${APPLY_GRAPHICS_FRAME_FN})(${graphicsFramePayload(frame)})`
-          );
+          // graphicsFramePayload ALREADY returns the JSON text — the arg
+          // rides verbatim (an extra stringify would double-encode it and
+          // the applier's JSON.parse would land on a string).
+          const payloadJson = graphicsFramePayload(frame);
+          if (payloadJson !== lastPayload) {
+            // The payload rides as a SERIALIZED arg into the page-installed
+            // applier (the render3d __CAMERA__ contract — version-stable).
+            await page.evaluate((payload: string) => {
+              (window as unknown as { __gfxApply?: (s: string) => boolean }).__gfxApply?.(payload);
+            }, payloadJson);
+            lastPayload = payloadJson;
+          }
           await page.screenshot({
             path: path.join(framesDir, `f${String(f).padStart(5, "0")}.jpg`),
             type: "jpeg",
@@ -222,7 +270,7 @@ export async function renderGraphics(
         const durSec = clock.scenes[si].deliveredSec;
         const args: string[] = [
           "-y",
-          "-framerate", String(effective.fps),
+          "-framerate", String(renderFps),
           "-i", path.join(framesDir, "f%05d.jpg"),
         ];
         if (voPath) args.push("-i", voPath);

@@ -166,12 +166,14 @@ import {
 import {
   GRAPHICS_DRAFT_MIN_DIM,
   GRAPHICS_DRAFT_SCALES,
+  graphicsDraftFps,
   graphicsDraftLabel,
   graphicsDraftMark,
   graphicsDraftScale,
   graphicsDraftViewport,
   isGraphicsDraftScale,
 } from "../src/lib/tubeforge/graphics/draft";
+import { graphicsDesignedBlackWindows, graphicsDesignedHolds } from "../src/lib/tubeforge/graphics/frame";
 import { graphicsQcRows, runGraphicsQc, runGraphicsSceneQc } from "../src/lib/tubeforge/graphics/qc";
 import { planFromTracks } from "../src/lib/tubeforge/composition-plan";
 import { scaffoldGraphicsDoc } from "../src/lib/tubeforge/graphics/planner";
@@ -16857,6 +16859,14 @@ await test("S123 P3 draft — the mark is non-reviewable and inherits no review 
   ok(graphicsDraftLabel(mark).includes("0.5×"), "the label carries the scale");
 });
 
+await test("S123 P3 draft — the fps floor: sub-1.0 drafts halve the frame rate, 1.0 keeps the doc's (the whiteboard preview precedent)", () => {
+  const d24 = s123Doc(24);
+  eq(graphicsDraftFps(d24, 0.5), 12, "a 0.5× draft of a 24 fps doc rasters at 12 fps");
+  eq(graphicsDraftFps(s123Doc(30), 0.5), 12, "a 0.5× draft of a 30 fps doc rasters at 12 fps");
+  eq(graphicsDraftFps(d24, 0.75), 12, "a 0.75× draft halves too");
+  eq(graphicsDraftFps(d24, 1.0), 24, "a 1.0× draft keeps the doc's own fps (a near-final look)");
+});
+
 await test("S123 P3 render seam — effectiveGraphicsDoc: explicit wins, VO fills (+the house tail), the stored doc never mutates", () => {
   const doc = s123Doc(24);
   const raw = JSON.parse(JSON.stringify(doc)); // a deep copy to detect mutation
@@ -16997,6 +17007,45 @@ await test("S123 P3 QC matrix — the per-scene slice scopes the rows; an unknow
   ok(!missing.passed, "an unknown scene FAILS — it cannot have passed anything");
   const exists = missing.rows.find((r) => r.id === "g-scene-exists");
   ok(exists && exists.status === "fail", "the g-scene-exists row fails honestly");
+});
+
+await test("S123 P3 designed evidence — the quiet open, the graced tail hold and the dark lead-in derive on the delivered clock", () => {
+  // The pin fixture: scene-1's motions end with h1's EXIT (3400+400 =
+  // 3800 ms of 5000) — the tail hold opens at 3800 − 1000 grace = 2800 ms.
+  // The quiet open runs to the SECOND mover's delay (h1 at 0, bar at 300):
+  // min(0 + 1000, 300) = 300 ms.
+  const doc = s123Doc(24);
+  const holds = graphicsDesignedHolds(doc);
+  const s1Head = holds.find((h) => h.startSec === 0);
+  ok(s1Head !== undefined, "scene-1's quiet open is a designed hold from 0");
+  eq(s1Head?.endSec, 0.3, "the quiet open ends at the second mover's delay (0.3s)");
+  const s1Tail = holds.find((h) => h.startSec === 2.8);
+  ok(s1Tail !== undefined && s1Tail.endSec === 5, "scene-1's tail hold opens graced (2.8s) and runs to the scene end");
+  // scene-3 (1100 ms, one draw at 500–1000): no tail hold (the motion ends
+  // inside the lens's own window of the scene end), but the head extends
+  // through min(500 + 1000, 1100) — the lone mover's open is designed.
+  const s3 = holds.find((h) => h.startSec === 7.5);
+  ok(s3 !== undefined && s3.endSec === 8.6, "scene-3's head hold spans the lone mover's quiet open");
+
+  // The dark lead-in needs a DARK scene — a dedicated doc: scene-2's
+  // #101820 background (luma below the lens's 0.10) with a first delay of
+  // 300 ms → the designed black window [start, start + 0.3].
+  const dark = validateGraphicsDoc({
+    version: GRAPHICS_VERSION, title: "dark lead-in", width: 1920, height: 1080, fps: 24,
+    scenes: [
+      { id: "scene-1", narration: "light", durationMs: 2000, background: "#ffffff",
+        elements: [{ id: "h", kind: "headline", at: { x: 100, y: 100, scale: 1, rotateDeg: 0 },
+          text: { text: "x" }, enter: { kind: "fade", durationMs: 300, delayMs: 0, ease: "linear" } }] },
+      { id: "scene-2", narration: "dark", durationMs: 2000, background: "#101820",
+        elements: [{ id: "ic", kind: "icon", at: { x: 300, y: 300, scale: 1, rotateDeg: 0 },
+          icon: { paths: ["M 0 0 L 8 8"] }, enter: { kind: "draw", durationMs: 500, delayMs: 300, ease: "linear" } }] },
+    ],
+  }).doc as GraphicsDoc;
+  const black = graphicsDesignedBlackWindows(dark);
+  ok(black.length === 1, "one designed black lead-in (the dark scene only)");
+  eq(black[0]?.startSec, 2, "the lead-in opens at the dark scene's start (the delivered clock)");
+  eq(black[0]?.endSec, 2.3, "the lead-in ends at the first motion's delay (+0.3s)");
+  ok(graphicsDesignedBlackWindows(dark).every((w) => w.endSec > w.startSec), "every designed window is well-formed");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

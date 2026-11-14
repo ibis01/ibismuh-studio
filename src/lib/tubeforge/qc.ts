@@ -271,6 +271,14 @@ export async function runQcReport(opts: {
    *  Deliberate burned captions are excluded by the judge's contract.
    *  Absent = the check is not emitted (e.g. a pre-S53 caller). */
   textScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string };
+  /** S123 — the graphics lane's DESIGNED static holds (frame.ts
+   *  graphicsDesignedHolds): the spans where the composition is
+   *  intentionally still (no camera — between motion windows the frame
+   *  holds by design). A frozen run that STARTS inside a designed hold is
+   *  explained (pass, named in the detail); a freeze outside one still
+   *  fails — per-evidence, never a lane-wide exemption. Absent = no
+   *  designed holds (every other lane). */
+  expectedHolds?: [number, number][];
 }): Promise<QcReport> {
   const aspect: QcAspect =
     opts.expectedAspect === "9:16" ? "9:16" : opts.expectedAspect === "1:1" ? "1:1" : "16:9";
@@ -373,13 +381,36 @@ export async function runQcReport(opts: {
           "ffmpeg could not complete the scan — this check did not run")
       );
     } else {
+      // S123 — the DESIGNED-holds read: a freeze that STARTS inside a
+      // designed hold window is the composition's resting state (the
+      // expectedBlack pattern for the graphics lane — per-evidence, never a
+      // lane-wide exemption; a freeze outside every window still fails).
+      // The 0.05s tolerance absorbs the encode's frame snapping (the run
+      // starts within a frame of the window edge).
+      const holds = opts.expectedHolds ?? [];
+      const inHold = (s: number) =>
+        holds.some(([a, b]) => s >= a - 0.05 && s < b);
+      const unexplained = freezes.filter((s) => !inHold(s));
+      const explained = freezes.length - unexplained.length;
+      const detail =
+        freezes.length === 0
+          ? ""
+          : [
+              ...unexplained.slice(0, 4).map((s) => `at ${s}s`),
+              ...(explained > 0 ? [`${explained} designed hold${explained > 1 ? "s" : ""} explained`] : []),
+            ].join(", ");
       checks.push(
         check(
           "frozen-frames",
           "No frozen imagery (motion everywhere)",
-          freezes.length === 0 ? "pass" : "fail",
-          freezes.length === 0 ? "none detected" : `${freezes.length} frozen run${freezes.length > 1 ? "s" : ""}`,
-          freezes.slice(0, 4).map((s) => `at ${s}s`).join(", ")
+          unexplained.length === 0 ? "pass" : "fail",
+          freezes.length === 0
+            ? "none detected"
+            : unexplained.length === 0
+              ? `${explained} designed hold${explained > 1 ? "s" : ""} (explained)`
+              : `${unexplained.length} unexplained frozen run${unexplained.length > 1 ? "s" : ""}` +
+                (explained > 0 ? ` (+${explained} designed)` : ""),
+          detail
         )
       );
     }
@@ -713,7 +744,8 @@ export async function qcForVideo(
   frameRate?: number,
   restrictedScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string },
   subjectScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string },
-  textScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string }
+  textScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string },
+  expectedHolds?: [number, number][]
 ): Promise<QcReport> {
   // Storage seam (T-3.7): ffprobe/readFile need real paths — materialize
   // returns the uploads path locally, a cached download under s3.
@@ -733,6 +765,7 @@ export async function qcForVideo(
     restrictedScan,
     subjectScan,
     textScan,
+    expectedHolds,
   });
 }
 

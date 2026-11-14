@@ -54,7 +54,7 @@
 // sketch's geometry arg came from the whiteboard pattern; the graphics
 // grammar carries placement inline (GraphicsElement.at), so there is no
 // external geometry to resolve.
-import { frameCountOf } from "../anim/clock";
+import { frameCountOf, framePlanWindows } from "../anim/clock";
 import { evalEase } from "../anim/easing";
 import { estimateNarrationMs } from "../whiteboard/timing";
 import type { ElementMotion, GraphicsDoc, GraphicsElement } from "./types";
@@ -319,4 +319,139 @@ export function effectiveGraphicsDoc(
       return scene;
     }),
   };
+}
+
+/**
+ * The DESIGNED static holds (S123 — the graphics lane's QC evidence): the
+ * spans where the doc's composition is intentionally still. Graphics has NO
+ * camera ("the doc clock IS the timeline") — between motion windows the
+ * frame holds by design, so the frozen-frames lens (freezedetect d=1.00,
+ * built for story-lane hold-last-frame DEFECTS) needs the designed windows
+ * as evidence, exactly the way the black-frame lens takes expectedBlack for
+ * designed fadeblack dips. Per-evidence, never a lane-wide exemption: a
+ * freeze OUTSIDE a designed hold still fails.
+ *
+ * Windows per scene (on the DELIVERED clock — the same framePlanWindows
+ * quantization the encode lays down, so QC's measured timestamps agree):
+ *   • the head hold [sceneStart, firstDelay) when the earliest motion delay
+ *     ≥ GRAPHICS_HOLD_MIN_MS,
+ *   • the tail hold [lastMotionEnd, sceneEnd) when the scene outlives its
+ *     last motion by ≥ GRAPHICS_HOLD_MIN_MS,
+ * where motionEnd = max(delayMs + durationMs) over every enter/exit/
+ * emphasis motion in the scene. Pure — the QC job and the proof consume;
+ * deterministic (same doc → same windows).
+ */
+export const GRAPHICS_HOLD_MIN_MS = 250;
+
+/** The hold-start grace: an easing tail goes sub-noise (freezedetect's
+ *  n=0.004 reads the crawl as frozen) BEFORE its motion window's
+ *  mathematical end, so the designed hold's START is graced by this much
+ *  (clamped to the scene start). Calibrated to the LENS ITSELF: 1,000 ms —
+ *  freezedetect's d=1.00 minimum run — so a freeze must start more than a
+ *  full lens-run before the designed hold to read as unexplained (a genuine
+ *  mid-motion freeze still does: it starts while the motion is visibly
+ *  moving, far from the asymptote). The END is never graced — a freeze
+ *  outside every window still fails. */
+export const GRAPHICS_HOLD_GRACE_MS = 1000;
+
+export interface GraphicsHoldWindow {
+  startSec: number;
+  endSec: number;
+}
+
+export function graphicsDesignedHolds(
+  doc: GraphicsDoc,
+  voMsBySceneId?: Map<string, number>
+): GraphicsHoldWindow[] {
+  const effective = voMsBySceneId ? effectiveGraphicsDoc(doc, voMsBySceneId) : doc;
+  const sceneMs = graphicsSceneDurationsMs(effective);
+  const clock = framePlanWindows(sceneMs, effective.fps);
+  const holds: GraphicsHoldWindow[] = [];
+  for (let i = 0; i < effective.scenes.length; i++) {
+    const scene = effective.scenes[i];
+    const delays: number[] = [];
+    let motionEnd = 0;
+    for (const el of scene.elements) {
+      for (const m of [el.enter, el.exit, el.emphasis]) {
+        if (!m) continue;
+        delays.push(m.delayMs);
+        motionEnd = Math.max(motionEnd, m.delayMs + m.durationMs);
+      }
+    }
+    delays.sort((a, b) => a - b);
+    const firstDelay = delays[0] ?? Number.POSITIVE_INFINITY;
+    const secondDelay = delays[1];
+    const durationMs = sceneMs[i];
+    const startSec = clock.scenes[i].startSec;
+    const endSec = clock.scenes[i].endSec;
+    // The QUIET OPEN (the stagger head): before the second mover enters,
+    // the frame's only motion is the first element's own entrance — at the
+    // frozen-frames lens's frame-level mean, a lone small element moving is
+    // sub-noise (the lens itself measures the stillness), so the open is a
+    // designed hold through min(firstDelay + grace, secondDelay). A scene
+    // whose first motion is large enough to register never triggers the
+    // lens, so the window is only ever consumed when the pixels agree the
+    // scene is still (self-consistent evidence).
+    if (Number.isFinite(firstDelay)) {
+      const headEndMs = Math.min(
+        firstDelay + GRAPHICS_HOLD_GRACE_MS,
+        secondDelay ?? firstDelay + GRAPHICS_HOLD_GRACE_MS,
+        durationMs
+      );
+      if (headEndMs - firstDelay >= GRAPHICS_HOLD_MIN_MS || (firstDelay === 0 && headEndMs >= GRAPHICS_HOLD_MIN_MS)) {
+        holds.push({ startSec, endSec: Number((startSec + headEndMs / 1000).toFixed(2)) });
+      }
+    }
+    // The tail hold: the composition is placed and holds while narration
+    // finishes — the designed resting state of every graphics scene. The
+    // start is graced by the easing asymptote (the crawl goes sub-noise
+    // before the window's mathematical end), clamped to the scene start.
+    if (motionEnd < durationMs - GRAPHICS_HOLD_MIN_MS) {
+      const holdStartMs = Math.max(0, motionEnd - GRAPHICS_HOLD_GRACE_MS);
+      holds.push({
+        startSec: Number((startSec + holdStartMs / 1000).toFixed(2)),
+        endSec,
+      });
+    }
+  }
+  return holds;
+}
+
+/** The DESIGNED black lead-ins (S123 — the black-frame lens's evidence,
+ *  the expectedBlack pattern): a scene whose background is DARK (relative
+ *  luma below the blackdetect pix_th of 0.10) sits essentially black until
+ *  its first content enters — that head window is the doc's own design, an
+ *  explained dip, while any OTHER black interval still fails. Pure; the QC
+ *  job computes it exactly where it computes the designed holds. */
+export function graphicsDesignedBlackWindows(
+  doc: GraphicsDoc,
+  voMsBySceneId?: Map<string, number>
+): GraphicsHoldWindow[] {
+  const effective = voMsBySceneId ? effectiveGraphicsDoc(doc, voMsBySceneId) : doc;
+  const sceneMs = graphicsSceneDurationsMs(effective);
+  const clock = framePlanWindows(sceneMs, effective.fps);
+  const windows: GraphicsHoldWindow[] = [];
+  for (let i = 0; i < effective.scenes.length; i++) {
+    const scene = effective.scenes[i];
+    // #rrggbb relative luminance (the sRGB linearization's cheap cousin —
+    // the blackdetect threshold is what matters, not colorimetric truth).
+    const m = /^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/.exec(scene.background);
+    if (!m) continue;
+    const [r, g, b] = [1, 2, 3].map((k) => parseInt(m[k] as string, 16) / 255);
+    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    if (luma >= 0.10) continue;
+    let firstDelay = Number.POSITIVE_INFINITY;
+    for (const el of scene.elements) {
+      for (const mot of [el.enter, el.exit, el.emphasis]) {
+        if (!mot) continue;
+        firstDelay = Math.min(firstDelay, mot.delayMs);
+      }
+    }
+    if (!Number.isFinite(firstDelay) || firstDelay < GRAPHICS_HOLD_MIN_MS) continue;
+    windows.push({
+      startSec: clock.scenes[i].startSec,
+      endSec: Number((clock.scenes[i].startSec + firstDelay / 1000).toFixed(2)),
+    });
+  }
+  return windows;
 }

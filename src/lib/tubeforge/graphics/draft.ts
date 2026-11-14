@@ -61,6 +61,21 @@ export interface GraphicsDraftViewport {
   scale: GraphicsDraftScale;
 }
 
+/** The draft frame-rate floor — the b6 philosophy applied to TIME: a draft
+ *  previews the choreography, not the smoothness. At a sub-1.0 scale the
+ *  draft raster halves its frame rate (min(doc.fps, 12)) and delivers the
+ *  SAME seconds (frameCountOf(ms, 12) / 12 ≡ the ms truth) with half the
+ *  screenshots — the house precedent is the whiteboard's scene preview,
+ *  which pins its own fps 24 regardless of the project's. A 1.0-scale draft
+ *  keeps the doc's fps (a full-size draft is a near-final look). */
+export const GRAPHICS_DRAFT_FPS = 12;
+
+/** The draft's render fps for a doc at a scale (see GRAPHICS_DRAFT_FPS). */
+export function graphicsDraftFps(doc: GraphicsDoc, requested: unknown): number {
+  const scale = graphicsDraftScale(requested);
+  return scale < 1 ? Math.min(doc.fps, GRAPHICS_DRAFT_FPS) : doc.fps;
+}
+
 /** The draft viewport for a doc at a scale: the doc's own aspect, shrunk,
  *  even-dimensioned, floored at 64 px per side. The frame truth is NEVER
  *  scaled — this is a raster size, nothing else. */
