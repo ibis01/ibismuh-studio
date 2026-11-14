@@ -1,0 +1,632 @@
+     1→// G1.3 — the graphics composer: static skeleton + ONE applier (S120 §5 /
+     2→// Part B). The wb-page.ts seam law applied to the graphics grammar:
+     3→//
+     4→//   the renderer rasterizes frameAt() through THESE artifacts; the editor
+     5→//   plays back frameAt() through THE SAME artifacts. One compose, one
+     6→//   applier, two callers — there is no second implementation to drift.
+     7→//
+     8→// The three artifacts, mirroring whiteboard/wb-page.ts exactly:
+     9→//   composeGraphicsScene(scene, doc) → the static HTML/SVG skeleton: the
+    10→//     background, one <g id="ge-{id}"> per element in doc order, every
+    11→//     piece of per-frame-reactive geometry baked into data-* attributes,
+    12→//     static attributes carrying the PLACED state (the poster frame — the
+    13→//     applier corrects before any capture).
+    14→//   graphicsFramePayload(frame) → the frame truth, serialized for the
+    15→//     page (frameAt's GraphicsFrameState, verbatim per element).
+    16→//   APPLY_GRAPHICS_FRAME_FN → the ONE applier, a set-only DOM function
+    17→//     evaluated by renderer (page.evaluate) and editor (iframe eval)
+    18→//     alike. NO CSS animation anywhere — every frame applied by JS
+    19→//     (the determinism law, wb-page.ts verbatim).
+    20→//
+    21→// THE REVEAL CHANNEL — one mechanism per element (the G1.2 contract:
+    22→// "wipe/grow/draw expose the reveal-progress channel the composer
+    23→// interprets per payload"):
+    24→//   bar/barChart → the payload's native mechanism, bar LENGTHS, always
+    25→//     baked (progress 1 = full bars; any progress-driving motion —
+    26→//     wipe enter, grow exit, emphasis re-trace — modulates them).
+    27→//   icon → stroke-dash along the path arc length (svg.ts#pathSegments →
+    28→//     totalLength — the S64 geometry, reused, never a second parser),
+    29→//     always baked.
+    30→//   shape → the FIRST progress-driving motion in slot order (enter →
+    31→//     exit → emphasis) picks the mechanism: wipe → a baked clip rect
+    32→//     reveals left→right; grow → the shape geometry scales from zero;
+    33→//     draw → the outline dashes on (fill appears at progress 1 — the
+    34→//     fill-after-outline law). No progress-driving motion → none.
+    35→//   text kinds / counter / callout → no mechanism (their legal motion
+    36→//     sets drive opacity/offset/scale/count only).
+    37→//
+    38→// RECORDED v1 DECISIONS (receipts to tune; the names are the contract —
+    39→// GRAPHICS_COMPOSE_DEFAULTS is the ONE table):
+    40→//   - compose-time defaults: sizePx 48, weight 700, ink #111111, icon
+    41→//     strokeWidth 4, shape strokeWidth 4, callout size 28, align center,
+    42→//     chart box = ½ surface centered on `at` (types.ts' own comments —
+    43→//     the validator clamps, the composer defaults).
+    44→//   - bar color is the ink (a per-bar palette is a design-doc slice);
+    45→//     bar labels carry the payload unit after the label.
+    46→//   - text renders explicit \n lines via tspans; auto-wrap is a design
+    47→//     slice, not a drive-by. dominant-baseline centers the block on the
+    48→//     anchor; align maps to text-anchor (left→start, center→middle,
+    49→//     right→end).
+    50→//   - an ABSENT payload composes as an empty element (the validator
+    51→//     warned; parse never refuses — the Part F law).
+    52→//   - group children nest INSIDE the group's <g> (the group's frame
+    53→//     transform/opacity composes with each child's — SVG multiplies
+    54→//     subtree opacity for free). Children ride the group's children-array
+    55→//     order; an element claimed by two groups lives in the LAST claim
+    56→//     (validator dedupes within one group only — recorded semantics).
+    57→//   - no camera: graphics is a peer lane; the W5 camera layer stays the
+    58→//     whiteboard's. The doc clock IS the timeline.
+    59→//   - the applier is IDEMPOTENT BY CONSTRUCTION: every write is an
+    60→//     absolute set on a static node — it creates no elements, reads no
+    61→//     layout (the W1 getBBox lesson), touches no wall clock, draws no
+    62→//     randomness. Full DOM idempotence rides the G1.10 benchmark's
+    63→//     frame-hash pin; the unit pins hold the construction laws.
+    64→//
+    65→// SECURITY (the hostile-icon pin): icon path data is sanitized with
+    66→// svg.ts#sanitizeSvg FIRST (payload markup stripped from the d string
+    67→// itself), then HTML-attribute-escaped (the hard gate — an escaped value
+    68→// cannot break out of its attribute context, ever). Validation counted
+    69→// commands on the raw d; the rendered path is the sanitized remainder —
+    70→// the budget was an upper bound, sanitize only removes hostile junk.
+    71→//
+    72→// PURE — no fs, no DOM execution, no clock, no randomness (the S64 law):
+    73→// this module builds STRINGS; the DOM owns execution. Leaf-module law:
+    74→// imports the grammar (types.ts), the frame truth (frame.ts) and two
+    75→// whiteboard siblings (svg) — never the reverse.
+    76→import {
+    77→  sanitizeSvg,
+    78→  pathSegments,
+    79→  totalLength,
+    80→} from "../whiteboard/svg";
+    81→import type { GraphicsDoc, GraphicsElement, GraphicsScene } from "./types";
+    82→import type { GraphicsFrameState } from "./frame";
+    83→
+    84→// ---------------------------------------------------------------------------
+    85→// The compose-time defaults — ONE table, cited by the skeleton and the pins
+    86→// ---------------------------------------------------------------------------
+    87→
+    88→export const GRAPHICS_COMPOSE_DEFAULTS = {
+    89→  /** Text font size when the payload omits sizePx (types.ts comment). */
+    90→  sizePx: 48,
+    91→  /** Text weight when the payload omits weight (types.ts comment). */
+    92→  weight: 700,
+    93→  /** The default ink — text fill, bar fill, icon stroke, shape stroke. */
+    94→  ink: "#111111",
+    95→  /** Icon stroke width when the payload omits it. */
+    96→  iconStrokeWidth: 4,
+    97→  /** Shape stroke width when the payload omits it. */
+    98→  shapeStrokeWidth: 4,
+    99→  /** Callout bubble text size (callouts are annotations, not headlines). */
+   100→  calloutSizePx: 28,
+   101→  /** Chart box = this fraction of the surface, centered on `at`. */
+   102→  chartBoxFraction: 0.5,
+   103→  /** Bar label font size. */
+   104→  barLabelSizePx: 20,
+   105→  /** Gap between the chart baseline and its labels. */
+   106→  barLabelGapPx: 24,
+   107→  /** Bar thickness as a fraction of its slot. */
+   108→  barSlotFill: 0.6,
+   109→  /** Text line height multiplier. */
+   110→  textLineHeight: 1.25,
+   111→  /** Shape defaults when the payload omits the dimension. */
+   112→  shapeW: 240,
+   113→  shapeH: 240,
+   114→  shapeR: 120,
+   115→  lineW: 320,
+   116→  /** Callout bubble padding / minimum width / char-width estimate. */
+   117→  bubblePadPx: 16,
+   118→  bubbleMinW: 140,
+   119→  bubbleCharW: 0.6,
+   120→  bubbleLineHeight: 1.3,
+   121→  /** Callout tail dot radius. */
+   122→  tailDotR: 4,
+   123→} as const;
+   124→
+   125→// ---------------------------------------------------------------------------
+   126→// Escaping + formatting (module-private, pure)
+   127→// ---------------------------------------------------------------------------
+   128→
+   129→/** HTML-escape for text content AND attribute values — the hard gate that
+   130→ *  keeps author strings (payload text, icon path data) inside their
+   131→ *  context. Applied AFTER sanitizeSvg on icon paths (sanitize first —
+   132→ *  strips the payload markup; escape second — nothing breaks out). */
+   133→function esc(s: string): string {
+   134→  return s
+   135→    .replace(/&/g, "&amp;")
+   136→    .replace(/</g, "&lt;")
+   137→    .replace(/>/g, "&gt;")
+   138→    .replace(/"/g, "&quot;")
+   139→    .replace(/'/g, "&#39;");
+   140→}
+   141→
+   142→/** Deterministic number → attribute string (6 decimals, no -0, no
+   143→ *  exponent noise). The applier recomputes FROM these baked values, so
+   144→ *  what the skeleton says is what the frame math uses. */
+   145→function fmt(n: number): string {
+   146→  return String(Math.round(n * 1e6) / 1e6);
+   147→}
+   148→
+   149→/** The counter's rendered string — exported so the pins and any future
+   150→ *  surface share ONE formatter. decimals defaults to 0, unit rides after. */
+   151→export function formatCounter(value: number, decimals?: number, unit?: string): string {
+   152→  return value.toFixed(decimals ?? 0) + (unit ?? "");
+   153→}
+   154→
+   155→// ---------------------------------------------------------------------------
+   156→// The reveal mechanism — ONE per element (module-private)
+   157→// ---------------------------------------------------------------------------
+   158→
+   159→type RevealMechanism = "bar" | "dash" | "grow" | "wipe";
+   160→
+   161→const SHAPE_PROGRESS_MECHANISM: Partial<Record<string, "wipe" | "grow" | "dash">> = {
+   162→  wipe: "wipe",
+   163→  grow: "grow",
+   164→  draw: "dash",
+   165→};
+   166→
+   167→/** Shapes pick the mechanism from the FIRST progress-driving motion in
+   168→ *  slot order (enter → exit → emphasis); bars/icons carry their native
+   169→ *  mechanism always; everything else none. */
+   170→function revealMechanism(el: GraphicsElement): RevealMechanism | null {
+   171→  if (el.kind === "bar" || el.kind === "barChart") return "bar";
+   172→  if (el.kind === "icon") return "dash";
+   173→  if (el.kind === "shape") {
+   174→    for (const m of [el.enter, el.exit, el.emphasis]) {
+   175→      if (m === undefined) continue;
+   176→      const mech = SHAPE_PROGRESS_MECHANISM[m.kind];
+   177→      if (mech !== undefined) return mech;
+   178→    }
+   179→  }
+   180→  return null;
+   181→}
+   182→
+   183→// ---------------------------------------------------------------------------
+   184→// Element renderers (module-private, pure) — each returns the INNER content
+   185→// of the element's <g>; the wrapper carries the frame-driven transform +
+   186→// opacity (poster = the placed state).
+   187→// ---------------------------------------------------------------------------
+   188→
+   189→interface TextOpts {
+   190→  lines: string[];
+   191→  sizePx: number;
+   192→  weight: number;
+   193→  color: string;
+   194→  align: "left" | "center" | "right";
+   195→  extraAttrs?: string;
+   196→  /** Pre-formatted single-line content (the counter's poster value). */
+   197→  content?: string;
+   198→}
+   199→
+   200→/** The shared text block: tspans per line, block centered on the anchor
+   201→ *  (dominant-baseline middle), align → text-anchor. */
+   202→function textBlock(o: TextOpts): string {
+   203→  const anchor = o.align === "left" ? "start" : o.align === "right" ? "end" : "middle";
+   204→  const lh = o.sizePx * GRAPHICS_COMPOSE_DEFAULTS.textLineHeight;
+   205→  const n = o.lines.length;
+   206→  const tspans = o.content !== undefined && n === 1
+   207→    ? esc(o.content)
+   208→    : o.lines
+   209→        .map((line, i) => `<tspan x="0" y="${fmt((i - (n - 1) / 2) * lh)}">${esc(line)}</tspan>`)
+   210→        .join("");
+   211→  return (
+   212→    `<text text-anchor="${anchor}" dominant-baseline="middle"` +
+   213→    ` font-size="${fmt(o.sizePx)}" font-weight="${o.weight}" fill="${o.color}"` +
+   214→    ` xml:space="preserve"${o.extraAttrs ?? ""}>${tspans}</text>`
+   215→  );
+   216→}
+   217→
+   218→function textInner(el: GraphicsElement): string {
+   219→  const p = el.text;
+   220→  if (p === undefined) return ""; // absent payload → empty element (validator warned)
+   221→  return textBlock({
+   222→    lines: p.text.split("\n"),
+   223→    sizePx: p.sizePx ?? GRAPHICS_COMPOSE_DEFAULTS.sizePx,
+   224→    weight: p.weight ?? GRAPHICS_COMPOSE_DEFAULTS.weight,
+   225→    color: p.color ?? GRAPHICS_COMPOSE_DEFAULTS.ink,
+   226→    align: p.align ?? "center",
+   227→  });
+   228→}
+   229→
+   230→function counterInner(el: GraphicsElement): string {
+   231→  const p = el.counter;
+   232→  if (p === undefined) return "";
+   233→  const d = p.decimals ?? 0;
+   234→  return textBlock({
+   235→    lines: [""],
+   236→    sizePx: GRAPHICS_COMPOSE_DEFAULTS.sizePx,
+   237→    weight: GRAPHICS_COMPOSE_DEFAULTS.weight,
+   238→    color: GRAPHICS_COMPOSE_DEFAULTS.ink,
+   239→    align: "center",
+   240→    extraAttrs: ` data-counter="1" data-decimals="${d}" data-unit="${esc(p.unit ?? "")}"`,
+   241→    content: formatCounter(p.to, p.decimals, p.unit), // poster = the final value
+   242→  });
+   243→}
+   244→
+   245→function barInner(el: GraphicsElement, doc: GraphicsDoc): string {
+   246→  const p = el.bar;
+   247→  if (p === undefined) return "";
+   248→  const D = GRAPHICS_COMPOSE_DEFAULTS;
+   249→  const boxW = doc.width * D.chartBoxFraction;
+   250→  const boxH = doc.height * D.chartBoxFraction;
+   251→  const left = el.at.x - boxW / 2;
+   252→  const top = el.at.y - boxH / 2;
+   253→  // scaleMax: the payload ceiling, else the data max (all-zero data → 1,
+   254→  // so zero-length bars stay honest instead of dividing by zero).
+   255→  const dataMax = Math.max(...p.data.map((r) => r.value), 0);
+   256→  const scaleMax = p.max !== undefined && p.max > 0 ? p.max : dataMax > 0 ? dataMax : 1;
+   257→  const ink = GRAPHICS_COMPOSE_DEFAULTS.ink;
+   258→  const n = p.data.length;
+   259→  const parts: string[] = [];
+   260→  if (p.horizontal === true) {
+   261→    const slotH = boxH / n;
+   262→    const barH = slotH * D.barSlotFill;
+   263→    for (let i = 0; i < n; i++) {
+   264→      const row = p.data[i];
+   265→      if (row === undefined) continue;
+   266→      const len = (row.value / scaleMax) * boxW;
+   267→      const cy = top + i * slotH + slotH / 2;
+   268→      parts.push(
+   269→        `<rect x="${fmt(left)}" y="${fmt(cy - barH / 2)}" width="${fmt(len)}" height="${fmt(barH)}"` +
+   270→          ` fill="${ink}" data-len="${fmt(len)}" data-axis="h"/>`,
+   271→      );
+   272→      parts.push(
+   273→        `<text x="${fmt(left - 12)}" y="${fmt(cy)}" text-anchor="end" dominant-baseline="middle"` +
+   274→          ` font-size="${D.barLabelSizePx}" fill="${ink}" xml:space="preserve">${esc(row.label + (p.unit ? " " + p.unit : ""))}</text>`,
+   275→      );
+   276→    }
+   277→  } else {
+   278→    const slotW = boxW / n;
+   279→    const barW = slotW * D.barSlotFill;
+   280→    const baseline = top + boxH;
+   281→    for (let i = 0; i < n; i++) {
+   282→      const row = p.data[i];
+   283→      if (row === undefined) continue;
+   284→      const len = (row.value / scaleMax) * boxH;
+   285→      const x = left + i * slotW + (slotW - barW) / 2;
+   286→      parts.push(
+   287→        `<rect x="${fmt(x)}" y="${fmt(baseline - len)}" width="${fmt(barW)}" height="${fmt(len)}"` +
+   288→          ` fill="${ink}" data-len="${fmt(len)}" data-axis="v" data-base="${fmt(baseline)}"/>`,
+   289→      );
+   290→      parts.push(
+   291→        `<text x="${fmt(left + i * slotW + slotW / 2)}" y="${fmt(baseline + D.barLabelGapPx)}"` +
+   292→          ` text-anchor="middle" font-size="${D.barLabelSizePx}" fill="${ink}" xml:space="preserve">` +
+   293→          `${esc(row.label + (p.unit ? " " + p.unit : ""))}</text>`,
+   294→      );
+   295→    }
+   296→  }
+   297→  return parts.join("\n");
+   298→}
+   299→
+   300→function iconInner(el: GraphicsElement): string {
+   301→  const p = el.icon;
+   302→  if (p === undefined) return "";
+   303→  const color = p.color ?? GRAPHICS_COMPOSE_DEFAULTS.ink;
+   304→  const sw = p.strokeWidth ?? GRAPHICS_COMPOSE_DEFAULTS.iconStrokeWidth;
+   305→  // sanitize FIRST (svg.ts strips payload markup from the d string), then
+   306→  // escape (nothing breaks the attribute context). The data-len rides the
+   307→  // SANITIZED path — what renders is what measures.
+   308→  return p.paths
+   309→    .map((d) => {
+   310→      const clean = sanitizeSvg(d);
+   311→      const len = totalLength(pathSegments(clean));
+   312→      return (
+   313→        `<path d="${esc(clean)}" fill="none" stroke="${color}" stroke-width="${fmt(sw)}"` +
+   314→        ` stroke-linecap="round" stroke-linejoin="round"` +
+   315→        ` stroke-dasharray="${fmt(len)}" data-len="${fmt(len)}"/>`
+   316→      );
+   317→    })
+   318→    .join("\n");
+   319→}
+   320→
+   321→function calloutInner(el: GraphicsElement): string {
+   322→  const p = el.callout;
+   323→  if (p === undefined) return "";
+   324→  const D = GRAPHICS_COMPOSE_DEFAULTS;
+   325→  const sizePx = D.calloutSizePx;
+   326→  const ink = D.ink;
+   327→  const lines = p.text.split("\n");
+   328→  const maxChars = Math.max(...lines.map((l) => l.length), 1);
+   329→  const w = Math.max(maxChars * sizePx * D.bubbleCharW + D.bubblePadPx * 2, D.bubbleMinW);
+   330→  const h = lines.length * sizePx * D.bubbleLineHeight + D.bubblePadPx * 2;
+   331→  const parts: string[] = [];
+   332→  if (p.pointsAt !== undefined) {
+   333→    // Tail from the bubble's bottom edge to the target — LOCAL coords (the
+   334→    // group carries `at`; exact when rotate 0 / scale 1, the authored case).
+   335→    const dx = p.pointsAt.x - el.at.x;
+   336→    const dy = p.pointsAt.y - el.at.y;
+   337→    parts.push(`<line x1="0" y1="${fmt(h / 2)}" x2="${fmt(dx)}" y2="${fmt(dy)}" stroke="${ink}" stroke-width="2"/>`);
+   338→    parts.push(`<circle cx="${fmt(dx)}" cy="${fmt(dy)}" r="${D.tailDotR}" fill="${ink}"/>`);
+   339→  }
+   340→  parts.push(
+   341→    `<rect x="${fmt(-w / 2)}" y="${fmt(-h / 2)}" width="${fmt(w)}" height="${fmt(h)}" rx="12"` +
+   342→      ` fill="#ffffff" stroke="${ink}" stroke-width="2"/>`,
+   343→  );
+   344→  parts.push(
+   345→    textBlock({
+   346→      lines,
+   347→      sizePx,
+   348→      weight: D.weight,
+   349→      color: ink,
+   350→      align: "center",
+   351→    }),
+   352→  );
+   353→  return parts.join("\n");
+   354→}
+   355→
+   356→function shapeInner(el: GraphicsElement): string {
+   357→  const p = el.shape;
+   358→  if (p === undefined) return "";
+   359→  const D = GRAPHICS_COMPOSE_DEFAULTS;
+   360→  const stroke = p.stroke ?? D.ink;
+   361→  const fill = p.fill ?? "none";
+   362→  const sw = p.strokeWidth ?? D.shapeStrokeWidth;
+   363→  const mech = revealMechanism(el);
+   364→  const base = ` stroke="${stroke}" stroke-width="${fmt(sw)}" data-shape="${p.kind}"`;
+   365→  let attrs = "";
+   366→  if (mech === "dash") {
+   367→    attrs += ` data-fill="1"`; // fill-after-outline: the applier flips it at progress 1
+   368→  }
+   369→  if (mech === "grow") {
+   370→    attrs += ` data-grow="1"`; // the applier recomputes the geometry from the baked dims
+   371→  }
+   372→  // Full dims ALWAYS baked (data-w/h/r) — the grow branch recomputes from
+   373→  // them; the poster attributes carry the placed geometry.
+   374→  switch (p.kind) {
+   375→    case "rect": {
+   376→      const w = p.w ?? D.shapeW;
+   377→      const h = p.h ?? D.shapeH;
+   378→      attrs += ` data-w="${fmt(w)}" data-h="${fmt(h)}"`;
+   379→      if (mech === "dash") {
+   380→        const len = 2 * (w + h);
+   381→        attrs += ` stroke-dasharray="${fmt(len)}" data-len="${fmt(len)}"`;
+   382→      }
+   383→      if (mech === "wipe") {
+   384→        attrs += ` clip-path="url(#ge-${el.id}--wipe)"`;
+   385→      }
+   386→      return `<rect x="${fmt(-w / 2)}" y="${fmt(-h / 2)}" width="${fmt(w)}" height="${fmt(h)}"` +
+   387→        ` fill="${fill}"${base}${attrs}/>`;
+   388→    }
+   389→    case "line": {
+   390→      const w = p.w ?? D.lineW;
+   391→      const h = p.h ?? 0;
+   392→      attrs += ` data-w="${fmt(w)}" data-h="${fmt(h)}"`;
+   393→      if (mech === "dash") {
+   394→        const len = Math.hypot(w, h);
+   395→        attrs += ` stroke-dasharray="${fmt(len)}" data-len="${fmt(len)}"`;
+   396→      }
+   397→      return `<line x1="${fmt(-w / 2)}" y1="${fmt(-h / 2)}" x2="${fmt(w / 2)}" y2="${fmt(h / 2)}"` +
+   398→        ` fill="none"${base}${attrs}/>`;
+   399→    }
+   400→    case "circle": {
+   401→      const r = p.r ?? D.shapeR;
+   402→      attrs += ` data-r="${fmt(r)}"`;
+   403→      if (mech === "dash") {
+   404→        const len = 2 * Math.PI * r;
+   405→        attrs += ` stroke-dasharray="${fmt(len)}" data-len="${fmt(len)}"`;
+   406→      }
+   407→      if (mech === "wipe") {
+   408→        attrs += ` clip-path="url(#ge-${el.id}--wipe)"`;
+   409→      }
+   410→      return `<circle cx="0" cy="0" r="${fmt(r)}" fill="${fill}"${base}${attrs}/>`;
+   411→    }
+   412→  }
+   413→}
+   414→
+   415→/** The wipe mechanism's clip — baked INSIDE the group so the applier's
+   416→ *  :scope query finds it and the element's user space owns the coords. */
+   417→function wipeClip(el: GraphicsElement): string {
+   418→  const p = el.shape;
+   419→  if (p === undefined) return "";
+   420→  const D = GRAPHICS_COMPOSE_DEFAULTS;
+   421→  let x: number;
+   422→  let y: number;
+   423→  let w: number;
+   424→  let h: number;
+   425→  switch (p.kind) {
+   426→    case "rect": {
+   427→      w = p.w ?? D.shapeW;
+   428→      h = p.h ?? D.shapeH;
+   429→      x = -w / 2;
+   430→      y = -h / 2;
+   431→      break;
+   432→    }
+   433→    case "line": {
+   434→      w = p.w ?? D.lineW;
+   435→      h = (p.h ?? 0) + (p.strokeWidth ?? D.shapeStrokeWidth) + 8;
+   436→      x = -w / 2;
+   437→      y = -h / 2;
+   438→      break;
+   439→    }
+   440→    case "circle": {
+   441→      const r = p.r ?? D.shapeR;
+   442→      x = -r;
+   443→      y = -r;
+   444→      w = 2 * r;
+   445→      h = 2 * r;
+   446→      break;
+   447→    }
+   448→  }
+   449→  return (
+   450→    `<clipPath id="ge-${el.id}--wipe"><rect x="${fmt(x)}" y="${fmt(y)}"` +
+   451→    ` width="${fmt(w)}" height="${fmt(h)}" data-w="${fmt(w)}"/></clipPath>`
+   452→  );
+   453→}
+   454→
+   455→function elementInner(el: GraphicsElement, doc: GraphicsDoc): string {
+   456→  switch (el.kind) {
+   457→    case "headline":
+   458→    case "subhead":
+   459→    case "bullet":
+   460→      return textInner(el);
+   461→    case "counter":
+   462→      return counterInner(el);
+   463→    case "bar":
+   464→    case "barChart":
+   465→      return barInner(el, doc);
+   466→    case "icon":
+   467→      return iconInner(el);
+   468→    case "callout":
+   469→      return calloutInner(el);
+   470→    case "shape":
+   471→      return shapeInner(el);
+   472→    case "group":
+   473→      return ""; // unreachable — elementNode short-circuits groups; children ride the assembly pass
+   474→  }
+   475→}
+   476→
+   477→/** The element wrapper: the frame engine (applier) owns transform +
+   478→ *  opacity; the poster carries the placed state. Groups receive their
+   479→ *  children's nodes as the body (the assembly pass below builds them). */
+   480→function elementNode(el: GraphicsElement, doc: GraphicsDoc, childrenBody = ""): string {
+   481→  const transform =
+   482→    `translate(${fmt(el.at.x)} ${fmt(el.at.y)}) rotate(${fmt(el.at.rotateDeg)}) scale(${fmt(el.at.scale)})`;
+   483→  const opacity = fmt(el.opacity ?? 1);
+   484→  const clip = el.kind === "shape" && revealMechanism(el) === "wipe" ? wipeClip(el) : "";
+   485→  const inner = el.kind === "group" ? childrenBody : elementInner(el, doc);
+   486→  const body = clip !== "" ? `${clip}\n${inner}` : inner;
+   487→  return `<g id="ge-${el.id}" transform="${transform}" opacity="${opacity}">${body}</g>`;
+   488→}
+   489→
+   490→// ---------------------------------------------------------------------------
+   491→// The skeleton
+   492→// ---------------------------------------------------------------------------
+   493→
+   494→export interface ComposedGraphicsScene {
+   495→  html: string;
+   496→}
+   497→
+   498→/** The static skeleton for one scene — the poster frame. PURE: same
+   499→ *  (scene, doc) → byte-identical html (pinned). The renderer feeds it to
+   500→ *  page.setContent; the editor to an iframe srcdoc — one compose, two
+   501→ *  callers (the wb-page.ts seam law). */
+   502→export function composeGraphicsScene(scene: GraphicsScene, doc: GraphicsDoc): ComposedGraphicsScene {
+   503→  // Group nesting — children ride the group's children-array order inside
+   504→  // the group's <g>; an element claimed by two groups lives in the LAST
+   505→  // claim (recorded v1 semantics).
+   506→  const claims = new Map<string, string>();
+   507→  for (const el of scene.elements) {
+   508→    if (el.kind === "group" && el.group !== undefined) {
+   509→      for (const child of el.group.children) claims.set(child, el.id);
+   510→    }
+   511→  }
+   512→  const emitted = new Set<string>();
+   513→  const parts: string[] = [];
+   514→  for (const el of scene.elements) {
+   515→    if (el.kind === "group") {
+   516→      const inner = (el.group?.children ?? [])
+   517→        .map((cid) => scene.elements.find((c) => c.id === cid))
+   518→        .filter((c): c is GraphicsElement => c !== undefined && !emitted.has(c.id));
+   519→      for (const c of inner) emitted.add(c.id);
+   520→      const body = inner.map((c) => elementNode(c, doc)).join("\n");
+   521→      parts.push(elementNode(el, doc, body));
+   522→      continue;
+   523→    }
+   524→    if (claims.has(el.id) || emitted.has(el.id)) continue; // lives inside its group
+   525→    parts.push(elementNode(el, doc));
+   526→  }
+   527→  const html =
+   528→    `<!doctype html><html><head><meta charset="utf-8"><style>
+   529→html,body{margin:0;padding:0;background:${scene.background};overflow:hidden}
+   530→svg{display:block}
+   531→text{font-family:Arial,Helvetica,sans-serif}
+   532→</style></head><body>
+   533→<svg id="board" width="${doc.width}" height="${doc.height}" viewBox="0 0 ${doc.width} ${doc.height}" xmlns="http://www.w3.org/2000/svg">
+   534→<rect x="0" y="0" width="${doc.width}" height="${doc.height}" fill="${scene.background}"/>
+   535→${parts.join("\n")}
+   536→</svg></body></html>`;
+   537→  return { html };
+   538→}
+   539→
+   540→// ---------------------------------------------------------------------------
+   541→// The payload + the ONE applier
+   542→// ---------------------------------------------------------------------------
+   543→
+   544→/** The frame truth serialized for the page — frameAt's state, verbatim,
+   545→ *  in doc order. Key order stable; byte-identical for equal frames. */
+   546→export function graphicsFramePayload(frame: GraphicsFrameState): string {
+   547→  return JSON.stringify({
+   548→    sceneId: frame.sceneId,
+   549→    sceneTMs: frame.sceneTMs,
+   550→    elements: frame.elements.map((e) => ({
+   551→      id: e.id,
+   552→      opacity: e.opacity,
+   553→      x: e.x,
+   554→      y: e.y,
+   555→      scale: e.scale,
+   556→      rotateDeg: e.rotateDeg,
+   557→      progress: e.progress,
+   558→      ...(e.counterValue !== undefined ? { counterValue: e.counterValue } : {}),
+   559→    })),
+   560→  });
+   561→}
+   562→
+   563→/** The ONE applier — shared by the renderer (page.evaluate) and the editor
+   564→ *  (iframe eval). IDEMPOTENT BY CONSTRUCTION: every write is an absolute
+   565→ *  set on a static skeleton node (apply twice ≡ once); it creates no
+   566→ *  elements, reads no layout, touches no wall clock, draws no randomness.
+   567→ *  Mechanism queries are :scope-scoped to the element's OWN content so a
+   568→ *  group's pass never overwrites a child's reveal state. */
+   569→export const APPLY_GRAPHICS_FRAME_FN = `(payloadJson) => {
+   570→  const p = JSON.parse(payloadJson);
+   571→  for (const el of p.elements) {
+   572→    const g = document.getElementById("ge-" + el.id);
+   573→    if (!g) continue;
+   574→    g.setAttribute("transform", "translate(" + el.x + " " + el.y + ") rotate(" + el.rotateDeg + ") scale(" + el.scale + ")");
+   575→    g.setAttribute("opacity", String(el.opacity));
+   576→    const prog = el.progress;
+   577→    // Bars — the data reveal: each bar's length rides the progress channel.
+   578→    for (const rect of g.querySelectorAll(":scope > rect[data-len][data-axis]")) {
+   579→      const len = Number(rect.dataset.len) * prog;
+   580→      if (rect.dataset.axis === "v") {
+   581→        rect.setAttribute("height", String(len));
+   582→        rect.setAttribute("y", String(Number(rect.dataset.base) - len));
+   583→      } else {
+   584→        rect.setAttribute("width", String(len));
+   585→      }
+   586→    }
+   587→    // Counter — the tweened value, formatted by the baked decimals/unit.
+   588→    const counter = g.querySelector(":scope > text[data-counter]");
+   589→    if (counter && el.counterValue !== undefined) {
+   590→      counter.textContent = Number(el.counterValue).toFixed(Number(counter.dataset.decimals || "0")) + (counter.dataset.unit || "");
+   591→    }
+   592→    // Stroke draw — icons and drawn shapes reveal along their arc length
+   593→    // (data-len without data-axis: bars carry the axis, draw does not).
+   594→    for (const s of g.querySelectorAll(":scope > [data-len]:not([data-axis])")) {
+   595→      const L = Number(s.dataset.len);
+   596→      s.setAttribute("stroke-dashoffset", String(L * (1 - prog)));
+   597→    }
+   598→    // Shape geometry grow + the fill-after-outline flip.
+   599→    const shape = g.querySelector(":scope > [data-shape]");
+   600→    if (shape) {
+   601→      if (shape.hasAttribute("data-grow")) {
+   602→        const k = prog;
+   603→        const kind = shape.getAttribute("data-shape");
+   604→        if (kind === "rect") {
+   605→          const w = Number(shape.dataset.w) * k;
+   606→          const h = Number(shape.dataset.h) * k;
+   607→          shape.setAttribute("width", String(w));
+   608→          shape.setAttribute("height", String(h));
+   609→          shape.setAttribute("x", String(-w / 2));
+   610→          shape.setAttribute("y", String(-h / 2));
+   611→        } else if (kind === "circle") {
+   612→          shape.setAttribute("r", String(Number(shape.dataset.r) * k));
+   613→        } else {
+   614→          const w = Number(shape.dataset.w) * k;
+   615→          const h = Number(shape.dataset.h) * k;
+   616→          shape.setAttribute("x1", String(-w / 2));
+   617→          shape.setAttribute("y1", String(-h / 2));
+   618→          shape.setAttribute("x2", String(w / 2));
+   619→          shape.setAttribute("y2", String(h / 2));
+   620→        }
+   621→      }
+   622→      if (shape.hasAttribute("data-fill")) {
+   623→        shape.setAttribute("fill-opacity", prog >= 1 ? "1" : "0");
+   624→      }
+   625→    }
+   626→    // Wipe — the baked clip rect's width rides progress.
+   627→    const clipRect = g.querySelector(":scope > clipPath rect[data-w]");
+   628→    if (clipRect) clipRect.setAttribute("width", String(Number(clipRect.dataset.w) * prog));
+   629→  }
+   630→  return true;
+   631→}`;
+   632→
