@@ -116,9 +116,11 @@ export async function POST(req: NextRequest) {
     // S67 — whiteboard is a story-format mode (the E1 design §2.2 law):
     // creating a classic-script video with it is a contradiction, and a 400
     // here beats a video that can never render.
-    if (renderMode === "whiteboard" && format !== "story")
+    // S123 (G1) — the graphics engine lane rides the same law (the engine
+    // modes are a set, not a case).
+    if ((renderMode === "whiteboard" || renderMode === "graphics") && format !== "story")
       return NextResponse.json(
-        { error: "Whiteboard mode needs a scene-based story — create the video with format \"story\"" },
+        { error: "Whiteboard and motion-graphics modes need a scene-based story — create the video with format \"story\"" },
         { status: 400 }
       );
 
