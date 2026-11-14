@@ -34,9 +34,11 @@ import type { AssembledTimeline, TimelineTrack } from "./timeline";
  *  "image" = the designed PNG IS the frame (slides today); "video" = a
  *  moving or footage-derived clip; "whiteboard" = the engine DRAWS the
  *  frames (the Whiteboard lane owns execution — the compositor's segment
- *  builders refuse the kind as a routing wall). 3d/character/graphics land
- *  with the engines that own them. */
-export type PlanVisualKind = "video" | "image" | "whiteboard";
+ *  builders refuse the kind as a routing wall). "graphics" = S123 (G1):
+ *  the motion-graphics lane draws the frames the same way (the compositor
+ *  refuses it on the SAME routing wall). 3d/character land with the
+ *  engines that own them. */
+export type PlanVisualKind = "video" | "image" | "whiteboard" | "graphics";
 
 export interface CompositionPlanScene {
   /** Play-order position (0-based) — the row's scenes align BY POSITION
@@ -104,7 +106,14 @@ export function planFromTracks(
     scenes.push({
       position: i,
       sceneIndex: typeof c.sceneIndex === "number" ? c.sceneIndex : i + 1,
-      kind: c.kind === "image" ? "image" : c.kind === "whiteboard" ? "whiteboard" : "video",
+      kind:
+        c.kind === "image"
+          ? "image"
+          : c.kind === "whiteboard"
+            ? "whiteboard"
+            : c.kind === "graphics"
+              ? "graphics"
+              : "video",
       assetSource:
         c.asset?.source === "stock"
           ? "stock"

@@ -180,6 +180,27 @@ import {
   graphicsBudgetReport,
 } from "../src/lib/tubeforge/graphics/preflight";
 import { graphicsTracks } from "../src/lib/tubeforge/graphics/tracks";
+// S123 P3 — the engine renderer's pure seams, the draft viewport law and
+// the graphics QC group (the matrix + the lane-aware battery helpers).
+import {
+  graphicsEncodeArgs,
+  graphicsAssemblyArgs,
+  sceneCursorMs,
+} from "../src/lib/tubeforge/graphics/render";
+import {
+  GRAPHICS_DRAFT_SCALES,
+  draftSurfaceDim,
+  graphicsDraftDoc,
+  graphicsDraftKey,
+  graphicsDraftPlan,
+  isGraphicsDraftScale,
+} from "../src/lib/tubeforge/graphics/draft";
+import {
+  graphicsExpectedCuts,
+  graphicsHoldWindows,
+  graphicsQcMatrix,
+} from "../src/lib/tubeforge/graphics/qc";
+import { judgeFreezes, judgeStaticRuns } from "../src/lib/tubeforge/qc";
 
 const execFileAsync = promisify(execFile);
 
@@ -2313,11 +2334,11 @@ await test("queue: resumableKinds covers every kind the routes start", async () 
   // in review); every one must be resumable after a crash. Since the S33
   // contract fix, resumableKinds() is DERIVED from the handler registry, so
   // this test can no longer pass with a stale list — the literal below pins
-  // exhaustiveness: all 25 JobKind values are route-started AND
+  // exhaustiveness: all 26 JobKind values are route-started AND
   // handler-registered (director + continuity joined in Stage 5, upload in
   // Stage 6, whiteboard in S67, consistency in S77, reference in S88,
-  // scene3d in S94, scene-recheck in S116; the pre-fix copy listed only 18
-  // and enshrined the drift).
+  // scene3d in S94, scene-recheck in S116, graphics in S123; the pre-fix
+  // copy listed only 18 and enshrined the drift).
   const { resumableKinds } = await import("../src/lib/tubeforge/queue-handlers.ts");
   const kinds = resumableKinds();
   const expected = [
@@ -2325,7 +2346,7 @@ await test("queue: resumableKinds covers every kind the routes start", async () 
     "render", "short", "convert", "verify", "comments", "thumbnail",
     "variants", "slide", "portrait", "poses", "qc", "upload",
     "director", "continuity", "whiteboard", "consistency", "reference",
-    "scene3d", "scene-recheck",
+    "scene3d", "scene-recheck", "graphics",
   ];
   for (const k of expected) {
     ok(kinds.includes(k), `"${k}" is resumable`);
@@ -13022,13 +13043,82 @@ await test("s123: the graphics lane rows of the truth table + the ship-dark law"
   // Lockstep covers the engine-lane side automatically.
   ok(laneDecisionsComplete(), "RENDER_MODES minus {whiteboard, graphics} is exactly the story modes (lockstep)");
 
-  // The ship-dark law (spec §10, acceptance criterion 4): the contract
-  // seats the lane, but the picker does NOT offer it until the lockstep
-  // commit lands the compositor case + route branch with it — a picker
-  // entry without its route branch would degrade to the story gates, the
-  // S119 bug class. This pin flips WITH that commit, never before.
+  // The lockstep law (spec §10 / acceptance criterion 4): the contract
+  // seats the lane and the picker offers it ONLY in the commit that also
+  // lands the route branch + the compositor dispatch — all three landed
+  // together in the S123 P3 commit, so this pin now asserts the SHIPPED
+  // state (a picker entry without its route branch is the S119 bug class;
+  // the source pin below holds the three files to the lockstep).
   const { RENDER_MODES } = await import("../src/lib/tubeforge/types");
-  ok(!RENDER_MODES.some((m) => m.id === "graphics"), "ship-dark: RENDER_MODES does not offer graphics until the P3/P4 lockstep commit");
+  const graphicsMode = RENDER_MODES.find((m) => m.id === "graphics");
+  ok(graphicsMode !== undefined, "lockstep shipped: RENDER_MODES offers graphics (the P3 commit landed picker + route + dispatch in one commit)");
+  ok(graphicsMode?.icon === "BarChart3" && typeof graphicsMode?.desc === "string", "the graphics picker entry carries its icon + desc");
+});
+
+await test("s123 P3: the lane is wired end-to-end — route branch, job dispatch, queue handler, doc column (source pin)", async () => {
+  // The render route: the graphics branch validates the doc + runs the
+  // preflight wall at ADMISSION (on click, never in a failed job card),
+  // and the status surface reads the graphics job kind.
+  const route = fs.readFileSync("src/app/api/videos/[id]/render/route.ts", "utf8");
+  ok(
+    route.includes('if (lane.lane === "graphics")') &&
+      route.includes("assertGraphicsBudget(doc)") &&
+      route.includes("parseGraphicsDoc(video.graphicsDoc)"),
+    "POST /render carries the graphics lane branch: doc parse + the admission-time preflight wall + the engine enqueue"
+  );
+  ok(
+    route.includes('video.renderMode === "graphics" ? "graphics" : null'),
+    "GET /render status reads the graphics lane's job kind (progress/error come from the lane that is actually running)"
+  );
+  // The job dispatch: runRenderJob delegates a graphics row to the engine
+  // lane (the durable replay path — a stale compositor row never renders
+  // a graphics video through the story gates).
+  const jobs = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
+  ok(
+    jobs.includes('if (video.renderMode === "graphics") {\n    return runGraphicsJob(videoId);\n  }'),
+    "runRenderJob delegates a graphics row to runGraphicsJob (the whiteboard delegation, mirrored)"
+  );
+  ok(
+    jobs.includes('marker: "#scene" | "#slide" | "#wb" | "#g"'),
+    "splitEntityId carries the #g suffix (the durable draft-entity encoding)"
+  );
+  // The queue handler + the recovery law.
+  const handlers = fs.readFileSync("src/lib/tubeforge/queue-handlers.ts", "utf8");
+  ok(
+    handlers.includes('registerJobHandler("graphics"') && handlers.includes("parseGraphicsPayload"),
+    "the durable queue registers the graphics handler (a resumed row re-runs the SAME lane)"
+  );
+  const jobsKind = fs.readFileSync("src/lib/tubeforge/jobs.ts", "utf8");
+  ok(
+    jobsKind.includes('row.kind === "graphics" && row.entityId === baseEntityId(row.entityId)'),
+    "the graphics FULL render rides the idempotence recovery wall (an already-landed final is marked done, never re-rendered)"
+  );
+  // The compositor's routing wall grew the graphics refusal.
+  const compositor = fs.readFileSync("src/lib/tubeforge/render.ts", "utf8");
+  ok(
+    compositor.includes('ps.kind === "whiteboard" || ps.kind === "graphics"'),
+    "the compositor's routing wall refuses graphics-kind plans (engine clips execute through their engine lanes only)"
+  );
+  // The doc column + its migration.
+  const schema = fs.readFileSync("prisma/schema.prisma", "utf8");
+  ok(
+    schema.includes("graphicsDoc String?"),
+    "Video.graphicsDoc exists (the eleventh JSON doc column — the engine doc's home)"
+  );
+  const migration = fs.readFileSync(
+    "prisma/migrations/20261120000000_s123_graphics_doc/migration.sql",
+    "utf8"
+  );
+  ok(
+    migration.includes('ADD COLUMN "graphicsDoc" TEXT'),
+    "the S123 migration adds the column for the postgres chain (the sqlite push mirrors it)"
+  );
+  // The plan contract seats the kind the wall refuses.
+  const plan = fs.readFileSync("src/lib/tubeforge/composition-plan.ts", "utf8");
+  ok(
+    plan.includes('c.kind === "graphics"'),
+    "planFromTracks maps graphics-kind clips onto the plan kind the compositor wall refuses"
+  );
 });
 
 await test("s119: the lane contract is wired — route resolves the lane, scaffold pins, dialog surfaces rejections (source pin)", async () => {
@@ -16758,7 +16848,174 @@ await test("S123 tracks — hand-authored scene ids carry no row linkage (null i
   eq(tracks[0].clips[1].sceneIndex, 2, "scene-2 still links row 2 — position still orders the clip");
 });
 
-console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
+// ---------------------------------------------------------------------------
+// graphics — S123 P3: the engine renderer's pure seams, the draft viewport
+// law, and the graphics QC group. The chromium loop itself is proven by the
+// P5 proof script (the real render); the pins here hold the CONTRACT the
+// loop reads — the arg lists, the clock math, the draft geometry, the QC
+// judgments — to byte-shapes the house can audit.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S123 P3: the renderer contract (pure seams), the draft viewport, the QC group");
+
+await test("S123 P3 — the draft viewport law: closed scales, even dims ≥ 64, non-reviewable, no credit (the b6 pattern)", () => {
+  eq([...GRAPHICS_DRAFT_SCALES], [0.5, 0.75, 1.0], "the scale set is closed: {0.5, 0.75, 1.0}");
+  for (const s of GRAPHICS_DRAFT_SCALES) ok(isGraphicsDraftScale(s), `${s}× is a legal draft scale`);
+  for (const junk of [0.25, 0.6, 1.5, "0.5", null, undefined, Number.NaN])
+    ok(!isGraphicsDraftScale(junk), `${String(junk)} is not a legal scale (never a silent snap)`);
+
+  // Even + ≥ 64 — the encoder floor, derived never assumed.
+  eq(draftSurfaceDim(960), 960, "1920 × 0.5 stays 960 (even)");
+  eq(draftSurfaceDim(1440), 1440, "1920 × 0.75 stays 1440 (even)");
+  eq(draftSurfaceDim(540), 540, "1080 × 0.5 stays 540 (even)");
+  eq(draftSurfaceDim(810), 810, "1080 × 0.75 stays 810 (even)");
+  eq(draftSurfaceDim(63), 64, "odd sub-64 clamps to the 64 px floor");
+  eq(draftSurfaceDim(65), 66, "odd values bump to even (the macroblock law)");
+
+  const doc = s123Doc(24);
+  const plan = graphicsDraftPlan(doc, 0.5);
+  ok(plan !== null, "the legal scale yields a plan");
+  ok(
+    plan?.reviewable === false && plan?.inheritedReviewCredit === false,
+    "a draft is labelled non-reviewable and inherits/grants NO review credit"
+  );
+  ok(plan?.width === 960 && plan?.height === 540, "the 0.5× draft surface is 960×540");
+  ok(graphicsDraftPlan(doc, 0.9) === null, "an illegal scale refuses (null, never a snap)");
+
+  // The draft doc: same scenes/clock/fps on the scaled surface — a draft is
+  // the SAME render on a smaller raster (the one-renderer rule).
+  const ddoc = graphicsDraftDoc(doc, 0.75);
+  ok(ddoc?.width === 1440 && ddoc?.height === 810, "the 0.75× draft doc rescales the surface");
+  ok(ddoc?.scenes.length === doc.scenes.length && ddoc?.fps === doc.fps, "the draft doc keeps every scene and the clock");
+  ok(graphicsDraftDoc(doc, 0.9) === null, "the draft doc refuses an illegal scale too");
+
+  // The artifact key: namespaced under graphics/, scale-scoped, OUTSIDE the
+  // standard preview/final namespaces by construction (a look can never
+  // shadow an artifact a gate reads).
+  eq(graphicsDraftKey("v1", 0.5, "scene-2"), "v1/graphics/draft-scene-scene-2-0.5.mp4", "the scene draft key names the scene + scale");
+  eq(graphicsDraftKey("v1", 0.75, null), "v1/graphics/draft-full-0.75.mp4", "the whole-doc draft key names the scope + scale");
+  ok(graphicsDraftKey("v1", 0.9, null) === null, "the key refuses an illegal scale");
+});
+
+await test("S123 P3 — the renderer's pure seams: the global frame clock, the encode args, the assembly args", () => {
+  const sceneMs = [5000, 2500, 1100];
+  eq(sceneCursorMs(sceneMs, 0), 0, "scene 1's cursor is 0");
+  eq(sceneCursorMs(sceneMs, 1), 5000, "scene 2's cursor is the exact ms sum of its predecessors");
+  eq(sceneCursorMs(sceneMs, 2), 7500, "scene 3's cursor is 7500 (NO frame quantization drift — the render reads the ms truth)");
+
+  // The render loop's frame-time law: the global doc clock resolves the
+  // RIGHT scene, scene-locally (the R-6 law the render reads by calling
+  // frameAt(doc, cursor + sceneLocal)).
+  const doc = s123Doc(24);
+  const midScene2 = sceneCursorMs(sceneMs, 1) + 1200;
+  const f2 = frameAt(doc, midScene2);
+  eq(f2.sceneId, "scene-2", "the global clock resolves scene 2 at cursor+1200");
+  eq(f2.sceneTMs, 1200, "the frame state carries the SCENE-LOCAL clock");
+  const lateScene2 = sceneCursorMs(sceneMs, 1) + 2600;
+  eq(frameAt(doc, lateScene2).sceneId, "scene-3", "2600 ms into scene 2's window crosses its 2500 ms boundary into scene 3 (the cursor math is exact)");
+
+  // The encode args: the S87 slice-5 stream-homogeneity law + the apad law.
+  // (Substring reads ride the JOINED arg string — filter chains are single
+  // elements; exact reads ride the element list.)
+  const vo = graphicsEncodeArgs({ framesDir: "d", fps: 24, durSec: 5.0, voPath: "vo.wav", silentFill: false, sceneFile: "s.mp4" });
+  ok(vo.includes("-framerate") && vo.includes("24"), "the encode rides doc.fps (never an assumed rate)");
+  ok(vo.includes("vo.wav") && vo.includes("-map") && vo.includes("1:a") && vo.includes("apad"), "a VO scene maps the slot and PADS it (never -shortest — the tail survives)");
+  ok(vo.includes("-t") && vo.includes("5.000"), "the encode is bounded to the DELIVERED seconds (the R-1 arithmetic)");
+  const fill = graphicsEncodeArgs({ framesDir: "d", fps: 30, durSec: 2.5, voPath: null, silentFill: true, sceneFile: "s.mp4" });
+  ok(fill.some((a) => a.includes("anullsrc")), "a silent scene ahead of a voiced one fills with anullsrc (the concat is stream-homogeneous)");
+  const silent = graphicsEncodeArgs({ framesDir: "d", fps: 24, durSec: 1.1, voPath: null, silentFill: false, sceneFile: "s.mp4" });
+  ok(!silent.some((a) => a.includes("anullsrc")) && !silent.includes("1:a"), "a FULLY silent project keeps the video-only shape (the silent-draft law)");
+
+  // The assembly args: the bed gains + normalize=0, the copy path. The bed
+  // chain rides the single -filter_complex element (index after the flag).
+  const bedVo = graphicsAssemblyArgs({ listFile: "c.txt", finalFile: "final.mp4", totalSec: 8.6, musicPath: "bed.flac", anyVoAudio: true });
+  const bedVoFilter = bedVo[bedVo.indexOf("-filter_complex") + 1];
+  ok(bedVoFilter.includes("volume=0.16"), "a bed under narration ducks to 0.16 (the S64 receipt)");
+  ok(bedVoFilter.includes("normalize=0") && bedVoFilter.includes("duration=first"), "the amix arm never divides the voice (normalize=0) and bounds on the program (duration=first)");
+  const bedSolo = graphicsAssemblyArgs({ listFile: "c.txt", finalFile: "final.mp4", totalSec: 8.6, musicPath: "bed.flac", anyVoAudio: false });
+  // JS number concat renders 1.0 as "1" — the whiteboard chain is byte-identical ("volume=1,afade…").
+  ok(bedSolo[bedSolo.indexOf("-filter_complex") + 1].includes("volume=1,"), "a SOLO bed carries the program at full level (the S64 receipt)");
+  const copy = graphicsAssemblyArgs({ listFile: "c.txt", finalFile: "final.mp4", totalSec: 8.6, musicPath: null, anyVoAudio: true });
+  ok(copy.includes("-c") && copy.includes("copy"), "no bed = the concat stream-copies (the whole program)");
+});
+
+await test("S123 P3 — the tracks projection gains the audio truth (VO slots + the bed clip), absent opts stays byte-identical", () => {
+  const doc = s123Doc(24);
+  // Absent opts: the P2 pinned shape (empty audio) — byte-identical.
+  const p2 = graphicsTracks(doc);
+  eq(p2[1].clips.length, 0, "absent opts: the audio track stays empty (the P2 contract verbatim)");
+  // With the render's audio truth: one slot per voiced scene over the SAME
+  // window + one doc-spanning bed clip.
+  const voiced = graphicsTracks(doc, { voSceneIds: ["scene-1", "scene-3"], musicOn: true });
+  eq(voiced[1].clips.length, 3, "two VO slots + one bed clip");
+  eq(voiced[1].clips[0].id, "a-g0", "the slot grammar mirrors the whiteboard's");
+  eq(voiced[1].clips[0].startSec, 0, "slot 1 rides scene 1's window");
+  eq(voiced[1].clips[1].startSec, voiced[0].clips[2].startSec, "slot 3 rides scene 3's window (the same window the picture was delivered on)");
+  eq(voiced[1].clips[2].id, "a-music", "the bed clip is the contract's doc-spanning grammar");
+  eq(voiced[1].clips[2].sceneIndex, null, "the bed is scene-unbound");
+});
+
+await test("S123 P3 — the graphics QC matrix: re-derived, fail-closed, never a broad-pass cover", () => {
+  const doc = s123Doc(24);
+  const report = graphicsQcMatrix(doc, 2);
+  ok(report.passed, "a valid doc with accounted VO passes every row");
+  const ids = report.rows.map((r) => r.id);
+  ok(ids.includes("G1-PROJ-1") && ids.includes("G1-PROJ-2") && ids.includes("G1-PROJ-3") && ids.includes("G1-PROJ-4"), "the rows carry their Stickman-structure ids");
+
+  // The wall row reads the DELIVERED arithmetic (R-1), not the whole-doc.
+  const budgetRow = report.rows.find((r) => r.id === "G1-PROJ-1");
+  ok(budgetRow?.value.includes("858") || budgetRow?.value.includes("/25920"), `the wall row records the delivered count (${budgetRow?.value})`);
+
+  // More VO claims than scenes = a fail (no broad-pass cover).
+  const overVoiced = graphicsQcMatrix(doc, doc.scenes.length + 1);
+  const voRow = overVoiced.rows.find((r) => r.id === "G1-PROJ-3");
+  eq(voRow?.status, "fail", "VO slots exceeding the scene count fail the row (a mapping bug, not a warning)");
+
+  // The projection row measures contiguity honestly.
+  const projRow = report.rows.find((r) => r.id === "G1-PROJ-2");
+  eq(projRow?.status, "pass", "the S87 projection is contiguous from zero for the pinned fixture");
+});
+
+await test("S123 P3 — the lane-aware battery judgments: designed holds + hard cuts (the graphics group)", () => {
+  const doc = s123Doc(24);
+
+  // The hold windows: absolute seconds AFTER the last motion window ends.
+  const holds = graphicsHoldWindows(doc);
+  eq(holds.length, 3, "every pinned scene has a legal hold (its motions end before the scene does)");
+  const r2 = (v: number): number => Math.round(v * 100) / 100;
+  eq(holds[0].startSec, r2((sceneCursorMs([5000, 2500, 1100], 0) + 3800) / 1000), "scene 1's hold starts when its LAST motion ends (h1's exit @3400+400)");
+  eq(holds[0].endSec, 5.0, "scene 1's hold ends at its scene boundary");
+  ok(holds[1].startSec > holds[0].endSec, "holds are doc-absolute — scene 2's hold starts after scene 1 ends");
+  eq(holds[2].endSec, 8.6, "the last hold ends at the doc total (8600 ms)");
+
+  // The freeze judgment: inside a hold = designed; outside = the defect.
+  const starts = holds.map((h) => h.startSec + 0.01);
+  const split = judgeFreezes(starts, holds.map((h) => [h.startSec, h.endSec] as [number, number]));
+  eq(split.unexpected.length, 0, `freezes that begin inside the doc's holds are the design (${split.designedCount} designed)`);
+  const rogue = judgeFreezes([1.0], holds.map((h) => [h.startSec, h.endSec] as [number, number]));
+  eq(rogue.unexpected.length, 1, "a freeze BEFORE any hold is a dead compositor (unexpected)");
+  const runSplit = judgeStaticRuns(
+    holds.map((h) => ({ startSec: h.startSec, endSec: h.endSec })),
+    holds.map((h) => [h.startSec, h.endSec] as [number, number])
+  );
+  eq(runSplit.unexpected.length, 0, "static runs overlapping the holds are the design");
+  ok(judgeFreezes([2.0], []).unexpected.length === 1, "absent windows = the pre-S123 judgment verbatim (every freeze unexpected)");
+
+  // The hard-cut expectation: n−1 cuts at the frame-quantized boundaries.
+  const cuts = graphicsExpectedCuts(doc);
+  eq(cuts.cuts.length, 2, "three scenes → two boundaries");
+  eq(cuts.cuts[0], 5.0, "boundary 1 lands at the quantized end of scene 1 (120 frames @ 24)");
+  eq(cuts.cuts[1], 7.5, "boundary 2 lands at the quantized end of scene 2");
+  eq(cuts.windows.length, 0, "no blend windows — the doc's exits are in-scene motion, the track cuts are HARD");
+
+  // A single-scene doc expects NO cuts (any detected cut is a break).
+  const single = s123Doc(24);
+  single.scenes = single.scenes.slice(0, 1);
+  const singleCuts = graphicsExpectedCuts(single);
+  eq(singleCuts.cuts.length, 0, "a single-scene doc books no cuts");
+  eq(singleCuts.windows.length, 0, "and no windows");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

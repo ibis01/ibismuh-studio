@@ -59,6 +59,7 @@ export type JobKind =
   | "critic" // S84 — Video Critic: the rendered-cut quality report (entity = video)
   | "qc" // Stage 6 — re-run the QC battery against the existing final.mp4
   | "whiteboard" // S67 — Whiteboard Engine full render / scene preview (E9 Phase A)
+  | "graphics" // S123 (G1) — the motion-graphics lane: full render / labelled draft
   | "reference" // S88 — Reference-video structural analysis (upload → scene map/pacing/transcript/treatment/structure)
   | "scene3d" // S94 — the 3D scene render (the scene3d doc → the orbit clip through the shared compositor)
   | "scene-recheck"; // S116 — scene-scoped QC re-check (entity "<videoId>#scene<N>"; the approval-gating verdict)
@@ -209,6 +210,25 @@ async function runRecovery(): Promise<void> {
           continue;
         }
       }
+      // S123 — the graphics FULL render's idempotence wall (the whiteboard
+      // wall mirrored): a render whose final.mp4 already landed must be
+      // marked done, not re-enqueued. Labelled drafts (composite ids with
+      // the #g suffix) re-render cheaply and ride the normal resume.
+      if (row.kind === "graphics" && row.entityId === baseEntityId(row.entityId)) {
+        const gVideo = await rawDb.video.findUnique({ where: { id: row.entityId } });
+        if (gVideo && gVideo.hasVideo && gVideo.renderMode === "graphics") {
+          await rawDb.job.update({
+            where: { id: row.id },
+            data: { status: "done", endedAt: new Date() },
+          });
+          jobsLog.warn("recovered stale graphics job — artifact already landed, marked done", {
+            kind: row.kind,
+            jobId: row.id,
+            entityId: row.entityId,
+          });
+          continue;
+        }
+      }
       const resumed = await reenqueueIfHandlerKind(row.id, row.kind).catch(() => false);
       if (resumed) {
         jobsLog.warn("recovered stale job — re-enqueued", { kind: row.kind, jobId: row.id, entityId: row.entityId });
@@ -229,7 +249,7 @@ async function runRecovery(): Promise<void> {
         // interrupted pass simply tells the user to re-run. Unreachable today
         // while every kind is handler-registered; this is the defense for the
         // day one isn't.)
-        if (["voiceover", "thumbnail", "variants", "storyboard", "render", "scene", "slide", "verify", "comments", "upload", "short", "convert", "script", "stock", "qc", "director", "continuity", "whiteboard", "reference", "scene3d"].includes(row.kind)) {
+        if (["voiceover", "thumbnail", "variants", "storyboard", "render", "scene", "slide", "verify", "comments", "upload", "short", "convert", "script", "stock", "qc", "director", "continuity", "whiteboard", "graphics", "reference", "scene3d"].includes(row.kind)) {
           const videoId = baseEntityId(row.entityId);
           const video = await rawDb.video.findUnique({ where: { id: videoId } });
           // Only set the error if the artifact never landed (completed after the row went stale).
@@ -250,6 +270,7 @@ async function runRecovery(): Promise<void> {
               (row.kind === "stock" && Boolean(video.scenes && video.scenes.includes('"stock"'))) ||
               (row.kind === "qc" && Boolean(video.qcReport)) ||
               (row.kind === "whiteboard" && video.hasVideo) ||
+              (row.kind === "graphics" && video.hasVideo) ||
               (row.kind === "reference" && Boolean(video.referenceAnalysis)) ||
               (row.kind === "scene3d" && Boolean(video.scene3d));
             if (!artifactLanded && !video.error)
@@ -515,6 +536,9 @@ export function jobSnapshot(videoId: string): {
   stock: boolean;
   qc: boolean;
   whiteboard: boolean;
+  /** S123 (G1) — the motion-graphics lane's running flag (the dialog's
+   *  progress surface reads it like whiteboard's). */
+  graphics: boolean;
 } {
   return {
     voiceover: isJobRunning(videoId, "voiceover"),
@@ -531,6 +555,7 @@ export function jobSnapshot(videoId: string): {
     stock: isJobRunning(videoId, "stock"),
     qc: isJobRunning(videoId, "qc"),
     whiteboard: isJobRunning(videoId, "whiteboard"),
+    graphics: isJobRunning(videoId, "graphics"),
   };
 }
 

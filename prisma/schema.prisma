@@ -447,6 +447,18 @@ model Video {
   // law (SQLite + Postgres behave identically).
   renderManifest String?
 
+  // S123 (G1) — the Motion Graphics Engine's doc (the eleventh JSON doc
+  // column; the whiteboardProject/scene3d house pattern): the VALIDATED
+  // GraphicsDoc v1 JSON (graphics/types.ts — closed grammar,
+  // writeGraphicsDoc's strict byte-stable write) the engine renders
+  // natively at $0 through the ONE compositor contract (the S87 projection
+  // + the frame-quantized clock at doc.fps). Null = the video never opened
+  // the graphics Studio. Concurrency: last-write-wins (the house rule) —
+  // the doc's own `version` field is the grammar contract, not a
+  // concurrency token. Kept TEXT per the house law (SQLite + Postgres
+  // behave identically).
+  graphicsDoc String?
+
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)

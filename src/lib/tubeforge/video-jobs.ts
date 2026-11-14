@@ -85,6 +85,13 @@ import {
   renderWhiteboard,
   probeDurationSec,
 } from "./whiteboard/render";
+// S123 (G1) P3 — the graphics engine lane: the renderer + the lane-aware
+// QC helpers (the doc's hold windows + the hard-cut expectation),
+// imported at the SAME seam the whiteboard engine rides.
+import { renderGraphics } from "./graphics/render";
+import { graphicsDraftDoc, graphicsDraftKey, isGraphicsDraftScale } from "./graphics/draft";
+import { graphicsExpectedCuts, graphicsHoldWindows } from "./graphics/qc";
+import { parseGraphicsDoc, validGraphicsId } from "./graphics/types";
 import { loadVideoLibrary } from "./whiteboard/asset-store";
 import type { WhiteboardAsset } from "./whiteboard/assets";
 import {
@@ -785,8 +792,13 @@ export async function runRenderJob(
   // THIS entry DELEGATES rather than refusing — the S67 refusal is retired.
   // runWhiteboardJob quietly no-ops when the mode flipped back (the
   // symmetric mode-drift law), so a replay honors the row's latest truth.
+  // S123 — the graphics lane rides the SAME shared path (the engine lanes
+  // are a set, not a case).
   if (video.renderMode === "whiteboard") {
     return runWhiteboardJob(videoId);
+  }
+  if (video.renderMode === "graphics") {
+    return runGraphicsJob(videoId);
   }
 
   const scenes = parseScenes(video.scenes);
@@ -1859,13 +1871,16 @@ async function loadValidatedProject(
   return { project, uploadedAssets: [...uploadedAssets.values()] };
 }
 
-/** The narration WAVs that actually exist, keyed by whiteboard scene id.
- *  The scaffold names scenes `scene-<index>` after the story scene index —
- *  the only mapping the WAV layout (sceneWavFile) supports; hand-authored
- *  scene ids ride the narration estimate (documented Phase A degradation). */
-function voFilesFor(project: WhiteboardProject, videoId: string): Map<string, string> {
+/** The narration WAVs that actually exist, keyed by engine scene id — the
+ *  ONE mapping law both engine lanes ride (the S123 no-private-copies
+ *  generalization: the graphics doc's scaffold scenes carry the same
+ *  `scene-<n>` ids). The scaffold names scenes `scene-<index>` after the
+ *  story scene index — the only mapping the WAV layout (sceneWavFile)
+ *  supports; hand-authored scene ids ride the narration estimate
+ *  (documented Phase A degradation). */
+function voFilesFor(scenes: readonly { id: string }[], videoId: string): Map<string, string> {
   const voFiles = new Map<string, string>();
-  for (const scene of project.scenes) {
+  for (const scene of scenes) {
     const m = /^scene-(\d+)$/.exec(scene.id);
     if (!m) continue;
     const index = Number(m[1]);
@@ -1878,11 +1893,13 @@ function voFilesFor(project: WhiteboardProject, videoId: string): Map<string, st
 
 /** Progress → the jobs surface, with the cancellation checkpoint. Throwing
  *  JobCancelledError from onProgress aborts the engine between frames;
- *  scene granularity is what the design promises and what lands. */
-function wbProgressGuard(entityId: string) {
+ *  scene granularity is what the design promises and what lands. The
+ *  engine lanes share ONE guard (S123: the graphics lane rides the same
+ *  contract, not a copy). */
+function engineProgressGuard(entityId: string, kind: "whiteboard" | "graphics") {
   return (label: string, fraction: number): void => {
-    if (isJobCancelled(entityId, "whiteboard")) throw new JobCancelledError();
-    setJobProgress(entityId, "whiteboard", Math.round(fraction * 100), 100, label);
+    if (isJobCancelled(entityId, kind)) throw new JobCancelledError();
+    setJobProgress(entityId, kind, Math.round(fraction * 100), 100, label);
   };
 }
 
@@ -1923,12 +1940,12 @@ export async function runWhiteboardJob(
         fps: 24,
         scenes: [scene],
       };
-      const voFiles = voFilesFor(previewProject, videoId);
+      const voFiles = voFilesFor(previewProject.scenes, videoId);
       const result = await renderWhiteboard(previewProject, {
         outDir,
         voFiles,
         asrAnchors: true,
-        onProgress: wbProgressGuard(entityId),
+        onProgress: engineProgressGuard(entityId, "whiteboard"),
         uploadedAssets,
       });
       const key = `${videoId}/whiteboard/preview-${sceneId}.mp4`;
@@ -1961,7 +1978,7 @@ export async function runWhiteboardJob(
     }
 
     // ---- full render: the project's own size/fps, VO + the music bed ----
-    const voFiles = voFilesFor(project, videoId);
+    const voFiles = voFilesFor(project.scenes, videoId);
     let musicPath: string | null = null;
     let musicWhy = "no music";
     if (await isMusicEnabledForVideo(video)) {
@@ -1978,7 +1995,7 @@ export async function runWhiteboardJob(
       voFiles,
       musicPath: musicPath ?? undefined,
       asrAnchors: true,
-      onProgress: wbProgressGuard(entityId),
+      onProgress: engineProgressGuard(entityId, "whiteboard"),
       uploadedAssets,
     });
 
@@ -2081,6 +2098,219 @@ export async function runWhiteboardJob(
 }
 
 // ---------------------------------------------------------------------------
+// S123 (G1) P3 — the graphics engine lane. Mirror of the whiteboard lane's
+// job shape: the SAME artifacts (the STANDARD `${videoId}/final.mp4` — the
+// player, the QC battery and the ship gate never learn graphics exists,
+// the peer-MODE law), per-scene encodes under `graphics/`, labelled
+// drafts that certify NOTHING.
+//
+//   `<videoId>`               — full render: the doc's own surface/fps, VO
+//                              slots (the WAV mapping, voFilesFor) when
+//                              present, the house music bed when enabled;
+//                              artifact = the STANDARD final.mp4 + the S117
+//                              manifest (mode "graphics").
+//   `<videoId>#g<sceneId>`    — single-scene DRAFT at a viewport scale
+//                              (default 0.5×): the b6 draft law — labelled
+//                              non-reviewable, `inherited_review_credit:
+//                              false`, artifact
+//                              `graphics/draft-scene-<id>-<scale>.mp4`.
+//                              Never touches hasVideo/final/manifest — a
+//                              draft can never certify or shadow.
+//   `<videoId>` + draft body  — the whole-doc look at a scale (payload
+//                              { draft: true, scale }) — same law, artifact
+//                              `graphics/draft-full-<scale>.mp4`.
+//
+// $0 native rendering (design §1 law 5): no generation API is touched —
+// no spend is recorded, unlike the compositor render job. The preflight
+// wall (the DELIVERED frame arithmetic at doc.fps, R-1) fires inside
+// renderGraphics BEFORE chromium launches — a refused budget never
+// reaches the rasterizer.
+// ---------------------------------------------------------------------------
+
+export interface GraphicsJobOptions {
+  /** The scene id for a single-scene draft (the #g suffix is the durable
+   *  truth; the payload is the tolerant resume path). */
+  sceneId?: string;
+  /** The draft viewport scale (∈ {0.5, 0.75, 1.0}); default 0.5. */
+  scale?: number;
+  /** True = the whole-doc look (no scene id needed). */
+  draft?: boolean;
+}
+
+export async function runGraphicsJob(
+  entityId: string,
+  opts: GraphicsJobOptions = {}
+): Promise<void> {
+  const ctx = assertCtx("runGraphicsJob");
+  const [videoId, gSuffix] = splitEntityId(entityId, "#g");
+  const sceneId = opts.sceneId ?? gSuffix ?? null;
+  const isDraft = opts.draft === true || sceneId !== null;
+  const scale = isGraphicsDraftScale(opts.scale) ? opts.scale : 0.5;
+
+  const video = await db.video.findUnique({ where: { id: videoId } });
+  if (!video) return; // deleted while queued — end quietly
+  if (video.renderMode !== "graphics") return; // mode changed while queued
+  const doc = parseGraphicsDoc(video.graphicsDoc);
+  if (!doc) {
+    throw new Error(
+      "No graphics doc on this video yet — scaffold one in the Graphics Studio first"
+    );
+  }
+
+  const outDir = path.join(videoDir(videoId), "graphics");
+  fs.mkdirSync(outDir, { recursive: true });
+
+  try {
+    if (isDraft) {
+      // ---- the labelled draft: a LOOK at the working doc, never a
+      // reviewable render (the b6 viewport law). One renderer: the scaled
+      // doc rides the SAME renderGraphics — same clock, same frame truth,
+      // same applier; only the surface differs. ----
+      const target = sceneId !== null ? doc.scenes.find((s) => s.id === sceneId) : null;
+      if (sceneId !== null && !target) {
+        throw new Error(`Graphics scene "${sceneId}" does not exist in this doc`);
+      }
+      const draftDoc = graphicsDraftDoc(doc, scale);
+      if (!draftDoc) {
+        throw new Error(`"${String(opts.scale)}" is not a legal draft scale (0.5 | 0.75 | 1.0)`);
+      }
+      const scoped = sceneId !== null && target ? { ...draftDoc, scenes: [target] } : draftDoc;
+      const voFiles = voFilesFor(scoped.scenes, videoId);
+      const result = await renderGraphics(scoped, {
+        outDir: path.join(outDir, `draft-${scale}`),
+        voFiles,
+        onProgress: engineProgressGuard(entityId, "graphics"),
+      });
+      const key = graphicsDraftKey(videoId, scale, sceneId);
+      if (!key) throw new Error("the draft key refused its scale — an engine bug");
+      await putFromPath(key, result.file);
+      await db.activity.create({
+        data: {
+          organizationId: video.organizationId,
+          userId: ctx.userId,
+          videoId,
+          stage: "render",
+          message: `Graphics draft rendered — ${sceneId !== null ? `scene "${sceneId}"` : "full doc"} @ ${scale}× (non-reviewable look; no review credit, no certification)`,
+        },
+      });
+      return;
+    }
+
+    // ---- full render: the doc's own surface/fps, VO + the music bed ----
+    const voFiles = voFilesFor(doc.scenes, videoId);
+    let musicPath: string | null = null;
+    let musicWhy = "no music";
+    if (await isMusicEnabledForVideo(video)) {
+      const planAudio = await getApprovedAudioMap(videoId);
+      const resolved = await resolveMusicForVideo(video, planAudio.musicMood, null);
+      if (resolved) {
+        musicPath = trackAbsolutePath(resolved.track);
+        musicWhy = `music: ${resolved.why}`;
+      }
+    }
+
+    const result = await renderGraphics(doc, {
+      outDir,
+      voFiles,
+      musicPath: musicPath ?? undefined,
+      onProgress: engineProgressGuard(entityId, "graphics"),
+    });
+
+    // Probe the render BEFORE it lands (the E12 receipt: putFromPath's
+    // local-driver fast path RENAMES the source — a probe after the put
+    // stats a moved-away file and the row records 0.0s).
+    const durationSec = (await probeDurationSec(result.file)) ?? 0;
+
+    // The standard key — the existing player route, QC battery and ship
+    // gate never learn graphics exists (the peer-MODE law).
+    await putFromPath(`${videoId}/final.mp4`, result.file);
+    // Per-scene encodes — each registers as a scene artifact (type video,
+    // the graphics lane's provenance). $0 local encodes — no cost
+    // attribution rides.
+    for (let i = 0; i < result.scenes.length; i++) {
+      const key = `${videoId}/graphics/scene-${i + 1}.mp4`;
+      await putFromPath(key, result.scenes[i].file);
+      await registerSceneArtifact({
+        video,
+        sceneIndex: i + 1,
+        type: "video",
+        storageKey: key,
+        input: `graphics-encode|scene=${i + 1}|doc=${video.graphicsDoc ?? ""}`,
+        prompt: null,
+        bytes: null,
+      });
+    }
+
+    await db.video.update({
+      where: { id: videoId },
+      data: {
+        hasVideo: true,
+        videoDuration: Math.round(durationSec * 10) / 10,
+        error: null,
+        // S117 — the graphics final records the manifest too (the SAME
+        // approved-only assembly the story and whiteboard lanes prove
+        // themselves with; mode "graphics"). boardModes stays absent —
+        // the graphics doc has no board policy, and the additive field
+        // reads both shapes.
+        renderManifest: JSON.stringify(
+          manifestOf(await resolveRenderAssembly(video), "graphics")
+        ),
+      },
+    });
+
+    // The QC battery rides the standing final.mp4 (runQcJob re-derives
+    // everything from the row — including the graphics lane's designed
+    // holds). A crashed battery never fails the render (the S45 law).
+    try {
+      await runQcJob(videoId);
+    } catch {
+      /* QC evidence stays absent — never stale */
+    }
+
+    await db.activity.create({
+      data: {
+        organizationId: video.organizationId,
+        userId: ctx.userId,
+        videoId,
+        stage: "render",
+        message: `Motion graphics rendered (${doc.scenes.length} scene${doc.scenes.length === 1 ? "" : "s"}, ${Math.round(durationSec)}s, ${voFiles.size > 0 ? "narrated" : "silent draft"}, ${musicWhy})`,
+      },
+    });
+  } catch (err) {
+    if (err instanceof JobCancelledError) {
+      await db.video.update({ where: { id: videoId }, data: { error: null } });
+      await db.activity
+        .create({
+          data: {
+            organizationId: video.organizationId,
+            userId: ctx.userId,
+            videoId,
+            stage: "render",
+            message: "Graphics render cancelled — completed scenes kept, run it again to restart",
+          },
+        })
+        .catch(() => {});
+      throw err;
+    }
+    const message = errorText(err, "Graphics render failed");
+    await db.video.update({ where: { id: videoId }, data: { error: message } });
+    await db.activity
+      .create({
+        data: {
+          organizationId: video.organizationId,
+          userId: ctx.userId,
+          videoId,
+          stage: "render",
+          level: "error",
+          message: `Graphics render failed: ${message}`,
+        },
+      })
+      .catch(() => {});
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // helpers
 
 /**
@@ -2092,17 +2322,18 @@ export async function runWhiteboardJob(
  */
 export function splitEntityId(
   entityId: string,
-  marker: "#scene" | "#slide" | "#wb"
+  marker: "#scene" | "#slide" | "#wb" | "#g"
 ): [string, string | null] {
   const idx = entityId.indexOf(marker);
   if (idx === -1) return [entityId, null];
   const suffix = entityId.slice(idx + marker.length);
-  // #scene/#slide suffixes are numeric scene indexes; #wb carries a
-  // whiteboard SCENE ID (the engine's charset-legal id — "scene-3", a
+  // #scene/#slide suffixes are numeric scene indexes; #wb/#g carry an
+  // ENGINE SCENE ID (the engine's charset-legal id — "scene-3", a
   // hand-authored id). Validating it with the id-charset law keeps a
   // corrupt composite id from silently degrading a preview job into a
   // full-render one (suffix null = full render downstream).
   if (marker === "#wb") return [entityId.slice(0, idx), validWhiteboardId(suffix) ? suffix : null];
+  if (marker === "#g") return [entityId.slice(0, idx), validGraphicsId(suffix) ? suffix : null];
   return [entityId.slice(0, idx), /^\d+$/.test(suffix) ? suffix : null];
 }
 
@@ -2122,6 +2353,16 @@ export interface PublishJobOptions {
   privacyStatus?: string;
   /** ISO date for scheduled publishing (YouTube's publishAt). Null = now. */
   publishAt?: string | null;
+}
+
+/** S123 (G1) — the graphics lane's designed hold windows for the battery
+ *  (absolute seconds, the doc's legal post-motion freezes). Other lanes:
+ *  undefined — the pre-S123 judgment verbatim. */
+function graphicsLaneQc(video: Video): [number, number][] | undefined {
+  if (video.renderMode !== "graphics") return undefined;
+  const doc = parseGraphicsDoc(video.graphicsDoc);
+  if (!doc) return undefined;
+  return graphicsHoldWindows(doc).map((w) => [w.startSec, w.endSec] as [number, number]);
 }
 
 /**
@@ -2150,9 +2391,16 @@ export async function runQcJob(videoId: string): Promise<void> {
     // the render built it: doc durations + per-boundary transitionIn wins
     // over the video-level default. Doc-less videos have nothing to align
     // against — the check then reports "unmeasured", never clean.
+    // S123 (G1) — the graphics lane derives its expectation from the DOC
+    // clock instead (the doc clock IS the graphics timeline): hard cuts at
+    // the frame-quantized scene boundaries; the story-timeline doc below
+    // is not what a graphics final was cut on.
+    const graphicsDoc =
+      video.renderMode === "graphics" ? parseGraphicsDoc(video.graphicsDoc) : null;
     const timeline = parseTimeline(video.timeline);
-    let expectedCuts: ExpectedCuts | null = null;
-    if (timeline && timeline.scenes.length > 0) {
+    let expectedCuts: ExpectedCuts | null =
+      graphicsDoc !== null ? graphicsExpectedCuts(graphicsDoc) : null;
+    if (graphicsDoc === null && timeline && timeline.scenes.length > 0) {
       const docDur = timeline.scenes.map(
         (s) => (typeof s.durationSec === "number" && Number.isFinite(s.durationSec) && s.durationSec > 0 ? s.durationSec : 0)
       );
@@ -2222,7 +2470,12 @@ export async function runQcJob(videoId: string): Promise<void> {
       video.frameRate === 24 || video.frameRate === 60 ? video.frameRate : 30,
       restrictedScan,
       subjectScan,
-      textScan
+      textScan,
+      // S123 (G1) — the graphics lane's designed holds: the doc's legal
+      // post-motion freezes + the hard-cut expectation derived from the
+      // doc clock (NOT the story timeline — the doc clock IS the
+      // graphics timeline). Absent doc / other lanes: null, byte-identical.
+      graphicsLaneQc(video)
     );
     await db.video.update({
       where: { id: videoId },

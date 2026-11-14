@@ -273,6 +273,10 @@ export async function invalidateRenderedArtifacts(
   // the way slide-design edits do). The preview-<id> charset is the engine's
   // id law ([A-Za-z0-9_.-], storyboard.ts), so the pattern cannot miss a
   // legal id — and a hostile id can never reach this key space anyway.
+  // S123 (G1) — the graphics lane's artifacts ride the same sweep: the
+  // per-scene encodes under graphics/scene-N.mp4 (same $0-regeneration
+  // class) and the labelled drafts under graphics/draft-*.mp4 (a doc edit
+  // stales every look at it — they are cheap looks, not evidence).
   //
   // S113 — the over-invalidation fix (the S111 reconciliation's §8.3 cost
   // bug): a SINGLE-scene change (art re-roll, AI edit, one-slide rescreenshot)
@@ -291,15 +295,16 @@ export async function invalidateRenderedArtifacts(
   const videoLevel =
     "\\/(final\\.mp4|preview\\.mp4|subtitles\\.srt" +
     (opts.slidePngs && opts.sceneIndex == null ? "|slide-\\d{2}\\.png" : "") +
-    "|whiteboard\\/preview-[A-Za-z0-9_.-]+\\.mp4)$";
+    "|whiteboard\\/preview-[A-Za-z0-9_.-]+\\.mp4" +
+    "|graphics\\/draft-[A-Za-z0-9_.-]+\\.mp4)$";
   // Scene-scoped clips/encodes: EVERY scene's (whole-project change), or
   // exactly the changed one (sceneIndex set — the S113 fix).
   const nn = opts.sceneIndex != null ? String(opts.sceneIndex).padStart(2, "0") : null;
   const sceneClips =
     nn != null
-      ? `/scene-${nn}\\.mp4$|/whiteboard/scene-${opts.sceneIndex}\\.mp4$` +
+      ? `/scene-${nn}\\.mp4$|/whiteboard/scene-${opts.sceneIndex}\\.mp4$|/graphics/scene-${opts.sceneIndex}\\.mp4$` +
         (opts.slidePngs ? `|/slide-${nn}\\.png$` : "")
-      : "/(scene-\\d{2}\\.mp4|whiteboard/scene-\\d+\\.mp4)$";
+      : "/(scene-\\d{2}\\.mp4|whiteboard/scene-\\d+\\.mp4|graphics/scene-\\d+\\.mp4)$";
   const stalePattern = new RegExp(`${videoLevel}|${sceneClips}`);
   const keys = await storage.list(videoId).catch(() => [] as string[]);
   const stale = keys.filter((k) => stalePattern.test(k));
@@ -1517,9 +1522,11 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
   // mode-whiteboard videos there before this entry. A whiteboard plan
   // reaching the compositor's segment builders means a routing bug — refuse
   // BEFORE any paid motion planning or geometry work runs.
-  if (planScenes?.some((ps) => ps.kind === "whiteboard"))
+  // S123 (G1) — the graphics lane rides the SAME wall: graphics-kind clips
+  // execute through the graphics lane only.
+  if (planScenes?.some((ps) => ps.kind === "whiteboard" || ps.kind === "graphics"))
     throw new Error(
-      "whiteboard clips execute through the Whiteboard lane — the compositor received a whiteboard plan, which is a routing bug (not a render input problem)"
+      "engine-kind clips (whiteboard/graphics) execute through their engine lanes — the compositor received an engine plan, which is a routing bug (not a render input problem)"
     );
   const sceneKindOf = (i: number): PlanVisualKind =>
     planScenes?.[i]?.kind ?? (opts.mode === "slides" ? "image" : "video");

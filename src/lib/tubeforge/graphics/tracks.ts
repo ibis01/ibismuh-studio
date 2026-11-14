@@ -52,7 +52,19 @@ function rowSceneIndex(sceneId: string): number | null {
  *   clips over the same windows.
  * • SUBTITLE track — empty (shape-stable for the compositor's dispatch).
  */
-export function graphicsTracks(doc: GraphicsDoc): TimelineTrack[] {
+/** P3 — the renderer's audio truth rides the SAME projection: per-scene VO
+ *  slots (the encoder pads/truncates VO to the scene duration, so the
+ *  window IS the slot — the whiteboard grammar, mirrored) and ONE
+ *  doc-spanning music-bed clip (`a-music`) when the bed is on. Absent opts
+ *  keeps the P2 shape byte-identical (the pinned contract). */
+export interface GraphicsTracksOptions {
+  /** Scene ids whose narration WAV exists (the render's voFilesFor map). */
+  voSceneIds?: Iterable<string>;
+  /** True when the render assembles a music bed. */
+  musicOn?: boolean;
+}
+
+export function graphicsTracks(doc: GraphicsDoc, opts: GraphicsTracksOptions = {}): TimelineTrack[] {
   const plan = framePlanWindows(graphicsSceneDurationsMs(doc), doc.fps);
 
   const visualClips: TimelineClip[] = doc.scenes.map((scene, i) => ({
@@ -66,9 +78,40 @@ export function graphicsTracks(doc: GraphicsDoc): TimelineTrack[] {
     asset: null, // the frame is drawn by the engine, not referenced
   }));
 
+  // P3 — the audio truth (mirrors whiteboardTracks): one clip per
+  // VO-carrying scene over the SAME window the picture was delivered on,
+  // plus the doc-spanning bed clip when music rides.
+  const voIds = new Set(opts.voSceneIds);
+  const audioClips: TimelineClip[] = [];
+  doc.scenes.forEach((scene, i) => {
+    if (!voIds.has(scene.id)) return;
+    audioClips.push({
+      id: `a-g${i}`,
+      kind: "audio",
+      sceneIndex: rowSceneIndex(scene.id),
+      startSec: plan.scenes[i].startSec,
+      endSec: plan.scenes[i].endSec,
+      transitionIn: null,
+      transitionOut: null,
+      asset: null,
+    });
+  });
+  if (opts.musicOn && doc.scenes.length > 0) {
+    audioClips.push({
+      id: "a-music", // the contract's bed grammar — doc-spanning, not scene-bound
+      kind: "audio",
+      sceneIndex: null,
+      startSec: 0,
+      endSec: plan.totalSec,
+      transitionIn: null,
+      transitionOut: null,
+      asset: null,
+    });
+  }
+
   return [
     { kind: "graphics", name: "visual", clips: visualClips },
-    { kind: "audio", name: "audio", clips: [] },
+    { kind: "audio", name: "audio", clips: audioClips },
     { kind: "subtitle", name: "subtitle", clips: [] },
   ];
 }
