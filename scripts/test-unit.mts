@@ -16562,12 +16562,36 @@ await test("S123 pin 3 — graphicsFrameCount reads doc.fps, never an assumed ra
 await test("S123 pin 4 — golden frames: ms-sampled states are fps-free; the per-fps frame series hashes distinct and stable (D3 §5.2.4)", () => {
   const d24 = s123Doc(24);
   const d30 = s123Doc(30);
+  // THE PORTABILITY LAW (the CI receipt 2026-11-14): the channel values ride
+  // libm transcendendentals (the easing curves) whose last-ULP results can
+  // differ across V8 platforms — the raw-float golden hash was stable HERE
+  // and flipped on CI (the 30 fps series). The golden serialization therefore
+  // QUANTIZES every numeric channel to 6 decimals: a 1-ULP libm difference
+  // (~1e-16 relative) absorbs into the same string, while any REAL drift in
+  // the math (hand-tuned curves move samples by orders more) still flips the
+  // hash. The quantization lives HERE (the drift detector's serialization),
+  // never in the engine — frameAt's full-precision truth is untouched.
+  const q = (states: GraphicsFrameState[]): unknown[] =>
+    states.map((st) => ({
+      sceneId: st.sceneId,
+      sceneTMs: st.sceneTMs,
+      elements: st.elements.map((el) => ({
+        id: el.id,
+        opacity: Number(el.opacity.toFixed(6)),
+        x: Number(el.x.toFixed(6)),
+        y: Number(el.y.toFixed(6)),
+        scale: Number(el.scale.toFixed(6)),
+        rotateDeg: Number(el.rotateDeg.toFixed(6)),
+        progress: Number(el.progress.toFixed(6)),
+        ...(el.counterValue !== undefined ? { counterValue: Number(el.counterValue.toFixed(6)) } : {}),
+      })),
+    }));
   // (a) Coincident ms sampling — the states are IDENTICAL at either rate:
   // motion truth is milliseconds; fps never enters frameAt.
-  const ms24 = S123_SHA(JSON.stringify(S123_MS_GRID.map((t) => frameAt(d24, t))));
-  const ms30 = S123_SHA(JSON.stringify(S123_MS_GRID.map((t) => frameAt(d30, t))));
+  const ms24 = S123_SHA(JSON.stringify(q(S123_MS_GRID.map((t) => frameAt(d24, t)))));
+  const ms30 = S123_SHA(JSON.stringify(q(S123_MS_GRID.map((t) => frameAt(d30, t)))));
   eq(ms24, ms30, "the same doc, sampled at ms-grid times, hashes identically at 24 and 30 fps");
-  eq(ms24, "a26ebc7ba208c3bf3aed4c7c27bdc5627eac704b7223ed518d35fe86a203cbf0", "the ms-grid golden hash is stable (drift detector)");
+  eq(ms24, "20e5d76684bba2a558f7107dd3329d0af613f375c0c2983a7c5e18175755796a", "the ms-grid golden hash is stable (drift detector)");
   // (b) Per-fps frame series — t = frame · 1000 / fps: the DELIVERED series
   // differs per rate, and each is pinned byte-for-byte.
   const seriesHash = (fps: 24 | 30): string => {
@@ -16575,10 +16599,10 @@ await test("S123 pin 4 — golden frames: ms-sampled states are fps-free; the pe
     const count = graphicsFrameCount(doc);
     const states: GraphicsFrameState[] = [];
     for (let n = 0; n < count; n++) states.push(frameAt(doc, (n * 1000) / fps));
-    return S123_SHA(JSON.stringify(states));
+    return S123_SHA(JSON.stringify(q(states)));
   };
-  eq(seriesHash(24), "035e460e45f7117420f5652790dcb5ff2e637330dcc6f273f2cf9479df07be77", "the 24 fps frame-series golden hash is stable");
-  eq(seriesHash(30), "4b8f8114c1b527795e142157e0abc21428ae7f8f55c0e5cf6150471066e77111", "the 30 fps frame-series golden hash is stable");
+  eq(seriesHash(24), "a01acd69cca04dbcb55ab85267795016d965c124e7b217ff16718aa225e1b695", "the 24 fps frame-series golden hash is stable");
+  eq(seriesHash(30), "44174a20cc885be009f288d3c3cd6efd8b83ca0879e58bd4c8ed5ee8db6a2a3e", "the 30 fps frame-series golden hash is stable");
   // (c) Determinism — no clock, no randomness: an immediate re-run of the
   // whole series is byte-identical (the S64 law, pinned over the full
   // delivered series).

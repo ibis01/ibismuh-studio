@@ -40,11 +40,13 @@
 
 Fixture: 3 scenes (5000 + 2500 + 1100 ms), mixed motions covering every channel; committed in `scripts/test-unit.mts` (the S123 pins suite).
 
+**The portability law (the first CI run's receipt, 2026-11-14):** the channel values ride libm transcendendentals (the easing curves) whose last-ULP results can differ across V8 platforms — the raw-float hash was stable locally and flipped on CI (the 30 fps series). The golden serialization QUANTIZES every numeric channel to 6 decimals (in the drift detector only — `frameAt`'s full-precision truth is untouched): 1-ULP differences absorb; real drift still flips the hash.
+
 | Hash | Value | Meaning |
 |---|---|---|
-| ms-grid | `a26ebc7ba208c3bf3aed4c7c27bdc5627eac704b7223ed518d35fe86a203cbf0` | identical at 24 **and** 30 fps — motion truth is fps-free |
-| frame series @ 24 | `035e460e45f7117420f5652790dcb5ff2e637330dcc6f273f2cf9479df07be77` (206 frames) | the delivered series, byte-pinned |
-| frame series @ 30 | `4b8f8114c1b527795e142157e0abc21428ae7f8f55c0e5cf6150471066e77111` (258 frames) | distinct per rate, byte-pinned |
+| ms-grid | `20e5d76684bba2a558f7107dd3329d0af613f375c0c2983a7c5e18175755796a` | identical at 24 **and** 30 fps — motion truth is fps-free |
+| frame series @ 24 | `a01acd69cca04dbcb55ab85267795016d965c124e7b217ff16718aa225e1b695` (206 frames) | the delivered series, byte-pinned |
+| frame series @ 30 | `44174a20cc885be009f288d3c3cd6efd8b83ca0879e58bd4c8ed5ee8db6a2a3e` (258 frames) | distinct per rate, byte-pinned |
 
 Determinism (acceptance criterion 6): same doc + same inputs → identical hashes, pinned per fps; the render adds the VO-measured clock as an input (same WAVs → same effective doc → same bytes).
 
