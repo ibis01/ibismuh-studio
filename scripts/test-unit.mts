@@ -174,6 +174,8 @@ import {
   formatCounter,
   GRAPHICS_COMPOSE_DEFAULTS,
   graphicsFramePayload,
+  graphicsGroupClaims,
+  placedGraphicsFrame,
 } from "../src/lib/tubeforge/graphics/compose";
 import {
   assertGraphicsBudget,
@@ -201,6 +203,15 @@ import {
   graphicsQcMatrix,
 } from "../src/lib/tubeforge/graphics/qc";
 import { judgeFreezes, judgeStaticRuns } from "../src/lib/tubeforge/qc";
+// S124 — the element editor's pure laws (hit-test, placement math, the
+// slots-law z-order) + the composer's placed-frame truth and claim map.
+import {
+  applyZOrder,
+  ELEMENT_EDITOR_LIMITS,
+  movedPlacement,
+  scaledPlacement,
+  topmostElementAt,
+} from "../src/lib/tubeforge/graphics/editor";
 
 const execFileAsync = promisify(execFile);
 
@@ -17014,6 +17025,234 @@ await test("S123 P3 — the lane-aware battery judgments: designed holds + hard 
   const singleCuts = graphicsExpectedCuts(single);
   eq(singleCuts.cuts.length, 0, "a single-scene doc books no cuts");
   eq(singleCuts.windows.length, 0, "and no windows");
+});
+
+// ---------------------------------------------------------------------------
+// S124 — the element editor: the placed-frame truth, the claim map, the
+// hit-test, the placement math, the slots-law z-order. The interactive
+// layer is thin by construction — every law is pinned HERE.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S124 the element editor: placed truth, hit-test, placement math, the z-order law");
+
+const S124_SCENE = G2_DOC.scenes[0];
+if (S124_SCENE === undefined) throw new Error("the mixed doc's first scene vanished");
+const S124_COMPOSED = composeGraphicsScene(S124_SCENE, G2_DOC);
+
+await test("S124 the placed frame rides the placement — at, base opacity, full reveal, no counter channel", () => {
+  const placed = placedGraphicsFrame(S124_SCENE);
+  eq(placed.sceneId, S124_SCENE.id, "the scene id rides");
+  eq(placed.elements.length, S124_SCENE.elements.length, "one frame per element, doc order");
+  for (const el of S124_SCENE.elements) {
+    const f = placed.elements.find((e) => e.id === el.id);
+    if (f === undefined) throw new Error(`placed frame missing for ${el.id}`);
+    eq(f.x, el.at.x, `${el.id} x`);
+    eq(f.y, el.at.y, `${el.id} y`);
+    eq(f.scale, el.at.scale, `${el.id} scale`);
+    eq(f.rotateDeg, el.at.rotateDeg, `${el.id} rotate`);
+    eq(f.opacity, el.opacity ?? 1, `${el.id} base opacity`);
+    eq(f.progress, 1, `${el.id} full reveal`);
+    ok(f.counterValue === undefined, `${el.id} carries no counter channel — the poster's baked end value holds`);
+  }
+});
+
+await test("S124 the placed frame IS the poster — the skeleton's baked transform/opacity match (the one-truth pin)", () => {
+  const placed = placedGraphicsFrame(S124_SCENE);
+  for (const f of placed.elements) {
+    // elementNode bakes `translate(x y) rotate(r) scale(s)` + opacity —
+    // parse the REAL html and compare numerically (fmt's 6dp rounding).
+    const re = new RegExp(
+      `<g id="ge-${f.id}" transform="translate\\(([-\\d.]+) ([-\\d.]+)\\) rotate\\(([-\\d.]+)\\) scale\\(([-\\d.]+)\\)" opacity="([-.\\d]+)">`
+    );
+    const m = re.exec(S124_COMPOSED.html);
+    if (!m) throw new Error(`the skeleton carries no baked node for ${f.id}`);
+    eq(Number(m[1]), f.x, `${f.id} baked x == placed x`);
+    eq(Number(m[2]), f.y, `${f.id} baked y == placed y`);
+    eq(Number(m[3]), f.rotateDeg, `${f.id} baked rotate == placed rotate`);
+    eq(Number(m[4]), f.scale, `${f.id} baked scale == placed scale`);
+    eq(Number(m[5]), f.opacity, `${f.id} baked opacity == placed opacity`);
+  }
+});
+
+await test("S124 the placed payload is byte-stable through the ONE serializer — double-run identical", () => {
+  const a = graphicsFramePayload(placedGraphicsFrame(S124_SCENE));
+  const b = graphicsFramePayload(placedGraphicsFrame(S124_SCENE));
+  eq(b, a, "double-run byte-identical");
+  ok(!a.includes("counterValue"), "the placed payload never carries the counter channel");
+  ok(a.includes('"progress":1'), "every element rides full reveal");
+});
+
+await test("S124 the claim map is the ONE claim truth — matches the composer's emission pass", () => {
+  const claims = graphicsGroupClaims(S124_SCENE);
+  eq(claims.size, 2, "the mixed doc claims exactly two children");
+  eq(claims.get("h1"), "grp", "h1 rides grp");
+  eq(claims.get("ic1"), "grp", "ic1 rides grp");
+  const unclaimed = S124_SCENE.elements.filter((el) => !claims.has(el.id)).map((el) => el.id);
+  eq(unclaimed.length, S124_SCENE.elements.length - 2, "the rest are unclaimed");
+  ok(!unclaimed.includes("h1") && !unclaimed.includes("ic1"), "claimed ids never appear unclaimed");
+});
+
+await test("S124 the hit-test reads doc order — the topmost containing bounds wins, edges inclusive, miss is null", () => {
+  const bounds = [
+    { id: "a", x: 0, y: 0, w: 10, h: 10 },
+    { id: "b", x: 5, y: 5, w: 10, h: 10 },
+  ];
+  eq(topmostElementAt(bounds, 6, 6), "b", "overlap reads the later doc order");
+  eq(topmostElementAt(bounds, 1, 1), "a", "a-only region reads a");
+  eq(topmostElementAt(bounds, 14, 14), "b", "b-only region reads b");
+  eq(topmostElementAt(bounds, 20, 20), null, "a miss is null");
+  eq(topmostElementAt(bounds, 5, 5), "b", "the shared corner is inclusive");
+});
+
+await test("S124 the hit slop keeps zero-area geometry grabbable — a bare line along its length", () => {
+  const line = [{ id: "ln", x: 0, y: 100, w: 300, h: 0 }];
+  eq(topmostElementAt(line, 150, 100), "ln", "a point ON the zero-height box hits even at slop 0 (inclusive edges)");
+  eq(topmostElementAt(line, 150, 104), null, "4 doc units off the line misses at slop 0");
+  eq(topmostElementAt(line, 150, 106, 8), "ln", "slop 8 covers the stroke neighborhood");
+  eq(topmostElementAt(line, 150, 120, 8), null, "beyond the slop is a miss");
+});
+
+await test("S124 move is exact and unclamped — scene-unit deltas, off-canvas is legal", () => {
+  const at = { x: 960, y: 540, scale: 2, rotateDeg: 15 };
+  const moved = movedPlacement(at, -1200, 300);
+  eq(moved.x, -240, "negative x is legal (slide entrances start off-canvas)");
+  eq(moved.y, 840, "exact y delta");
+  eq(moved.scale, 2, "scale untouched");
+  eq(moved.rotateDeg, 15, "rotate untouched");
+});
+
+await test("S124 scale rides the band — the ratio applies, the clamps hold, non-finite is a no-op", () => {
+  const at = { x: 100, y: 100, scale: 2, rotateDeg: 0 };
+  eq(scaledPlacement(at, 0.5).scale, 1, "half the distance, half the scale");
+  eq(scaledPlacement(at, 1000).scale, ELEMENT_EDITOR_LIMITS.scaleMax, "the ceiling holds");
+  eq(scaledPlacement(at, 0.0001).scale, ELEMENT_EDITOR_LIMITS.scaleMin, "the floor holds (the validator would collapse <=0 to 1 — the editor never ships it)");
+  eq(scaledPlacement(at, -3).scale, ELEMENT_EDITOR_LIMITS.scaleMin, "a negative factor clamps to the floor, never ships a silent rewrite");
+  const same = scaledPlacement(at, Number.NaN);
+  eq(same.scale, 2, "non-finite factor is a no-op");
+  eq(same.x, 100, "no-op keeps the placement");
+});
+
+function s124FlatScene(): GraphicsScene {
+  return mustValidate(
+    gDoc([gScene("flat", [gEl("a", "bullet"), gEl("b", "bullet"), gEl("c", "bullet"), gEl("d", "bullet")])]),
+    "the flat z-order scene"
+  ).scenes[0] as GraphicsScene;
+}
+
+await test("S124 z-order: the four actions on a flat scene — exact expected arrays", () => {
+  const top = s124FlatScene();
+  const rTop = applyZOrder(top, "b", "top");
+  ok(rTop.ok, "top accepts");
+  if (rTop.ok) eq(rTop.elements.map((e) => e.id).join("|"), "a|c|d|b", "top moves b to the end (paints last)");
+
+  const bottom = s124FlatScene();
+  const rBottom = applyZOrder(bottom, "c", "bottom");
+  ok(rBottom.ok, "bottom accepts");
+  if (rBottom.ok) eq(rBottom.elements.map((e) => e.id).join("|"), "c|a|b|d", "bottom moves c first (paints first)");
+
+  const raise = s124FlatScene();
+  const rRaise = applyZOrder(raise, "b", "raise");
+  ok(rRaise.ok, "raise accepts");
+  if (rRaise.ok) eq(rRaise.elements.map((e) => e.id).join("|"), "a|c|b|d", "raise swaps with the next neighbor");
+
+  const lower = s124FlatScene();
+  const rLower = applyZOrder(lower, "c", "lower");
+  ok(rLower.ok, "lower accepts");
+  if (rLower.ok) eq(rLower.elements.map((e) => e.id).join("|"), "a|c|b|d", "lower swaps with the previous neighbor");
+
+  const edge = s124FlatScene();
+  const rEdge = applyZOrder(edge, "d", "raise");
+  ok(rEdge.ok, "raise at the top is legal");
+  if (rEdge.ok) eq(rEdge.elements.map((e) => e.id).join("|"), "a|b|c|d", "and is an honest no-op");
+});
+
+await test("S124 z-order: the slots law — claimed children keep their exact array slots; the group's rank moves them", () => {
+  // Array order [A, GRP, B(claimed), C] — B lives at slot 2.
+  const scene = mustValidate(
+    gDoc([
+      gScene("slotted", [
+        gEl("A", "bullet"),
+        gEl("GRP", "group", { group: { children: ["B"] } }),
+        gEl("B", "icon", { enter: { kind: "draw", durationMs: 500, delayMs: 0, ease: "linear" } }),
+        gEl("C", "bullet"),
+      ]),
+    ]),
+    "the slotted scene"
+  ).scenes[0] as GraphicsScene;
+  const r = applyZOrder(scene, "GRP", "top");
+  ok(r.ok, "the group is a claimant — z-order applies to it");
+  if (r.ok) {
+    eq(r.elements.map((e) => e.id).join("|"), "A|C|B|GRP", "GRP moved last; B KEPT its slot 2 — the composer nests it inside GRP, so the child's effective z rides the group");
+    ok(r.elements[2]?.id === "B", "slot 2 still holds B's object");
+  }
+});
+
+await test("S124 z-order refusals — unknown ids and claimed members (the error names the owning group)", () => {
+  const scene = mustValidate(
+    gDoc([
+      gScene("refuse", [
+        gEl("h", "bullet"),
+        gEl("GRP", "group", { group: { children: ["k"] } }),
+        gEl("k", "icon", { enter: { kind: "draw", durationMs: 500, delayMs: 0, ease: "linear" } }),
+      ]),
+    ]),
+    "the refusal scene"
+  ).scenes[0] as GraphicsScene;
+  const unknown = applyZOrder(scene, "zz", "raise");
+  ok(!unknown.ok, "an unknown id refuses");
+  if (!unknown.ok) ok(unknown.error.includes("zz"), "the error names the id");
+  const claimed = applyZOrder(scene, "k", "top");
+  ok(!claimed.ok, "a claimed member refuses");
+  if (!claimed.ok) ok(claimed.error.includes("GRP"), "the error names the owning group");
+});
+
+await test("S124 z-order purity — the input scene is never mutated", () => {
+  const scene = s124FlatScene();
+  const before = JSON.stringify(scene);
+  applyZOrder(scene, "b", "top");
+  applyZOrder(scene, "a", "bottom");
+  eq(JSON.stringify(scene), before, "the input scene is byte-identical after the actions");
+});
+
+await test("S124 a z-ordered + re-placed doc round-trips the validator byte-stable", () => {
+  const doc = mustValidate(
+    gDoc([gScene("rt", [gEl("h", "headline"), gEl("s", "shape", { enter: { kind: "grow", durationMs: 500, delayMs: 0, ease: "ease-out" } }), gEl("b", "bullet")])]),
+    "the round-trip doc"
+  );
+  const scene = doc.scenes[0];
+  if (scene === undefined) throw new Error("the round-trip scene vanished");
+  const z = applyZOrder(scene, "h", "top");
+  ok(z.ok, "z applies");
+  if (z.ok) scene.elements = z.elements;
+  for (const el of scene.elements) {
+    el.at = movedPlacement(el.at, 120, -40);
+    el.at = scaledPlacement(el.at, 1.5);
+  }
+  const json1 = writeGraphicsDoc(doc);
+  const reparsed = mustParse(json1, "the round-trip write");
+  eq(writeGraphicsDoc(reparsed), json1, "write → parse → write is byte-identical");
+  const rScene = reparsed.scenes[0];
+  if (rScene === undefined) throw new Error("the reparsed scene vanished");
+  eq(rScene.elements.map((e) => e.id).join("|"), "s|b|h", "the new doc order survives the strict write");
+  const h = rScene.elements.find((e) => e.id === "h");
+  if (h === undefined) throw new Error("h vanished");
+  // gEl's at is (120, 96, scale 1): +120/-40 → (240, 56); ×1.5 → scale 1.5.
+  eq(h.at.x, 240, "the moved x survives");
+  eq(h.at.y, 56, "the moved y survives");
+  eq(h.at.scale, 1.5, "the scaled placement survives — inside the band, the validator stays silent");
+});
+
+await test("S124 the editor limits keep the validator silent at both band edges", () => {
+  const lo = mustValidate(
+    gDoc([gScene("lo", [gEl("a", "bullet", { at: { x: 0, y: 0, scale: ELEMENT_EDITOR_LIMITS.scaleMin, rotateDeg: 0 } })])]),
+    "scale floor"
+  );
+  eq(lo.scenes[0]?.elements[0]?.at.scale, ELEMENT_EDITOR_LIMITS.scaleMin, "the floor survives validation with no rewrite");
+  const hi = mustValidate(
+    gDoc([gScene("hi", [gEl("a", "bullet", { at: { x: 0, y: 0, scale: ELEMENT_EDITOR_LIMITS.scaleMax, rotateDeg: 0 } })])]),
+    "scale ceiling"
+  );
+  eq(hi.scenes[0]?.elements[0]?.at.scale, ELEMENT_EDITOR_LIMITS.scaleMax, "the ceiling survives validation with no rewrite");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
