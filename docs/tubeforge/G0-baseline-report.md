@@ -111,3 +111,17 @@ No README change required (already accurate).
 5. G0 makes **no** code changes (done — read-only attestation).
 
 **G0 verdict: COMPLETE.** The baseline is verified; the blind re-score (S120 §4) remains the only open W-track gate before G1 implementation begins.
+
+## 9. Addendum (2026-11-14, post-delivery — branch discovery)
+
+A follow-up read-only pass for the G1 spec reconciliation found repository state that **corrects two G0 conclusions**:
+
+1. **"No G1/K1/T-series work has started" (§2 row context, commit-subject scan) is true of `main` only.** Eleven pushed branches exist, all clean descendants of `37796ce` (`behind: 0`):
+   - `feat/g1-graphics-doc → frame → compose → planner` — 4 commits implementing G1.1–G1.4: `src/lib/tubeforge/graphics/{types,frame,compose,planner,llm-planner}.ts` + `scripts/test-unit.mts` suite registration. These correspond to **PRs #14–#17** per the `docs/s120-status-reconcile` branch.
+   - `feat/s121-p0-voicestudio-audio → p1 → p2 → p3p4` — 6 commits: **S121 = the unified integration roadmap** (`docs/design/s121-integration-roadmap.md`): VoiceStudio optional audio provider + measured word-timing ASR (captions/W4 anchors from DERIVED to MEASURED), semantic scene directives, consent ledger, `anim/{camera,ik,contact,gait}.ts` substrate, dub/diarization client, model-license policy, deployment security posture. Stickman contributes algorithms reimplemented in TypeScript only.
+   - `feat/s122-character-engine` — 7 commits: **S122 = K1 slice 1** (2D character-engine substrate + VoiceStudio adapter, `docs/design/k1-character-engine.md`, `scripts/test-voicestudio-adapter.mts`).
+   - `docs/s120-status-reconcile` (`0ad5faf`) — the §7 reconciliation edits already drafted (status line → "W3–W7 LANDED … blind re-scores … remain").
+   - `docs/external-2d-roadmap` (`498759b`) — the external file-by-file 2D roadmap + W5/G1 API drafts, re-baselined at `37796ce`; the G1.x branch commits cite it ("Drafted externally (Part F)").
+2. **§4 "G1 is greenfield" must be scoped to main.** A complete G1 foundation (grammar + validator + pure frame truth + composer + planners + unit suites) already exists unmerged on branches. The G1 spec is revised accordingly (Rev 2): P1 becomes **merge-and-extend**, not greenfield.
+
+**Numbering:** S121 and S122 are reserved by pushed branches; the next available sequential milestone number is **S123** (no `s12[3-9]` filenames, no worklog mentions, no other refs). The G1 milestone executes as stage S123.
