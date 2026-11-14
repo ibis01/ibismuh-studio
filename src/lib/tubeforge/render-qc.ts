@@ -345,7 +345,14 @@ export function alignCuts(
 /** Scene-change probe: full decode (unavoidable — the scene metric needs
  * pixels). Never throws — a failed probe reports measured: false. */
 export async function detectSceneCuts(
-  file: string
+  file: string,
+  /** The scene-score threshold — the story lanes' 0.40 (whole-frame
+   *  imagery changes); the graphics lane calibrates LOWER because its
+   *  hard cuts can be as subtle as a background-tone swap (a white →
+   *  off-white deck cut scores ~0.03). In-scene kinetic motion stays
+   *  under even the calibrated floor (per-frame deltas ≤ ~0.015 — the
+   *  P5 proof's recorded finding). */
+  sceneThreshold: number = 0.40
 ): Promise<{ cuts: number[]; measured: boolean }> {
   try {
     const { stderr } = await execFileAsync(
@@ -353,7 +360,7 @@ export async function detectSceneCuts(
       [
         "-hide_banner", "-nostats",
         "-i", file,
-        "-vf", "select=gt(scene\\,0.40),showinfo",
+        "-vf", `select=gt(scene\\,${sceneThreshold}),showinfo`,
         "-an",
         "-f", "null", "-",
       ],

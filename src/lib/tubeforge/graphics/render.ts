@@ -65,6 +65,18 @@ export interface RenderGraphicsOptions {
   /** Music bed path (FLAC/WAV); mixed at the house gains under the final assembly. */
   musicPath?: string;
   onProgress?: (label: string, fraction: number) => void;
+  /** The LOOK-RATE lever (labelled drafts only, closed set {1, 2}): step 2
+   *  renders every OTHER frame — at its EXACT doc-clock time, through the
+   *  same frame truth and applier — and encodes at doc.fps/2 (12 or 15).
+   *  The program duration is UNCHANGED (every encode stays bounded to the
+   *  final's delivered seconds), so the look spans exactly the program it
+   *  previews; only its temporal sampling halves (the whiteboard preview
+   *  precedent: a look rides its own surface/rate law, 720p/24 regardless
+   *  of the project). The P5 acceptance-7 probe records why: the 0.5×
+   *  surface lever alone measured ~1.4× on the proof rig — the pipeline's
+   *  fixed costs dominate a short program — and the look-rate closes the
+   *  ≥ 2× criterion honestly. FINAL renders never step (1, by absence). */
+  frameStep?: 1 | 2;
 }
 
 export interface GraphicsSceneRenderResult {
@@ -108,7 +120,9 @@ export function sceneCursorMs(sceneMs: number[], index: number): number {
  *  Exported for the unit pins (the arg list IS the contract). */
 export function graphicsEncodeArgs(input: {
   framesDir: string;
-  fps: 24 | 30;
+  /** The encode's OWN rate — the final's doc.fps, or the look's
+   *  doc.fps / frameStep (12 | 15). Never assumed from either. */
+  fps: number;
   durSec: number;
   voPath: string | null;
   silentFill: boolean;
@@ -221,13 +235,16 @@ export async function renderGraphics(
 
   const { chromium } = await import("playwright");
   fs.mkdirSync(opts.outDir, { recursive: true });
+  // The look-rate (labelled drafts only — see RenderGraphicsOptions).
+  const step = opts.frameStep === 2 ? 2 : 1;
+  const effFps = doc.fps / step;
   const browser = await chromium.launch({ headless: true, args: [...WB_CHROMIUM_LAUNCH_ARGS] });
 
   const sceneFiles: GraphicsSceneRenderResult[] = [];
   try {
     for (let si = 0; si < doc.scenes.length; si++) {
       const scene = doc.scenes[si];
-      const frames = plan.scenes[si].frames;
+      const frames = Math.ceil(plan.scenes[si].frames / step);
       const durSec = plan.scenes[si].deliveredSec;
       const durationMs = sceneMs[si];
       const cursorMs = sceneCursorMs(sceneMs, si);
@@ -253,10 +270,16 @@ export async function renderGraphics(
           // The GLOBAL doc clock — the exact truth the editor reads: scene
           // resolution + the scene-local motion evaluation stay one call
           // (the R-6 law), with no quantization drift (cursorMs is the
-          // exact ms sum, not the frame-quantized boundary).
-          const tMs = cursorMs + (f / doc.fps) * 1000;
+          // exact ms sum, not the frame-quantized boundary). A look-rate
+          // (step 2) samples every OTHER frame at its exact doc time.
+          const tMs = cursorMs + ((f * step) / doc.fps) * 1000;
           const payload = graphicsFramePayload(frameAt(doc, tMs));
-          await page.evaluate(`(${APPLY_GRAPHICS_FRAME_FN})(${payload})`);
+          // The whiteboard's evaluate law verbatim: the payload STRING is
+          // double-encoded into a quoted literal — the applier JSON.parses
+          // it inside the page. Interpolating the raw JSON here would pass
+          // an OBJECT where the applier expects a string (the exact
+          // SyntaxError the P5 proof caught on its first run).
+          await page.evaluate(`(${APPLY_GRAPHICS_FRAME_FN})(${JSON.stringify(payload)})`);
           await page.screenshot({
             path: path.join(framesDir, `f${String(f).padStart(5, "0")}.jpg`),
             type: "jpeg",
@@ -279,7 +302,7 @@ export async function renderGraphics(
         const sceneFile = path.join(opts.outDir, `scene-${si + 1}.mp4`);
         await runFfmpeg(graphicsEncodeArgs({
           framesDir,
-          fps: doc.fps,
+          fps: effFps,
           durSec,
           voPath,
           silentFill,

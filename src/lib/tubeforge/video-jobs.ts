@@ -2179,6 +2179,10 @@ export async function runGraphicsJob(
       const result = await renderGraphics(scoped, {
         outDir: path.join(outDir, `draft-${scale}`),
         voFiles,
+        // The look-rate: every OTHER frame at its exact doc time (the
+        // draft lever that closes acceptance criterion 7 with the 0.5×
+        // surface — see RenderGraphicsOptions.frameStep).
+        frameStep: 2,
         onProgress: engineProgressGuard(entityId, "graphics"),
       });
       const key = graphicsDraftKey(videoId, scale, sceneId);
@@ -2471,11 +2475,18 @@ export async function runQcJob(videoId: string): Promise<void> {
       restrictedScan,
       subjectScan,
       textScan,
-      // S123 (G1) — the graphics lane's designed holds: the doc's legal
-      // post-motion freezes + the hard-cut expectation derived from the
-      // doc clock (NOT the story timeline — the doc clock IS the
-      // graphics timeline). Absent doc / other lanes: null, byte-identical.
-      graphicsLaneQc(video)
+      // S123 (G1) — the graphics lane's QC group: the designed hold
+      // windows for the sampled static lens + the hard-cut expectation
+      // derived from the DOC clock (NOT the story timeline — the doc
+      // clock IS the graphics timeline) + the dead-compositor freeze
+      // semantics (the P5 proof's recorded noise-floor finding). Absent
+      // doc / other lanes: undefined, byte-identical.
+      graphicsLaneQc(video),
+      video.renderMode === "graphics",
+      // The graphics lane's scene-cut calibration — the format's subtle
+      // background-tone cuts sit far below the story lanes' 0.40 (the P5
+      // proof's recorded finding).
+      video.renderMode === "graphics" ? 0.025 : undefined
     );
     await db.video.update({
       where: { id: videoId },
