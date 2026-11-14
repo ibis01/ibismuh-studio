@@ -264,16 +264,31 @@ export function frameAt(doc: GraphicsDoc, tMs: number): GraphicsFrameState {
   return {
     sceneId: active.scene.id,
     sceneTMs: t - active.startMs,
-    elements: active.scene.elements.map((el) => elementFrame(el, t)),
+    // R-6 (the S123 multi-scene pin): element motions are SCENE-LOCAL (the
+    // validator's time-sanity law bounds every motion span by its own
+    // scene's clock), so they evaluate against the scene-local clock —
+    // passing the global doc time here made every scene after the first
+    // skip its entrances (the motion windows clamped complete). The
+    // single-scene suite could not see it; the multi-scene pin does.
+    elements: active.scene.elements.map((el) => elementFrame(el, t - active.startMs)),
   };
 }
 
 /** The doc-level frame count — the render pre-flight's arithmetic (G1.5)
  *  against GRAPHICS_FRAME_BUDGET, exposed here so the wall has one
- *  calculator. Uses the anim/clock frame rule (ceil to whole frames). */
+ *  calculator. Uses the anim/clock frame rule (round to whole frames —
+ *  frameCountOf's Math.round). */
 export function graphicsFrameCount(doc: GraphicsDoc): number {
   const clocks = sceneClocks(doc);
   const last: SceneClock | undefined = clocks[clocks.length - 1];
   if (last === undefined) throw new Error("graphicsFrameCount: the doc has no scenes — pass a validated GraphicsDoc");
   return frameCountOf(last.endMs, doc.fps);
+}
+
+/** The per-scene clocks in ms — explicit durationMs > the house estimate
+ *  (ONE clock rule; this is its single home, shared with the preflight
+ *  wall (R-1) and the tracks projection, which quantize it through
+ *  framePlanWindows at doc.fps). Pure. */
+export function graphicsSceneDurationsMs(doc: GraphicsDoc): number[] {
+  return sceneClocks(doc).map((c) => c.durationMs);
 }

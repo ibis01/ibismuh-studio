@@ -144,11 +144,12 @@ import {
   sceneSegmentSec,
   splitNarrationAt,
 } from "../src/lib/tubeforge/clip-ops";
-import { ANIM_FRAME_BUDGET } from "../src/lib/tubeforge/anim/clock";
+import { ANIM_FRAME_BUDGET, frameCountOf, framePlanWindows } from "../src/lib/tubeforge/anim/clock";
 import {
   GRAPHICS_BUDGETS,
   GRAPHICS_ELEMENT_KINDS,
   GRAPHICS_FRAME_BUDGET,
+  GRAPHICS_ROUTING_REASON_MAX,
   GRAPHICS_VERSION,
   legalMotions,
   MOTION_KINDS_BY_ELEMENT,
@@ -161,6 +162,7 @@ import {
 import {
   frameAt,
   graphicsFrameCount,
+  graphicsSceneDurationsMs,
   GRAPHICS_MOTION_SEMANTICS,
   type GraphicsFrameState,
 } from "../src/lib/tubeforge/graphics/frame";
@@ -15093,7 +15095,7 @@ await test("W7 seams: the render consumes the family + the sfx layer; the page s
 // integrity, and time-sanity enforcement.
 // ---------------------------------------------------------------------------
 
-suiteStart("graphics — G1.1 the doc contract + validator");
+suiteStart("graphics — S123 G1.1 the doc contract + validator");
 
 const G_SLOT: Record<string, string> = {
   headline: "text", subhead: "text", bullet: "text", counter: "counter",
@@ -15475,7 +15477,7 @@ await test("G1.1 parseGraphicsDoc nulls on junk JSON and non-objects", () => {
 // boundary, exact pre/post window states, scene-clock resolution.
 // ---------------------------------------------------------------------------
 
-suiteStart("graphics — G1.2 frame truth");
+suiteStart("graphics — S123 G1.2 frame truth");
 
 const G2_DOC = mustParse(JSON.stringify(MIXED_RAW), "the mixed doc for G1.2");
 
@@ -15662,6 +15664,294 @@ await test("G1.2 an empty doc is a caller bug — refused loudly, never fabricat
     threw = true;
   }
   eq(threw, true, "frameAt throws on scenes: []");
+});
+
+// ---------------------------------------------------------------------------
+// S123 pins (the P1 follow-up commit) — decision D2 (advisory routing
+// hints) + decision D3 (the 24/30 fps contract, spec §5.2). The compose
+// half of the D2 neutrality pin and the budget-at-fps pin land with the
+// P2 commit (they read compose.ts / preflight.ts, which merge in #16/#17).
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S123 pins: D2 routing neutrality + the 24/30 fps contract (D3)");
+
+const S123_MS_GRID: number[] = [];
+for (let t = 0; t <= 8600; t += 100) S123_MS_GRID.push(t);
+S123_MS_GRID.push(4999.5, 5000.5, 7499.5, 8599.5, 8600);
+
+const S123_SHA = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
+
+/** The pin fixture — 3 scenes with explicit clocks (5000 + 2500 + 1100 ms =
+ *  8600 ms of ms truth), mixed motions covering every channel. The
+ *  golden-frame hashes below are committed against THIS fixture; any drift
+ *  in the frame truth changes them (the drift detector). */
+const S123_SCENES: Array<Record<string, unknown>> = [
+  {
+    id: "scene-1", narration: "first scene narration", durationMs: 5000, background: "#ffffff",
+    elements: [
+      {
+        id: "h1", kind: "headline", at: { x: 960, y: 200, scale: 1, rotateDeg: 0 },
+        text: { text: "Big title", sizePx: 64, weight: 800, color: "#112233", align: "center" },
+        enter: { kind: "rise", durationMs: 600, delayMs: 0, ease: "ease-back" },
+        exit: { kind: "fade", durationMs: 400, delayMs: 3400, ease: "linear" },
+        opacity: 0.9,
+      },
+      {
+        id: "cn", kind: "counter", at: { x: 960, y: 540, scale: 1, rotateDeg: 0 },
+        counter: { from: 0, to: 100, unit: "%", decimals: 0 },
+        enter: { kind: "count", durationMs: 1200, delayMs: 600, ease: "linear" },
+        emphasis: { kind: "pop", durationMs: 300, delayMs: 2200, ease: "pop" },
+      },
+      {
+        id: "br", kind: "bar", at: { x: 480, y: 800, scale: 1, rotateDeg: 0 },
+        bar: { data: [{ label: "a", value: 1 }, { label: "b", value: 2 }] },
+        enter: { kind: "wipe", durationMs: 800, delayMs: 300, ease: "ease-out" },
+      },
+    ],
+  },
+  {
+    id: "scene-2", narration: "second scene words here", durationMs: 2500, background: "#f8f8f8",
+    elements: [
+      {
+        id: "sh", kind: "subhead", at: { x: 960, y: 300, scale: 1, rotateDeg: 0 },
+        text: { text: "Sub title" },
+        enter: { kind: "slide", durationMs: 500, delayMs: 200, ease: "ease-in-out" },
+      },
+    ],
+  },
+  {
+    id: "scene-3", narration: "third", durationMs: 1100, background: "#ffffff",
+    elements: [
+      {
+        id: "ic1", kind: "icon", at: { x: 300, y: 300, scale: 1, rotateDeg: 0 },
+        icon: { paths: ["M 0 0 L 8 8 L 16 0"] },
+        enter: { kind: "draw", durationMs: 500, delayMs: 500, ease: "linear" },
+      },
+    ],
+  },
+];
+
+function s123Doc(fps: 24 | 30): GraphicsDoc {
+  return mustValidate(
+    { version: GRAPHICS_VERSION, title: "s123 pin fixture", width: 1920, height: 1080, fps, scenes: S123_SCENES },
+    `the s123 fixture @ ${fps} fps`,
+  );
+}
+
+/** The routed twin of the pin fixture — scene 1 carries the advisory hints
+ *  (D2); everything else is byte-for-byte the same raw JSON. */
+const S123_ROUTED_RAW: Record<string, unknown> = {
+  version: GRAPHICS_VERSION,
+  title: "s123 pin fixture",
+  width: 1920,
+  height: 1080,
+  fps: 24,
+  scenes: [
+    {
+      ...S123_SCENES[0],
+      routing: { suggestedEngine: "graphics", confidence: 0.9, reason: "kinetic text scene" },
+    },
+    S123_SCENES[1],
+    S123_SCENES[2],
+  ],
+};
+
+const s123StripRouting = (scenes: Array<Record<string, unknown>>): Array<Record<string, unknown>> =>
+  scenes.map(({ routing: _routing, ...rest }) => rest);
+
+/** Full report — for the pins that must read the WARNINGS list (mustValidate
+ *  returns the doc alone, the established G1.1 helper). */
+function mustValidateReport(raw: unknown, label: string): { doc: GraphicsDoc; warnings: string[] } {
+  const r = validateGraphicsDoc(raw);
+  if (r.doc === null) throw new Error(`${label} — errors: ${r.errors.join(" | ")}`);
+  return { doc: r.doc, warnings: r.warnings };
+}
+
+const s123RoutedWith = (routing: unknown): Record<string, unknown> => ({
+  ...S123_ROUTED_RAW,
+  scenes: [{ ...S123_SCENES[0], routing }, S123_SCENES[1], S123_SCENES[2]],
+});
+
+await test("S123 pin 1 — frameCountOf round-trips the frame↔time conversion at both rates (D3 §5.2.1)", () => {
+  for (const fps of [24, 30] as const) {
+    // tMs = frame · 1000 / fps, frame = round(tMs · fps / 1000) — the
+    // conversion helpers derive from frameCountOf; indices never stored.
+    for (const n of [1, 2, 3, 7, 11, 24, 25, 29, 30, 31, 100, 331, 720, 863, 864, 1000, 2160, 25920]) {
+      eq(frameCountOf((n * 1000) / fps, fps), n, `frame ${n} @ ${fps} fps`);
+    }
+  }
+});
+
+await test("S123 pin 2 — framePlanWindows is contiguous with delivered = frames/fps at both rates; junk fps refuses loudly (D3 §5.2.2)", () => {
+  const sceneMs = [5000, 2500, 1100];
+  for (const fps of [24, 30] as const) {
+    const plan = framePlanWindows(sceneMs, fps);
+    eq(plan.scenes.length, 3, `${fps} fps: one window per scene`);
+    for (let i = 0; i < plan.scenes.length; i++) {
+      const w = plan.scenes[i];
+      eq(w.deliveredSec, w.frames / fps, `${fps} fps window ${i}: deliveredSec IS frames/fps (the encode's -t math)`);
+      const next = plan.scenes[i + 1];
+      if (next !== undefined) eq(next.startSec, w.endSec, `${fps} fps: window ${i} → ${i + 1} contiguous`);
+    }
+    const sumDelivered = plan.scenes.reduce((s, w) => s + w.deliveredSec, 0);
+    eq(plan.totalSec, Math.round(sumDelivered * 100) / 100, `${fps} fps: totalSec = r2(Σ deliveredSec)`);
+  }
+  // Contiguity by construction holds at the 24-scene wall too — uneven
+  // durations at either rate (D3: "either fps").
+  const wallMs: number[] = Array.from({ length: 24 }, (_, i) => 1000 + i * 137);
+  for (const fps of [24, 30] as const) {
+    const plan = framePlanWindows(wallMs, fps);
+    for (let i = 0; i + 1 < plan.scenes.length; i++) {
+      eq(plan.scenes[i + 1].startSec, plan.scenes[i].endSec, `${fps} fps wall-plan: window ${i} → ${i + 1} contiguous`);
+    }
+  }
+  // Junk fps refuses loudly (the anim/clock law — never a silent default).
+  for (const junk of [0, -12, Number.NaN, Number.POSITIVE_INFINITY]) {
+    let threw = false;
+    try {
+      framePlanWindows(sceneMs, junk);
+    } catch {
+      threw = true;
+    }
+    ok(threw, `junk fps ${String(junk)} refuses`);
+  }
+  let junkScene = false;
+  try {
+    framePlanWindows([5000, 0, 1100], 24);
+  } catch {
+    junkScene = true;
+  }
+  ok(junkScene, "a junk scene duration refuses (caller bug, never silently dropped)");
+});
+
+await test("S123 pin 3 — graphicsFrameCount reads doc.fps, never an assumed rate (D3 §5.2.3)", () => {
+  const d24 = s123Doc(24);
+  const d30 = s123Doc(30);
+  eq(graphicsSceneDurationsMs(d24), [5000, 2500, 1100], "the scene clocks are the ms truth (fps-free)");
+  eq(graphicsFrameCount(d24), frameCountOf(8600, 24), "24 fps: the doc counter = frameCountOf(totalMs, 24)");
+  eq(graphicsFrameCount(d24), 206, "24 fps: 8600 ms of truth = 206 frames");
+  eq(graphicsFrameCount(d30), frameCountOf(8600, 30), "30 fps: the doc counter = frameCountOf(totalMs, 30)");
+  eq(graphicsFrameCount(d30), 258, "30 fps: the same 8600 ms = 258 frames");
+  ok(graphicsFrameCount(d24) !== graphicsFrameCount(d30), "the same ms truth delivers DISTINCT frame series per rate");
+});
+
+await test("S123 pin 4 — golden frames: ms-sampled states are fps-free; the per-fps frame series hashes distinct and stable (D3 §5.2.4)", () => {
+  const d24 = s123Doc(24);
+  const d30 = s123Doc(30);
+  // (a) Coincident ms sampling — the states are IDENTICAL at either rate:
+  // motion truth is milliseconds; fps never enters frameAt.
+  const ms24 = S123_SHA(JSON.stringify(S123_MS_GRID.map((t) => frameAt(d24, t))));
+  const ms30 = S123_SHA(JSON.stringify(S123_MS_GRID.map((t) => frameAt(d30, t))));
+  eq(ms24, ms30, "the same doc, sampled at ms-grid times, hashes identically at 24 and 30 fps");
+  eq(ms24, "a26ebc7ba208c3bf3aed4c7c27bdc5627eac704b7223ed518d35fe86a203cbf0", "the ms-grid golden hash is stable (drift detector)");
+  // (b) Per-fps frame series — t = frame · 1000 / fps: the DELIVERED series
+  // differs per rate, and each is pinned byte-for-byte.
+  const seriesHash = (fps: 24 | 30): string => {
+    const doc = fps === 24 ? d24 : d30;
+    const count = graphicsFrameCount(doc);
+    const states: GraphicsFrameState[] = [];
+    for (let n = 0; n < count; n++) states.push(frameAt(doc, (n * 1000) / fps));
+    return S123_SHA(JSON.stringify(states));
+  };
+  eq(seriesHash(24), "035e460e45f7117420f5652790dcb5ff2e637330dcc6f273f2cf9479df07be77", "the 24 fps frame-series golden hash is stable");
+  eq(seriesHash(30), "4b8f8114c1b527795e142157e0abc21428ae7f8f55c0e5cf6150471066e77111", "the 30 fps frame-series golden hash is stable");
+  // (c) Determinism — no clock, no randomness: an immediate re-run of the
+  // whole series is byte-identical (the S64 law, pinned over the full
+  // delivered series).
+  eq(seriesHash(24), seriesHash(24), "frame evaluation is deterministic (same doc → same hash)");
+});
+
+await test("S123 D2 — routing parses tolerantly, writes strictly, round-trips byte-identical (spec §5.1)", () => {
+  const routed = mustValidate(S123_ROUTED_RAW, "the routed doc");
+  eq(routed.scenes[0]?.routing, { suggestedEngine: "graphics", confidence: 0.9, reason: "kinetic text scene" }, "the hints land on the scene verbatim");
+  eq(routed.scenes[1]?.routing, undefined, "scenes without hints stay without (absent stays absent)");
+  const json = writeGraphicsDoc(routed);
+  ok(json.includes('"routing":{"suggestedEngine":"graphics","confidence":0.9,"reason":"kinetic text scene"}'), "strict write serializes the advisory block");
+  const again = mustParse(json, "the written routed doc");
+  eq(writeGraphicsDoc(again), json, "write→parse→write is byte-identical WITH routing");
+
+  // Junk never refuses — the tolerant-parse law (advisory metadata has no
+  // power over the doc).
+  const nonObject = mustValidateReport(s123RoutedWith(5), "routing not an object");
+  eq(nonObject.doc.scenes[0]?.routing, undefined, "a non-object routing drops");
+  ok(nonObject.warnings.some((w) => w.includes("routing dropped — not an object")), "the drop warns");
+
+  const junkFields = mustValidateReport(
+    s123RoutedWith({ suggestedEngine: "cinema", confidence: "high", reason: 9, speed: 4 }),
+    "routing junk fields",
+  );
+  eq(junkFields.doc.scenes[0]?.routing, undefined, "all-junk hints drop — the block stays absent");
+  ok(junkFields.warnings.some((w) => w.includes("suggestedEngine dropped")), "an out-of-set engine drops with a warning");
+  ok(junkFields.warnings.some((w) => w.includes("routing.confidence dropped")), "a non-numeric confidence drops");
+  ok(junkFields.warnings.some((w) => w.includes("routing.reason dropped")), "a non-string reason drops");
+  ok(junkFields.warnings.some((w) => w.includes('unknown field "speed"')), "unknown hint fields drop with the unknown-key warning");
+
+  const clamped = mustValidateReport(s123RoutedWith({ confidence: 1.7 }), "routing confidence clamp");
+  eq(clamped.doc.scenes[0]?.routing?.confidence, 1, "confidence clamps into 0..1");
+  ok(clamped.warnings.some((w) => w.includes("routing.confidence 1.7 clamped")), "the clamp warns");
+
+  const truncated = mustValidateReport(s123RoutedWith({ reason: "x".repeat(300) }), "routing reason truncation");
+  eq(truncated.doc.scenes[0]?.routing?.reason?.length, GRAPHICS_ROUTING_REASON_MAX, "reason truncates to the cap");
+  ok(truncated.warnings.some((w) => w.includes("routing.reason truncated")), "the truncation warns");
+});
+
+await test("S123 D2 — neutrality: with and without routing, the reads are byte-identical and frameAt never sees the hints (spec §5.1)", () => {
+  const routed = mustValidate(S123_ROUTED_RAW, "the routed doc");
+  const plain = mustValidate(
+    { ...S123_ROUTED_RAW, scenes: s123StripRouting(S123_ROUTED_RAW.scenes as Array<Record<string, unknown>>) },
+    "the plain doc",
+  );
+
+  // (a) Each doc round-trips byte-identically on its own.
+  eq(writeGraphicsDoc(mustParse(writeGraphicsDoc(routed), "routed")), writeGraphicsDoc(routed), "the routed doc round-trips");
+  eq(writeGraphicsDoc(mustParse(writeGraphicsDoc(plain), "plain")), writeGraphicsDoc(plain), "the plain doc round-trips");
+  // (b) The written bytes differ ONLY by the advisory block — it is
+  // serialized, never silently ignored.
+  ok(writeGraphicsDoc(routed) !== writeGraphicsDoc(plain), "the advisory block is present on write");
+  // (c) frameAt is blind to routing — the whole ms sweep hashes identically.
+  const routedHash = S123_SHA(JSON.stringify(S123_MS_GRID.map((t) => frameAt(routed, t))));
+  const plainHash = S123_SHA(JSON.stringify(S123_MS_GRID.map((t) => frameAt(plain, t))));
+  eq(routedHash, plainHash, "the full ms sweep of frameAt states is byte-identical with and without routing");
+  // (d) The frame counter is blind too.
+  eq(graphicsFrameCount(routed), graphicsFrameCount(plain), "graphicsFrameCount is routing-blind");
+});
+
+await test("S123 pin 5 — the multi-scene clock law: motions evaluate against the SCENE-LOCAL clock (R-6)", () => {
+  // The R-6 regression pin: frameAt used to pass the GLOBAL doc time to the
+  // motion windows — scene 2+ skipped every entrance (motions are
+  // scene-local by the validator's time-sanity law). The single-scene G1.2
+  // fixture could not see it; this two-scene probe does.
+  const probe = mustValidate(
+    {
+      version: GRAPHICS_VERSION, title: "s123 multi-scene probe", width: 1920, height: 1080, fps: 24,
+      scenes: [
+        { id: "s1", narration: "one", durationMs: 1000, background: "#ffffff", elements: [] },
+        {
+          id: "s2", narration: "two", durationMs: 1000, background: "#ffffff",
+          elements: [
+            {
+              id: "sh", kind: "subhead", at: { x: 960, y: 300, scale: 1, rotateDeg: 0 },
+              text: { text: "Late" },
+              enter: { kind: "slide", durationMs: 500, delayMs: 200, ease: "linear" },
+            },
+          ],
+        },
+      ],
+    },
+    "the multi-scene probe doc",
+  );
+  // Scene 2 spans [1000, 2000]; its slide owns the SCENE-LOCAL window
+  // [200, 700] — the GLOBAL windows would be [1200, 1700] past the scene.
+  const start = frameAt(probe, 1000);
+  eq(start.sceneTMs, 0, "the scene-local clock starts at 0");
+  eq(start.elements[0]?.x, 840, "pre-window: the start state holds (x = 960 - slidePx)");
+  eq(start.elements[0]?.opacity, 0, "pre-window: opacity 0 (slide is fade-driven)");
+  const mid = frameAt(probe, 1350);
+  eq(mid.sceneTMs, 350, "scene-local time = doc time − scene start");
+  approx(mid.elements[0]?.x ?? 0, 876, 1e-9, "mid-window: x = 960 − slidePx·(1−e), e = 0.3 (linear)");
+  const done = frameAt(probe, 1800);
+  eq(done.elements[0]?.x, 960, "post-window: the placed state holds");
+  eq(done.elements[0]?.opacity, 1, "post-window: opacity 1");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

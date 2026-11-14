@@ -224,6 +224,35 @@ export interface GraphicsElement {
 }
 
 // ---------------------------------------------------------------------------
+// Advisory routing hints (decision D2) — graphics-local, Phase-R-free
+// ---------------------------------------------------------------------------
+
+/** The closed engine vocabulary an advisory hint may name — the same
+ *  grammar Stage R speaks; declared HERE so graphics never imports
+ *  director-plan.ts (the leaf-module law is the Phase-R firewall: the
+ *  hints ride the doc, no routing LOGIC ever reads them). */
+export const GRAPHICS_ROUTING_ENGINES = [
+  "whiteboard", "graphics", "character", "cinematic", "mixed",
+] as const;
+
+export type GraphicsRoutingEngine = (typeof GRAPHICS_ROUTING_ENGINES)[number];
+
+/** Advisory ONLY (decision D2). Stage R may map this structurally later;
+ *  G1's render pipeline never reads it — frameAt, compose, tracks and
+ *  render must not branch on it (the neutrality pin holds the
+ *  byte-identity law). Absence changes nothing. */
+export interface GraphicsRoutingHints {
+  suggestedEngine?: GraphicsRoutingEngine;
+  /** 0..1 — the validator clamps with a warning. */
+  confidence?: number;
+  /** ≤ GRAPHICS_ROUTING_REASON_MAX chars, advisory rationale. */
+  reason?: string;
+}
+
+/** The advisory reason cap — a validator detail, not a grammar wall. */
+export const GRAPHICS_ROUTING_REASON_MAX = 200;
+
+// ---------------------------------------------------------------------------
 // Scene + doc
 // ---------------------------------------------------------------------------
 
@@ -238,6 +267,10 @@ export interface GraphicsScene {
   /** #rrggbb — a designed choice: junk is an ERROR, never silently
    *  substituted (unlike optional palette fields, which drop honestly). */
   background: string;
+  /** (D2) Advisory routing hints — optional per-scene metadata; junk drops
+   *  with a warning under the tolerant-parse law (never an error, never a
+   *  default). The render pipeline never reads it. */
+  routing?: GraphicsRoutingHints;
   elements: GraphicsElement[];
 }
 
@@ -330,7 +363,9 @@ const ELEMENT_KEYS = new Set([
 ]);
 
 const DOC_KEYS = new Set(["version", "title", "width", "height", "fps", "scenes"]);
-const SCENE_KEYS = new Set(["id", "narration", "durationMs", "background", "elements"]);
+const SCENE_KEYS = new Set(["id", "narration", "durationMs", "background", "routing", "elements"]);
+
+const ROUTING_KEYS = new Set(["suggestedEngine", "confidence", "reason"]);
 
 const TEXT_PAYLOAD_KEYS = new Set(["text", "sizePx", "weight", "color", "align"]);
 const COUNTER_PAYLOAD_KEYS = new Set(["from", "to", "unit", "decimals"]);
@@ -888,9 +923,59 @@ function parseScene(
     );
     return null;
   }
+  // (D2) Advisory routing — tolerant read: junk drops with a warning, never
+  // an error, never a default (absent stays absent). The scene parses
+  // identically with, without, or with junk routing — the neutrality pin.
+  const routing = parseRoutingHints(raw.routing, where, warnings);
   const scene: GraphicsScene = { id, narration, background, elements };
   if (explicitMs !== null && explicitMs > 0) scene.durationMs = explicitMs;
+  if (routing !== null) scene.routing = routing;
   return scene;
+}
+
+/** (D2) The advisory routing hints' tolerant read. Junk drops honestly
+ *  with a warning — never an error, never defaulted (advisory metadata has
+ *  no power over the render); a hints object that carries no surviving
+ *  field stays absent (absent stays absent). PURE. */
+function parseRoutingHints(raw: unknown, where: string, warnings: string[]): GraphicsRoutingHints | null {
+  if (raw === undefined) return null;
+  if (!isObj(raw)) {
+    warnings.push(`${where}: routing dropped — not an object (advisory metadata never refuses the doc)`);
+    return null;
+  }
+  warnUnknownKeys(raw, ROUTING_KEYS, `${where} routing hints`, warnings);
+  const out: GraphicsRoutingHints = {};
+  const engine = str(raw.suggestedEngine);
+  if (engine !== null && (GRAPHICS_ROUTING_ENGINES as readonly string[]).includes(engine)) {
+    out.suggestedEngine = engine as GraphicsRoutingEngine;
+  } else if (raw.suggestedEngine !== undefined) {
+    warnings.push(
+      `${where}: routing.suggestedEngine dropped — not in the closed engine set (${GRAPHICS_ROUTING_ENGINES.join(", ")})`,
+    );
+  }
+  const confidence = num(raw.confidence);
+  if (confidence !== null) {
+    if (confidence < 0 || confidence > 1) {
+      warnings.push(`${where}: routing.confidence ${confidence} clamped to 0..1`);
+      out.confidence = clamp(confidence, 0, 1);
+    } else out.confidence = confidence;
+  } else if (raw.confidence !== undefined) {
+    warnings.push(`${where}: routing.confidence dropped — not a finite number`);
+  }
+  const reason = str(raw.reason);
+  if (reason !== null) {
+    if (reason.length > GRAPHICS_ROUTING_REASON_MAX) {
+      warnings.push(`${where}: routing.reason truncated to ${GRAPHICS_ROUTING_REASON_MAX} chars`);
+      out.reason = reason.slice(0, GRAPHICS_ROUTING_REASON_MAX);
+    } else out.reason = reason;
+  } else if (raw.reason !== undefined) {
+    warnings.push(`${where}: routing.reason dropped — not a string`);
+  }
+  if (Object.keys(out).length === 0) {
+    warnings.push(`${where}: routing carried no hints — dropped (absent stays absent)`);
+    return null;
+  }
+  return out;
 }
 
 function parseDoc(raw: unknown, warnings: string[], errors: string[]): GraphicsDoc | null {
@@ -1015,6 +1100,17 @@ function serializeMotion(m: ElementMotion): Rec {
   return { kind: m.kind, durationMs: m.durationMs, delayMs: m.delayMs, ease: m.ease };
 }
 
+/** Strict advisory write (D2): exactly the declared hint fields, declared
+ *  order — the routing block round-trips byte-stable like everything else
+ *  on the scene. */
+function serializeRouting(r: GraphicsRoutingHints): Rec {
+  const out: Rec = {};
+  if (r.suggestedEngine !== undefined) out.suggestedEngine = r.suggestedEngine;
+  if (r.confidence !== undefined) out.confidence = r.confidence;
+  if (r.reason !== undefined) out.reason = r.reason;
+  return out;
+}
+
 function serializePayload(kind: GraphicsElementKind, el: GraphicsElement): Rec | null {
   switch (kind) {
     case "headline":
@@ -1111,6 +1207,9 @@ export function writeGraphicsDoc(doc: GraphicsDoc): string {
       const out: Rec = { id: s.id, narration: s.narration };
       if (s.durationMs !== undefined) out.durationMs = s.durationMs;
       out.background = s.background;
+      // (D2) advisory block sits between the scene-level design fields and
+      // the element list — declared order, byte-stable like the rest.
+      if (s.routing !== undefined) out.routing = serializeRouting(s.routing);
       out.elements = s.elements.map(serializeElement);
       return out;
     }),
