@@ -1,0 +1,1121 @@
+     1→// G1.1 — the motion-graphics doc contract + validator (S120 §5 / the
+     2→// reconciliation roadmap §5). Drafted externally (Part F), landed here as
+     3→// the first code commit of G1.
+     4→//
+     5→// THE HOUSE DOC LAWS (S88's, verbatim — the Scene3D precedent):
+     6→// versioned (an unknown version reads as absent and is never
+     7→// overwritten), tolerant parse (null on unreadable — junk fields fall
+     8→// back honestly), strict write (exactly the declared fields, version
+     9→// first), byte-stable round-trip.
+    10→//
+    11→// The v1 element set is CLOSED (risk register row 5: grammar sprawl is
+    12→// G1's named risk — new element variants require a design-doc slice,
+    13→// never a drive-by union member). The motion/element compatibility table
+    14→// below is the grammar's enforcement surface — closed like the kind set.
+    15→//
+    16→// PURE — no fs, no DOM, no clock, no randomness (the S64 law
+    17→// generalizes); the composer (G1.3) and the render engine (G1.5) own the
+    18→// side effects. Leaf-module law: this file imports the anim/ substrate
+    19→// (Stage S) and two whiteboard siblings (svg, timing) — never the
+    20→// reverse.
+    21→//
+    22→// Validator split (the whiteboard's own shape — validate integrity once,
+    23→// schedule purely everywhere else):
+    24→//   errors   → structural nonsense: unreadable version shape, missing
+    25→//              scenes, id-law violations, named-wall violations, broken
+    26→//              payload shapes for a KNOWN kind, motion/element
+    27→//              incompatibility, group integrity. `doc` comes back null.
+    28→//   warnings → unknown-but-harmless extras a v1 reader drops on read:
+    29→//              unknown element kinds, unknown fields, v-next versions,
+    30→//              junk OPTIONAL fields (dropped — absent stays absent), a
+    31→//              payload absent for a kind that has one (the composer
+    32→//              falls back; parse never refuses — the Part F law).
+    33→//   clamps   → present-and-numeric values outside a named range are
+    34→//              clamped to it, with a warning (scene3d's clamp law, now
+    35→//              with a channel to say so).
+    36→import { countPathCommands, type Placement } from "../whiteboard/svg";
+    37→import { ANIM_FRAME_BUDGET } from "../anim/clock";
+    38→import { isEaseName, type EaseName } from "../anim/easing";
+    39→import { estimateNarrationMs } from "../whiteboard/timing";
+    40→
+    41→// ---------------------------------------------------------------------------
+    42→// Version + id law
+    43→// ---------------------------------------------------------------------------
+    44→
+    45→export const GRAPHICS_VERSION = 1;
+    46→
+    47→/** Legal element/scene id — the whiteboard's id-charset law verbatim
+    48→ *  (WB_ID_RE + the separator ban, storyboard.ts): ids ride
+    49→ *  DOM-namespace-shaped keys; a `--` or `::` inside an id corrupts that
+    50→ *  seam (the storyboard defense-in-depth receipt applies to graphics ids
+    51→ *  as-is). */
+    52→export const GRAPHICS_ID_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/;
+    53→
+    54→export function validGraphicsId(id: string): boolean {
+    55→  return GRAPHICS_ID_RE.test(id) && !id.includes("--") && !id.includes("::");
+    56→}
+    57→
+    58→// ---------------------------------------------------------------------------
+    59→// Stage-S aliases — ONE wall, TWO engines (the Part G.3 resolution)
+    60→// ---------------------------------------------------------------------------
+    61→
+    62→/** The anim/easing.ts curve table (Stage S / commit G1.0) — re-exported
+    63→ *  under the graphics name so the grammar reads standalone; the TYPE is
+    64→ *  the same union, the runtime check delegates to `isEaseName` (one
+    65→ *  source of curve truth). */
+    66→export type GraphicsEase = EaseName;
+    67→
+    68→/** THE shared frame-budget wall (anim/clock.ts, Stage S) — one wall, two
+    69→ *  engines. 25,920 frames = 18 min at 24 fps; the render pre-flight
+    70→ *  (G1.5) refuses over-budget docs BEFORE chromium launches. Re-exported
+    71→ *  (not re-declared) so a budget change lands once. */
+    72→export const GRAPHICS_FRAME_BUDGET = ANIM_FRAME_BUDGET;
+    73→
+    74→// ---------------------------------------------------------------------------
+    75→// Motion grammar
+    76→// ---------------------------------------------------------------------------
+    77→
+    78→export const GRAPHICS_MOTION_KINDS = [
+    79→  "fade", "rise", "slide", "pop", "wipe", "count", "grow", "draw",
+    80→] as const;
+    81→export type GraphicsMotionKind = (typeof GRAPHICS_MOTION_KINDS)[number];
+    82→
+    83→export interface ElementMotion {
+    84→  kind: GraphicsMotionKind;
+    85→  /** > 0, validator-pinned. */
+    86→  durationMs: number;
+    87→  /** ≥ 0, validator-pinned. */
+    88→  delayMs: number;
+    89→  ease: GraphicsEase;
+    90→}
+    91→
+    92→export const GRAPHICS_ELEMENT_KINDS = [
+    93→  "headline", "subhead", "bullet", "counter", "bar", "barChart",
+    94→  "icon", "callout", "shape", "group",
+    95→] as const;
+    96→export type GraphicsElementKind = (typeof GRAPHICS_ELEMENT_KINDS)[number];
+    97→
+    98→/** Which motions are legal per element kind — the compatibility table the
+    99→ *  validator enforces (a "count" on a headline is a doc bug, not a
+   100→ *  renderer branch; a "draw" on a text element has no stroke to draw).
+   101→ *  The table IS the grammar's enforcement surface — closed like the kind
+   102→ *  set. */
+   103→export const MOTION_KINDS_BY_ELEMENT: Readonly<
+   104→  Record<GraphicsElementKind, readonly GraphicsMotionKind[]>
+   105→> = {
+   106→  headline: ["fade", "rise", "slide", "pop"],
+   107→  subhead:  ["fade", "rise", "slide", "pop"],
+   108→  bullet:   ["fade", "rise", "slide", "pop"],
+   109→  counter:  ["fade", "rise", "slide", "pop", "count"],
+   110→  bar:      ["fade", "slide", "wipe", "grow"],
+   111→  barChart: ["fade", "slide", "wipe", "grow"],
+   112→  icon:     ["fade", "slide", "pop", "draw"],
+   113→  callout:  ["fade", "rise", "slide", "pop"],
+   114→  shape:    ["fade", "slide", "wipe", "grow", "draw"],
+   115→  group:    ["fade", "rise", "slide", "pop"],
+   116→};
+   117→
+   118→/** Runtime lookup with the closed-table guarantee restated (the Record is
+   119→ *  compile-total; the fallback exists only for the type checker's
+   120→ *  indexed access). */
+   121→export function legalMotions(kind: GraphicsElementKind): readonly GraphicsMotionKind[] {
+   122→  return MOTION_KINDS_BY_ELEMENT[kind] ?? GRAPHICS_MOTION_KINDS;
+   123→}
+   124→
+   125→// ---------------------------------------------------------------------------
+   126→// Element payloads — one optional payload per kind (the Scene3D flat
+   127→// shape): the validator enforces payload-per-kind; tolerant parse never
+   128→// refuses on an absent payload for a kind that has one.
+   129→// ---------------------------------------------------------------------------
+   130→
+   131→export interface TextPayload {
+   132→  text: string;
+   133→  /** default 48 at compose, clamped 12..288 by the validator. */
+   134→  sizePx?: number;
+   135→  /** 100..900, default 700 at compose; clamped by the validator. */
+   136→  weight?: number;
+   137→  /** #rrggbb. */
+   138→  color?: string;
+   139→  align?: "left" | "center" | "right";
+   140→}
+   141→
+   142→export interface CounterPayload {
+   143→  /** finite; from < to enforced (the v1 count-up law — a count-down is a
+   144→   *  design-doc slice, not a drive-by sign flip). */
+   145→  from: number;
+   146→  /** finite. */
+   147→  to: number;
+   148→  /** "%", "×", "k" … rendered after the number. */
+   149→  unit?: string;
+   150→  decimals?: 0 | 1 | 2;
+   151→}
+   152→
+   153→export interface BarDatum { label: string; value: number; } // value finite, ≥ 0
+   154→
+   155→export interface BarPayload {
+   156→  /** 1..GRAPHICS_BUDGETS.barDataMax rows. */
+   157→  data: BarDatum[];
+   158→  unit?: string;
+   159→  /** scale ceiling; absent ⇒ max(data) at compose. */
+   160→  max?: number;
+   161→  /** default false. */
+   162→  horizontal?: boolean;
+   163→}
+   164→
+   165→export interface IconPayload {
+   166→  /** SVG path `d` strings — parsed (command budget; countPathCommands is
+   167→   *  the unit of account) at validation; sanitized at compose time (G1.3,
+   168→   *  svg.ts#sanitizeSvg). */
+   169→  paths: string[];
+   170→  color?: string;
+   171→  strokeWidth?: number;
+   172→}
+   173→
+   174→export interface CalloutPayload {
+   175→  text: string;
+   176→  /** scene units — the tail's target. */
+   177→  pointsAt?: { x: number; y: number };
+   178→}
+   179→
+   180→export interface ShapePayload {
+   181→  kind: "rect" | "line" | "circle";
+   182→  w?: number;  // rect / line extent
+   183→  h?: number;  // rect
+   184→  r?: number;  // circle
+   185→  stroke?: string;
+   186→  fill?: string;
+   187→  strokeWidth?: number;
+   188→}
+   189→
+   190→export interface GroupPayload {
+   191→  /** Member element ids — must exist, must not reference the group itself
+   192→   *  or an ancestor (acyclic); v1: groups do not nest (the groupDepthMax
+   193→   *  wall — which also makes reference cycles unreachable by
+   194→   *  construction). */
+   195→  children: string[];
+   196→}
+   197→
+   198→export interface GraphicsElement {
+   199→  id: string;
+   200→  kind: GraphicsElementKind;
+   201→  /** Scene-space placement — the whiteboard's Placement (svg.ts): one
+   202→   *  placement shape across engines, never a second one. Junk/absent
+   203→   *  falls back honestly to the origin placement (the scene3d position
+   204→   *  law) with a warning. */
+   205→  at: Placement;
+   206→  /** The payload for `kind` (typed above); validator checks presence +
+   207→   *  shape per kind. */
+   208→  text?: TextPayload;
+   209→  counter?: CounterPayload;
+   210→  bar?: BarPayload;
+   211→  icon?: IconPayload;
+   212→  callout?: CalloutPayload;
+   213→  shape?: ShapePayload;
+   214→  group?: GroupPayload;
+   215→  /** Choreography: enter is REQUIRED (an element that cannot enter has
+   216→   *  no reason to exist in this grammar); exit/emphasis optional. The
+   217→   *  frame engine composes with fixed precedence emphasis > exit > enter
+   218→   *  (G1.2's pin). */
+   219→  enter: ElementMotion;
+   220→  exit?: ElementMotion;
+   221→  emphasis?: ElementMotion;
+   222→  /** base opacity 0..1, default 1 at compose; clamped by the validator. */
+   223→  opacity?: number;
+   224→}
+   225→
+   226→// ---------------------------------------------------------------------------
+   227→// Scene + doc
+   228→// ---------------------------------------------------------------------------
+   229→
+   230→export interface GraphicsScene {
+   231→  id: string;
+   232→  narration: string;
+   233→  /** Explicit clock override; absent ⇒ the house 2.6-wps estimate
+   234→   *  (whiteboard timing.ts estimateNarrationMs — ONE clock model, reused,
+   235→   *  not re-implemented). VO-measured duration rides the render call, not
+   236→   *  the doc (the anchors-are-inputs law, same as W4). */
+   237→  durationMs?: number;
+   238→  /** #rrggbb — a designed choice: junk is an ERROR, never silently
+   239→   *  substituted (unlike optional palette fields, which drop honestly). */
+   240→  background: string;
+   241→  elements: GraphicsElement[];
+   242→}
+   243→
+   244→export interface GraphicsDoc {
+   245→  /** GRAPHICS_VERSION — first field on write (strict write). */
+   246→  version: number;
+   247→  title: string;
+   248→  /** Output surface — one of the three house aspects' native sizes:
+   249→   *  1920×1080 (16:9), 1080×1920 (9:16), 1080×1080 (1:1). */
+   250→  width: number;
+   251→  height: number;
+   252→  fps: 24 | 30;
+   253→  scenes: GraphicsScene[];
+   254→}
+   255→
+   256→// ---------------------------------------------------------------------------
+   257→// Named walls — the WB_BUDGETS shape (storyboard.ts): constants cited by
+   258→// the validator, the tests, and the design doc — ONE source. Values are
+   259→// the implementer's receipts to tune; the NAMES are the contract.
+   260→// ---------------------------------------------------------------------------
+   261→
+   262→export const GRAPHICS_BUDGETS = {
+   263→  /** Max elements per scene (counted on the KEPT set — what the v1 reader
+   264→   *  will actually render; v-next drops land before the wall, so a v-next
+   265→   *  doc is never refused for elements its v1 reader cannot see). */
+   266→  elementsPerScene: 32,
+   267→  /** Max scenes per project (the whiteboard's number). */
+   268→  scenesPerProject: 24,
+   269→  /** Max EXPLICIT scene duration (estimates clamp lower — the timing
+   270→   *  law's 4s..30s band). */
+   271→  sceneDurationMsMax: 120_000,
+   272→  /** Max Σ explicit scene durations (VO-measured totals are bounded at
+   273→   *  the render pre-flight by GRAPHICS_FRAME_BUDGET instead). */
+   274→  projectExplicitDurationMsMax: 900_000,
+   275→  /** Max data rows per bar/barChart. */
+   276→  barDataMax: 8,
+   277→  /** v1: groups do not nest (which also makes reference cycles
+   278→   *  unreachable by construction). */
+   279→  groupDepthMax: 1,
+   280→  /** Parsed command budget per icon path — countPathCommands is the unit
+   281→   *  of account (the EXPANDED count: implicit repeats cost what the
+   282→   *  flattener and the rasterizer pay). The WB_PATH_COMMAND_BUDGET
+   283→   *  number. */
+   284→  iconPathCommandBudget: 512,
+   285→} as const;
+   286→
+   287→/** Borrowed readable-ink wall (the whiteboard's WB_STROKE_WIDTH_MAX
+   288→ *  number): a wider icon/shape stroke stops tracking the aesthetic.
+   289→ *  Module-private — a validator detail, not a grammar wall. */
+   290→const STROKE_WIDTH_MAX = 64;
+   291→
+   292→// ---------------------------------------------------------------------------
+   293→// The result shape
+   294→// ---------------------------------------------------------------------------
+   295→
+   296→export interface GraphicsValidationResult {
+   297→  doc: GraphicsDoc | null;
+   298→  /** Structural nonsense — the doc did not parse (doc is null). */
+   299→  errors: string[];
+   300→  /** Tolerant-read notes: unknown element kinds / unknown fields / unknown
+   301→   *  version / junk optional fields dropped / clamps applied — the doc
+   302→   *  still parses, the notes explain what was ignored (the additive-parse
+   303→   *  law: v-next docs load in v1 readers). */
+   304→  warnings: string[];
+   305→}
+   306→
+   307→// ---------------------------------------------------------------------------
+   308→// Parsing helpers (module-private, pure)
+   309→// ---------------------------------------------------------------------------
+   310→
+   311→type Rec = Record<string, unknown>;
+   312→
+   313→const isObj = (v: unknown): v is Rec =>
+   314→  typeof v === "object" && v !== null && !Array.isArray(v);
+   315→
+   316→const num = (v: unknown): number | null =>
+   317→  typeof v === "number" && Number.isFinite(v) ? v : null;
+   318→
+   319→const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+   320→
+   321→const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+   322→
+   323→const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+   324→
+   325→/** The declared element keys — anything else on a known element is an
+   326→ *  unknown field (warning + dropped). */
+   327→const ELEMENT_KEYS = new Set([
+   328→  "id", "kind", "at", "text", "counter", "bar", "icon", "callout",
+   329→  "shape", "group", "enter", "exit", "emphasis", "opacity",
+   330→]);
+   331→
+   332→const DOC_KEYS = new Set(["version", "title", "width", "height", "fps", "scenes"]);
+   333→const SCENE_KEYS = new Set(["id", "narration", "durationMs", "background", "elements"]);
+   334→
+   335→const TEXT_PAYLOAD_KEYS = new Set(["text", "sizePx", "weight", "color", "align"]);
+   336→const COUNTER_PAYLOAD_KEYS = new Set(["from", "to", "unit", "decimals"]);
+   337→const BAR_PAYLOAD_KEYS = new Set(["data", "unit", "max", "horizontal"]);
+   338→const ICON_PAYLOAD_KEYS = new Set(["paths", "color", "strokeWidth"]);
+   339→const CALLOUT_PAYLOAD_KEYS = new Set(["text", "pointsAt"]);
+   340→const SHAPE_PAYLOAD_KEYS = new Set(["kind", "w", "h", "r", "stroke", "fill", "strokeWidth"]);
+   341→const GROUP_PAYLOAD_KEYS = new Set(["children"]);
+   342→
+   343→/** The output-surface law: exactly the three house aspects' native sizes.
+   344→ *  EXPORTED (the G1.4 planner snaps caller geometry onto this ONE table —
+   345→ *  the validator and the planner share the law, never a second list). */
+   346→export const GRAPHICS_SURFACES: ReadonlyArray<readonly [number, number]> = [
+   347→  [1920, 1080], // 16:9
+   348→  [1080, 1920], // 9:16
+   349→  [1080, 1080], // 1:1
+   350→];
+   351→
+   352→function warnUnknownKeys(raw: Rec, declared: ReadonlySet<string>, where: string, warnings: string[]): void {
+   353→  for (const key of Object.keys(raw)) {
+   354→    if (!declared.has(key)) warnings.push(`${where}: unknown field "${key}" ignored`);
+   355→  }
+   356→}
+   357→
+   358→/** Optional color: junk drops honestly with a warning; well-formed hex
+   359→ *  lowers (the scene3d hex law). */
+   360→function parseColor(raw: unknown, where: string, field: string, warnings: string[]): string | undefined {
+   361→  const s = str(raw);
+   362→  if (s === null) {
+   363→    if (raw !== undefined) warnings.push(`${where}: ${field} dropped — not a string`);
+   364→    return undefined;
+   365→  }
+   366→  if (!HEX_RE.test(s)) {
+   367→    warnings.push(`${where}: ${field} dropped — not #rrggbb`);
+   368→    return undefined;
+   369→  }
+   370→  return s.toLowerCase();
+   371→}
+   372→
+   373→function parseStrokeWidth(raw: unknown, where: string, warnings: string[]): number | undefined {
+   374→  const v = num(raw);
+   375→  if (v === null) {
+   376→    if (raw !== undefined) warnings.push(`${where}: strokeWidth dropped — not a finite number`);
+   377→    return undefined;
+   378→  }
+   379→  if (v <= 0) {
+   380→    warnings.push(`${where}: strokeWidth dropped — must be > 0`);
+   381→    return undefined;
+   382→  }
+   383→  if (v > STROKE_WIDTH_MAX) {
+   384→    warnings.push(`${where}: strokeWidth ${v} clamped to ${STROKE_WIDTH_MAX} (the readable-ink wall)`);
+   385→    return STROKE_WIDTH_MAX;
+   386→  }
+   387→  return v;
+   388→}
+   389→
+   390→/** Placement — the whiteboard shape, four finite numbers. Absent/junk
+   391→ *  falls back honestly to the origin placement (the scene3d position
+   392→ *  law) with a warning; readable members are kept, the rest defaulted. */
+   393→function parsePlacement(raw: unknown, where: string, warnings: string[]): Placement {
+   394→  if (!isObj(raw)) {
+   395→    if (raw !== undefined) warnings.push(`${where}: "at" unreadable — origin placement assumed`);
+   396→    return { x: 0, y: 0, scale: 1, rotateDeg: 0 };
+   397→  }
+   398→  const x = num(raw.x);
+   399→  const y = num(raw.y);
+   400→  const scale = num(raw.scale);
+   401→  const rotateDeg = num(raw.rotateDeg);
+   402→  if (x === null || y === null || scale === null || rotateDeg === null) {
+   403→    warnings.push(`${where}: "at" has unreadable members — kept what reads, defaulted the rest`);
+   404→  }
+   405→  return {
+   406→    x: x ?? 0,
+   407→    y: y ?? 0,
+   408→    scale: scale !== null && scale > 0 ? scale : 1,
+   409→    rotateDeg: rotateDeg ?? 0,
+   410→  };
+   411→}
+   412→
+   413→/** Motion parse. `required=true` is the enter slot (an unreadable enter is
+   414→ *  structural); optional slots (exit/emphasis) drop honestly with a
+   415→ *  warning. */
+   416→function parseMotion(
+   417→  raw: unknown,
+   418→  where: string,
+   419→  slot: string,
+   420→  warnings: string[],
+   421→  errors: string[],
+   422→  required: boolean,
+   423→): ElementMotion | null {
+   424→  if (raw === undefined) return null;
+   425→  const reject = (msg: string): null => {
+   426→    if (required) errors.push(`${where}: the ${slot} motion is unreadable — ${msg}`);
+   427→    else warnings.push(`${where}: ${slot} motion dropped — ${msg}`);
+   428→    return null;
+   429→  };
+   430→  if (!isObj(raw)) return reject("not an object");
+   431→  const kind = str(raw.kind);
+   432→  if (kind === null || !GRAPHICS_MOTION_KINDS.includes(kind as GraphicsMotionKind)) {
+   433→    return reject(`kind "${String(raw.kind)}" is not in the closed motion set`);
+   434→  }
+   435→  const durationMs = num(raw.durationMs);
+   436→  if (durationMs === null || durationMs <= 0) return reject("durationMs must be finite > 0");
+   437→  const delayMs = num(raw.delayMs);
+   438→  if (delayMs === null || delayMs < 0) return reject("delayMs must be finite ≥ 0");
+   439→  const ease = str(raw.ease);
+   440→  if (ease === null || !isEaseName(ease)) return reject(`ease "${String(raw.ease)}" is not a Stage-S curve`);
+   441→  warnUnknownKeys(raw, new Set(["kind", "durationMs", "delayMs", "ease"]), `${where} ${slot} motion`, warnings);
+   442→  return { kind: kind as GraphicsMotionKind, durationMs, delayMs, ease };
+   443→}
+   444→
+   445→// --- per-kind payload parsers: shape violations are ERRORS (a payload
+   446→// that CLAIMS to be the kind's payload but is broken is structural);
+   447→// optional junk fields drop honestly with warnings. -------------------------
+   448→
+   449→function parseTextPayload(raw: unknown, where: string, warnings: string[], errors: string[]): TextPayload | null {
+   450→  if (raw === undefined) return null; // absent — the caller warns; tolerant parse never refuses
+   451→  if (!isObj(raw)) { errors.push(`${where}: text payload unreadable — not an object`); return null; }
+   452→  const text = str(raw.text);
+   453→  if (text === null || text.trim() === "") {
+   454→    errors.push(`${where}: text payload requires a non-empty "text" string`);
+   455→    return null;
+   456→  }
+   457→  const out: TextPayload = { text };
+   458→  const sizePx = num(raw.sizePx);
+   459→  if (sizePx !== null) {
+   460→    if (sizePx < 12 || sizePx > 288) {
+   461→      warnings.push(`${where}: sizePx ${sizePx} clamped to 12..288`);
+   462→      out.sizePx = clamp(sizePx, 12, 288);
+   463→    } else out.sizePx = sizePx;
+   464→  } else if (raw.sizePx !== undefined) {
+   465→    warnings.push(`${where}: sizePx dropped — not a finite number`);
+   466→  }
+   467→  const weight = num(raw.weight);
+   468→  if (weight !== null) {
+   469→    if (weight < 100 || weight > 900) {
+   470→      warnings.push(`${where}: weight ${weight} clamped to 100..900`);
+   471→      out.weight = clamp(weight, 100, 900);
+   472→    } else out.weight = weight;
+   473→  } else if (raw.weight !== undefined) {
+   474→    warnings.push(`${where}: weight dropped — not a finite number`);
+   475→  }
+   476→  const color = parseColor(raw.color, where, "color", warnings);
+   477→  if (color !== undefined) out.color = color;
+   478→  const align = str(raw.align);
+   479→  if (align === "left" || align === "center" || align === "right") out.align = align;
+   480→  else if (raw.align !== undefined) warnings.push(`${where}: align dropped — not left|center|right`);
+   481→  warnUnknownKeys(raw, TEXT_PAYLOAD_KEYS, `${where} text payload`, warnings);
+   482→  return out;
+   483→}
+   484→
+   485→function parseCounterPayload(raw: unknown, where: string, warnings: string[], errors: string[]): CounterPayload | null {
+   486→  if (raw === undefined) return null; // absent — the caller warns; tolerant parse never refuses
+   487→  if (!isObj(raw)) { errors.push(`${where}: counter payload unreadable — not an object`); return null; }
+   488→  const from = num(raw.from);
+   489→  const to = num(raw.to);
+   490→  if (from === null || to === null) {
+   491→    errors.push(`${where}: counter payload requires finite "from" and "to"`);
+   492→    return null;
+   493→  }
+   494→  if (from >= to) {
+   495→    errors.push(`${where}: counter from (${from}) must be < to (${to}) — the v1 count-up law`);
+   496→    return null;
+   497→  }
+   498→  const out: CounterPayload = { from, to };
+   499→  const unit = str(raw.unit);
+   500→  if (unit !== null) out.unit = unit;
+   501→  else if (raw.unit !== undefined) warnings.push(`${where}: unit dropped — not a string`);
+   502→  const decimals = num(raw.decimals);
+   503→  if (decimals === 0 || decimals === 1 || decimals === 2) out.decimals = decimals;
+   504→  else if (raw.decimals !== undefined) warnings.push(`${where}: decimals dropped — must be 0|1|2`);
+   505→  warnUnknownKeys(raw, COUNTER_PAYLOAD_KEYS, `${where} counter payload`, warnings);
+   506→  return out;
+   507→}
+   508→
+   509→function parseBarPayload(raw: unknown, where: string, warnings: string[], errors: string[]): BarPayload | null {
+   510→  if (raw === undefined) return null; // absent — the caller warns; tolerant parse never refuses
+   511→  if (!isObj(raw)) { errors.push(`${where}: bar payload unreadable — not an object`); return null; }
+   512→  if (!Array.isArray(raw.data)) {
+   513→    errors.push(`${where}: bar payload requires a "data" array`);
+   514→    return null;
+   515→  }
+   516→  if (raw.data.length === 0) {
+   517→    errors.push(`${where}: bar payload requires 1..${GRAPHICS_BUDGETS.barDataMax} data rows`);
+   518→    return null;
+   519→  }
+   520→  if (raw.data.length > GRAPHICS_BUDGETS.barDataMax) {
+   521→    errors.push(
+   522→      `${where}: ${raw.data.length} bar rows exceeds the barDataMax wall (${GRAPHICS_BUDGETS.barDataMax})`,
+   523→    );
+   524→    return null;
+   525→  }
+   526→  const data: BarDatum[] = [];
+   527→  for (const row of raw.data) {
+   528→    if (!isObj(row)) { errors.push(`${where}: bar data row unreadable — not an object`); return null; }
+   529→    const label = str(row.label);
+   530→    const value = num(row.value);
+   531→    if (label === null || label.trim() === "" || value === null || value < 0) {
+   532→      errors.push(`${where}: bar data rows require a non-empty "label" and a finite "value" ≥ 0`);
+   533→      return null;
+   534→    }
+   535→    data.push({ label, value });
+   536→  }
+   537→  const out: BarPayload = { data };
+   538→  const unit = str(raw.unit);
+   539→  if (unit !== null) out.unit = unit;
+   540→  else if (raw.unit !== undefined) warnings.push(`${where}: unit dropped — not a string`);
+   541→  const max = num(raw.max);
+   542→  if (max !== null && max > 0) out.max = max;
+   543→  else if (raw.max !== undefined) warnings.push(`${where}: max dropped — must be finite > 0`);
+   544→  if (typeof raw.horizontal === "boolean") out.horizontal = raw.horizontal;
+   545→  else if (raw.horizontal !== undefined) warnings.push(`${where}: horizontal dropped — not a boolean`);
+   546→  warnUnknownKeys(raw, BAR_PAYLOAD_KEYS, `${where} bar payload`, warnings);
+   547→  return out;
+   548→}
+   549→
+   550→function parseIconPayload(raw: unknown, where: string, warnings: string[], errors: string[]): IconPayload | null {
+   551→  if (raw === undefined) return null; // absent — the caller warns; tolerant parse never refuses
+   552→  if (!isObj(raw)) { errors.push(`${where}: icon payload unreadable — not an object`); return null; }
+   553→  if (!Array.isArray(raw.paths) || raw.paths.length === 0) {
+   554→    errors.push(`${where}: icon payload requires a non-empty "paths" array`);
+   555→    return null;
+   556→  }
+   557→  const paths: string[] = [];
+   558→  for (const p of raw.paths) {
+   559→    const d = str(p);
+   560→    if (d === null || d.trim() === "") {
+   561→      errors.push(`${where}: icon paths must be non-empty path-data strings`);
+   562→      return null;
+   563→    }
+   564→    const commands = countPathCommands(d);
+   565→    if (commands === 0) {
+   566→      errors.push(`${where}: icon path does not parse — "${d.slice(0, 32)}"`);
+   567→      return null;
+   568→    }
+   569→    if (commands > GRAPHICS_BUDGETS.iconPathCommandBudget) {
+   570→      errors.push(
+   571→        `${where}: icon path with ${commands} commands exceeds the iconPathCommandBudget wall (${GRAPHICS_BUDGETS.iconPathCommandBudget})`,
+   572→      );
+   573→      return null;
+   574→    }
+   575→    paths.push(d);
+   576→  }
+   577→  const out: IconPayload = { paths };
+   578→  const color = parseColor(raw.color, where, "color", warnings);
+   579→  if (color !== undefined) out.color = color;
+   580→  const strokeWidth = parseStrokeWidth(raw.strokeWidth, where, warnings);
+   581→  if (strokeWidth !== undefined) out.strokeWidth = strokeWidth;
+   582→  warnUnknownKeys(raw, ICON_PAYLOAD_KEYS, `${where} icon payload`, warnings);
+   583→  return out;
+   584→}
+   585→
+   586→function parseCalloutPayload(raw: unknown, where: string, warnings: string[], errors: string[]): CalloutPayload | null {
+   587→  if (raw === undefined) return null; // absent — the caller warns; tolerant parse never refuses
+   588→  if (!isObj(raw)) { errors.push(`${where}: callout payload unreadable — not an object`); return null; }
+   589→  const text = str(raw.text);
+   590→  if (text === null || text.trim() === "") {
+   591→    errors.push(`${where}: callout payload requires a non-empty "text" string`);
+   592→    return null;
+   593→  }
+   594→  const out: CalloutPayload = { text };
+   595→  if (raw.pointsAt !== undefined) {
+   596→    const px = isObj(raw.pointsAt) ? num(raw.pointsAt.x) : null;
+   597→    const py = isObj(raw.pointsAt) ? num(raw.pointsAt.y) : null;
+   598→    if (px !== null && py !== null) out.pointsAt = { x: px, y: py };
+   599→    else warnings.push(`${where}: pointsAt dropped — must be {x, y} finite`);
+   600→  }
+   601→  warnUnknownKeys(raw, CALLOUT_PAYLOAD_KEYS, `${where} callout payload`, warnings);
+   602→  return out;
+   603→}
+   604→
+   605→function parseShapePayload(raw: unknown, where: string, warnings: string[], errors: string[]): ShapePayload | null {
+   606→  if (raw === undefined) return null; // absent — the caller warns; tolerant parse never refuses
+   607→  if (!isObj(raw)) { errors.push(`${where}: shape payload unreadable — not an object`); return null; }
+   608→  const kind = str(raw.kind);
+   609→  if (kind !== "rect" && kind !== "line" && kind !== "circle") {
+   610→    errors.push(`${where}: shape payload requires kind rect|line|circle — got "${String(raw.kind)}"`);
+   611→    return null;
+   612→  }
+   613→  const out: ShapePayload = { kind };
+   614→  for (const dim of ["w", "h", "r"] as const) {
+   615→    const v = num(raw[dim]);
+   616→    if (v !== null && v > 0) out[dim] = v;
+   617→    else if (raw[dim] !== undefined) warnings.push(`${where}: ${dim} dropped — must be finite > 0`);
+   618→  }
+   619→  const stroke = parseColor(raw.stroke, where, "stroke", warnings);
+   620→  if (stroke !== undefined) out.stroke = stroke;
+   621→  const fill = parseColor(raw.fill, where, "fill", warnings);
+   622→  if (fill !== undefined) out.fill = fill;
+   623→  const strokeWidth = parseStrokeWidth(raw.strokeWidth, where, warnings);
+   624→  if (strokeWidth !== undefined) out.strokeWidth = strokeWidth;
+   625→  warnUnknownKeys(raw, SHAPE_PAYLOAD_KEYS, `${where} shape payload`, warnings);
+   626→  return out;
+   627→}
+   628→
+   629→function parseGroupPayload(raw: unknown, where: string, warnings: string[], errors: string[]): GroupPayload | null {
+   630→  if (raw === undefined) return null; // absent — the caller warns; tolerant parse never refuses
+   631→  if (!isObj(raw)) { errors.push(`${where}: group payload unreadable — not an object`); return null; }
+   632→  if (!Array.isArray(raw.children) || raw.children.length === 0) {
+   633→    errors.push(`${where}: group payload requires a non-empty "children" id array`);
+   634→    return null;
+   635→  }
+   636→  const children: string[] = [];
+   637→  for (const c of raw.children) {
+   638→    const id = str(c);
+   639→    if (id === null) {
+   640→      errors.push(`${where}: group children must be element ids (strings)`);
+   641→      return null;
+   642→    }
+   643→    children.push(id);
+   644→  }
+   645→  warnUnknownKeys(raw, GROUP_PAYLOAD_KEYS, `${where} group payload`, warnings);
+   646→  return { children };
+   647→}
+   648→
+   649→/** The payload slot per kind — the closed mapping (compile-total). */
+   650→const PAYLOAD_SLOT: Readonly<Record<GraphicsElementKind, string>> = {
+   651→  headline: "text", subhead: "text", bullet: "text",
+   652→  counter: "counter", bar: "bar", barChart: "bar",
+   653→  icon: "icon", callout: "callout", shape: "shape", group: "group",
+   654→};
+   655→
+   656→const PAYLOAD_SLOTS = new Set(["text", "counter", "bar", "icon", "callout", "shape", "group"]);
+   657→
+   658→function parseElement(
+   659→  raw: unknown,
+   660→  sceneWhere: string,
+   661→  sceneMs: number,
+   662→  warnings: string[],
+   663→  errors: string[],
+   664→): GraphicsElement | null {
+   665→  if (!isObj(raw)) { errors.push(`${sceneWhere}: element unreadable — not an object`); return null; }
+   666→  const id = str(raw.id);
+   667→  if (id === null || !validGraphicsId(id)) {
+   668→    errors.push(`${sceneWhere}: element id violates the id law (${String(raw.id)})`);
+   669→    return null;
+   670→  }
+   671→  const where = `${sceneWhere} element "${id}"`;
+   672→  warnUnknownKeys(raw, ELEMENT_KEYS, where, warnings);
+   673→  const kind = str(raw.kind);
+   674→  if (kind === null || !GRAPHICS_ELEMENT_KINDS.includes(kind as GraphicsElementKind)) {
+   675→    warnings.push(`${where}: unknown element kind "${String(raw.kind)}" dropped (the v1 set is closed)`);
+   676→    return null;
+   677→  }
+   678→  const elKind = kind as GraphicsElementKind;
+   679→
+   680→  // Choreography — enter is REQUIRED (an element that cannot enter has no
+   681→  // reason to exist in this grammar); exit/emphasis drop honestly when
+   682→  // absent/junk.
+   683→  if (raw.enter === undefined) {
+   684→    errors.push(`${where}: enter is required — an element that cannot enter has no reason to exist in this grammar`);
+   685→    return null;
+   686→  }
+   687→  const enter = parseMotion(raw.enter, where, "enter", warnings, errors, true);
+   688→  if (enter === null) return null;
+   689→  const exit = parseMotion(raw.exit, where, "exit", warnings, errors, false);
+   690→  const emphasis = parseMotion(raw.emphasis, where, "emphasis", warnings, errors, false);
+   691→  const motions: Array<{ slot: string; motion: ElementMotion }> = [
+   692→    { slot: "enter", motion: enter },
+   693→    ...(exit ? [{ slot: "exit", motion: exit }] : []),
+   694→    ...(emphasis ? [{ slot: "emphasis", motion: emphasis }] : []),
+   695→  ];
+   696→
+   697→  // Motion/element compatibility + time sanity — enforced HERE, not at
+   698→  // render (the Part F law: a doc that reaches the frame engine is
+   699→  // guaranteed legal, so frameAt carries no defensive branches).
+   700→  const legal = legalMotions(elKind);
+   701→  for (const { slot, motion } of motions) {
+   702→    if (!legal.includes(motion.kind)) {
+   703→      errors.push(
+   704→        `${where}: the ${slot} motion "${motion.kind}" is not legal on a "${elKind}" (the compatibility table allows: ${legal.join(", ")})`,
+   705→      );
+   706→      return null;
+   707→    }
+   708→    const spanEnd = motion.delayMs + motion.durationMs;
+   709→    if (spanEnd > sceneMs) {
+   710→      errors.push(
+   711→        `${where}: the ${slot} motion ends at ${spanEnd}ms, past the scene clock (${sceneMs}ms)`,
+   712→      );
+   713→      return null;
+   714→    }
+   715→  }
+   716→
+   717→  // Payload-per-kind: payloads parked under the WRONG slot are
+   718→  // unknown-field noise to a v1 reader (warning + ignored); the element's
+   719→  // own slot parses strictly (shape violations are errors); an absent
+   720→  // payload for a kind that has one warns but never refuses.
+   721→  const ownSlot = PAYLOAD_SLOT[elKind];
+   722→  for (const key of Object.keys(raw)) {
+   723→    if (PAYLOAD_SLOTS.has(key) && key !== ownSlot && raw[key] !== undefined) {
+   724→      warnings.push(`${where}: a "${key}" payload on a "${elKind}" is ignored (payload-per-kind)`);
+   725→    }
+   726→  }
+   727→
+   728→  const el: GraphicsElement = {
+   729→    id,
+   730→    kind: elKind,
+   731→    at: parsePlacement(raw.at, where, warnings),
+   732→    enter,
+   733→  };
+   734→  const ownRaw = raw[ownSlot];
+   735→  let ownParsed = false;
+   736→  switch (ownSlot) {
+   737→    case "text": {
+   738→      const p = parseTextPayload(ownRaw, where, warnings, errors);
+   739→      if (errors.length > 0) return null;
+   740→      if (p !== null) { el.text = p; ownParsed = true; }
+   741→      break;
+   742→    }
+   743→    case "counter": {
+   744→      const p = parseCounterPayload(ownRaw, where, warnings, errors);
+   745→      if (errors.length > 0) return null;
+   746→      if (p !== null) { el.counter = p; ownParsed = true; }
+   747→      break;
+   748→    }
+   749→    case "bar": {
+   750→      const p = parseBarPayload(ownRaw, where, warnings, errors);
+   751→      if (errors.length > 0) return null;
+   752→      if (p !== null) { el.bar = p; ownParsed = true; }
+   753→      break;
+   754→    }
+   755→    case "icon": {
+   756→      const p = parseIconPayload(ownRaw, where, warnings, errors);
+   757→      if (errors.length > 0) return null;
+   758→      if (p !== null) { el.icon = p; ownParsed = true; }
+   759→      break;
+   760→    }
+   761→    case "callout": {
+   762→      const p = parseCalloutPayload(ownRaw, where, warnings, errors);
+   763→      if (errors.length > 0) return null;
+   764→      if (p !== null) { el.callout = p; ownParsed = true; }
+   765→      break;
+   766→    }
+   767→    case "shape": {
+   768→      const p = parseShapePayload(ownRaw, where, warnings, errors);
+   769→      if (errors.length > 0) return null;
+   770→      if (p !== null) { el.shape = p; ownParsed = true; }
+   771→      break;
+   772→    }
+   773→    case "group": {
+   774→      const p = parseGroupPayload(ownRaw, where, warnings, errors);
+   775→      if (errors.length > 0) return null;
+   776→      if (p !== null) { el.group = p; ownParsed = true; }
+   777→      break;
+   778→    }
+   779→  }
+   780→  if (!ownParsed) {
+   781→    warnings.push(
+   782→      `${where}: the "${ownSlot}" payload is absent — the composer falls back (tolerant parse never refuses)`,
+   783→    );
+   784→  }
+   785→  if (exit) el.exit = exit;
+   786→  if (emphasis) el.emphasis = emphasis;
+   787→  const opacity = num(raw.opacity);
+   788→  if (opacity !== null) {
+   789→    if (opacity < 0 || opacity > 1) {
+   790→      warnings.push(`${where}: opacity ${opacity} clamped to 0..1`);
+   791→      el.opacity = clamp(opacity, 0, 1);
+   792→    } else el.opacity = opacity;
+   793→  } else if (raw.opacity !== undefined) {
+   794→    warnings.push(`${where}: opacity dropped — not a finite number`);
+   795→  }
+   796→  return el;
+   797→}
+   798→
+   799→function parseScene(
+   800→  raw: unknown,
+   801→  index: number,
+   802→  warnings: string[],
+   803→  errors: string[],
+   804→): GraphicsScene | null {
+   805→  const sceneNo = `scene #${index + 1}`;
+   806→  if (!isObj(raw)) { errors.push(`${sceneNo}: unreadable — not an object`); return null; }
+   807→  warnUnknownKeys(raw, SCENE_KEYS, sceneNo, warnings);
+   808→  const id = str(raw.id);
+   809→  if (id === null || !validGraphicsId(id)) {
+   810→    errors.push(`${sceneNo}: scene id violates the id law (${String(raw.id)})`);
+   811→    return null;
+   812→  }
+   813→  const where = `scene "${id}"`;
+   814→  const narration = str(raw.narration);
+   815→  if (narration === null) {
+   816→    errors.push(`${where}: narration must be a string (the clock model reads it)`);
+   817→    return null;
+   818→  }
+   819→  const background = str(raw.background);
+   820→  if (background === null || !HEX_RE.test(background)) {
+   821→    errors.push(`${where}: background must be #rrggbb — a junk background is refused, never substituted`);
+   822→    return null;
+   823→  }
+   824→  const explicitMs = num(raw.durationMs);
+   825→  if (raw.durationMs !== undefined && (explicitMs === null || explicitMs <= 0)) {
+   826→    errors.push(`${where}: durationMs must be finite > 0`);
+   827→    return null;
+   828→  }
+   829→  if (explicitMs !== null && explicitMs > GRAPHICS_BUDGETS.sceneDurationMsMax) {
+   830→    errors.push(
+   831→      `${where}: explicit durationMs ${explicitMs} exceeds the sceneDurationMsMax wall (${GRAPHICS_BUDGETS.sceneDurationMsMax})`,
+   832→    );
+   833→    return null;
+   834→  }
+   835→  if (!Array.isArray(raw.elements)) {
+   836→    errors.push(`${where}: elements must be an array`);
+   837→    return null;
+   838→  }
+   839→  // The scene clock: explicit > the house 2.6-wps estimate (ONE clock
+   840→  // model — timing.ts, never re-implemented).
+   841→  const sceneMs = explicitMs !== null && explicitMs > 0 ? explicitMs : estimateNarrationMs(narration);
+   842→  const elements: GraphicsElement[] = [];
+   843→  const ids = new Set<string>();
+   844→  for (const elRaw of raw.elements) {
+   845→    const el = parseElement(elRaw, where, sceneMs, warnings, errors);
+   846→    if (errors.length > 0) return null;
+   847→    if (el === null) continue; // dropped (unknown kind) — warned
+   848→    if (ids.has(el.id)) {
+   849→      errors.push(`${where}: duplicate element id "${el.id}" — ids are the group seam, they must be unique`);
+   850→      return null;
+   851→    }
+   852→    ids.add(el.id);
+   853→    elements.push(el);
+   854→  }
+   855→  // Second phase — group referential integrity (the first phase parsed
+   856→  // payloads; ids are now known). The groupDepthMax wall (groups do not
+   857→  // nest) makes reference cycles unreachable by construction.
+   858→  for (const el of elements) {
+   859→    if (el.kind !== "group" || el.group === undefined) continue;
+   860→    const seen = new Set<string>();
+   861→    const children: string[] = [];
+   862→    for (const child of el.group.children) {
+   863→      if (child === el.id) {
+   864→        errors.push(`${where}: group "${el.id}" references itself`);
+   865→        return null;
+   866→      }
+   867→      if (!ids.has(child)) {
+   868→        errors.push(`${where}: group "${el.id}" references missing element "${child}"`);
+   869→        return null;
+   870→      }
+   871→      const childEl = elements.find((c) => c.id === child);
+   872→      if (childEl !== undefined && childEl.kind === "group") {
+   873→        errors.push(
+   874→          `${where}: group "${el.id}" nests group "${child}" — the groupDepthMax wall (${GRAPHICS_BUDGETS.groupDepthMax}) forbids nested groups`,
+   875→        );
+   876→        return null;
+   877→      }
+   878→      if (seen.has(child)) {
+   879→        warnings.push(`${where}: group "${el.id}" lists "${child}" twice — deduplicated`);
+   880→        continue;
+   881→      }
+   882→      seen.add(child);
+   883→      children.push(child);
+   884→    }
+   885→    el.group = { children };
+   886→  }
+   887→  if (elements.length > GRAPHICS_BUDGETS.elementsPerScene) {
+   888→    errors.push(
+   889→      `${where}: ${elements.length} elements exceeds the elementsPerScene wall (${GRAPHICS_BUDGETS.elementsPerScene})`,
+   890→    );
+   891→    return null;
+   892→  }
+   893→  const scene: GraphicsScene = { id, narration, background, elements };
+   894→  if (explicitMs !== null && explicitMs > 0) scene.durationMs = explicitMs;
+   895→  return scene;
+   896→}
+   897→
+   898→function parseDoc(raw: unknown, warnings: string[], errors: string[]): GraphicsDoc | null {
+   899→  if (!isObj(raw)) { errors.push("the doc must be a JSON object"); return null; }
+   900→  warnUnknownKeys(raw, DOC_KEYS, "doc", warnings);
+   901→  // Version check — the Scene3D law: an unknown version reads as absent
+   902→  // and is never overwritten. A HIGHER integer is the additive law (v-next
+   903→  // loads in v1 readers, warned); a junk/missing shape is unreadable.
+   904→  const version = num(raw.version);
+   905→  if (version === null || !Number.isInteger(version)) {
+   906→    errors.push(`doc version must be the integer ${GRAPHICS_VERSION} — got ${String(raw.version)}`);
+   907→    return null;
+   908→  }
+   909→  if (version > GRAPHICS_VERSION) {
+   910→    warnings.push(`doc version ${version} is newer than this reader (${GRAPHICS_VERSION}) — parsed as v1, unknown fields dropped`);
+   911→  } else if (version < GRAPHICS_VERSION) {
+   912→    errors.push(`doc version ${version} predates ${GRAPHICS_VERSION} — nothing to read`);
+   913→    return null;
+   914→  }
+   915→  const title = str(raw.title);
+   916→  if (title === null || title.trim() === "") {
+   917→    errors.push("doc title must be a non-empty string");
+   918→    return null;
+   919→  }
+   920→  const width = num(raw.width);
+   921→  const height = num(raw.height);
+   922→  const onSurface = GRAPHICS_SURFACES.some(([w, h]) => width === w && height === h);
+   923→  if (width === null || height === null || !onSurface) {
+   924→    errors.push(
+   925→      `doc size ${String(raw.width)}×${String(raw.height)} is not a house surface (${GRAPHICS_SURFACES.map(([w, h]) => `${w}×${h}`).join(", ")})`,
+   926→    );
+   927→    return null;
+   928→  }
+   929→  const fps = num(raw.fps);
+   930→  if (fps !== 24 && fps !== 30) {
+   931→    errors.push(`doc fps must be 24 or 30 — got ${String(raw.fps)}`);
+   932→    return null;
+   933→  }
+   934→  if (!Array.isArray(raw.scenes)) {
+   935→    errors.push("doc scenes must be an array");
+   936→    return null;
+   937→  }
+   938→  if (raw.scenes.length === 0) {
+   939→    errors.push("doc scenes is empty — a doc with no scenes renders nothing");
+   940→    return null;
+   941→  }
+   942→  if (raw.scenes.length > GRAPHICS_BUDGETS.scenesPerProject) {
+   943→    errors.push(
+   944→      `${raw.scenes.length} scenes exceeds the scenesPerProject wall (${GRAPHICS_BUDGETS.scenesPerProject})`,
+   945→    );
+   946→    return null;
+   947→  }
+   948→  const scenes: GraphicsScene[] = [];
+   949→  const sceneIds = new Set<string>();
+   950→  let explicitTotalMs = 0;
+   951→  for (let i = 0; i < raw.scenes.length; i++) {
+   952→    const scene = parseScene(raw.scenes[i], i, warnings, errors);
+   953→    if (errors.length > 0) return null;
+   954→    if (scene === null) continue;
+   955→    if (sceneIds.has(scene.id)) {
+   956→      errors.push(`duplicate scene id "${scene.id}" — scene ids ride the S87 tracks, they must be unique`);
+   957→      return null;
+   958→    }
+   959→    sceneIds.add(scene.id);
+   960→    if (scene.durationMs !== undefined) explicitTotalMs += scene.durationMs;
+   961→    scenes.push(scene);
+   962→  }
+   963→  if (explicitTotalMs > GRAPHICS_BUDGETS.projectExplicitDurationMsMax) {
+   964→    errors.push(
+   965→      `Σ explicit scene durations (${explicitTotalMs}ms) exceeds the projectExplicitDurationMsMax wall (${GRAPHICS_BUDGETS.projectExplicitDurationMsMax})`,
+   966→    );
+   967→    return null;
+   968→  }
+   969→  return {
+   970→    version: GRAPHICS_VERSION,
+   971→    title,
+   972→    width,
+   973→    height,
+   974→    fps: fps as 24 | 30,
+   975→    scenes,
+   976→  };
+   977→}
+   978→
+   979→// ---------------------------------------------------------------------------
+   980→// Validation entries
+   981→// ---------------------------------------------------------------------------
+   982→
+   983→/** Full validation: version check, id law on every id, walls, per-kind
+   984→ *  payload shapes, motion/element compatibility (MOTION_KINDS_BY_ELEMENT),
+   985→ *  group referential integrity + depth, time sanity (durationMs > 0,
+   986→ *  delayMs ≥ 0, enter required, motion spans within the scene clock), icon
+   987→ *  path parse under the command budget, color/#rrggbb shape, fps ∈ {24,
+   988→ *  30}, surface ∈ the three house sizes. PURE — same input, same result. */
+   989→export function validateGraphicsDoc(raw: unknown): GraphicsValidationResult {
+   990→  const errors: string[] = [];
+   991→  const warnings: string[] = [];
+   992→  const doc = parseDoc(raw, warnings, errors);
+   993→  if (errors.length > 0) return { doc: null, errors, warnings };
+   994→  return { doc, errors, warnings };
+   995→}
+   996→
+   997→/** Tolerant entry (the parseScene3D shape): null on unreadable — junk
+   998→ *  JSON, wrong version shape, structural nonsense. */
+   999→export function parseGraphicsDoc(json: string | null | undefined): GraphicsDoc | null {
+  1000→  if (!json) return null;
+  1001→  let raw: unknown;
+  1002→  try {
+  1003→    raw = JSON.parse(json);
+  1004→  } catch {
+  1005→    return null;
+  1006→  }
+  1007→  return validateGraphicsDoc(raw).doc;
+  1008→}
+  1009→
+  1010→// ---------------------------------------------------------------------------
+  1011→// Strict write — exactly the declared fields, version first, key order
+  1012→// stable. Byte-stable round-trip is the pin:
+  1013→// writeGraphicsDoc(parseGraphicsDoc(writeGraphicsDoc(doc))) ≡ the string.
+  1014→// ---------------------------------------------------------------------------
+  1015→
+  1016→function serializeMotion(m: ElementMotion): Rec {
+  1017→  return { kind: m.kind, durationMs: m.durationMs, delayMs: m.delayMs, ease: m.ease };
+  1018→}
+  1019→
+  1020→function serializePayload(kind: GraphicsElementKind, el: GraphicsElement): Rec | null {
+  1021→  switch (kind) {
+  1022→    case "headline":
+  1023→    case "subhead":
+  1024→    case "bullet": {
+  1025→      if (el.text === undefined) return null;
+  1026→      const p = el.text;
+  1027→      const out: Rec = { text: p.text };
+  1028→      if (p.sizePx !== undefined) out.sizePx = p.sizePx;
+  1029→      if (p.weight !== undefined) out.weight = p.weight;
+  1030→      if (p.color !== undefined) out.color = p.color;
+  1031→      if (p.align !== undefined) out.align = p.align;
+  1032→      return out;
+  1033→    }
+  1034→    case "counter": {
+  1035→      if (el.counter === undefined) return null;
+  1036→      const p = el.counter;
+  1037→      const out: Rec = { from: p.from, to: p.to };
+  1038→      if (p.unit !== undefined) out.unit = p.unit;
+  1039→      if (p.decimals !== undefined) out.decimals = p.decimals;
+  1040→      return out;
+  1041→    }
+  1042→    case "bar":
+  1043→    case "barChart": {
+  1044→      if (el.bar === undefined) return null;
+  1045→      const p = el.bar;
+  1046→      const out: Rec = {
+  1047→        data: p.data.map((d) => ({ label: d.label, value: d.value })),
+  1048→      };
+  1049→      if (p.unit !== undefined) out.unit = p.unit;
+  1050→      if (p.max !== undefined) out.max = p.max;
+  1051→      if (p.horizontal !== undefined) out.horizontal = p.horizontal;
+  1052→      return out;
+  1053→    }
+  1054→    case "icon": {
+  1055→      if (el.icon === undefined) return null;
+  1056→      const p = el.icon;
+  1057→      const out: Rec = { paths: [...p.paths] };
+  1058→      if (p.color !== undefined) out.color = p.color;
+  1059→      if (p.strokeWidth !== undefined) out.strokeWidth = p.strokeWidth;
+  1060→      return out;
+  1061→    }
+  1062→    case "callout": {
+  1063→      if (el.callout === undefined) return null;
+  1064→      const p = el.callout;
+  1065→      const out: Rec = { text: p.text };
+  1066→      if (p.pointsAt !== undefined) out.pointsAt = { x: p.pointsAt.x, y: p.pointsAt.y };
+  1067→      return out;
+  1068→    }
+  1069→    case "shape": {
+  1070→      if (el.shape === undefined) return null;
+  1071→      const p = el.shape;
+  1072→      const out: Rec = { kind: p.kind };
+  1073→      if (p.w !== undefined) out.w = p.w;
+  1074→      if (p.h !== undefined) out.h = p.h;
+  1075→      if (p.r !== undefined) out.r = p.r;
+  1076→      if (p.stroke !== undefined) out.stroke = p.stroke;
+  1077→      if (p.fill !== undefined) out.fill = p.fill;
+  1078→      if (p.strokeWidth !== undefined) out.strokeWidth = p.strokeWidth;
+  1079→      return out;
+  1080→    }
+  1081→    case "group": {
+  1082→      if (el.group === undefined) return null;
+  1083→      return { children: [...el.group.children] };
+  1084→    }
+  1085→  }
+  1086→}
+  1087→
+  1088→function serializeElement(el: GraphicsElement): Rec {
+  1089→  const out: Rec = {
+  1090→    id: el.id,
+  1091→    kind: el.kind,
+  1092→    at: { x: el.at.x, y: el.at.y, scale: el.at.scale, rotateDeg: el.at.rotateDeg },
+  1093→  };
+  1094→  const payload = serializePayload(el.kind, el);
+  1095→  if (payload !== null) out[PAYLOAD_SLOT[el.kind]] = payload;
+  1096→  out.enter = serializeMotion(el.enter);
+  1097→  if (el.exit !== undefined) out.exit = serializeMotion(el.exit);
+  1098→  if (el.emphasis !== undefined) out.emphasis = serializeMotion(el.emphasis);
+  1099→  if (el.opacity !== undefined) out.opacity = el.opacity;
+  1100→  return out;
+  1101→}
+  1102→
+  1103→/** Strict write: exactly the declared fields, version first, key order
+  1104→ *  stable — byte-stable round-trip is the pin. */
+  1105→export function writeGraphicsDoc(doc: GraphicsDoc): string {
+  1106→  return JSON.stringify({
+  1107→    version: doc.version,
+  1108→    title: doc.title,
+  1109→    width: doc.width,
+  1110→    height: doc.height,
+  1111→    fps: doc.fps,
+  1112→    scenes: doc.scenes.map((s) => {
+  1113→      const out: Rec = { id: s.id, narration: s.narration };
+  1114→      if (s.durationMs !== undefined) out.durationMs = s.durationMs;
+  1115→      out.background = s.background;
+  1116→      out.elements = s.elements.map(serializeElement);
+  1117→      return out;
+  1118→    }),
+  1119→  });
+  1120→}
+  1121→
