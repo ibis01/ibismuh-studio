@@ -12985,9 +12985,50 @@ await test("s119: the render lane contract — resolveRenderLane truth table (pu
   ok(garbageStory.lane === "story" && garbageStory.pinRenderMode === null, "unrecognized mode on a story row defers to the row");
 
   // Lockstep with the picker list (the priors-table twin).
-  ok(laneDecisionsComplete(), "every RENDER_MODES id except whiteboard has a story-lane row (lockstep)");
+  ok(laneDecisionsComplete(), "every RENDER_MODES id except the engine lanes has a story-lane row (lockstep)");
   ok(isStoryRenderMode("kenburns") && isStoryRenderMode("stock") && isStoryRenderMode("slides") && isStoryRenderMode("animated"), "isStoryRenderMode accepts the four story modes");
   ok(!isStoryRenderMode("whiteboard") && !isStoryRenderMode("nonsense") && !isStoryRenderMode(null), "isStoryRenderMode rejects the lane id, garbage and null");
+});
+
+await test("s123: the graphics lane rows of the truth table + the ship-dark law", async () => {
+  const { resolveRenderLane, laneDecisionsComplete, isStoryRenderMode, isEngineLaneId } = await import(
+    "../src/lib/tubeforge/render-lane"
+  );
+  // Explicit graphics ask: the engine lane + pin (the whiteboard rows,
+  // mirrored symmetrically — the engine lanes are a set, not a case).
+  const g = resolveRenderLane("graphics", "kenburns");
+  ok(g.lane === "graphics" && g.pinRenderMode === "graphics", "explicit graphics on a story row pins + routes to the graphics lane");
+  ok(resolveRenderLane("graphics", "whiteboard").pinRenderMode === "graphics", "explicit graphics flips a whiteboard row to the graphics lane");
+  const gSame = resolveRenderLane("graphics", "graphics");
+  ok(gSame.lane === "graphics" && gSame.pinRenderMode === null, "explicit graphics on a graphics row pins nothing");
+  ok(resolveRenderLane("graphics", null).pinRenderMode === "graphics", "explicit graphics on a null-mode row pins");
+
+  // Story modes flip a graphics row back (the admission-time twin).
+  for (const m of ["kenburns", "stock", "slides", "animated"] as const) {
+    const r = resolveRenderLane(m, "graphics");
+    ok(r.lane === "story" && r.pinRenderMode === m, `explicit ${m} flips a graphics row back to the story lane`);
+  }
+
+  // Silent body defers to the row; garbage never flips a lane.
+  ok(resolveRenderLane(null, "graphics").lane === "graphics" && resolveRenderLane(null, "graphics").pinRenderMode === null, "silent body on a graphics row keeps the engine lane");
+  const garbageG = resolveRenderLane("nonsense", "graphics");
+  ok(garbageG.lane === "graphics" && garbageG.pinRenderMode === null, "unrecognized mode on a graphics row defers to the row");
+
+  // The lane-set laws.
+  ok(isEngineLaneId("whiteboard") && isEngineLaneId("graphics"), "isEngineLaneId accepts both engine lanes");
+  ok(!isEngineLaneId("kenburns") && !isEngineLaneId("nonsense") && !isEngineLaneId(null), "isEngineLaneId rejects story modes, garbage and null");
+  ok(!isStoryRenderMode("graphics"), "graphics is a lane id, not a story mode");
+
+  // Lockstep covers the engine-lane side automatically.
+  ok(laneDecisionsComplete(), "RENDER_MODES minus {whiteboard, graphics} is exactly the story modes (lockstep)");
+
+  // The ship-dark law (spec §10, acceptance criterion 4): the contract
+  // seats the lane, but the picker does NOT offer it until the lockstep
+  // commit lands the compositor case + route branch with it — a picker
+  // entry without its route branch would degrade to the story gates, the
+  // S119 bug class. This pin flips WITH that commit, never before.
+  const { RENDER_MODES } = await import("../src/lib/tubeforge/types");
+  ok(!RENDER_MODES.some((m) => m.id === "graphics"), "ship-dark: RENDER_MODES does not offer graphics until the P3/P4 lockstep commit");
 });
 
 await test("s119: the lane contract is wired — route resolves the lane, scaffold pins, dialog surfaces rejections (source pin)", async () => {
