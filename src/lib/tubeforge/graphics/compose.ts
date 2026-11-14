@@ -488,6 +488,49 @@ function elementNode(el: GraphicsElement, doc: GraphicsDoc, childrenBody = ""): 
 }
 
 // ---------------------------------------------------------------------------
+// The placed state + the group claims (S124 — the element editor's truths)
+// ---------------------------------------------------------------------------
+
+/** The group-claim map for one scene — child id → the group id that renders
+ *  it. ONE claim truth: the composer's emission pass AND the element
+ *  editor's z-order/hit-test laws read THIS map (S124; the inline loop it
+ *  replaces was byte-identical — the G1.3 suite pins the skeleton bytes). */
+export function graphicsGroupClaims(scene: GraphicsScene): Map<string, string> {
+  const claims = new Map<string, string>();
+  for (const el of scene.elements) {
+    if (el.kind === "group" && el.group !== undefined) {
+      for (const child of el.group.children) claims.set(child, el.id);
+    }
+  }
+  return claims;
+}
+
+/** The PLACED frame state — the doc's resting truth for one scene: every
+ *  element at its placement (at), base opacity, full reveal. This is the
+ *  state the skeleton poster bakes (elementNode carries the placed
+ *  transform/opacity; the reveal mechanisms bake progress 1), exported so
+ *  the element editor plays EXACTLY the poster state through the ONE
+ *  applier while editing (S124: edit-mode preview == the poster, pinned).
+ *  NOT an animation-time state — frameAt owns motion; this owns rest.
+ *  counterValue stays ABSENT: the applier only rewrites counter text when
+ *  the field is present, so the poster's baked end value holds. */
+export function placedGraphicsFrame(scene: GraphicsScene): GraphicsFrameState {
+  return {
+    sceneId: scene.id,
+    sceneTMs: 0,
+    elements: scene.elements.map((el) => ({
+      id: el.id,
+      opacity: el.opacity ?? 1,
+      x: el.at.x,
+      y: el.at.y,
+      scale: el.at.scale,
+      rotateDeg: el.at.rotateDeg,
+      progress: 1,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // The skeleton
 // ---------------------------------------------------------------------------
 
@@ -502,13 +545,9 @@ export interface ComposedGraphicsScene {
 export function composeGraphicsScene(scene: GraphicsScene, doc: GraphicsDoc): ComposedGraphicsScene {
   // Group nesting — children ride the group's children-array order inside
   // the group's <g>; an element claimed by two groups lives in the LAST
-  // claim (recorded v1 semantics).
-  const claims = new Map<string, string>();
-  for (const el of scene.elements) {
-    if (el.kind === "group" && el.group !== undefined) {
-      for (const child of el.group.children) claims.set(child, el.id);
-    }
-  }
+  // claim (recorded v1 semantics). The claim map is the exported ONE truth
+  // (S124): the element editor's laws read the same map.
+  const claims = graphicsGroupClaims(scene);
   const emitted = new Set<string>();
   const parts: string[] = [];
   for (const el of scene.elements) {
