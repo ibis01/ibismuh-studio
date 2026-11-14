@@ -51,6 +51,7 @@ import {
   runQcJob,
   runUploadJob,
   runWhiteboardJob,
+  runGraphicsJob,
   type PublishJobOptions,
   splitEntityId,
   type VoiceoverJobSource,
@@ -316,6 +317,16 @@ export function parseWhiteboardPayload(payload: unknown): { sceneId?: string } {
   return {};
 }
 
+/** S123 — the graphics job's payload: an optional scene id for the
+ *  single-scene DRAFT. Tolerant decode: junk shapes degrade to the full
+ *  render (the entityId's #gfx suffix stays the durable truth anyway —
+ *  runGraphicsJob prefers the suffix when the payload disagrees). */
+export function parseGraphicsPayload(payload: unknown): { sceneId?: string } {
+  const raw = asRecord(payload)?.sceneId;
+  if (typeof raw === "string" && raw.trim()) return { sceneId: raw.trim().slice(0, 64) };
+  return {};
+}
+
 /** T-6.3 — the publish options survive a crash so the resumed upload uses
  *  the SAME title/description/privacy the user picked. Strings are
  *  clamped to YouTube's API limits; junk shapes degrade to safe defaults
@@ -413,6 +424,14 @@ export function registerDefaultHandlers(): void {
   // deterministic local work at zero marginal API cost (design §3.2).
   registerJobHandler("whiteboard", (entityId, payload) =>
     runWhiteboardJob(entityId, parseWhiteboardPayload(payload))
+  );
+
+  // S123 — Graphics Engine: full render (plain videoId) + scene draft
+  // (<videoId>#gfx<sceneId>). Default attempts (2): a graphics re-run is
+  // deterministic local work at zero marginal API cost (the whiteboard's
+  // rationale, mirrored — the peer-lane law).
+  registerJobHandler("graphics", (entityId, payload) =>
+    runGraphicsJob(entityId, parseGraphicsPayload(payload))
   );
 
   // S88 — Reference-video intelligence: the structural analysis of the

@@ -8,7 +8,7 @@ import { assertWithinVideoCeiling, CostCeilingExceededError } from "@/lib/tubefo
 
 const digestOf = (input: string) =>
   createHash("sha256").update(input, "utf8").digest("hex").slice(0, 16);
-import { runRenderJob, runWhiteboardJob, type RenderJobOptions } from "@/lib/tubeforge/video-jobs";
+import { runRenderJob, runWhiteboardJob, runGraphicsJob, type RenderJobOptions } from "@/lib/tubeforge/video-jobs";
 import { renderStaleness, parseRenderManifest } from "@/lib/tubeforge/render-assembly";
 import { resolveMusicForVideo, isMusicEnabledForVideo, musicBedActive } from "@/lib/tubeforge/music";
 import { docMusicPick, resolveDeliveryQuality, resolveBurnSubtitles } from "@/lib/tubeforge/studio-doc";
@@ -19,6 +19,7 @@ import { resolveUserPlan, hasCredits, RENDER_ESTIMATE_MICRO, planSupportsResolut
 import { parseWhiteboardDoc } from "@/lib/tubeforge/whiteboard/whiteboard-planner";
 import { validateWhiteboardProject } from "@/lib/tubeforge/whiteboard/storyboard";
 import { loadVideoLibrary } from "@/lib/tubeforge/whiteboard/asset-store";
+import { parseGraphicsProject, validateGraphicsDoc } from "@/lib/tubeforge/graphics/types";
 import { resolveRenderLane } from "@/lib/tubeforge/render-lane";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -36,12 +37,18 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   if (video.format !== "story")
     return NextResponse.json({ error: "Not a scene-based video" }, { status: 400 });
 
-  // S87 slice 3 — the shared status surface sees BOTH lanes: a whiteboard
-  // video renders through the "whiteboard" job kind (the engine lane), so
+  // S87 slice 3 — the shared status surface sees ALL THREE lanes: a
+  // whiteboard video renders through the "whiteboard" job kind and a
+  // graphics video through the "graphics" kind (the engine lanes), so
   // the compositor's "render" kind reads empty and the honest answer comes
-  // from the lane that is actually running.
+  // from the lane that is actually running (S123 mirrors the whiteboard's
+  // seam — the engine lanes are a set, not a case).
   const wb = video.renderMode === "whiteboard";
-  const rendering = isJobRunning(id, "render") || (wb && isJobRunning(id, "whiteboard"));
+  const gfx = video.renderMode === "graphics";
+  const rendering =
+    isJobRunning(id, "render") ||
+    (wb && isJobRunning(id, "whiteboard")) ||
+    (gfx && isJobRunning(id, "graphics"));
   // S117 — the manifest + the live staleness verdict (computed, never
   // stored): what the standing final was assembled from, and whether the
   // current approved content has moved on since.
@@ -51,7 +58,8 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     mode: rendering ? video.renderMode : null,
     progress:
       jobProgress(id, "render") ??
-      (wb ? jobProgress(id, "whiteboard") : null),
+      (wb ? jobProgress(id, "whiteboard") : null) ??
+      (gfx ? jobProgress(id, "graphics") : null),
     hasVideo: video.hasVideo,
     videoDuration: video.videoDuration,
     manifest: parseRenderManifest(video.renderManifest),
@@ -59,6 +67,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     error:
       lastJobError(id, "render") ??
       (wb ? lastJobError(id, "whiteboard") : null) ??
+      (gfx ? lastJobError(id, "graphics") : null) ??
       video.error,
   });
 }
@@ -170,6 +179,34 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     const accepted = await startJob(id, "whiteboard", () => runWhiteboardJob(id, {}));
     return NextResponse.json(
       { accepted, generating: true, mode: "whiteboard", scope: "full" },
+      { status: accepted ? 202 : 200 }
+    );
+  }
+
+  // S123 — THE GRAPHICS LANE, the whiteboard branch mirrored (the engine
+  // lanes are a set, not a case): the same gates, the same job dispatch,
+  // the same verbatim-errors law — the graphics validator is pure, so the
+  // gate re-validates the parsed doc (no library merge needed).
+  if (lane.lane === "graphics") {
+    const env = parseGraphicsProject(video.graphicsProject);
+    if (!env)
+      return NextResponse.json(
+        { error: "No graphics project yet — scaffold one in the Graphics Studio first" },
+        { status: 409 }
+      );
+    // Same gate the lane's own route applies — the validator's verbatim
+    // errors on click, not in a failed job card.
+    const { doc, errors } = validateGraphicsDoc(env.doc);
+    if (!doc)
+      return NextResponse.json(
+        { error: "The graphics doc is invalid — fix it in the Studio first", errors },
+        { status: 400 }
+      );
+
+    await db.video.update({ where: { id }, data: { error: null } });
+    const accepted = await startJob(id, "graphics", () => runGraphicsJob(id, {}));
+    return NextResponse.json(
+      { accepted, generating: true, mode: "graphics", scope: "full" },
       { status: accepted ? 202 : 200 }
     );
   }

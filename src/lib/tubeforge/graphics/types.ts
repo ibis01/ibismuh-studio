@@ -1217,3 +1217,52 @@ export function writeGraphicsDoc(doc: GraphicsDoc): string {
     }),
   });
 }
+
+// ---------------------------------------------------------------------------
+// The storage envelope — the whiteboard doc's {rev, project} shape,
+// mirrored (the route family's advisory-concurrency contract). The envelope
+// is a STORAGE detail, not grammar: the doc inside is validated on every
+// read (errors → null = the honest "no project" state; warnings are the
+// additive-read law's own notes and never fail the read). A bare doc with
+// no envelope (a pre-envelope write) still loads — rev 0, the additive-read
+// posture the grammar itself applies to v-next docs.
+// ---------------------------------------------------------------------------
+
+export interface GraphicsProjectEnvelope {
+  /** ≥ 1 on a save; 0 only for a bare pre-envelope doc. Advisory UX, never
+   *  a guarantee (the whiteboard rev law — LWW stays the final truth). */
+  rev: number;
+  doc: GraphicsDoc;
+}
+
+/** Tolerant read — corrupt/foreign JSON, a failed validation or a junk rev
+ *  reads null ("no project"), never a guess. */
+export function parseGraphicsProject(raw: string | null | undefined): GraphicsProjectEnvelope | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isObj(parsed)) return null;
+  // The envelope shape first; a bare validated doc falls back to rev 0.
+  const body: unknown = "doc" in parsed ? parsed.doc : parsed;
+  const { doc, errors } = validateGraphicsDoc(body);
+  if (!doc || errors.length > 0) return null;
+  let rev = 0;
+  if ("doc" in parsed) {
+    const r = num(parsed.rev);
+    if (r === null || r < 1 || !Number.isInteger(r)) return null;
+    rev = r;
+  }
+  return { rev, doc };
+}
+
+/** Strict write: the envelope's two keys in declared order, the doc through
+ *  the strict write (writeGraphicsDoc — version first, stable key order), so
+ *  a save round-trips byte-identically. The doc must already be validated —
+ *  every writer does (the scaffold, the PUT route, the planner). */
+export function serializeGraphicsProject(env: GraphicsProjectEnvelope): string {
+  return `{"rev":${env.rev},"doc":${writeGraphicsDoc(env.doc)}}`;
+}

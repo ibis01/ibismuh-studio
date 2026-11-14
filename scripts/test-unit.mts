@@ -154,12 +154,26 @@ import {
   legalMotions,
   MOTION_KINDS_BY_ELEMENT,
   parseGraphicsDoc,
+  parseGraphicsProject,
+  serializeGraphicsProject,
   validGraphicsId,
   validateGraphicsDoc,
   writeGraphicsDoc,
   type GraphicsDoc,
   type GraphicsScene,
 } from "../src/lib/tubeforge/graphics/types";
+import { effectiveGraphicsDoc } from "../src/lib/tubeforge/graphics/render";
+import {
+  GRAPHICS_DRAFT_MIN_DIM,
+  GRAPHICS_DRAFT_SCALES,
+  graphicsDraftLabel,
+  graphicsDraftMark,
+  graphicsDraftScale,
+  graphicsDraftViewport,
+  isGraphicsDraftScale,
+} from "../src/lib/tubeforge/graphics/draft";
+import { graphicsQcRows, runGraphicsQc, runGraphicsSceneQc } from "../src/lib/tubeforge/graphics/qc";
+import { planFromTracks } from "../src/lib/tubeforge/composition-plan";
 import { scaffoldGraphicsDoc } from "../src/lib/tubeforge/graphics/planner";
 import {
   frameAt,
@@ -2313,11 +2327,11 @@ await test("queue: resumableKinds covers every kind the routes start", async () 
   // in review); every one must be resumable after a crash. Since the S33
   // contract fix, resumableKinds() is DERIVED from the handler registry, so
   // this test can no longer pass with a stale list — the literal below pins
-  // exhaustiveness: all 25 JobKind values are route-started AND
+  // exhaustiveness: all 26 JobKind values are route-started AND
   // handler-registered (director + continuity joined in Stage 5, upload in
   // Stage 6, whiteboard in S67, consistency in S77, reference in S88,
-  // scene3d in S94, scene-recheck in S116; the pre-fix copy listed only 18
-  // and enshrined the drift).
+  // scene3d in S94, scene-recheck in S116, graphics in S123; the pre-fix
+  // copy listed only 18 and enshrined the drift).
   const { resumableKinds } = await import("../src/lib/tubeforge/queue-handlers.ts");
   const kinds = resumableKinds();
   const expected = [
@@ -2325,7 +2339,7 @@ await test("queue: resumableKinds covers every kind the routes start", async () 
     "render", "short", "convert", "verify", "comments", "thumbnail",
     "variants", "slide", "portrait", "poses", "qc", "upload",
     "director", "continuity", "whiteboard", "consistency", "reference",
-    "scene3d", "scene-recheck",
+    "scene3d", "scene-recheck", "graphics",
   ];
   for (const k of expected) {
     ok(kinds.includes(k), `"${k}" is resumable`);
@@ -5030,12 +5044,15 @@ await test("S39 tenant ALS: module-graph duplication shares one storage", async 
 // that never runs (drift the day a check is renamed). S49 added
 // "restricted-visual"; S53 added "subject-continuity" + "text-artifacts" —
 // all three emitted only when the caller ran the respective scan, but each
-// IS part of the battery's emission set and carries a severity.
+// IS part of the battery's emission set and carries a severity. S123 added
+// the six g-* rows (graphics/qc.ts) — emitted only for graphics-mode videos,
+// the same conditional-emission pattern, each classified BLOCK.
 const S40_EMITTED_IDS = [
   "playable", "duration", "black-frames", "frozen-frames", "aspect",
   "loudness", "true-peak", "loudness-range", "dead-air", "static-shots",
   "flicker", "stutter", "cut-alignment", "tail-fade", "captions",
   "restricted-visual", "subject-continuity", "text-artifacts",
+  "g-grammar", "g-motions", "g-clocks", "g-budget", "g-frame-truth", "g-groups",
 ] as const;
 
 const s40Check = (id: string, status: "pass" | "fail" | "unmeasured") => ({
@@ -5055,7 +5072,7 @@ const s40Report = (
   checks,
 });
 
-await test("S40 matrix: every battery check classified exactly once — 10 block, 8 report", () => {
+await test("S40 matrix: every battery check classified exactly once — 16 block, 8 report", () => {
   const matrixIds = Object.keys(QC_ENFORCEMENT_MATRIX).sort();
   const emitted = [...S40_EMITTED_IDS].sort();
   eq(matrixIds, emitted, "matrix ids == battery emission set (both directions)");
@@ -5064,7 +5081,7 @@ await test("S40 matrix: every battery check classified exactly once — 10 block
     oneOf(entry.severity, ["block", "report"], `${id} severity`);
     ok(entry.why.length > 10, `${id} carries a readable rationale`);
   }
-  eq(QC_BLOCKING_COUNT, 10, "ten blocking checks — S49 added restricted-visual deliberately (a flip here is a deliberate act)");
+  eq(QC_BLOCKING_COUNT, 16, "sixteen blocking checks — S49 added restricted-visual; S123 added the six g-* graphics rows (a flip here is a deliberate act)");
   eq(
     Object.values(QC_ENFORCEMENT_MATRIX).filter((e) => e.severity === "report").length,
     8,
@@ -13022,13 +13039,52 @@ await test("s123: the graphics lane rows of the truth table + the ship-dark law"
   // Lockstep covers the engine-lane side automatically.
   ok(laneDecisionsComplete(), "RENDER_MODES minus {whiteboard, graphics} is exactly the story modes (lockstep)");
 
-  // The ship-dark law (spec §10, acceptance criterion 4): the contract
-  // seats the lane, but the picker does NOT offer it until the lockstep
-  // commit lands the compositor case + route branch with it — a picker
-  // entry without its route branch would degrade to the story gates, the
-  // S119 bug class. This pin flips WITH that commit, never before.
+  // The lockstep law (spec §10, acceptance criterion 4) — the LIT state:
+  // the P3 lockstep commit landed the compositor case + the route branch +
+  // the RENDER_MODES picker entry TOGETHER (never a picker entry without
+  // its route branch — the S119 bug class). The source pins below hold all
+  // three legs to the same commit.
   const { RENDER_MODES } = await import("../src/lib/tubeforge/types");
-  ok(!RENDER_MODES.some((m) => m.id === "graphics"), "ship-dark: RENDER_MODES does not offer graphics until the P3/P4 lockstep commit");
+  const gMode = RENDER_MODES.find((m) => m.id === "graphics");
+  ok(gMode !== undefined, "lockstep: RENDER_MODES offers graphics (the picker entry joined with the route branch)");
+  ok(gMode !== undefined && typeof gMode.label === "string" && gMode.label.length > 0, "the graphics picker entry carries a label");
+
+  // Leg 2 — the route branch: POST /render dispatches the graphics lane to
+  // the graphics job kind (source pin, the s119 pattern).
+  const routeSrc = fs.readFileSync("src/app/api/videos/[id]/render/route.ts", "utf8");
+  ok(
+    routeSrc.includes('lane.lane === "graphics"') &&
+      routeSrc.includes('startJob(id, "graphics"') &&
+      routeSrc.includes("No graphics project yet"),
+    "lockstep: POST /render carries the graphics lane branch (gate + dispatch)"
+  );
+
+  // Leg 3 — the compositor case: the routing wall refuses graphics-kind
+  // plans into the story segment builders, and the plan mapping seats the
+  // kind (source pin).
+  const compositorSrc = fs.readFileSync("src/lib/tubeforge/render.ts", "utf8");
+  ok(
+    compositorSrc.includes('ps.kind === "whiteboard" || ps.kind === "graphics"'),
+    "lockstep: the compositor routing wall covers both engine kinds"
+  );
+  const planSrc = fs.readFileSync("src/lib/tubeforge/composition-plan.ts", "utf8");
+  ok(
+    planSrc.includes('"whiteboard" | "graphics"') && planSrc.includes('c.kind === "graphics"'),
+    "lockstep: PlanVisualKind seats graphics and planFromTracks maps it"
+  );
+
+  // Leg 4 — the job plumbing: the graphics kind is registered (queue) and
+  // the render job delegates (source pins).
+  const queueSrc = fs.readFileSync("src/lib/tubeforge/queue-handlers.ts", "utf8");
+  ok(
+    queueSrc.includes('registerJobHandler("graphics"'),
+    "lockstep: the graphics job kind is handler-registered (crash recovery)"
+  );
+  const jobSrc = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
+  ok(
+    jobSrc.includes('video.renderMode === "graphics"') && jobSrc.includes("runGraphicsJob(videoId)"),
+    "lockstep: runRenderJob delegates graphics rows to the graphics lane"
+  );
 });
 
 await test("s119: the lane contract is wired — route resolves the lane, scaffold pins, dialog surfaces rejections (source pin)", async () => {
@@ -16756,6 +16812,190 @@ await test("S123 tracks — hand-authored scene ids carry no row linkage (null i
   const tracks = graphicsTracks(doc);
   eq(tracks[0].clips[0].sceneIndex, null, '"intro" links to no story row');
   eq(tracks[0].clips[1].sceneIndex, 2, "scene-2 still links row 2 — position still orders the clip");
+});
+
+// ---------- S123 P3 — the draft viewport, the QC subcheck matrix, the render seams ----------
+
+suiteStart("graphics — S123 P3: the draft viewport, the QC subcheck matrix and the render seams");
+
+await test("S123 P3 draft — the scale set is closed, junk clamps, dims are even and floored", () => {
+  eq([...GRAPHICS_DRAFT_SCALES], [0.5, 0.75, 1.0], "the b6 scale set, verbatim");
+  ok(isGraphicsDraftScale(0.5) && isGraphicsDraftScale(0.75) && isGraphicsDraftScale(1.0), "the set's own guard accepts its members");
+  ok(!isGraphicsDraftScale(0.6) && !isGraphicsDraftScale("0.5") && !isGraphicsDraftScale(null), "junk scales are not members");
+
+  // Junk clamps to the NEAREST legal scale — never fails, never invents.
+  eq(graphicsDraftScale(0.6), 0.5, "0.6 clamps down to 0.5");
+  eq(graphicsDraftScale(0.9), 1.0, "0.9 clamps up to 1.0");
+  eq(graphicsDraftScale(0.7), 0.75, "0.7 sits at 0.75");
+  eq(graphicsDraftScale(undefined), 0.5, "absent clamps to the smallest");
+  eq(graphicsDraftScale("junk"), 0.5, "junk clamps to the smallest");
+
+  const doc = s123Doc(24);
+  const vp = graphicsDraftViewport(doc, 0.5);
+  eq(vp.width, 960, "1920 × 0.5 = 960 (even)");
+  eq(vp.height, 540, "1080 × 0.5 = 540 (even)");
+  const odd = graphicsDraftViewport({ ...doc, width: 1921, height: 1081 }, 0.5);
+  eq(odd.width, 960, "1921 × 0.5 rounds DOWN to even (960)");
+  eq(odd.height, 540, "1081 × 0.5 rounds DOWN to even (540)");
+
+  // The 64 px floor — a tiny doc at a small scale still reads.
+  const tiny = graphicsDraftViewport({ ...doc, width: 100, height: 80 }, 0.5);
+  eq(tiny.width, GRAPHICS_DRAFT_MIN_DIM, "a tiny doc floors at 64 px wide");
+  ok(tiny.height >= GRAPHICS_DRAFT_MIN_DIM, "a tiny doc floors at 64 px high");
+});
+
+await test("S123 P3 draft — the mark is non-reviewable and inherits no review credit (the b6 law)", () => {
+  const doc = s123Doc(24);
+  const mark = graphicsDraftMark(doc, 0.5);
+  eq(mark.draft, true, "the mark is a draft");
+  eq(mark.reviewable, false, "a draft is NEVER reviewable");
+  eq(mark.inheritedReviewCredit, false, "a draft inherits NO review credit");
+  eq(mark.scale, 0.5, "the effective scale rides the mark");
+  eq(mark.width, 960, "the raster width rides the mark");
+  ok(graphicsDraftLabel(mark).includes("non-reviewable"), "the label carries the non-reviewable law");
+  ok(graphicsDraftLabel(mark).includes("0.5×"), "the label carries the scale");
+});
+
+await test("S123 P3 render seam — effectiveGraphicsDoc: explicit wins, VO fills (+the house tail), the stored doc never mutates", () => {
+  const doc = s123Doc(24);
+  const raw = JSON.parse(JSON.stringify(doc)); // a deep copy to detect mutation
+
+  // EXPLICIT WINS: every fixture scene carries an explicit clock; measured
+  // VO durations must never override one (the ONE clock rule's precedence).
+  const voMs = new Map([
+    ["scene-1", 4000], ["scene-3", 900],
+  ]);
+  const effective = effectiveGraphicsDoc(doc, voMs);
+  eq(effective.scenes[0].durationMs, 5000, "scene-1 keeps its explicit 5000 ms (a measurement never overrides)");
+  eq(effective.scenes[1].durationMs, 2500, "scene-2 keeps its explicit 2500 ms");
+  eq(effective.scenes[2].durationMs, 1100, "scene-3 keeps its explicit 1100 ms (over the measured 900)");
+
+  // VO FILLS THE ABSENT: strip every explicit clock — scenes WITHOUT one
+  // take the measured WAV duration plus the house 350 ms tail (the
+  // whiteboard vo law, mirrored verbatim); anchorless scenes keep the
+  // narration estimate (durationMs stays absent — the estimator rules
+  // inside frameAt, unchanged).
+  const estimated = mustValidate(
+    {
+      version: GRAPHICS_VERSION, title: "s123 vo-fill fixture", width: 1920, height: 1080, fps: 24,
+      scenes: S123_SCENES.map(({ durationMs: _dm, ...rest }) => rest),
+    },
+    "the vo-fill fixture",
+  );
+  const filled = effectiveGraphicsDoc(estimated, voMs);
+  eq(filled.scenes[0].durationMs, 4350, "scene-1 rides the measured 4000 ms + 350 ms tail");
+  eq(filled.scenes[1].durationMs, undefined, "an anchorless scene keeps riding the estimate");
+  eq(filled.scenes[2].durationMs, 1250, "scene-3 rides the measured 900 ms + 350 ms tail");
+
+  // THE STORED DOC NEVER MUTATES — the render-time clock rides the call.
+  eq(JSON.stringify(doc), JSON.stringify(raw), "the input doc is byte-identical after the call");
+
+  // Determinism: same voFiles → same effective doc (the render determinism
+  // law's input half).
+  eq(JSON.stringify(effectiveGraphicsDoc(doc, voMs)), JSON.stringify(effective), "same inputs → same effective doc");
+});
+
+await test("S123 P3 envelope — the {rev, doc} storage envelope round-trips byte-identically; corrupt reads null (never a guess)", () => {
+  const doc = s123Doc(24);
+  const env = { rev: 3, doc };
+  const stored = serializeGraphicsProject(env);
+  const back = parseGraphicsProject(stored);
+  ok(back !== null, "the envelope parses back");
+  eq(back?.rev, 3, "the rev survives");
+  eq(writeGraphicsDoc(back?.doc as GraphicsDoc), writeGraphicsDoc(doc), "the doc survives the round trip (strict-write form)");
+
+  // BYTE-STABLE: parse → serialize lands on the same string (the strict
+  // write feeds the envelope; the round-trip is the byte-stability pin).
+  eq(serializeGraphicsProject(back as { rev: number; doc: GraphicsDoc }), stored, "parse → serialize is byte-identical");
+
+  // A BARE doc (no envelope) still loads — rev 0, the additive-read posture.
+  const bare = parseGraphicsProject(writeGraphicsDoc(doc));
+  ok(bare !== null && bare.rev === 0, "a bare pre-envelope doc reads rev 0");
+
+  // Corrupt/foreign shapes read null — the honest "no project" state.
+  eq(parseGraphicsProject(null), null, "null column reads null");
+  eq(parseGraphicsProject(""), null, "empty string reads null");
+  eq(parseGraphicsProject("{not json"), null, "corrupt JSON reads null");
+  eq(parseGraphicsProject(JSON.stringify({ rev: 2 })), null, "envelope without a doc reads null");
+  eq(parseGraphicsProject(JSON.stringify({ rev: 0, doc })), null, "junk rev (< 1) reads null");
+  eq(parseGraphicsProject(JSON.stringify({ rev: 1.5, doc })), null, "non-integer rev reads null");
+  eq(parseGraphicsProject(JSON.stringify({ rev: 1, doc: { version: 99 } })), null, "an invalid doc reads null");
+});
+
+await test("S123 P3 contract seam — planFromTracks maps the graphics kind; the windows ARE the frame plan", () => {
+  for (const fps of [24, 30] as const) {
+    const doc = s123Doc(fps);
+    const tracks = graphicsTracks(doc);
+    const plan = planFromTracks({ tracks }, doc.scenes.length);
+    ok(plan !== null, `${fps} fps: the graphics tracks read back through the compositor's plan`);
+    eq(plan?.origin, "tracks", `${fps} fps: the plan's ledger names the tracks read`);
+    for (let i = 0; i < doc.scenes.length; i++) {
+      eq(plan?.scenes[i].kind, "graphics", `${fps} fps scene ${i}: the kind is graphics (never degraded to video)`);
+    }
+    // The windows agree with framePlanWindows — one derivation, shared with
+    // the preflight wall and the tracks projection.
+    const sceneMs = graphicsSceneDurationsMs(doc);
+    const windows = framePlanWindows(sceneMs, fps);
+    for (let i = 0; i < doc.scenes.length; i++) {
+      eq(plan?.scenes[i].startSec, windows.scenes[i].startSec, `${fps} fps scene ${i}: start agrees`);
+      eq(plan?.scenes[i].endSec, windows.scenes[i].endSec, `${fps} fps scene ${i}: end agrees`);
+    }
+    // asset: null (the frame is DRAWN) projects onto the plan's default
+    // source slot — the same read the whiteboard clips take.
+    eq(plan?.scenes[0].assetSource, "ai", "asset-null clips carry the plan's default source (the whiteboard read, mirrored)");
+  }
+});
+
+await test("S123 P3 QC matrix — the authored rows pass on a valid doc and carry the Stickman structure", () => {
+  const doc = s123Doc(24);
+  const result = runGraphicsQc(doc);
+  ok(result.passed, "a valid doc passes the matrix");
+  const ids = result.rows.map((r) => r.id);
+  eq(
+    ids,
+    ["g-grammar", "g-motions", "g-clocks", "g-budget", "g-frame-truth", "g-groups"],
+    "the six authored rows, in declared order"
+  );
+  for (const row of result.rows) {
+    eq(row.required, "pass", `${row.id}: every graphics row demands pass (structural laws)`);
+    eq(row.status, "pass", `${row.id}: passes on the pin fixture`);
+    ok(row.allowedVariation.length > 10, `${row.id}: carries the allowed-variation column (no broad-pass cover)`);
+    ok(row.value.length > 0, `${row.id}: carries a measured value`);
+  }
+  // The rows are the same set the qc-policy matrix classifies (the emission
+  // pin at the S40 block holds both directions; this is the human-readable
+  // restatement).
+  ok(graphicsQcRows(doc).length === 6, "the row builder is the matrix's engine");
+});
+
+await test("S123 P3 QC matrix — fail-closed: junk input fails, unmeasured is never pass", () => {
+  // A junk string fails g-grammar (the row throws → unmeasured) and the
+  // whole report fails — an unchecked subcheck FAILS.
+  const junk = runGraphicsQc("{ definitely not a graphics doc");
+  ok(!junk.passed, "junk input fails the matrix");
+  const grammar = junk.rows.find((r) => r.id === "g-grammar");
+  ok(grammar && grammar.status !== "pass", "g-grammar does not pass on junk");
+  // An empty object fails too (no scenes → the validator refuses).
+  ok(!runGraphicsQc({}).passed, "an empty object fails the matrix");
+  // The failure mode is honest in the value column.
+  ok(
+    junk.rows.every((r) => r.status === "unmeasured" || r.status === "fail"),
+    "junk rows read unmeasured/fail — never a fabricated pass"
+  );
+});
+
+await test("S123 P3 QC matrix — the per-scene slice scopes the rows; an unknown scene fails honestly", () => {
+  const doc = s123Doc(24);
+  const slice = runGraphicsSceneQc(doc, "scene-2");
+  ok(slice.sceneExists, "scene-2 resolves");
+  ok(slice.passed, "scene-2 passes its slice");
+  eq(slice.rows.length, 6, "the doc rows all run for the slice (project rows gate every scene — no broad-pass cover)");
+
+  const missing = runGraphicsSceneQc(doc, "scene-999");
+  ok(!missing.sceneExists, "scene-999 does not resolve");
+  ok(!missing.passed, "an unknown scene FAILS — it cannot have passed anything");
+  const exists = missing.rows.find((r) => r.id === "g-scene-exists");
+  ok(exists && exists.status === "fail", "the g-scene-exists row fails honestly");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

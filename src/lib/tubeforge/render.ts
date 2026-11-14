@@ -274,6 +274,12 @@ export async function invalidateRenderedArtifacts(
   // id law ([A-Za-z0-9_.-], storyboard.ts), so the pattern cannot miss a
   // legal id — and a hostile id can never reach this key space anyway.
   //
+  // S123 — the graphics lane's artifacts join the SAME stale set (the
+  // graphics doc route invalidates through this seam exactly like the
+  // whiteboard's): the per-scene encodes and the draft previews die with
+  // every doc edit — the same preview-<id> charset law (graphics/types.ts
+  // validGraphicsId) and the same $0-encode cheapness.
+  //
   // S113 — the over-invalidation fix (the S111 reconciliation's §8.3 cost
   // bug): a SINGLE-scene change (art re-roll, AI edit, one-slide rescreenshot)
   // passes sceneIndex, and then ONLY that scene's clip/encode dies alongside
@@ -282,24 +288,27 @@ export async function invalidateRenderedArtifacts(
   // render already reuses cached clips (ensureSceneClip) — so a one-scene
   // fix no longer re-pays the whole video's clip generation.
   // Video-level artifacts (the union — final/preview/srt always die when any
-  // scene changed; the whiteboard preview-<sceneId> files are keyed by the
-  // ENGINE's scene ids, unmappable from a numeric index, so they ride the
-  // video-level set — they are $0 local encodes, cheap to regenerate). The
-  // whole-project slide set rides too — EXCEPT in the scene-scoped case,
-  // where only the changed scene's own slide png is index-addressable (it
-  // joins the scene set below); the others' slides are still current.
+  // scene changed; the whiteboard and graphics preview-<sceneId> files are
+  // keyed by the ENGINES' scene ids, unmappable from a numeric index, so
+  // they ride the video-level set — they are $0 local encodes, cheap to
+  // regenerate). The whole-project slide set rides too — EXCEPT in the
+  // scene-scoped case, where only the changed scene's own slide png is
+  // index-addressable (it joins the scene set below); the others' slides are
+  // still current.
   const videoLevel =
     "\\/(final\\.mp4|preview\\.mp4|subtitles\\.srt" +
     (opts.slidePngs && opts.sceneIndex == null ? "|slide-\\d{2}\\.png" : "") +
-    "|whiteboard\\/preview-[A-Za-z0-9_.-]+\\.mp4)$";
+    "|whiteboard\\/preview-[A-Za-z0-9_.-]+\\.mp4" +
+    "|graphics\\/preview-[A-Za-z0-9_.-]+\\.mp4)$";
   // Scene-scoped clips/encodes: EVERY scene's (whole-project change), or
   // exactly the changed one (sceneIndex set — the S113 fix).
   const nn = opts.sceneIndex != null ? String(opts.sceneIndex).padStart(2, "0") : null;
   const sceneClips =
     nn != null
       ? `/scene-${nn}\\.mp4$|/whiteboard/scene-${opts.sceneIndex}\\.mp4$` +
+        `|/graphics/scene-${opts.sceneIndex}\\.mp4$` +
         (opts.slidePngs ? `|/slide-${nn}\\.png$` : "")
-      : "/(scene-\\d{2}\\.mp4|whiteboard/scene-\\d+\\.mp4)$";
+      : "/(scene-\\d{2}\\.mp4|whiteboard/scene-\\d+\\.mp4|graphics/scene-\\d+\\.mp4)$";
   const stalePattern = new RegExp(`${videoLevel}|${sceneClips}`);
   const keys = await storage.list(videoId).catch(() => [] as string[]);
   const stale = keys.filter((k) => stalePattern.test(k));
@@ -1512,14 +1521,19 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
   // renders). Homogeneous docs make the two reads identical — the parity
   // pins hold them to it.
   const planScenes = opts.timelinePlan?.scenes ?? null;
-  // S87 slice 3 — the routing wall: whiteboard-kind clips execute through
-  // the Whiteboard lane (peer ENGINE, shared CONTRACT); runRenderJob routes
-  // mode-whiteboard videos there before this entry. A whiteboard plan
-  // reaching the compositor's segment builders means a routing bug — refuse
-  // BEFORE any paid motion planning or geometry work runs.
-  if (planScenes?.some((ps) => ps.kind === "whiteboard"))
+  // S87 slice 3 — the routing wall: whiteboard-kind and graphics-kind clips
+  // execute through their ENGINE lanes (peer ENGINES, shared CONTRACT);
+  // runRenderJob routes mode-whiteboard and mode-graphics videos to those
+  // lanes before this entry. An engine plan reaching the compositor's
+  // segment builders means a routing bug — refuse BEFORE any paid motion
+  // planning or geometry work runs (S123 seats the graphics kind in the
+  // same wall; a mixed kind never reaches here today — the engine lanes
+  // render whole videos — and when Stage X lands mixed composition, its
+  // design slice rewrites THIS wall, never a silent fall-through).
+  const engineKind = planScenes?.find((ps) => ps.kind === "whiteboard" || ps.kind === "graphics")?.kind ?? null;
+  if (engineKind)
     throw new Error(
-      "whiteboard clips execute through the Whiteboard lane — the compositor received a whiteboard plan, which is a routing bug (not a render input problem)"
+      `${engineKind} clips execute through the ${engineKind === "whiteboard" ? "Whiteboard" : "Graphics"} lane — the compositor received a ${engineKind} plan, which is a routing bug (not a render input problem)`
     );
   const sceneKindOf = (i: number): PlanVisualKind =>
     planScenes?.[i]?.kind ?? (opts.mode === "slides" ? "image" : "video");

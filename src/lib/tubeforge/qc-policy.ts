@@ -132,6 +132,36 @@ export const QC_ENFORCEMENT_MATRIX: Record<string, QcPolicyEntry> = {
     severity: "report",
     why: "gibberish pseudo-text and watermarks are polish defects of AI imagery — deliberate burned captions are excluded by the judge; REPORT until calibration evidence justifies a flip (S53)",
   },
+  // S123 — THE GRAPHICS QC GROUP (graphics/qc.ts rows; emitted only for
+  // graphics-mode videos, the conditional-emission pattern restricted-visual
+  // established). All six rows are structural laws behind the standing
+  // final — a failing row means the doc no longer describes the artifact,
+  // which is exactly what the ship gate exists to refuse. BLOCK, not
+  // report: unlike polish defects, none of these is an editorial choice.
+  "g-grammar": {
+    severity: "block",
+    why: "a standing final whose doc no longer validates is unprovable — the artifact cannot be traced to a legal doc (the S117 staleness law's QC twin)",
+  },
+  "g-motions": {
+    severity: "block",
+    why: "an illegal motion is a grammar violation the frame engine would refuse — the final predates or misrepresents the doc (S123 closed-table law)",
+  },
+  "g-clocks": {
+    severity: "block",
+    why: "a clock that no longer derives or tiles means the doc's scene durations changed since the render — the delivered cut no longer matches the doc",
+  },
+  "g-budget": {
+    severity: "block",
+    why: "the DELIVERED frame count over the wall at doc.fps means the doc grew past the budget the render preflight enforced (the R-1 arithmetic, re-proved)",
+  },
+  "g-frame-truth": {
+    severity: "block",
+    why: "a non-finite or out-of-range channel is a frame-engine contract violation — the standing final cannot be certified against a doc the truth function fails on",
+  },
+  "g-groups": {
+    severity: "block",
+    why: "a dangling group child silently vanishes from the composition — the rendered pixels would not match the doc's claimed content",
+  },
 };
 
 /** Number of blocking checks — pinned by tests so a matrix edit that flips

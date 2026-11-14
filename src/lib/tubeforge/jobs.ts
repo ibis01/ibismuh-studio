@@ -59,6 +59,7 @@ export type JobKind =
   | "critic" // S84 — Video Critic: the rendered-cut quality report (entity = video)
   | "qc" // Stage 6 — re-run the QC battery against the existing final.mp4
   | "whiteboard" // S67 — Whiteboard Engine full render / scene preview (E9 Phase A)
+  | "graphics" // S123 — Graphics Engine full render / scene draft (the peer engine lane)
   | "reference" // S88 — Reference-video structural analysis (upload → scene map/pacing/transcript/treatment/structure)
   | "scene3d" // S94 — the 3D scene render (the scene3d doc → the orbit clip through the shared compositor)
   | "scene-recheck"; // S116 — scene-scoped QC re-check (entity "<videoId>#scene<N>"; the approval-gating verdict)
@@ -129,6 +130,7 @@ const STAGE_LABEL: Record<string, string> = {
   consistency: "consistency check", // S77 — Visual Consistency Engine
   qc: "quality check",
   whiteboard: "whiteboard render",
+  graphics: "graphics render",
   reference: "reference analysis", // S88
   scene3d: "3D scene render", // S94
 };
@@ -194,9 +196,21 @@ async function runRecovery(): Promise<void> {
       // budget laws exist to prevent. Scene previews (composite
       // <videoId>#wb<sceneId> entityIds) re-render cheaply at 720p and ride
       // the normal resume; only the full-render rows (plain videoId) gate.
-      if (row.kind === "whiteboard" && row.entityId === baseEntityId(row.entityId)) {
+      // S123 — the graphics full render rides the SAME wall (deterministic
+      // chromium work at the doc's own raster; a landed final is not worth
+      // re-encoding), scene drafts (<videoId>#gfx<sceneId>) re-render
+      // cheaply and ride the normal resume.
+      if (
+        (row.kind === "whiteboard" || row.kind === "graphics") &&
+        row.entityId === baseEntityId(row.entityId)
+      ) {
         const wbVideo = await rawDb.video.findUnique({ where: { id: row.entityId } });
-        if (wbVideo && wbVideo.hasVideo && wbVideo.renderMode === "whiteboard") {
+        if (
+          wbVideo &&
+          wbVideo.hasVideo &&
+          ((row.kind === "whiteboard" && wbVideo.renderMode === "whiteboard") ||
+            (row.kind === "graphics" && wbVideo.renderMode === "graphics"))
+        ) {
           await rawDb.job.update({
             where: { id: row.id },
             data: { status: "done", endedAt: new Date() },
@@ -229,7 +243,7 @@ async function runRecovery(): Promise<void> {
         // interrupted pass simply tells the user to re-run. Unreachable today
         // while every kind is handler-registered; this is the defense for the
         // day one isn't.)
-        if (["voiceover", "thumbnail", "variants", "storyboard", "render", "scene", "slide", "verify", "comments", "upload", "short", "convert", "script", "stock", "qc", "director", "continuity", "whiteboard", "reference", "scene3d"].includes(row.kind)) {
+        if (["voiceover", "thumbnail", "variants", "storyboard", "render", "scene", "slide", "verify", "comments", "upload", "short", "convert", "script", "stock", "qc", "director", "continuity", "whiteboard", "graphics", "reference", "scene3d"].includes(row.kind)) {
           const videoId = baseEntityId(row.entityId);
           const video = await rawDb.video.findUnique({ where: { id: videoId } });
           // Only set the error if the artifact never landed (completed after the row went stale).
@@ -250,6 +264,7 @@ async function runRecovery(): Promise<void> {
               (row.kind === "stock" && Boolean(video.scenes && video.scenes.includes('"stock"'))) ||
               (row.kind === "qc" && Boolean(video.qcReport)) ||
               (row.kind === "whiteboard" && video.hasVideo) ||
+              (row.kind === "graphics" && video.hasVideo) ||
               (row.kind === "reference" && Boolean(video.referenceAnalysis)) ||
               (row.kind === "scene3d" && Boolean(video.scene3d));
             if (!artifactLanded && !video.error)
@@ -515,6 +530,7 @@ export function jobSnapshot(videoId: string): {
   stock: boolean;
   qc: boolean;
   whiteboard: boolean;
+  graphics: boolean;
 } {
   return {
     voiceover: isJobRunning(videoId, "voiceover"),
@@ -531,6 +547,7 @@ export function jobSnapshot(videoId: string): {
     stock: isJobRunning(videoId, "stock"),
     qc: isJobRunning(videoId, "qc"),
     whiteboard: isJobRunning(videoId, "whiteboard"),
+    graphics: isJobRunning(videoId, "graphics"),
   };
 }
 

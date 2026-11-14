@@ -134,6 +134,13 @@ export const RENDER_MODES = [
     eta: "≈ 2–6 min",
   },
   {
+    id: "graphics",
+    label: "Motion graphics",
+    icon: "BarChart3",
+    desc: "Kinetic-typography explainer — a native engine animates headlines, counters, bars and icons from a declarative graphics doc with your narration (no image gen, $0)",
+    eta: "≈ 2–5 min",
+  },
+  {
     id: "animated",
     label: "Full AI animation",
     icon: "Clapperboard",
