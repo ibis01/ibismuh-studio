@@ -9,8 +9,8 @@ standard + the content-policy visual scan under a restricted policy), and
 publishes to a connected YouTube channel — all inside a multi-user web
 application with metered AI spending and Stripe billing underneath.
 
-**Status:** S-series stage S120 + the W-track at W7 with W6+W7 LANDED (2026-11-14) — the whiteboard finishing track W1–W7 is COMPLETE; **S123 (milestone G1) landed the Motion Graphics Engine end-to-end (P0–P5)**; CI is 8/8
-green on `main` with the 597-test unit battery (the S123 execution branch carries 685). The production loop is
+**Status:** S-series stage S120 + the W-track at W7 with W6+W7 LANDED (2026-11-14) — the whiteboard finishing track W1–W7 is COMPLETE; **S123 (milestone G1) landed the Motion Graphics Engine end-to-end (P0–P5)**; **S124 landed the element-level graphics editor (drag · scale · z-order, the Layout mode — the friction clean-room study, `docs/audits/external-friction-editor-study.md`)**; CI is 8/8
+green on `main` with the 597-test unit battery (the S123 execution branch carries 685; S124 carries 699). The production loop is
 feature-complete, and the production-readiness arc (S99–S108) closed every
 reliability gate with CI evidence — clean-clone bootstrap, queue leases +
 fencing, atomic storage admission, shared rate limiting + trusted-proxy IP law,
