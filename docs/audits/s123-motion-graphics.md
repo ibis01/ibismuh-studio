@@ -82,7 +82,7 @@ The probe measured three real defects and the fixes are laws now:
 
 ## 7. The e2e + CI evidence
 
-- `e2e/graphics.spec.ts` (the whiteboard suite's mirror): auth → doc workflow → the scaffold's honest gate → a REAL scene-draft render → the FULL render through the shared POST /render lane branch (manifest mode "graphics", staleness fresh) → the cross-mode refusal. **Runs on CI** — the e2e job boots its own dev server; the whiteboard suite proves the harness.
+- `e2e/graphics.spec.ts` (the whiteboard suite's mirror): auth → the shared path's ORDER LAW (the scenes gate precedes the lane dispatch — a CI receipt: the shared POST /render 400s "no scenes" before any lane logic for scenes-empty videos, both engine lanes) → doc workflow → the scaffold's honest gate → a REAL scene-draft render (0.5×/12 fps) → the FULL render through the LANE'S OWN route (the engine doc IS the scene list — no scenes gate; the mode-picker's shared branch needs the story scene list, CI-unreachable without the AI gateway — its dispatch is source-pinned in the unit battery) → the manifest + staleness evidence → the cross-mode refusal. **Runs on CI** — the e2e job boots its own dev server.
 - `scripts/s123-route-e2e.mjs` (the house sN pattern): the same contract as numbered checks against a running daemon; run ad hoc (like every sN probe — no package.json entry, per the family convention).
 - **CI run URL for the close commit**: pending the push (the operator's token delivered the branch; the 8/8 gates incl. the Docker production smoke and the PostgreSQL `migrate deploy` — which applies `20261120000000_s123_graphics_project` — are CI-only, per the P0–P2 receipt's own gate table). This record updates with the run URL at merge time.
 

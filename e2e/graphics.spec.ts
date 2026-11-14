@@ -138,15 +138,18 @@ test.describe("S123 — graphics studio end-to-end", () => {
     const videoId = ((await createRes.json()) as { video: { id: string } }).video.id;
     expect(videoId).toBeTruthy();
 
-    // 2. The shared POST /render lane branch fires BEFORE any doc exists:
-    //    409 with the scaffold-first refusal (the S119 contract, the
-    //    graphics edition — the lockstep commit's route leg).
+    // 2. THE SHARED PATH'S ORDER LAW (the CI receipt): POST /render's
+    //    scenes gate ("Video has no scenes") fires BEFORE the lane dispatch —
+    //    for BOTH engine lanes. A scenes-empty graphics video gets the shared
+    //    gate's 400, not the lane's 409; the lane branch itself is covered by
+    //    the source pin (unit) and exercised by the studio's own route below
+    //    (which has no scenes gate — the engine doc IS the scene list).
     const laneNoDoc = await request.post(`/api/videos/${videoId}/render`, {
       headers: { cookie, "Content-Type": "application/json" },
       data: { mode: "graphics" },
     });
-    expect(laneNoDoc.status()).toBe(409);
-    expect(((await laneNoDoc.json()) as { error?: string }).error).toMatch(/no graphics project yet/i);
+    expect(laneNoDoc.status()).toBe(400);
+    expect(((await laneNoDoc.json()) as { error?: string }).error).toMatch(/no scenes/i);
 
     // 3. GET — no doc yet, but the grammar surfaces + budgets + voMs.
     const get1 = await request.get(`/api/videos/${videoId}/graphics`, { headers: { cookie } });
@@ -257,18 +260,20 @@ test.describe("S123 — graphics studio end-to-end", () => {
     expect(mp4.status()).toBe(200);
     expect((mp4.headers()["content-type"] ?? "")).toContain("video/");
 
-    // 10. THE FULL RENDER — the shared POST /render branch (the lane the
-    //     mode picker drives): a graphics-mode video with a valid doc is
-    //     accepted onto the "graphics" job kind. Poll the render status
-    //     endpoint until hasVideo lands, then the artifact serves.
-    const fullRes = await request.post(`/api/videos/${videoId}/render`, {
+    // 10. THE FULL RENDER — through the LANE'S OWN route (the Graphics
+    //     Studio's "Render full video" button): the engine doc IS the scene
+    //     list, so the lane route has no scenes gate (the whiteboard's own
+    //     route, mirrored). The shared POST /render branch — the mode
+    //     picker's path — needs the story scene list, which CI (no AI
+    //     gateway) cannot produce; its dispatch is covered by the source pin
+    //     and the order law above.
+    const fullRes = await request.post(`/api/videos/${videoId}/graphics/render`, {
       headers: { cookie, "Content-Type": "application/json" },
-      data: { mode: "graphics" },
+      data: {},
     });
     expect([200, 202]).toContain(fullRes.status());
-    const fullBody = (await fullRes.json()) as { accepted?: boolean; mode?: string; scope?: string };
+    const fullBody = (await fullRes.json()) as { accepted?: boolean; scope?: string };
     expect(fullBody.accepted).not.toBe(false);
-    expect(fullBody.mode).toBe("graphics");
     expect(fullBody.scope).toBe("full");
 
     let finalUrl: string | null = null;

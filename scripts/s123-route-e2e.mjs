@@ -66,15 +66,15 @@ check("2.1  create (story, graphics mode) -> < 300", createRes.status < 300, cre
 const videoId = createBody?.video?.id;
 check("2.2  video id present", Boolean(videoId), createBody);
 
-// ---- 3. the lane branch fires BEFORE any doc exists: 409 scaffold-first ----
+// ---- 3. the shared path's ORDER LAW: the scenes gate precedes the lane dispatch ----
 const laneNoDoc = await fetch(`${BASE}/api/videos/${videoId}/render`, {
   method: "POST",
   headers: H({ "content-type": "application/json" }),
   body: JSON.stringify({ mode: "graphics" }),
 });
 const laneNoDocBody = await json(laneNoDoc);
-check("3.1  POST /render mode=graphics, no doc -> 409", laneNoDoc.status === 409, laneNoDoc.status);
-check("3.2  the refusal names the Graphics Studio", /no graphics project yet/i.test(laneNoDocBody?.error ?? ""), laneNoDocBody?.error);
+check("3.1  POST /render mode=graphics, scenes-empty -> 400 (the shared gate)", laneNoDoc.status === 400, laneNoDoc.status);
+check("3.2  the shared scenes gate fires first (both engine lanes)", /no scenes/i.test(laneNoDocBody?.error ?? ""), laneNoDocBody?.error);
 
 // ---- 4. the doc workflow ----
 const get1 = await fetch(`${BASE}/api/videos/${videoId}/graphics`, { headers: H() });
@@ -190,14 +190,16 @@ if (previewUrl) {
   check("5.4  the artifact serves video bytes", mp4.status === 200 && (mp4.headers.get("content-type") ?? "").includes("video/"), { status: mp4.status, type: mp4.headers.get("content-type") });
 }
 
-// ---- 6. the FULL render through the shared lane branch ----
-const fullRes = await fetch(`${BASE}/api/videos/${videoId}/render`, {
+// ---- 6. the FULL render through the LANE'S OWN route (the engine doc IS
+// the scene list — no scenes gate; the shared POST /render branch needs the
+// story scene list, which the probe (no AI gateway) cannot produce) ----
+const fullRes = await fetch(`${BASE}/api/videos/${videoId}/graphics/render`, {
   method: "POST",
   headers: H({ "content-type": "application/json" }),
-  body: JSON.stringify({ mode: "graphics" }),
+  body: JSON.stringify({}),
 });
 const fullBody = await json(fullRes);
-check("6.1  the lane branch accepts the full render", [200, 202].includes(fullRes.status) && fullBody?.mode === "graphics" && fullBody?.scope === "full", { status: fullRes.status, body: fullBody });
+check("6.1  the lane route accepts the full render", [200, 202].includes(fullRes.status) && fullBody?.accepted !== false && fullBody?.scope === "full", { status: fullRes.status, body: fullBody });
 
 let finalUrl = null;
 for (let i = 0; i < 120; i++) {
