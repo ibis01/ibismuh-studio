@@ -4,7 +4,7 @@
 |---|---|
 | Milestone | G1 — Motion graphics, executed as stage **S123** (decision D1) under the S120 programme |
 | Revision | **Rev 2** (2026-11-14) — approved decisions D1–D4 incorporated; unmerged branch prior art reconciled into the plan |
-| Status | **APPROVED with revisions.** Implementation authorized 2026-11-14 ("build all the gaps left"): P0–P2 executed on the `s123/p0-p2-execution` branch (merge receipts in the commit subjects). P3–P5 remain gated on their own authorization; the S120 §4 blind re-score needs its scorers. |
+| Status | **EXECUTED — P0–P5 COMPLETE (2026-11-14).** P0–P2 on the `s123/p0-p2-execution` branch (merge receipts in the commit subjects); P3–P5 executed under the operator's extended authorization ("continue building till you finish all"): the lockstep commit flipped the ship-dark pin, the engine lane renders, the routes + studio + e2e landed, and the stage-close record is `docs/audits/s123-motion-graphics.md`. The S120 §4 blind re-score needs its human scorers (`docs/audits/s123-blind-rescore.md`). |
 | Main repository | `ibis01/tubeforge` (all work happens here; TubeForge stays the single production orchestrator) |
 | Baseline | The G0 read-only audit (2026-11-14): 18 declarations verified against main HEAD `37796ce`, risk register + S120 doc-correction clauses recorded |
 | References | `kaomei/stickman-video-director` (MIT — workflow patterns only); in-repo drafts `docs/audits/external-2d-animation-roadmap.md` + `docs/audits/external-w5-g1-api-drafts.md` (merged from `docs/external-2d-roadmap`, PR #13) |
@@ -201,9 +201,9 @@ Stage-close record in `docs/audits/s123-motion-graphics.md` (P5): commit list (S
 | P0 | Merge `docs/s120-status-reconcile` (PR #22) + `docs/external-2d-roadmap` (PR #13); execute the outstanding post-W7 blind re-score (S120 §4 — the external roadmap explicitly gates G1.1 on it) | **Docs merges executed 2026-11-14**; the blind re-score needs running repo code + human scorers — its own authorization |
 | **P1** | **Merge `feat/g1-graphics-doc` (PR #14) + `feat/g1-graphics-frame` (PR #15); add D2 routing metadata; add D3 per-fps pins; commit `docs/design/s123-motion-graphics.md`. Scope = schema, grammar, validation, evaluation on the `anim/` substrate, deterministic evaluation, unit tests + pins. Must NOT: introduce a second clock, modify whiteboard, integrate a renderer, add routing logic, add runtime dependencies (zero required)** | **Executed 2026-11-14** |
 | P2 | Merge G1.3 + G1.4 (PRs #16/#17 — composer, planners); add `graphics/tracks.ts`; `RENDER_MODES`/lane lockstep | **Executed 2026-11-14** |
-| P3 | Renderer integration; preflight/draft/qc | Not authorized |
-| P4 | Routes, studio UI, e2e | Not authorized |
-| P5 | Proof script, blind re-score for S123, docs close | Not authorized |
+| P3 | Renderer integration; preflight/draft/qc | **Executed 2026-11-14** — the lockstep commit (RENDER_MODES + route branch + compositor case) flipped the ship-dark pin; `graphics/render.ts` + `draft.ts` + `qc.ts` landed; the renderer seam moved to the version-stable script-tag applier (playwright 1.65's string-evaluate change, found by the proof) |
+| P4 | Routes, studio UI, e2e | **Executed 2026-11-14** — the graphics route family + the Graphics Studio/Canvas + the dialog integration + `e2e/graphics.spec.ts` |
+| P5 | Proof script, blind re-score for S123, docs close | **Executed 2026-11-14** — `scripts/s123-graphics-proof.mts` PROOF GREEN (3.92× draft speedup, the QC battery clean); `scripts/s123-route-e2e.mjs` authored; `docs/audits/s123-motion-graphics.md` closed; `docs/audits/s123-blind-rescore.md` mapped (awaiting human scorers — not autonomously executable) |
 
 ## 13. P1 readiness — verification summary
 

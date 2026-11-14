@@ -37,11 +37,17 @@ exits, the carried ink riding the one applier, byte-identical clean mode), and
 W7 (the finishing layer — the hand family with per-asset left mirrors and
 role-driven poses, the pen-up travel that ended the vanish-reappear teleport,
 and the optional whiteboard SFX mixed under the −16 LUFS contract, off by
-default). The blind re-scores and the operator-side staging drills remain. The entry queue remains staging provisioning → launch drills →
+default). **S123 — motion graphics (G1) — LANDED (2026-11-14)**: the declarative
+GraphicsDoc engine (kinetic text, counters, bars, icons, shapes) renders
+through the same chromium→ffmpeg pipeline as its own peer lane, with the
+Graphics Studio, the QC subcheck group and the S123 stage-close record
+([`docs/audits/s123-motion-graphics.md`](docs/audits/s123-motion-graphics.md)).
+The blind re-scores and the operator-side staging drills remain. The entry queue remains staging provisioning → launch drills →
 release candidate (see
 [`docs/production-readiness.md`](docs/production-readiness.md)). On top of the
 studio, the **Whiteboard Engine** (the native, $0-per-render creative mode —
-E0–E9 landed) and the **Creator Intelligence Engine** (hook scoring, packaging
+E0–E9 landed), the **Graphics Engine** (S123 — the motion-graphics peer lane,
+$0-per-render, same pipeline) and the **Creator Intelligence Engine** (hook scoring, packaging
 lint, transcript-based Shorts selection, retention ingestion — CI-1..CI-4
 landed) are in the tree.
 
@@ -63,6 +69,17 @@ landed) are in the tree.
   floor). It renders to the standard
   `final.mp4`, through the unchanged QC battery and ship gate. See
   [`WHITEBOARD_ENGINE_DESIGN.md`](WHITEBOARD_ENGINE_DESIGN.md).
+- **The Graphics Engine (S123)** — a third, fully native render mode: a
+  declarative motion-graphics engine (kinetic headlines, counters, bars and
+  charts, icons, shapes — a closed v1 grammar with a validator, a deterministic
+  keyword→archetype planner and a metered LLM planner that degrades per
+  element) rendering through the same chromium→ffmpeg pipeline at $0. The
+  Graphics Studio previews the doc's own frame truth through the ONE applier
+  the renderer uses; scene drafts are labelled non-reviewable looks; the QC
+  battery gains the graphics subcheck group. See
+  [`docs/design/s123-motion-graphics.md`](docs/design/s123-motion-graphics.md)
+  and the close record
+  [`docs/audits/s123-motion-graphics.md`](docs/audits/s123-motion-graphics.md).
 - **Creator Intelligence** — hook/script scoring, title+thumbnail pairing
   lint, transcript-based Shorts moment selection (upgrading the deterministic
   picker behind the same seam), and retention ingestion mapped to scenes —
