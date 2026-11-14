@@ -162,7 +162,7 @@ import {
   type GraphicsDoc,
   type GraphicsScene,
 } from "../src/lib/tubeforge/graphics/types";
-import { effectiveGraphicsDoc } from "../src/lib/tubeforge/graphics/render";
+
 import {
   GRAPHICS_DRAFT_MIN_DIM,
   GRAPHICS_DRAFT_SCALES,
@@ -176,6 +176,7 @@ import { graphicsQcRows, runGraphicsQc, runGraphicsSceneQc } from "../src/lib/tu
 import { planFromTracks } from "../src/lib/tubeforge/composition-plan";
 import { scaffoldGraphicsDoc } from "../src/lib/tubeforge/graphics/planner";
 import {
+  effectiveGraphicsDoc,
   frameAt,
   graphicsFrameCount,
   graphicsSceneDurationsMs,

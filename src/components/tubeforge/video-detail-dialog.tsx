@@ -33,6 +33,7 @@ import { InlineCloneSetup } from "@/components/tubeforge/inline-clone-setup";
 import { BrandKitCard } from "@/components/tubeforge/brand-kit";
 import { SceneEditorDialog } from "@/components/tubeforge/scene-editor";
 import WhiteboardStudio from "@/components/tubeforge/whiteboard/whiteboard-studio";
+import GraphicsStudio from "@/components/tubeforge/graphics/graphics-studio";
 import { DirectorCard } from "@/components/tubeforge/director-card";
 import { CriticCard } from "@/components/tubeforge/critic-card";
 import { ProductionBoard } from "@/components/tubeforge/production-board";
@@ -106,6 +107,8 @@ import {
   ShieldAlert,
   ShieldCheck,
   Unlock,
+  PenTool,
+  BarChart3,
 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -118,6 +121,10 @@ const QC_GROUPS: { title: string; ids: string[] }[] = [
   },
   { title: "Audio", ids: ["loudness", "true-peak", "loudness-range", "dead-air"] },
   { title: "Sync", ids: ["duration", "captions"] },
+  // S123 — the graphics subcheck group (graphics/qc.ts; emitted only for
+  // graphics-mode videos — absent on other lanes, the Other bucket is
+  // never hit by them).
+  { title: "Graphics", ids: ["g-grammar", "g-motions", "g-clocks", "g-budget", "g-frame-truth", "g-groups"] },
 ];
 
 /** QC checks store a three-state status (qc.ts); older reports predate it.
@@ -1945,9 +1952,16 @@ export function VideoDetailDialog({
 
   // ---------- Video tab ----------
   // Keynote slides design their own deck — storyboard art is optional there.
-  const renderDisabledReason = !video.hasStoryboard && video.renderMode !== "slides"
+  // S123 — the ENGINE LANES (whiteboard, graphics) skip BOTH story gates in
+  // the route (the engine renders natively from its own doc; silent drafts
+  // are a legal render) — the picker's disabled state now mirrors that, so
+  // a scaffolded engine video can render from the main button too (the
+  // pre-S123 picker disabled whiteboard rows the server would have
+  // accepted — the studio's own render button was the only honest path).
+  const engineMode = video.renderMode === "whiteboard" || video.renderMode === "graphics";
+  const renderDisabledReason = !engineMode && video.renderMode !== "slides" && !video.hasStoryboard
     ? "Generate the storyboard first"
-    : !video.hasVoiceover
+    : !engineMode && !video.hasVoiceover
       ? "Generate the voiceover first"
       : null;
 
@@ -1988,6 +2002,10 @@ export function VideoDetailDialog({
                   <Zap className="h-3.5 w-3.5 text-amber-300" />
                 ) : m.id === "slides" ? (
                   <Presentation className="h-3.5 w-3.5 text-violet-300" />
+                ) : m.id === "whiteboard" ? (
+                  <PenTool className="h-3.5 w-3.5 text-teal-300" />
+                ) : m.id === "graphics" ? (
+                  <BarChart3 className="h-3.5 w-3.5 text-fuchsia-300" />
                 ) : (
                   <Clapperboard className="h-3.5 w-3.5 text-sky-300" />
                 )}
@@ -4152,6 +4170,18 @@ export function VideoDetailDialog({
                      render. The scene grid / Director card return for every
                      other mode. */
                   <WhiteboardStudio
+                    videoId={video.id}
+                    hasVideo={video.hasVideo}
+                    onRenderQueued={() => {
+                      void refreshVideo(video.id);
+                      bumpRefresh();
+                    }}
+                  />
+                ) : renderMode === "graphics" ? (
+                  /* S123 — the Graphics Studio owns this tab in graphics
+                     mode (the peer engine's mirror: scaffold → edit →
+                     preview the frame truth → render / scene draft). */
+                  <GraphicsStudio
                     videoId={video.id}
                     hasVideo={video.hasVideo}
                     onRenderQueued={() => {

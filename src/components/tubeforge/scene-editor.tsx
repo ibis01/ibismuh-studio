@@ -382,13 +382,32 @@ export function SceneEditorDialog({
             Scene {scene.index} Studio — {scene.title}
           </DialogTitle>
           <DialogDescription className="text-xs">
-            {renderMode === "slides"
-              ? "Shape this scene's slide and its art — re-roll the design, restyle, edit the prompt, or upload your own image."
-              : "Shape this scene's art to your taste — style, prompt, AI edits or your own image. Narration is never touched."}
+            {renderMode === "graphics"
+              ? "This scene's pixels live in the Graphics Studio (the doc's elements animate there) — its narration below is what the graphics doc carries, and the storyboard art is not the delivered frame."
+              : renderMode === "slides"
+                ? "Shape this scene's slide and its art — re-roll the design, restyle, edit the prompt, or upload your own image."
+                : "Shape this scene's art to your taste — style, prompt, AI edits or your own image. Narration is never touched."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
+          {/* S123 — graphics mode: the doc IS the frame. The scene stack's art
+             tools have no purchase on a graphics video (the compositor never
+             reads storyboard art on this lane — the engine animates the
+             doc); say so honestly instead of offering a dead button row. */}
+          {renderMode === "graphics" && (
+            <div className="space-y-1 rounded-xl border border-fuchsia-500/25 bg-fuchsia-500/5 p-3 text-xs text-white/70">
+              <p className="font-medium text-fuchsia-200">
+                Motion graphics scene — edited in the Graphics Studio
+              </p>
+              <p className="text-white/50">
+                The graphics doc&apos;s scene <span className="font-mono">scene-{scene.index}</span> carries this
+                scene&apos;s narration; its elements (headline, counters, bars, icons) animate through the
+                engine&apos;s frame truth. Open the video&apos;s Storyboard tab to scaffold, edit, preview and
+                render — storyboard art and scene re-rolls do not apply on this lane.
+              </p>
+            </div>
+          )}
           {/* Slide design (keynote slides mode) — what viewers actually see */}
           {renderMode === "slides" && (
             <div className="space-y-2 rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">

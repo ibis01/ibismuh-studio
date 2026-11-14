@@ -292,3 +292,31 @@ export function graphicsFrameCount(doc: GraphicsDoc): number {
 export function graphicsSceneDurationsMs(doc: GraphicsDoc): number[] {
   return sceneClocks(doc).map((c) => c.durationMs);
 }
+
+/**
+ * The render/playback-time clock (S123 P3): explicit durationMs stays (the
+ * ONE clock rule's own precedence — a measurement never overrides); a scene
+ * WITHOUT an explicit clock takes the measured WAV duration plus the house
+ * 350 ms tail (the whiteboard vo law, mirrored verbatim); anchorless scenes
+ * keep the narration estimate (durationMs stays absent — the estimator
+ * rules inside sceneClocks, unchanged). PURE — the renderer, the studio
+ * preview and the QC read the SAME derivation (one clock end to end); the
+ * stored doc is never mutated: same voFiles → same effective doc → the
+ * same bytes (the render determinism law's input half).
+ */
+export function effectiveGraphicsDoc(
+  doc: GraphicsDoc,
+  voMsBySceneId: Map<string, number>
+): GraphicsDoc {
+  return {
+    ...doc,
+    scenes: doc.scenes.map((scene) => {
+      if (scene.durationMs !== undefined && scene.durationMs > 0) return scene;
+      const voMs = voMsBySceneId.get(scene.id);
+      if (voMs !== undefined && voMs > 0) {
+        return { ...scene, durationMs: Math.round(voMs + 350) };
+      }
+      return scene;
+    }),
+  };
+}

@@ -40,7 +40,7 @@ import {
   composeGraphicsScene,
   graphicsFramePayload,
 } from "./compose";
-import { frameAt, graphicsSceneDurationsMs } from "./frame";
+import { effectiveGraphicsDoc, frameAt, graphicsSceneDurationsMs } from "./frame";
 import { assertGraphicsBudget } from "./preflight";
 import { graphicsTracks } from "./tracks";
 import type { GraphicsDoc } from "./types";
@@ -90,34 +90,10 @@ export interface GraphicsRenderResult {
 }
 
 /**
- * The render-time clock: explicit durationMs stays (explicit wins — the ONE
- * clock rule's own precedence); a scene without one takes the measured WAV
- * duration (+ the house 350 ms tail, the whiteboard's vo law verbatim);
- * anchorless scenes keep the narration estimate. PURE, exported for the
- * unit pin — same voFiles → same effective doc → same bytes.
+ * The render-time clock — moved to frame.ts (effectiveGraphicsDoc, the ONE
+ * clock rule's home) at P4 so the studio preview and the renderer share
+ * the SAME client-safe derivation. This module imports it from there.
  */
-export function effectiveGraphicsDoc(
-  doc: GraphicsDoc,
-  voMsBySceneId: Map<string, number>
-): GraphicsDoc {
-  return {
-    ...doc,
-    scenes: doc.scenes.map((scene) => {
-      if (scene.durationMs !== undefined && scene.durationMs > 0) return scene;
-      const voMs = voMsBySceneId.get(scene.id);
-      if (voMs !== undefined && voMs > 0) {
-        return { ...scene, durationMs: Math.round(voMs + 350) };
-      }
-      return scene;
-    }),
-  };
-}
-
-/** The narration WAVs that exist for one graphics doc, keyed by scene id —
- *  the scene-<n> → WAV layout mapping (voFilesFor, mirrored; hand-authored
- *  ids ride the narration estimate, the documented degradation). Lives in
- *  video-jobs.ts (it reads the video dir); declared here as the contract
- *  comment's home. */
 
 export async function renderGraphics(
   doc: GraphicsDoc,
