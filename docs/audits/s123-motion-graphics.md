@@ -33,7 +33,9 @@
 | Unit battery (`scripts/test-unit.mts`) | 679 passed / 0 failed (+82) | **689 passed / 0 failed** (+92 vs main's 597): the four G1 suites, the S123 pins suite, the P3 suite (draft viewport, QC matrix, render seams, envelope, contract seam, designed evidence) |
 | Typecheck (`tsc --noEmit`) | PASS | PASS |
 | Lint (`eslint .`) | PASS | PASS |
-| Production build (`next build`) | PASS (P0–P2 tree) | re-run at close — see the CI row |
+| Production build (`next build`) | PASS (P0–P2 tree) | **PASS** (CI: Production build ✓) |
+| Queue integration (`test:queue`) | PASS | **PASS** (the handler-registry literal seats graphics — 26 kinds) |
+| Billing / storage / rate / scene-revisions | PASS | **PASS** (40 / PASS / PASS / 29) |
 | Regression law | `git diff main -- src/lib/tubeforge/whiteboard/` empty | **still empty** — the whiteboard tree is byte-identical; `director-plan.ts`/`director.ts` untouched (D2's firewall) |
 
 ## 3. Golden-frame hashes (per fps — D3)
@@ -84,7 +86,7 @@ The probe measured three real defects and the fixes are laws now:
 
 - `e2e/graphics.spec.ts` (the whiteboard suite's mirror): auth → the shared path's ORDER LAW (the scenes gate precedes the lane dispatch — a CI receipt: the shared POST /render 400s "no scenes" before any lane logic for scenes-empty videos, both engine lanes) → doc workflow → the scaffold's honest gate → a REAL scene-draft render (0.5×/12 fps) → the FULL render through the LANE'S OWN route (the engine doc IS the scene list — no scenes gate; the mode-picker's shared branch needs the story scene list, CI-unreachable without the AI gateway — its dispatch is source-pinned in the unit battery) → the manifest + staleness evidence → the cross-mode refusal. **Runs on CI** — the e2e job boots its own dev server.
 - `scripts/s123-route-e2e.mjs` (the house sN pattern): the same contract as numbered checks against a running daemon; run ad hoc (like every sN probe — no package.json entry, per the family convention).
-- **CI run URL for the close commit**: pending the push (the operator's token delivered the branch; the 8/8 gates incl. the Docker production smoke and the PostgreSQL `migrate deploy` — which applies `20261120000000_s123_graphics_project` — are CI-only, per the P0–P2 receipt's own gate table). This record updates with the run URL at merge time.
+- **CI run URL for the close commit `04980b6`**: https://github.com/ibis01/tubeforge/actions/runs/43629918254 — **GREEN** (Production build ✓ · Clean-clone bootstrap ✓ · PostgreSQL integration incl. the `20261120000000_s123_graphics_project` migrate deploy ✓ · Secret scan ✓ · Typecheck·Lint·Unit ✓ · Money-path coverage ✓ · E2E Playwright ✓ — the Docker production smoke is a main-only job, skipped on the branch per the workflow's own law). The run's three earlier iterations carried the close record's findings: the golden-hash portability law (§3), the queue-registry literal, the shared path's ORDER LAW (§7), and the restored doc route.
 
 ## 8. The G1.x ↔ S123 mapping (PRs #14–#17)
 
