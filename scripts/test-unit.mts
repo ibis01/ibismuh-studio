@@ -175,6 +175,11 @@ import {
   GRAPHICS_COMPOSE_DEFAULTS,
   graphicsFramePayload,
 } from "../src/lib/tubeforge/graphics/compose";
+import {
+  assertGraphicsBudget,
+  graphicsBudgetReport,
+} from "../src/lib/tubeforge/graphics/preflight";
+import { graphicsTracks } from "../src/lib/tubeforge/graphics/tracks";
 
 const execFileAsync = promisify(execFile);
 
@@ -15687,7 +15692,7 @@ await test("G1.2 an empty doc is a caller bug — refused loudly, never fabricat
 // benchmark's frame-hash pin).
 // ---------------------------------------------------------------------------
 
-suiteStart("graphics — G1.3 the composer — static skeleton + one APPLY_FRAME_FN");
+suiteStart("graphics — S123 G1.3 the composer — static skeleton + one APPLY_FRAME_FN");
 
 function g3FirstScene(doc: GraphicsDoc): GraphicsScene {
   const s = doc.scenes[0];
@@ -15878,7 +15883,7 @@ await test("G1.3 the surface drives the geometry — the same scene composes per
 // drops, per-scene fallback, byte-identical degrade to the native doc.
 // ---------------------------------------------------------------------------
 
-suiteStart("graphics — G1.4 the native planner + the LLM scaffold");
+suiteStart("graphics — S123 G1.4 the native planner + the LLM scaffold");
 
 const G14_SCENES = [
   { index: 1, title: "The Growth Engine", narration: "Every product grows through three forces: reach, retention, and revenue." },
@@ -16533,6 +16538,18 @@ await test("S123 D2 — neutrality: with and without routing, the reads are byte
   eq(routedHash, plainHash, "the full ms sweep of frameAt states is byte-identical with and without routing");
   // (d) The frame counter is blind too.
   eq(graphicsFrameCount(routed), graphicsFrameCount(plain), "graphicsFrameCount is routing-blind");
+  // (e) The composer is blind too (the P2 half of the pin, landed with
+  // compose.ts): the composed bytes and the payload string are identical.
+  eq(
+    JSON.stringify(composeGraphicsScene(routed.scenes[0], routed)),
+    JSON.stringify(composeGraphicsScene(plain.scenes[0], plain)),
+    "composeGraphicsScene is routing-blind",
+  );
+  eq(
+    graphicsFramePayload(frameAt(routed, 1234)),
+    graphicsFramePayload(frameAt(plain, 1234)),
+    "graphicsFramePayload is routing-blind",
+  );
 });
 
 await test("S123 pin 5 — the multi-scene clock law: motions evaluate against the SCENE-LOCAL clock (R-6)", () => {
@@ -16571,6 +16588,133 @@ await test("S123 pin 5 — the multi-scene clock law: motions evaluate against t
   const done = frameAt(probe, 1800);
   eq(done.elements[0]?.x, 960, "post-window: the placed state holds");
   eq(done.elements[0]?.opacity, 1, "post-window: opacity 1");
+});
+
+await test("S123 pin 6 — the budget wall refuses at doc.fps against the DELIVERED count (D3 §5.2.5, R-1)", () => {
+  // 24 scenes × 37,500 ms = 900,000 ms — under the explicit-duration wall
+  // (900,000 ≤ 900,000) but OVER the frame wall at 30 fps (27,000 > 25,920)
+  // while PASSING at 24 fps (21,600) — the rate must come from doc.fps, the
+  // count from the delivered arithmetic.
+  const mk = (fps: 24 | 30) => mustValidate(
+    {
+      version: GRAPHICS_VERSION, title: "s123 budget probe", width: 1920, height: 1080, fps,
+      scenes: Array.from({ length: 24 }, (_, i) => ({
+        id: `scene-${i + 1}`, narration: "budget probe scene", durationMs: 37_500, background: "#ffffff",
+        elements: [],
+      })),
+    },
+    `the budget probe @ ${fps} fps`,
+  );
+  const over30 = mk(30);
+  const over24 = mk(24);
+  const r30 = graphicsBudgetReport(over30);
+  eq(r30.fps, 30, "the report reads the doc's fps");
+  eq(r30.frames, 27_000, "the delivered count: 24 × frameCountOf(37500, 30)");
+  eq(r30.wall, ANIM_FRAME_BUDGET, "the wall is the ONE wall (GRAPHICS_FRAME_BUDGET = ANIM_FRAME_BUDGET)");
+  eq(r30.capSec, 864, "the 30 fps cap is 864 s (14.4 min) — derived, never assumed");
+  eq(r30.ok, false, "27,000 frames > 25,920 — refuse");
+  ok(
+    r30.refusal !== null && r30.refusal.includes("frame budget wall") && r30.refusal.includes("the cap at 30 fps is 864.0s"),
+    "the refusal is a named-wall message citing the fps-derived cap",
+  );
+  let threw = false;
+  try {
+    assertGraphicsBudget(over30);
+  } catch {
+    threw = true;
+  }
+  ok(threw, "assertGraphicsBudget throws before chromium launches");
+
+  const r24 = graphicsBudgetReport(over24);
+  eq(r24.frames, 21_600, "the SAME scenes at 24 fps deliver 21,600 frames");
+  eq(r24.ok, true, "…and pass — the wall is frame-based, the rate is doc.fps's");
+
+  // Boundary: 24 × 36,000 ms at 30 fps delivers EXACTLY the wall — allowed
+  // (exceeding means strictly greater).
+  const boundary = mustValidate(
+    {
+      version: GRAPHICS_VERSION, title: "s123 budget boundary", width: 1920, height: 1080, fps: 30,
+      scenes: Array.from({ length: 24 }, (_, i) => ({
+        id: `scene-${i + 1}`, narration: "boundary scene", durationMs: 36_000, background: "#ffffff",
+        elements: [],
+      })),
+    },
+    "the boundary doc",
+  );
+  const rb = graphicsBudgetReport(boundary);
+  eq(rb.frames, 25_920, "864 s at 30 fps = exactly the wall");
+  eq(rb.ok, true, "the boundary passes");
+
+  // R-1: the DELIVERED arithmetic (Σ per-scene rounding) differs from the
+  // whole-doc figure — the preflight MUST use the delivered count. 1030 ms
+  // at 30 fps rounds UP per scene (30.9 → 31) but the whole-doc figure
+  // rounds the total once (741.6 → 742) — 24 delivered vs 742.
+  const asymmetry = mustValidate(
+    {
+      version: GRAPHICS_VERSION, title: "s123 r1 asymmetry", width: 1920, height: 1080, fps: 30,
+      scenes: Array.from({ length: 24 }, (_, i) => ({
+        id: `scene-${i + 1}`, narration: "asymmetry scene", durationMs: 1030, background: "#ffffff",
+        elements: [],
+      })),
+    },
+    "the asymmetry doc",
+  );
+  const ra = graphicsBudgetReport(asymmetry);
+  eq(ra.frames, 744, "delivered: 24 × round(30.9) = 24 × 31");
+  eq(graphicsFrameCount(asymmetry), 742, "whole-doc: round(741.6) — the figure R-1 forbids relying on");
+  ok(ra.frames > graphicsFrameCount(asymmetry), "per-scene rounding exceeds the whole-doc figure — the preflight uses delivered");
+  eq(ra.ok, true, "both figures sit under the wall here — the pin is the arithmetic, not the refusal");
+});
+
+await test("S123 tracks — graphicsTracks projects the frame plan onto the S87 contract at doc.fps", () => {
+  const d24 = s123Doc(24);
+  const d30 = s123Doc(30);
+  const t24 = graphicsTracks(d24);
+  const t30 = graphicsTracks(d30);
+  eq(t24.length, 3, "visual + audio + subtitle (shape-stable for the compositor's dispatch)");
+  eq(t24[0].kind, "graphics", "the visual track is the graphics kind (the contract seat)");
+  eq(t24[0].name, "visual", "…named visual");
+  eq(t24[0].clips.length, 3, "one clip per scene");
+  eq(t24[1].clips.length, 0, "audio is empty at P2 — VO slots ride the render call (P3)");
+  eq(t24[2].clips.length, 0, "subtitle empty (whiteboard parity)");
+
+  const plan24 = framePlanWindows([5000, 2500, 1100], 24);
+  t24[0].clips.forEach((clip, i) => {
+    eq(clip.kind, "graphics", `clip ${i}: graphics kind`);
+    eq(clip.id, `g${i}`, `clip ${i}: deterministic id`);
+    eq(clip.asset, null, `clip ${i}: asset null — the frame is drawn by the engine`);
+    eq(clip.transitionIn, null, `clip ${i}: no track blend in`);
+    eq(clip.transitionOut, null, `clip ${i}: no track blend out`);
+    eq(clip.startSec, plan24.scenes[i].startSec, `clip ${i}: the frame-quantized window start`);
+    eq(clip.endSec, plan24.scenes[i].endSec, `clip ${i}: the frame-quantized window end`);
+    const next = t24[0].clips[i + 1];
+    if (next !== undefined) eq(next.startSec, clip.endSec, `clip ${i} → ${i + 1}: contiguous`);
+  });
+  eq(t24[0].clips[0].sceneIndex, 1, "scene-1 → story row 1 (the planner's scene-N ids)");
+  eq(t24[0].clips[1].sceneIndex, 2, "scene-2 → row 2");
+  eq(t24[0].clips[2].sceneIndex, 3, "scene-3 → row 3");
+
+  // The same ms truth at 30 fps projects DIFFERENT (fps-correct) windows —
+  // the 1100 ms tail quantizes to 26 frames @ 24 (endSec 8.58) vs 33
+  // frames @ 30 (endSec 8.6); the 5000 ms head happens to quantize equal.
+  const plan30 = framePlanWindows([5000, 2500, 1100], 30);
+  eq(t30[0].clips[2].endSec, plan30.scenes[2].endSec, "30 fps: the windows follow framePlanWindows at doc.fps");
+  ok(t30[0].clips[2].endSec !== t24[0].clips[2].endSec, "the windows differ per rate (frame-quantized, never ms-raw)");
+
+  eq(JSON.stringify(graphicsTracks(d24)), JSON.stringify(t24), "deterministic — same doc, byte-identical projection");
+});
+
+await test("S123 tracks — hand-authored scene ids carry no row linkage (null is the honest read)", () => {
+  const doc = mustValidate(
+    {
+      version: GRAPHICS_VERSION, title: "s123 tracks linkage", width: 1920, height: 1080, fps: 24,
+      scenes: S123_SCENES.map((s, i) => (i === 0 ? { ...s, id: "intro" } : s)),
+    },
+    "the hand-authored doc",
+  );
+  const tracks = graphicsTracks(doc);
+  eq(tracks[0].clips[0].sceneIndex, null, '"intro" links to no story row');
+  eq(tracks[0].clips[1].sceneIndex, 2, "scene-2 still links row 2 — position still orders the clip");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
