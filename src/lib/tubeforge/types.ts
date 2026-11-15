@@ -888,6 +888,9 @@ export interface CharacterDTO {
   voice: string;
   artStyle: string;
   hasPortrait: boolean;
+  /** S125 (K1) — the character carries a validated rig doc (the native
+   *  character lane's seat; the studio shows the rig editor when true). */
+  hasRig: boolean;
   videoCount: number;
   poseCount: number;
   portraitUrl: string | null;

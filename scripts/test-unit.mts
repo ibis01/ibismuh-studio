@@ -18013,6 +18013,22 @@ await test("S125 the lane is wired end-to-end — route/job/schema sources (the 
   ok(renderSrc.includes("asr: false,"), "the anchors ride the $0 ladder (no paid ASR at the hook)");
 });
 
+await test("S125 the admission routes — the validator is the gate, the pass degrades per-part (the source pins)", async () => {
+  const rigRoute = await fsp.readFile("src/app/api/characters/[id]/rig/route.ts", "utf8");
+  const autoRoute = await fsp.readFile("src/app/api/characters/[id]/rig/auto/route.ts", "utf8");
+  const charsSrc = await fsp.readFile("src/lib/tubeforge/characters.ts", "utf8");
+  const typesSrc = await fsp.readFile("src/lib/tubeforge/types.ts", "utf8");
+  ok(rigRoute.includes("validateRigParts(parts)"), "the PUT gates the parts library first");
+  ok(rigRoute.includes("validateRigDoc(doc, partsResult.parts)"), "the doc's svgRefs resolve against the SAME payload");
+  ok(rigRoute.includes("writeRigDoc(docResult.doc)"), "what lands in the columns is the validator's output (byte-stable)");
+  ok(autoRoute.includes("generateCharacterParts"), "the auto route rides the parts pass");
+  ok(charsSrc.includes("RIG_SLOT_SEEDS"), "the scaffold kinematics come from the ONE seed table");
+  ok(charsSrc.includes("mouth parts dropped"), "a partial mouth set drops ALL mouth rows (the honesty law)");
+  ok(charsSrc.includes("pose proposal was refused"), "a refused pose proposal degrades to the empty sheet");
+  ok(typesSrc.includes("hasRig: boolean;"), "the DTO carries the rig seat (the studio reads it)");
+  ok(charsSrc.includes("hasRig: Boolean(c.rigDoc)"), "the serializer reports the seat");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
