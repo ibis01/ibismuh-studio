@@ -17927,6 +17927,92 @@ await test("S125 the clip hash — deterministic, sensitive to every render inpu
   );
 });
 
+// ---------------------------------------------------------------------------
+// S125 (K1) — the lane wiring: the native-rig channel's precedence (rule
+// 4.5, native-first between the stills contract and i2v) + the end-to-end
+// source pins (the S123 P3 pattern) (design record §6).
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S125 the lane wiring (liveliness + the render hook)");
+
+import { selectChannels, type LivelinessInput } from "../src/lib/tubeforge/liveliness";
+
+function chanInput(overrides: Partial<LivelinessInput> = {}): LivelinessInput {
+  return {
+    mode: "kenburns",
+    motionOff: false,
+    planNeedsI2V: [false, false],
+    planMotionOff: [false, false],
+    humanMotionOff: [false, false],
+    docCameraKeys: [false, false],
+    hasStock: [false, false],
+    i2vReady: true,
+    nativeRig: [false, false],
+    ...overrides,
+  };
+}
+
+await test("S125 rule 4.5 — the native rig sits BETWEEN the stills contract and the i2v pick (native-first)", () => {
+  const rigged: LivelinessInput = chanInput({ nativeRig: [true, true], planNeedsI2V: [true, true] });
+  const out = selectChannels(rigged);
+  eq(out[0].channel, "native-rig", "the rig outranks the director's true-motion pick (native-first)");
+  ok(out[0].reason.includes("$0"), "the reason names the native-first law");
+  // Every senior rule still pins its channel:
+  eq(
+    selectChannels(chanInput({ nativeRig: [true, true], motionOff: true }))[0].channel,
+    "kenburns",
+    "the stills contract stills the rig"
+  );
+  eq(
+    selectChannels(chanInput({ nativeRig: [true, true], docCameraKeys: [true, false] }))[0].channel,
+    "kenburns",
+    "the studio's camera keys outrank the rig (a user edit is senior)"
+  );
+  eq(
+    selectChannels(chanInput({ nativeRig: [true, true], planMotionOff: [true, false] }))[0].channel,
+    "kenburns",
+    "the plan's own still order outranks the rig"
+  );
+  eq(
+    selectChannels(chanInput({ nativeRig: [true, true], humanMotionOff: [true, false] }))[0].channel,
+    "kenburns",
+    "the human's per-scene still order outranks the rig"
+  );
+  eq(
+    selectChannels(chanInput({ mode: "stock", nativeRig: [true, true], hasStock: [true, false] }))[0].channel,
+    "stock",
+    "matched stock outranks the rig (rule 3 senior)"
+  );
+  eq(selectChannels(chanInput({ mode: "slides", nativeRig: [true, true] }))[0].channel, "slides", "slides outrank the rig");
+  eq(selectChannels(chanInput({ mode: "animated", nativeRig: [true, true] }))[0].channel, "i2v", "the video-level animated pick outranks the rig");
+});
+
+await test("S125 no rig → the byte-identical legacy path (the rollback law)", () => {
+  const legacy = selectChannels(chanInput({ planNeedsI2V: [true, false] }));
+  eq(legacy[0].channel, "i2v", "the i2v pick plays when no rig exists");
+  eq(legacy[1].channel, "kenburns", "the default stays Ken Burns");
+  eq(
+    JSON.stringify(selectChannels(chanInput({}))),
+    JSON.stringify(selectChannels(chanInput({ nativeRig: [false, false] }))),
+    "false flags ≡ absent flags"
+  );
+});
+
+await test("S125 the lane is wired end-to-end — route/job/schema sources (the P3 source-pin pattern)", async () => {
+  const renderSrc = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  const jobsSrc = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const schemaSrc = await fsp.readFile("prisma/schema.prisma", "utf8");
+  const livelinessSrc = await fsp.readFile("src/lib/tubeforge/liveliness.ts", "utf8");
+  ok(renderSrc.includes('if (chan === "native-rig") {'), "the render hook carries the native-rig branch");
+  ok(renderSrc.includes("parseRigDoc(opts.character.rigDoc"), "the rig columns parse at the orchestrator (additive)");
+  ok(renderSrc.includes("rig: chan === \"native-rig\" ? rigInputs : null"), "the rig pair rides ONLY on the rig channel (the rollback law)");
+  ok(jobsSrc.includes("select: { hasPortrait: true, rigDoc: true, parts: true }"), "the job body selects the rig columns");
+  ok(schemaSrc.includes("rigDoc          String?") && schemaSrc.includes("parts           String?"), "the schema carries the additive columns");
+  ok(livelinessSrc.includes('"native-rig"'), "the selector speaks the channel");
+  ok(renderSrc.includes("planRigTimeline({"), "the planner compiles at the hook (compile-only)");
+  ok(renderSrc.includes("asr: false,"), "the anchors ride the $0 ladder (no paid ASR at the hook)");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

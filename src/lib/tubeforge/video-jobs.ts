@@ -962,10 +962,12 @@ export async function runRenderJob(
 
   // S93 — the character rig's eligibility: a portrait-backed cast character
   // (the rig reads nothing else — the identity anchors stay untouched).
+  // S125 (K1) — the raw rig columns ride along (additive; render.ts parses
+  // them — junk/null = no rig, the byte-identical legacy path).
   const rigCharacter = video.characterId
     ? await db.character.findUnique({
         where: { id: video.characterId },
-        select: { hasPortrait: true },
+        select: { hasPortrait: true, rigDoc: true, parts: true },
       })
     : null;
 
@@ -974,7 +976,13 @@ export async function runRenderJob(
       videoId,
       scenes: renderScenes,
       mode,
-      character: rigCharacter ? { hasPortrait: rigCharacter.hasPortrait } : null,
+      character: rigCharacter
+        ? {
+            hasPortrait: rigCharacter.hasPortrait,
+            rigDoc: rigCharacter.rigDoc,
+            parts: rigCharacter.parts,
+          }
+        : null,
       burnSubtitles: subtitles,
       smartCaptions,
       music,

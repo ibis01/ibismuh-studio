@@ -260,6 +260,14 @@ model Character {
   // and the VLM continuity check. JSON array of storage keys (T-3.7 driver
   // namespace, e.g. "characters/<id>/ref-1.png"), oldest first.
   referenceImages String?
+  // S125 (K1) — the 2D character rig: rigDoc carries the VALIDATED
+  // CharacterRigDoc v1 JSON (characters/rig2d.ts — the closed grammar,
+  // writeRigDoc's strict byte-stable write); parts carries the parts
+  // library (RigPartArt rows — stage-coordinate SVG fragments the rig's
+  // parts reference by id). Null = no rig — the S93 still-portrait path
+  // renders byte-identical (additive parse; no backfill).
+  rigDoc          String?
+  parts           String?
   voice           String                @default("jam")
   artStyle        String                @default("cinematic")
   hasPortrait     Boolean               @default(false)

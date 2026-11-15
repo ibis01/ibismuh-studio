@@ -69,6 +69,10 @@ import {
   type ShotJoinMark,
 } from "./motion";
 import { rigPlan } from "./character-rig";
+import { ensureRigClip } from "./characters/rig-render";
+import { planRigTimeline } from "./characters/rig-director";
+import { parseRigDoc, parseRigParts, type CharacterRigDoc, type RigPartArt } from "./characters/rig2d";
+import { sceneVoiceAnchors } from "./whiteboard/voice-anchors";
 import {
   gradeFilter,
   titleDrawtextFilter,
@@ -186,8 +190,11 @@ export interface RenderOptions {
   /** Video-level context so scene classification can read tone/niche. */
   motionContext?: SceneContext;
   /** S93 — the video's cast character (portrait-backed) — the rig's
-   *  eligibility. Null/absent = no cast, the rig never applies. */
-  character?: { hasPortrait: boolean } | null;
+   *  eligibility. Null/absent = no cast, the rig never applies.
+   *  S125 (K1) — the raw rig columns ride along: rigDoc/parts are the
+   *  character's stored JSON (additive parse — null/junk = no rig, the
+   *  byte-identical legacy path). */
+  character?: { hasPortrait: boolean; rigDoc?: string | null; parts?: string | null } | null;
   /** Video topic — drives the slide deck's art direction (slides mode). */
   topic?: string;
   /** Brand kit overrides for keynote slides (accent recolor + logo badge). */
@@ -689,6 +696,13 @@ async function buildSegment(opts: {
    * into RenderResult.expectedCuts so the QC cut-alignment lens reads the
    *  graph's own flips as designed boundaries, not strays. */
   onShotJoins?: (joins: ShotJoinMark[]) => void;
+  /** S125 (K1) — the parsed rig pair for native-rig scenes (the selector's
+   *  channel is the authority; a native-rig scene without a rig here is a
+   *  wiring bug and degrades honestly to Ken Burns with the reason). */
+  rig?: { rig: CharacterRigDoc; art: RigPartArt[] } | null;
+  /** S125 (K1) — fired when the native-rig channel degrades to Ken Burns
+   *  (the i2v degradation shape: visible, never silent). */
+  onRigFallback?: (sceneIndex: number, reason: string) => void;
 }): Promise<void> {
   const { scene, dur, mode, motion, plan, shotPlan, outPath } = opts;
   const dir = videoDir(opts.videoId);
@@ -985,6 +999,70 @@ async function buildSegment(opts: {
       //    the fallback — visible, never silent.
       if (mode === "animated") throw err;
       opts.onI2vFallback?.(
+        scene.index,
+        err instanceof Error ? err.message : String(err).slice(0, 160)
+      );
+      await runKenburns();
+      return;
+    }
+  }
+
+  // S125 (K1) — the native-rig channel: the rigged character DRAWS this
+  // scene's pixels ($0, identity-locked, deterministic). The clip renders
+  // (or reuses the hash-keyed cache) at the program's rate with the 30fps
+  // shared-timebase cap, then composes through the SAME footage path i2v
+  // uses — the segment's audio graph stays the ONE mix (the rig never
+  // carries a second VO path). ANY failure degrades honestly to the Ken
+  // Burns executor (the i2v degradation shape): the liveliness pick never
+  // breaks the render, the fallback is reported.
+  if (chan === "native-rig") {
+    try {
+      if (!opts.rig) throw new Error("the native-rig channel carries no rig (a wiring bug)");
+      const sceneMs = Math.round(dur * 1000);
+      // The W4 anchors — the $0 ladder (silence-run refined windows, no
+      // paid ASR): null degrades to the word-proportional estimator inside
+      // the planner (anchors are inputs, never stored).
+      const voSec = await probeDuration(wav).catch(() => 0);
+      const anchors = await sceneVoiceAnchors({
+        narration: scene.narration,
+        voPath: wav,
+        voDurationSec: voSec,
+        sceneDurationMs: sceneMs,
+        asr: false,
+      });
+      const rigPlanCompiled = planRigTimeline({
+        narration: scene.narration,
+        rig: opts.rig.rig,
+        durationMs: sceneMs,
+        anchors,
+      });
+      const [W, H] = OUTPUT_SIZES[aspect].out;
+      const clip = await ensureRigClip(
+        path.join(videoDir(opts.videoId), `scene-rig-${String(scene.index).padStart(2, "0")}.mp4`),
+        {
+          rig: opts.rig.rig,
+          art: opts.rig.art,
+          timeline: rigPlanCompiled.timeline,
+          speech: rigPlanCompiled.speech,
+          slot: { sceneIndex: scene.index, durationMs: sceneMs },
+          opts: { outDir: videoDir(opts.videoId), canvas: { width: W, height: H }, fps },
+        }
+      );
+      await run("ffmpeg", [
+        "-stream_loop", "-1", "-t", dur.toFixed(3), "-i", clip,
+        "-i", wav,
+        ...audio.inputs,
+        ...pipInputs,
+        "-filter_complex", `${fullVisual(visualSuffix(FOOTAGE), hasPip ? 2 + audio.inputs.filter((a) => a === "-i").length : null)};${audio.graph}`,
+        ...common,
+      ]);
+      return;
+    } catch (err) {
+      renderLog.warn("native rig render failed — Ken Burns fallback", {
+        scene: scene.index,
+        err,
+      });
+      opts.onRigFallback?.(
         scene.index,
         err instanceof Error ? err.message : String(err).slice(0, 160)
       );
@@ -1650,6 +1728,17 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
     );
     const humanMotionOff = scenes.map((s) => motionOverrides.get(s.index) === "off");
     const docCameraKeys = scenes.map((s) => docScenes?.[s.index - 1]?.cameraKeys != null);
+    // S125 (K1) — the native rig's inputs: the character's stored rig columns
+    // parsed ONCE (additive — junk/null = no rig, the byte-identical legacy
+    // path). The rig is cast-scene-only (the continuity law) and the flags
+    // feed the selector's rule 4.5 (native-first, between KB and i2v).
+    const rigInputs: { rig: CharacterRigDoc; art: RigPartArt[] } | null = (() => {
+      if (!opts.character?.rigDoc) return null;
+      const rig = parseRigDoc(opts.character.rigDoc, opts.character.parts ?? null);
+      const art = parseRigParts(opts.character.parts ?? null);
+      return rig && art ? { rig, art } : null;
+    })();
+    const nativeRig = scenes.map((s) => Boolean(rigInputs && s.hostInScene));
     const channels = selectChannels({
       mode: opts.mode,
       motionOff: motion.mode === "off" || motion.intensity < 1,
@@ -1659,6 +1748,7 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
       docCameraKeys,
       hasStock,
       i2vReady,
+      nativeRig,
     });
     // Mutable copy for the result: an i2v scene that falls back mid-render
     // updates its decision, so RenderResult.liveliness reports what PLAYED,
@@ -1872,9 +1962,11 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
           ? opts.mode === "animated"
             ? `Animating scene ${i + 1}`
             : `Animating scene ${i + 1} — director's true-motion pick`
-          : chan === "stock"
-            ? `Cutting stock footage — scene ${i + 1}`
-            : `Composing scene ${i + 1}`;
+          : chan === "native-rig"
+            ? `Posing the character — scene ${i + 1} (the native rig)`
+            : chan === "stock"
+              ? `Cutting stock footage — scene ${i + 1}`
+              : `Composing scene ${i + 1}`;
       report(i, label);
       const segPath = path.join(tmpDir, `seg-${String(i + 1).padStart(2, "0")}.mp4`);
       const doc = docScenes?.[i] ?? null;
@@ -1912,6 +2004,17 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
         },
         onShotJoins: (marks) => {
           shotJoinMarks[i] = marks;
+        },
+        // S125 (K1) — the rig pair rides ONLY when the channel says so (the
+        // legacy branches never see it — the byte-identical rollback law).
+        rig: chan === "native-rig" ? rigInputs : null,
+        onRigFallback: (sceneIndex, reason) => {
+          const d = liveliness.find((x) => x.sceneIndex === sceneIndex);
+          if (d) {
+            d.channel = "kenburns";
+            d.reason = `native rig unavailable — Ken Burns fallback (${reason.slice(0, 90)})`;
+          }
+          report(i, `Composing scene ${i + 1} — rig unavailable, Ken Burns fallback`);
         },
         motion,
         plan: plans[i],
