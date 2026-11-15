@@ -33,6 +33,7 @@
 // fired (the S75 E10 receipt) — a fresh context per scene hands chromium's
 // memory back at every scene boundary; the browser itself is reused.
 import { execFile } from "child_process";
+import { createHash } from "crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "util";
@@ -49,7 +50,7 @@ import { graphicsEventList, type GraphicsEventSlot } from "./events";
 import { frameAt, graphicsSceneDurationsMs } from "./frame";
 import { assertGraphicsBudget } from "./preflight";
 import { graphicsTracks } from "./tracks";
-import type { GraphicsDoc } from "./types";
+import { writeGraphicsDoc, type GraphicsDoc } from "./types";
 
 const execFileP = promisify(execFile);
 
@@ -84,6 +85,15 @@ export interface RenderGraphicsOptions {
    *  fail-closed (the G1-IMP lens's enforcement half — a silently missing
    *  sprite is the exact lie the lane exists to catch). */
   spriteAssets?: Map<string, string[]>;
+  /** S132 (PAE-4) — resume an INTERRUPTED render: encoded scenes (per the
+   *  outDir's render-manifest.json, the doc fingerprint matching, and the
+   *  scene files still on disk) skip chromium + encode and rejoin the
+   *  assembly. FAIL-CLOSED: a fingerprint mismatch (the doc, the VO/music
+   *  inputs, the frame step, or the sprite assets changed) refuses — a
+   *  resumed render that mixes two renders' scenes would ship a lie. A
+   *  completed render deletes its manifest: resume applies only to an
+   *  INTERRUPTED run. */
+  resume?: boolean;
 }
 
 export interface GraphicsSceneRenderResult {
@@ -109,6 +119,102 @@ export interface GraphicsRenderResult {
    *  event channel's one seam — the audio/QC consumers' fact source;
    *  cues are not clips, so they never ride the tracks). */
   events: GraphicsEventSlot[];
+}
+
+// ---------------------------------------------------------------------------
+// S132 — the resume manifest: the interrupted render's record. ONE file in
+// the outDir (render-manifest.json), written after every encoded scene so
+// a crash loses at most the scene it was mid-rendering. The fingerprint
+// pins EVERY input that shapes the scene files (the doc's strict write,
+// the raw VO/music paths, the frame step, the sprite assets) — resume
+// against different inputs refuses instead of mixing two renders.
+// ---------------------------------------------------------------------------
+
+const RENDER_MANIFEST_VERSION = 1;
+
+interface RenderManifestScene {
+  sceneId: string;
+  index: number;
+  status: "encoded" | "pending";
+  file: string;
+  frames: number;
+}
+
+interface RenderManifest {
+  version: number;
+  fingerprint: string;
+  scenes: RenderManifestScene[];
+}
+
+function renderManifestPath(outDir: string): string {
+  return path.join(outDir, "render-manifest.json");
+}
+
+/** The tolerant read (the house doc law): null on unreadable — junk JSON,
+ *  a wrong version, structural nonsense. A corrupt manifest is treated as
+ *  NO manifest: the render starts fresh rather than resuming from a lie.
+ *  Exported for the unit pins (the io contract IS the recovery contract). */
+export function readRenderManifest(outDir: string): RenderManifest | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(renderManifestPath(outDir), "utf8")) as RenderManifest;
+    if (
+      raw === null || typeof raw !== "object" || raw.version !== RENDER_MANIFEST_VERSION ||
+      typeof raw.fingerprint !== "string" || !Array.isArray(raw.scenes)
+    ) {
+      return null;
+    }
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+function writeRenderManifest(outDir: string, manifest: RenderManifest): void {
+  fs.writeFileSync(renderManifestPath(outDir), JSON.stringify(manifest, null, 2) + "\n");
+}
+/** Exported for the unit pins alongside the read. */
+export { writeRenderManifest, renderManifestPath };
+
+/** The render fingerprint — sha256 over EVERY input that shapes the scene
+ *  files: the doc's strict write (version-first, key-stable), the raw VO
+ *  and music paths, the frame step, the sprite assets. Deterministic; a
+ *  change in any of them refuses resume (fail-closed). Exported for the
+ *  unit pins. */
+export function renderFingerprint(doc: GraphicsDoc, opts: RenderGraphicsOptions): string {
+  const vo = [...(opts.voFiles?.entries() ?? [])].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const sprites = [...(opts.spriteAssets?.entries() ?? [])].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return createHash("sha256")
+    .update(writeGraphicsDoc(doc))
+    .update(JSON.stringify({ vo, music: opts.musicPath ?? null, frameStep: opts.frameStep ?? 1, sprites }))
+    .digest("hex")
+    .slice(0, 32);
+}
+
+/** S132 — the resume decision, PURE (file existence rides a predicate so
+ *  the pins run without a filesystem). null ⇒ nothing to resume (a fresh
+ *  start); a refusal ⇒ the fingerprint mismatch (fail-closed, the exact
+ *  reason text); else the plan — the manifest plus the encoded-and-present
+ *  scenes that skip chromium + encode and rejoin the assembly. Exported
+ *  for the unit pins (the decision IS the contract). */
+export function resumePlan(
+  manifest: RenderManifest | null,
+  fingerprint: string,
+  fileExists: (p: string) => boolean,
+): { refusal: string } | { plan: RenderManifest; resumable: Map<number, { file: string; frames: number }> } | null {
+  if (manifest === null) return null;
+  if (manifest.fingerprint !== fingerprint) {
+    return {
+      refusal:
+        "the render inputs changed since the interrupted run (the doc, the VO/music inputs, the frame step or the sprite assets) — resume refuses rather than mixing two renders' scenes",
+    };
+  }
+  const resumable = new Map<number, { file: string; frames: number }>();
+  for (const s of manifest.scenes) {
+    if (s.status === "encoded" && fileExists(s.file)) {
+      resumable.set(s.index, { file: s.file, frames: s.frames });
+    }
+  }
+  return { plan: manifest, resumable };
 }
 
 /** The scene clock's absolute start in ms — the EXACT running sum of the
@@ -246,6 +352,36 @@ export async function renderGraphics(
 
   const { chromium } = await import("playwright");
   fs.mkdirSync(opts.outDir, { recursive: true });
+
+  // S132 — the resume setup. The fingerprint pins every input that shapes
+  // the scene files; a mismatch refuses (fail-closed) instead of mixing
+  // two renders' scenes. Encoded scenes rejoin only when their FILE still
+  // exists — a cleaned outDir simply re-renders.
+  const fingerprint = renderFingerprint(doc, opts);
+  let manifest: RenderManifest | null = null;
+  const resumable = new Map<number, { file: string; frames: number }>();
+  if (opts.resume === true) {
+    const decision = resumePlan(readRenderManifest(opts.outDir), fingerprint, (p) => fs.existsSync(p));
+    if (decision !== null && "refusal" in decision) throw new Error(decision.refusal);
+    if (decision !== null) {
+      manifest = decision.plan;
+      for (const [i, r] of decision.resumable) resumable.set(i, r);
+    } else {
+      manifest = {
+        version: RENDER_MANIFEST_VERSION,
+        fingerprint,
+        scenes: doc.scenes.map((scene, i) => ({
+          sceneId: scene.id,
+          index: i,
+          status: "pending" as const,
+          file: path.join(opts.outDir, `scene-${i + 1}.mp4`),
+          frames: 0,
+        })),
+      };
+      writeRenderManifest(opts.outDir, manifest);
+    }
+  }
+
   // The look-rate (labelled drafts only — see RenderGraphicsOptions).
   const step = opts.frameStep === 2 ? 2 : 1;
   const effFps = doc.fps / step;
@@ -259,6 +395,20 @@ export async function renderGraphics(
       const durSec = plan.scenes[si].deliveredSec;
       const durationMs = sceneMs[si];
       const cursorMs = sceneCursorMs(sceneMs, si);
+
+      // S132 — the resume skip: an encoded scene whose file survived the
+      // interruption rejoins the assembly untouched (chromium + encode
+      // never run for it; the manifest is the record, the fingerprint the
+      // guarantee its content matches this render's inputs).
+      const resumed = resumable.get(si);
+      if (resumed !== undefined) {
+        opts.onProgress?.(
+          `scene ${si + 1}/${doc.scenes.length} ("${scene.id}"): resumed (the encoded scene reused)`,
+          si / doc.scenes.length,
+        );
+        sceneFiles.push({ sceneId: scene.id, durationMs, frames: resumed.frames, file: resumed.file });
+        continue;
+      }
 
       // Per-scene context recycling (the S75 E10 receipt) + security line 2.
       const context = await browser.newContext({
@@ -329,6 +479,17 @@ export async function renderGraphics(
         }));
         fs.rmSync(framesDir, { recursive: true, force: true });
         sceneFiles.push({ sceneId: scene.id, durationMs, frames, file: sceneFile });
+        // S132 — the manifest records the encoded scene the moment it
+        // exists: a crash after this line loses at most the NEXT scene.
+        if (manifest !== null) {
+          const entry = manifest.scenes[si];
+          if (entry !== undefined) {
+            entry.status = "encoded";
+            entry.frames = frames;
+            entry.file = sceneFile;
+            writeRenderManifest(opts.outDir, manifest);
+          }
+        }
       } finally {
         await context.close().catch(() => {});
       }
@@ -353,6 +514,10 @@ export async function renderGraphics(
       musicPath: opts.musicPath ?? null,
       anyVoAudio,
     }));
+    // S132 — the render COMPLETED: the manifest's purpose (resuming an
+    // interrupted run) is spent. Delete it so the next run starts fresh;
+    // the scene mp4s stay (today's behavior).
+    if (manifest !== null) fs.rmSync(renderManifestPath(opts.outDir), { force: true });
     return { scenes: sceneFiles, file: finalFile, tracks, plan: contractPlan, events: graphicsEventList(doc, doc.fps) };
   } finally {
     await browser.close();

@@ -16209,6 +16209,90 @@ await test("S131 graphicsEventList — the global projection: frame accumulation
 });
 
 // ---------------------------------------------------------------------------
+// S132 (PAE-4) — the render resume manifest: scene-level recovery for the
+// graphics lane. Pins: the fingerprint (every input that shapes the scene
+// files — doc, VO, music, frame step, sprites — changes the hash; the same
+// inputs repeat it; map order never matters), the PURE resume decision
+// (fresh start / fail-closed refusal / encoded-and-present skips), the
+// manifest io round-trip + the tolerant read (corrupt → no manifest).
+// The chromium+ffmpeg flow itself rides the queue's crash-recovery tests.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S132 (PAE-4) render recovery");
+
+await test("S132 the render fingerprint — every scene-shaping input moves it; map order never does", async () => {
+  const { renderFingerprint } = await import("../src/lib/tubeforge/graphics/render");
+  const docA = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2000 })]), "doc a");
+  const docB = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2500 })]), "doc b");
+  const base = renderFingerprint(docA, {});
+  eq(renderFingerprint(docA, {}), base, "the same inputs repeat the hash");
+  ok(renderFingerprint(docB, {}) !== base, "a doc change moves it");
+  ok(renderFingerprint(docA, { voFiles: new Map([["s1", "/tmp/a.wav"]]) }) !== base, "a VO input moves it");
+  ok(renderFingerprint(docA, { musicPath: "/tmp/m.flac" }) !== base, "a music input moves it");
+  ok(renderFingerprint(docA, { frameStep: 2 }) !== base, "a frame-step change moves it");
+  ok(renderFingerprint(docA, { spriteAssets: new Map([["imp-x", ["data:image/png;base64,AAA"]]]) }) !== base, "a sprite asset moves it");
+  const orderA = renderFingerprint(docA, { voFiles: new Map([["s1", "/x.wav"], ["s2", "/y.wav"]]) });
+  const orderB = renderFingerprint(docA, { voFiles: new Map([["s2", "/y.wav"], ["s1", "/x.wav"]]) });
+  eq(orderA, orderB, "insertion order never matters (sorted entries)");
+});
+
+await test("S132 the resume decision — fresh start, fail-closed refusal, encoded-and-present skips", async () => {
+  const { resumePlan } = await import("../src/lib/tubeforge/graphics/render");
+  eq(resumePlan(null, "fp", () => true), null, "no manifest → nothing to resume (fresh start)");
+  const manifest = {
+    version: 1,
+    fingerprint: "fp",
+    scenes: [
+      { sceneId: "s1", index: 0, status: "encoded", file: "/out/scene-1.mp4", frames: 48 },
+      { sceneId: "s2", index: 1, status: "pending", file: "/out/scene-2.mp4", frames: 0 },
+      { sceneId: "s3", index: 2, status: "encoded", file: "/out/gone.mp4", frames: 24 },
+    ],
+  };
+  const refusal = resumePlan({ ...manifest, fingerprint: "OTHER" }, "fp", () => true);
+  ok(refusal !== null && "refusal" in refusal && refusal.refusal.includes("resume refuses rather than mixing two renders' scenes"),
+    "a fingerprint mismatch refuses with its reason");
+  const decision = resumePlan(manifest, "fp", (p) => p !== "/out/gone.mp4");
+  ok(decision !== null && "plan" in decision, "a matching manifest yields the plan");
+  if (decision !== null && "plan" in decision) {
+    eq(decision.resumable.size, 1, "only encoded AND present scenes skip");
+    const r0 = decision.resumable.get(0);
+    ok(r0 !== undefined && r0.file === "/out/scene-1.mp4" && r0.frames === 48, "the skip carries the manifest's file + frames");
+    ok(!decision.resumable.has(1), "a pending scene never skips");
+    ok(!decision.resumable.has(2), "an encoded scene whose file vanished never skips (a cleaned outDir re-renders)");
+  }
+  const empty = resumePlan(manifest, "fp", () => false);
+  ok(empty !== null && "plan" in empty && empty.resumable.size === 0, "no files present → the plan carries an EMPTY resumable set (all scenes re-render)");
+});
+
+await test("S132 the manifest io — round-trip through a real dir; corrupt/wrong-version reads as NO manifest", async () => {
+  const { renderFingerprint, readRenderManifest, writeRenderManifest, renderManifestPath, resumePlan } = await import("../src/lib/tubeforge/graphics/render");
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2000 })]), "manifest doc");
+  const fp = renderFingerprint(doc, {});
+  const tmp = fs.mkdtempSync("/tmp/s132-manifest-");
+  try {
+    const manifest = {
+      version: 1,
+      fingerprint: fp,
+      scenes: [{ sceneId: "s1", index: 0, status: "pending", file: path.join(tmp, "scene-1.mp4"), frames: 0 }],
+    };
+    writeRenderManifest(tmp, manifest);
+    eq(renderManifestPath(tmp), path.join(tmp, "render-manifest.json"), "the manifest lives at one known path");
+    const readBack = readRenderManifest(tmp);
+    ok(readBack !== null && readBack.version === 1 && readBack.fingerprint === fp && readBack.scenes.length === 1, "write → read round-trips");
+    fs.writeFileSync(renderManifestPath(tmp), "{corrupt json");
+    eq(readRenderManifest(tmp), null, "corrupt JSON reads as no manifest (start fresh, never resume from a lie)");
+    fs.writeFileSync(renderManifestPath(tmp), JSON.stringify({ ...manifest, version: 99 }));
+    eq(readRenderManifest(tmp), null, "a wrong version reads as no manifest");
+    fs.writeFileSync(renderManifestPath(tmp), JSON.stringify({ version: 1, fingerprint: fp, scenes: "nope" }));
+    eq(readRenderManifest(tmp), null, "structural nonsense reads as no manifest");
+    const decision = resumePlan(readBack, fp, () => false);
+    ok(decision !== null && "plan" in decision, "the round-tripped manifest feeds the resume decision");
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // G1.2 — frame truth (Part B): frameAt is the ONE source of motion truth.
 // Pins: determinism (sweep hash over a fixed doc), the fixed composition
 // order (emphasis > exit > enter — applied last), element state never
