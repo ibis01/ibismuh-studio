@@ -72,6 +72,17 @@ the active LTS, and a runtime where the file parses with margin (the sandbox's
 made the goldens version-independent; this change is general alignment, with
 the same receipt class as the S33 ubuntu-24.04 pin.
 
+## Closing receipt
+
+Run 3 (`43696690532`, dispatch on `s124/element-editor` @ `dc6a518`): **7/8
+GREEN** — Typecheck·Lint·Unit, Money-path coverage, Production build,
+PostgreSQL integration, Clean-clone bootstrap, Docker production smoke (the
+S128 opt-in trigger firing as designed), Secret scan. E2E (Playwright)
+skipped by design on dispatch — it runs on pull_request and main-push. The
+stack is CI-proven end to end; the landing path is the PR
+(`s123/full-execution` → main as PR #24, then `s124/element-editor` with
+base = that, the stack as one).
+
 ## Standing reminder
 
 Four GitHub PATs have now been pasted into chat. They are compromised the
