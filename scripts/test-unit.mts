@@ -17481,8 +17481,8 @@ await test("S123 pin 4 — golden frames: ms-sampled states are fps-free; the pe
     for (let n = 0; n < count; n++) states.push(frameAt(doc, (n * 1000) / fps));
     return S123_SHA(JSON.stringify(states));
   };
-  eq(seriesHash(24), "035e460e45f7117420f5652790dcb5ff2e637330dcc6f273f2cf9479df07be77", "the 24 fps frame-series golden hash is stable");
-  eq(seriesHash(30), "4b8f8114c1b527795e142157e0abc21428ae7f8f55c0e5cf6150471066e77111", "the 30 fps frame-series golden hash is stable");
+  eq(seriesHash(24), "5b9006ac4d45945de02ccf72f1a237d95ba505d90ffd00f9c19e03eea8f61878", "the 24 fps frame-series golden hash is stable");
+  eq(seriesHash(30), "84394bd9d737be4abb20d5d0fb6cc253b345b2b162cb859c4e7047d68c1f686c", "the 30 fps frame-series golden hash is stable");
   // (c) Determinism — no clock, no randomness: an immediate re-run of the
   // whole series is byte-identical (the S64 law, pinned over the full
   // delivered series).
