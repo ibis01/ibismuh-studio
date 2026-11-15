@@ -37,6 +37,14 @@ on:
   push:
     branches: [main]
   pull_request:
+  # S128 (the PR #24 integration review, 2026-11-15): the Docker production
+  # smoke had skipped on BOTH open integration PRs (#23, #24) because its
+  # `if` fired only on pushes to main — and main had not moved. Two opt-in
+  # triggers close the gap without paying the ~10-minute build on every PR:
+  #   workflow_dispatch — "Run workflow" in the Actions UI boots the FULL
+  #     gate (Docker smoke included) on ANY branch, on demand;
+  #   the `docker-smoke` label on a PR opts that PR's run in.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -378,12 +386,18 @@ jobs:
   # web + worker, and walks register → login → create project → ffmpeg
   # render → MinIO artifact round-trip (the S101 lifecycle) → cross-process
   # job execution → worker-restart recovery (the S100 reap, token bumped).
-  # Runs on main pushes only (the build costs ~10 min; PR runs get the rest
-  # of the gate).
+  # Runs on pushes to main (as before) AND, since S128, on demand:
+  #   workflow_dispatch — run the whole gate on any branch from the UI;
+  #   a PR carrying the `docker-smoke` label opts its own run in.
+  # The 2026-11-15 external audit flagged the smoke as "skipped, not passed"
+  # on both open integration PRs — this is the root cause and the fix.
   docker-smoke:
     name: Docker production smoke (P0.6)
     runs-on: ubuntu-24.04
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'docker-smoke'))
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7

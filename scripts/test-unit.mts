@@ -15453,6 +15453,82 @@ await test("G1.1 the groupDepthMax wall rejects with its name", () => {
   ok(errors.some((e) => e.includes("groupDepthMax wall")), "the error names the wall");
 });
 
+// ── S128 — the char walls (the PR #24 review's F1/F2): the grammar's
+// structural walls never bounded the CHAR content of the strings riding
+// inside it. Required content refuses (never silently truncated); the
+// OPTIONAL decorations (units) warning-drop (the tolerance law).
+
+await test("S128 the textCharsMax wall — a megabyte headline refuses with its name; the boundary parses", () => {
+  const big = "A".repeat(GRAPHICS_BUDGETS.textCharsMax + 1);
+  const errors = mustReject(
+    validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { text: { text: big } })])])),
+    "2001-char headline",
+  );
+  ok(errors.some((e) => e.includes("textCharsMax wall")), "the error names the wall");
+  ok(errors.some((e) => e.includes(`${GRAPHICS_BUDGETS.textCharsMax + 1} chars`)), "the error counts the chars");
+  const at = mustValidate(
+    gDoc([gScene("s1", [gEl("h1", "headline", { text: { text: "A".repeat(GRAPHICS_BUDGETS.textCharsMax) } })])]),
+    "exactly at the wall",
+  );
+  eq(at.scenes[0]?.elements[0]?.text?.text.length, GRAPHICS_BUDGETS.textCharsMax, "the boundary string rides");
+});
+
+await test("S128 the textCharsMax wall — callout text and bar labels refuse too", () => {
+  const big = "B".repeat(GRAPHICS_BUDGETS.textCharsMax + 1);
+  const callout = mustReject(
+    validateGraphicsDoc(gDoc([gScene("s1", [gEl("co", "callout", { callout: { text: big } })])])),
+    "callout text",
+  );
+  ok(callout.some((e) => e.includes("textCharsMax wall")), "the callout error names the wall");
+  const rows = [{ label: big, value: 1 }];
+  const bar = mustReject(
+    validateGraphicsDoc(gDoc([gScene("s1", [gEl("br", "bar", { bar: { data: rows } })])])),
+    "bar label",
+  );
+  ok(bar.some((e) => e.includes("textCharsMax wall")), "the bar-label error names the wall");
+});
+
+await test("S128 the textCharsMax wall — narration and the doc title refuse", () => {
+  const big = "N".repeat(GRAPHICS_BUDGETS.textCharsMax + 1);
+  const narration = mustReject(
+    validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { narration: big })])),
+    "narration",
+  );
+  ok(narration.some((e) => e.includes("textCharsMax wall")), "the narration error names the wall");
+  const title = mustReject(validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")])], { title: big })), "title");
+  ok(title.some((e) => e.includes("textCharsMax wall")), "the title error names the wall");
+});
+
+await test("S128 the textCharsMax wall — OPTIONAL units warning-drop, never refuse (the tolerance law)", () => {
+  const bigUnit = "u".repeat(GRAPHICS_BUDGETS.textCharsMax + 1);
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("cn", "counter", { counter: { from: 0, to: 100, unit: bigUnit, decimals: 0 } }),
+    gEl("br", "bar", { bar: { data: [{ label: "a", value: 1 }], unit: bigUnit } }),
+  ])]));
+  if (r.doc === null) throw new Error(`units must NOT refuse — errors: ${r.errors.join(" | ")}`);
+  const cn = r.doc.scenes[0]?.elements[0]?.counter;
+  const br = r.doc.scenes[0]?.elements[1]?.bar;
+  eq(cn?.unit, undefined, "the counter unit dropped");
+  eq(br?.unit, undefined, "the bar unit dropped");
+  ok(r.warnings.some((w) => w.includes("unit dropped") && w.includes("textCharsMax wall")), "the warnings name the wall");
+});
+
+await test("S128 the iconPathCharsMax wall — one command with a huge literal refuses (the F2 hole)", () => {
+  // The iconPathCommandBudget counts COMMANDS: a single M with one
+  // megabyte coordinate literal is ONE command — the old walls rode under
+  // it. The char wall closes the hole.
+  const hugeLiteral = `M0 0 L${"9".repeat(GRAPHICS_BUDGETS.iconPathCharsMax)}`;
+  const errors = mustReject(
+    validateGraphicsDoc(gDoc([gScene("s1", [gEl("ic", "icon", { icon: { paths: [hugeLiteral] } })])])),
+    "one command, 4100-char literal",
+  );
+  ok(errors.some((e) => e.includes("iconPathCharsMax wall")), "the error names the wall");
+  // A legal path just under the char wall (and under the command budget) rides.
+  const long = `M0 0 ${"L1 1 ".repeat(200)}`.trim();
+  if (long.length > GRAPHICS_BUDGETS.iconPathCharsMax) throw new Error("fixture drifted over the wall");
+  mustValidate(gDoc([gScene("s1", [gEl("ic2", "icon", { icon: { paths: [long] } })])]), "long-but-legal path");
+});
+
 await test("G1.1 the compatibility table rejects cross-kind motions by name", () => {
   const r1 = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { enter: { kind: "count", durationMs: 500, delayMs: 0, ease: "linear" } })])]));
   const e1 = mustReject(r1, "count on a headline");

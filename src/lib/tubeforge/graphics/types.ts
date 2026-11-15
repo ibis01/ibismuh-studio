@@ -341,6 +341,22 @@ export const GRAPHICS_BUDGETS = {
    *  flattener and the rasterizer pay). The WB_PATH_COMMAND_BUDGET
    *  number. */
   iconPathCommandBudget: 512,
+  /** S128 (the PR #24 review's F1) — max chars per FREE-FORM string: the
+   *  doc title, scene narration, text/callout payloads, bar labels. The
+   *  grammar's other walls bound STRUCTURE (elements per scene, path
+   *  commands); nothing bounded the CHAR content of the strings riding
+   *  inside it — a PUT could store a megabyte-scale "headline" that
+   *  round-trips into the doc row and the chromium page verbatim. The
+   *  wall refuses (required content is never silently truncated); the
+   *  OPTIONAL decorations (counter/bar unit) warning-drop instead (the
+   *  house tolerance law — decorations are droppable, content is not). */
+  textCharsMax: 2_000,
+  /** S128 (the review's F2) — max chars per icon path-data string. The
+   *  iconPathCommandBudget counts COMMANDS, not characters: a single
+   *  command's coordinate literal could carry an unbounded digit run
+   *  under the command wall. 4,096 chars is generous for 512 commands
+   *  and bounds the worst single-literal payload. */
+  iconPathCharsMax: 4_096,
   /** S126 — max frames per sprite import (a sheet's grid cells or a
    *  sequence's file count). A longer animation is a design-doc slice. */
   spriteFramesMax: 48,
@@ -519,6 +535,12 @@ function parseTextPayload(raw: unknown, where: string, warnings: string[], error
     errors.push(`${where}: text payload requires a non-empty "text" string`);
     return null;
   }
+  if (text.length > GRAPHICS_BUDGETS.textCharsMax) {
+    errors.push(
+      `${where}: the text string (${text.length} chars) exceeds the textCharsMax wall (${GRAPHICS_BUDGETS.textCharsMax})`,
+    );
+    return null;
+  }
   const out: TextPayload = { text };
   const sizePx = num(raw.sizePx);
   if (sizePx !== null) {
@@ -562,7 +584,11 @@ function parseCounterPayload(raw: unknown, where: string, warnings: string[], er
   }
   const out: CounterPayload = { from, to };
   const unit = str(raw.unit);
-  if (unit !== null) out.unit = unit;
+  if (unit !== null && unit.length > GRAPHICS_BUDGETS.textCharsMax) {
+    warnings.push(
+      `${where}: unit dropped — ${unit.length} chars exceeds the textCharsMax wall (${GRAPHICS_BUDGETS.textCharsMax})`,
+    );
+  } else if (unit !== null) out.unit = unit;
   else if (raw.unit !== undefined) warnings.push(`${where}: unit dropped — not a string`);
   const decimals = num(raw.decimals);
   if (decimals === 0 || decimals === 1 || decimals === 2) out.decimals = decimals;
@@ -597,11 +623,21 @@ function parseBarPayload(raw: unknown, where: string, warnings: string[], errors
       errors.push(`${where}: bar data rows require a non-empty "label" and a finite "value" ≥ 0`);
       return null;
     }
+    if (label.length > GRAPHICS_BUDGETS.textCharsMax) {
+      errors.push(
+        `${where}: bar label (${label.length} chars) exceeds the textCharsMax wall (${GRAPHICS_BUDGETS.textCharsMax})`,
+      );
+      return null;
+    }
     data.push({ label, value });
   }
   const out: BarPayload = { data };
   const unit = str(raw.unit);
-  if (unit !== null) out.unit = unit;
+  if (unit !== null && unit.length > GRAPHICS_BUDGETS.textCharsMax) {
+    warnings.push(
+      `${where}: unit dropped — ${unit.length} chars exceeds the textCharsMax wall (${GRAPHICS_BUDGETS.textCharsMax})`,
+    );
+  } else if (unit !== null) out.unit = unit;
   else if (raw.unit !== undefined) warnings.push(`${where}: unit dropped — not a string`);
   const max = num(raw.max);
   if (max !== null && max > 0) out.max = max;
@@ -624,6 +660,12 @@ function parseIconPayload(raw: unknown, where: string, warnings: string[], error
     const d = str(p);
     if (d === null || d.trim() === "") {
       errors.push(`${where}: icon paths must be non-empty path-data strings`);
+      return null;
+    }
+    if (d.length > GRAPHICS_BUDGETS.iconPathCharsMax) {
+      errors.push(
+        `${where}: icon path (${d.length} chars) exceeds the iconPathCharsMax wall (${GRAPHICS_BUDGETS.iconPathCharsMax})`,
+      );
       return null;
     }
     const commands = countPathCommands(d);
@@ -654,6 +696,12 @@ function parseCalloutPayload(raw: unknown, where: string, warnings: string[], er
   const text = str(raw.text);
   if (text === null || text.trim() === "") {
     errors.push(`${where}: callout payload requires a non-empty "text" string`);
+    return null;
+  }
+  if (text.length > GRAPHICS_BUDGETS.textCharsMax) {
+    errors.push(
+      `${where}: the callout string (${text.length} chars) exceeds the textCharsMax wall (${GRAPHICS_BUDGETS.textCharsMax})`,
+    );
     return null;
   }
   const out: CalloutPayload = { text };
@@ -932,6 +980,12 @@ function parseScene(
     errors.push(`${where}: narration must be a string (the clock model reads it)`);
     return null;
   }
+  if (narration.length > GRAPHICS_BUDGETS.textCharsMax) {
+    errors.push(
+      `${where}: narration (${narration.length} chars) exceeds the textCharsMax wall (${GRAPHICS_BUDGETS.textCharsMax})`,
+    );
+    return null;
+  }
   const background = str(raw.background);
   if (background === null || !HEX_RE.test(background)) {
     errors.push(`${where}: background must be #rrggbb — a junk background is refused, never substituted`);
@@ -1081,6 +1135,12 @@ function parseDoc(raw: unknown, warnings: string[], errors: string[]): GraphicsD
   const title = str(raw.title);
   if (title === null || title.trim() === "") {
     errors.push("doc title must be a non-empty string");
+    return null;
+  }
+  if (title.length > GRAPHICS_BUDGETS.textCharsMax) {
+    errors.push(
+      `doc title (${title.length} chars) exceeds the textCharsMax wall (${GRAPHICS_BUDGETS.textCharsMax})`,
+    );
     return null;
   }
   const width = num(raw.width);
