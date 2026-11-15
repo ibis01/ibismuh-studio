@@ -293,11 +293,95 @@ async function partB(): Promise<void> {
 }
 
 // ===========================================================================
+// PART C — the GRAPHICS engine lane: a real motion-graphics render on the
+// contract clock. THE S136 STABILISATION GATE (gate 4's decode-side proof):
+// the graphics artifact was mux-proven (ffmpeg exit 0 + served bytes) but
+// never DECODED in CI — the exact blind spot that let S130's render-killer
+// ship behind green flags. This part ffprobe-measures the delivered MP4
+// the same way Part A measures the whiteboard lane: per-scene encodes on
+// the plan windows, the concat total, the audio stream, the one-consumer
+// contract read-back.
+// ===========================================================================
+async function partC(): Promise<void> {
+  console.log("\nPart C — the Graphics lane (real chromium render, $0 AI spend)");
+  const { renderGraphics } = await import("../src/lib/tubeforge/graphics/render");
+  const { scaffoldGraphicsDocLlm } = await import("../src/lib/tubeforge/graphics/llm-planner");
+  const { graphicsTracks } = await import("../src/lib/tubeforge/graphics/tracks");
+  const { planFromTracks } = await import("../src/lib/tubeforge/composition-plan");
+
+  const dir = path.join(OUT_DIR, "graphics");
+  fs.mkdirSync(dir, { recursive: true });
+
+  // The ZERO-AI native scaffold (no ask/call → the deterministic rule-table
+  // base, exactly the production degradation floor).
+  const { doc } = await scaffoldGraphicsDocLlm({
+    scenes: [
+      { index: 1, title: "The opener", narration: "the budget holds when the render proves it" },
+      { index: 2, title: "The chart", narration: "one two three four five" },
+    ],
+    topic: "acceptance battery graphics",
+    width: 640,
+    height: 360,
+    fps: 24,
+  });
+
+  // Synthesized VO (scene-2 slot) + the music bed — the same sync inputs
+  // Part A gives the whiteboard lane.
+  const vo2 = path.join(dir, "vo-scene-2.wav");
+  await ffmpeg(["-f", "lavfi", "-i", "sine=frequency=330:duration=2", "-ar", "48000", "-ac", "1", vo2]);
+  const bed = path.join(dir, "bed.flac");
+  await ffmpeg(["-f", "lavfi", "-i", "sine=frequency=220:duration=12", "-ar", "48000", "-ac", "2", bed]);
+
+  const expectedTracks = graphicsTracks(doc, { voSceneIds: ["scene-2"], musicOn: true });
+
+  const result = await renderGraphics(doc, {
+    outDir: dir,
+    voFiles: new Map([["scene-2", vo2]]),
+    musicPath: bed,
+  });
+
+  // §4.C-1 — the same one-consumer law Part A proves for the whiteboard:
+  // the graphics engine emits contract tracks, and the plan IS the tracks
+  // read (never a second derivation).
+  check("4.C-1", "the graphics engine emits contract tracks (re-derivation is byte-identical)",
+    deepEq(result.tracks, expectedTracks),
+    `${result.tracks[0].clips.length} graphics clips, kinds ${result.tracks.map((t) => t.kind).join("/")}`);
+  check("4.C-1", "the plan is the tracks read (one consumer, every engine)",
+    deepEq(result.plan, planFromTracks({ tracks: result.tracks }, 2)),
+    `origin=${result.plan.origin}, total=${result.plan.totalSec}s`);
+
+  // §4.C-3 — DECODE-SIDE MEASUREMENT (the gate's missing half): ffprobe
+  // every delivered artifact against the contract.
+  for (let i = 0; i < result.scenes.length; i++) {
+    const win = result.plan.scenes[i];
+    const dur = (await probeDurationSec(result.scenes[i].file)) ?? -1;
+    check("4.C-3", `graphics scene ${i + 1} encodes on its contract window`,
+      win && Math.abs(dur - (win.endSec - win.startSec)) <= 0.06,
+      near(dur, win ? win.endSec - win.startSec : -1, 0.06));
+  }
+  const finalDur = (await probeDurationSec(result.file)) ?? -1;
+  check("4.C-3", "the graphics concat total is the contract total",
+    Math.abs(finalDur - result.plan.totalSec) <= 0.25,
+    near(finalDur, result.plan.totalSec, 0.25));
+
+  // §4.C-2 — sync: the VO slot and the bed actually ride the file.
+  check("4.C-2", "the graphics final carries the mixed audio (VO slot + bed)",
+    await hasAudioStream(result.file), (await hasAudioStream(result.file)) ? "audio stream present" : "NO audio stream");
+
+  // §4.C-5 — the scene linkages ride the shared reader (the future-engine
+  // law, re-proven on the graphics lane's own numbers).
+  check("4.C-5", "graphics tracks carry the row linkages through the shared reader",
+    result.plan.scenes.map((s) => s.sceneIndex).join(",") === "1,2",
+    `sceneIndex [${result.plan.scenes.map((s) => s.sceneIndex).join(", ")}]`);
+}
+
+// ===========================================================================
 async function main(): Promise<void> {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const t0 = Date.now();
   await partA();
   await partB();
+  await partC();
 
   const report = {
     battery: "S87 slice 5 — the §4.C acceptance battery",

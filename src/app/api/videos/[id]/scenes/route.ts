@@ -6,6 +6,9 @@ import { CAMERAS, sanitizeSceneStyle } from "@/lib/tubeforge/types";
 import { parseTimeline, serializeTimeline, guardTimelineOverwrite } from "@/lib/tubeforge/timeline";
 import {
   commitSceneChanges,
+  checkExpectedVersion,
+  headRevision,
+  headSummary,
   RevisionConflict,
 } from "@/lib/tubeforge/scene-revisions";
 import { planSceneInvalidation, sweepInvalidArtifacts } from "@/lib/tubeforge/scene-deps";
@@ -132,6 +135,38 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: "Nothing to update — send at least one scene field" }, { status: 400 });
 
   const updated = scenes.map((s) => (s.index === index ? scene : s));
+
+  // S136 — the concurrency gate moves UP-FRONT (the Stabilisation Gate's
+  // blocker: the old order swept this scene's artifacts and wrote the
+  // timeline doc BEFORE commitSceneChanges' version check — a 409 landed
+  // AFTER deleted renders, leaving broken artifacts behind a green
+  // hasVideo flag). The SAME conflict shape, mapped to the SAME 409, but
+  // resolved BEFORE any mutation; commitSceneChanges' in-transaction gate
+  // stays authoritative behind it (a race between the two checks still
+  // refuses inside the tx).
+  if (expectedSceneVersion != null) {
+    if (!scene.id)
+      return NextResponse.json(
+        { error: `Scene ${index} does not exist — reload the video.` },
+        { status: 409 }
+      );
+    const head = await headRevision(id, scene.id);
+    try {
+      checkExpectedVersion(expectedSceneVersion, head);
+    } catch (err) {
+      if (err instanceof RevisionConflict) {
+        if (head) err.current = headSummary(head);
+        return NextResponse.json(
+          {
+            error: err.message,
+            ...(err.current ? { current: err.current } : {}),
+          },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
+  }
 
   // S43 — write the caption through to the saved timeline doc TOO: the render
   // reads caption overrides from the doc (S2 chain), and the Timeline Studio

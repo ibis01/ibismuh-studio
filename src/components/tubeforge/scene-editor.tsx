@@ -224,6 +224,23 @@ export function SceneEditorDialog({
       if (style !== (scene.style || "default")) body.style = style;
       if (narration !== scene.narration) body.narration = narration;
       if (caption !== scene.caption) body.caption = caption;
+      // S136 — optimistic concurrency (the Stabilisation Gate): the PATCH
+      // carries the revision head this edit was based on. The 409 gate
+      // existed since S112 but the UI never sent the version (Stage 7
+      // closed without adopting it), so a concurrent edit silently
+      // superseded instead of conflicting. head null = no revisions yet →
+      // 0, the first-edit-always-passes law. The version feed failing is
+      // an honest degradation — the route's in-transaction gate stays
+      // authoritative for the data it does receive.
+      try {
+        const revRes = await fetch(`/api/videos/${videoId}/scenes/${scene.index}/revisions`, { cache: "no-store" });
+        if (revRes.ok) {
+          const rev = (await revRes.json()) as { head?: { version?: number } | null };
+          body.expectedSceneVersion = rev.head?.version ?? 0;
+        }
+      } catch {
+        /* advisory — proceed without the version claim */
+      }
       const res = await fetch(`/api/videos/${videoId}/scenes`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

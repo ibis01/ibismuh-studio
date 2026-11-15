@@ -6950,3 +6950,53 @@ order, narration alignment — is the operator's next human step.
 - THE KIT (scripts/blind-rescore-kit.mts): the S120 §4 re-score session as ONE command — the K1 smoke arm, the S123 proof arm, and an in-process REST-ONLY control (same fixture: art, narration, 8.00s clock, mouth schedule; the pose sheet stripped to rests; a kit assertion fails the run if a gesture row leaks or the control stops speaking), codenamed + shuffled (TFR-<8hex>), 3 scorer sheets with the rubric rows verbatim, the gitignored key + sha256 manifest. The k1 + s123 rubric records gained §4 pointing at it; both stay PENDING — the scoring is the humans' and only theirs. The control-arm deviation (rest-only vs the S93 portrait zoompan the rubric originally named) is recorded in the record and the README, not hidden.
 - THE PLAYBOOK (docs/audits/s128-integration-playbook.md): merge order (#24 → s124 PR; #23 + #13–#17 + #22 superseded), the CI numbers to expect (battery 765), the docker-smoke dispatch/label order, the post-merge soak (re-scores → VCE row → X-full as S129 with parity pins).
 - PACKAGE: s128-execution.bundle + s128-push.sh (the bundle carries BOTH branches: s123/full-execution @ f202a4f for the PR #24 merge, s124/element-editor @ the S128 tip). Battery 765, 0 failed; tsc + eslint clean. The chat-leaked tokens (now FOUR — a fourth was pasted mid-session) remain unused here and MUST be revoked; all pushes run with a fresh token on the operator's machine.
+
+## S136 — the Stabilisation Wave (2026-11-15)
+
+- THE GATE: a fresh READ-ONLY audit against `f9f57c1` classified the nine Stabilisation
+  Gate exit conditions: **4 PASS / 5 PARTIAL / 0 FAIL** (main CI, typecheck/lint/unit,
+  build+docker-smoke, whiteboard+graphics playability; K1 movement, scene-editing
+  isolation, mixed-scene composition, data-integrity class, docs). Four parallel
+  evidence legs; every claim carries file:line. Full record: `docs/audits/s136-stabilisation-gate.md`
+  + the operator-side report `/home/z/tubeforge-gate-reports/2026-11-15-stabilisation-gate.md`.
+- B1 FIXED WITH ITS FAILING TEST: the mocap binding law — `buildMocapTimeline` writes
+  inline joints keyed by rig SLOT; `poseAt` addressed them by PART ID. On any rig whose
+  ids differ from its slots (the auto-rig's free-form kebab ids), an uploaded capture
+  silently outranked the compiled beats yet moved NOTHING (the statue). Reproduced at
+  0.00° implied rotation (the harness), fixed by the slot→part bridge in `poseAt`
+  (`jointsReachableByParts` — the one seam render + preview share; id keys stay senior,
+  ids-equal-slots rigs byte-identical), the regression pin measures 45.00°. The mocap
+  route now REFUSES a capture that binds no rig part (422 + `boundParts` in the receipt).
+- B2 FIXED: the S135 receipt-ordering guard (video-row failure state FIRST with a
+  bounded 500ms-retried second attempt, the Activity row best-effort AFTER) ported to
+  the render, storyboard, scene, short and convert lanes — the live-incident class
+  (both writes lost to the post-timeout SQLite writer lock) is repo-wide law now, pinned.
+- WAVE 1 (proof into CI): the 28-test scene-revision battery joined the check job;
+  the K1 rig smoke joined the e2e job — with a SECOND fixture whose part ids differ
+  from its slots (the S136 mandate) and the acceptance measured on PIXELS (frame sha
+  during the gesture window differs from rest; the hold is byte-identical after the
+  tween); the S87 battery gained Part C — the graphics artifact ffprobe-measured
+  (per-scene windows, concat total, audio stream, one-consumer tracks) — 25/25 checks;
+  the graphics e2e asserts the landed `videoDuration > 0` + the QC `playable` verdict;
+  the narration-sync QC check + the caption speech-run aligner got their first
+  ground-truth fixtures; the E12 cancellation drill joined the e2e job (Stop really
+  stops: "cancelled", never failed, never retried).
+- THE PROBE WALL: `?? 0` at the whiteboard + graphics landings turned an unmeasurable
+  file into a LANDED 0.0s "playable" row — the blind spot that let S130 ship. A render
+  that cannot prove a readable duration now FAILS (the S75 pin re-anchored; the wall
+  itself pinned).
+- WAVE 2: the PATCH concurrency gate moved UP-FRONT (a 409 can no longer land after
+  deleted renders; same 409 shape) and the scene editor now SENDS `expectedSceneVersion`
+  (the S112 gate was unreachable from the product — Stage 7 closed without adopting it);
+  `GraphicsImport` joined `ORG_SCOPED_MODELS` and a new schema-scan pin found a SIXTH
+  unscoped carrier the manual audit missed (`WhiteboardAssetUpload` — also scoped now);
+  the SQLite datasource carries `busy_timeout=10000` + a one-shot WAL pragma (the
+  engine-level contention floor under S135's transaction budgets).
+- WAVE 3: this worklog + the S136 audit record; README/ROADMAP/ARCHITECTURE/s120-doc/
+  external-doc/SECURITY reconciled to HEAD; `public/tubeforge.zip` untracked (scanned
+  first: no secrets — stale source already public in a public repo) and patch artifacts
+  gitignored out of `public/`.
+- FEATURE FREEZE HELD: no new features, no renderer, no second clock, no new runtime
+  dependency. Battery 807 → 814, 0 failed; tsc clean; changed-file eslint clean.
+- THE OPERATOR'S STANDING ITEM (unchanged): the four chat-exposed PATs must still be
+  revoked at github.com/settings/tokens — the repo never received them (gitleaks-green).

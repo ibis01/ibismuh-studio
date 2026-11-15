@@ -9,7 +9,7 @@
 
 ## 1. Current architecture (reconciled at S75, 2026-11-10 UTC — baseline §1.1–1.8 from the S47 reconciliation)
 
-**Source of truth:** `prisma/schema.prisma` (32 models), `prisma/migrations/`
+**Source of truth:** `prisma/schema.prisma` (38 models), `prisma/migrations/`
 (22 migrations), `src/lib/tubeforge/` (117 modules), `src/app/api/` (116 route
 files). §1.1–1.8 were rewritten from those sources during S47 and stay
 accurate for what they describe; §1.9 is the S48→S74 delta that the S47
@@ -47,7 +47,7 @@ exists anywhere in the repo.
 ### 1.2 Database
 
 - **Engine:** PostgreSQL in production, SQLite for local dev. ONE source
-  schema (`schema.prisma`, 32 models); the SQLite mirror is GENERATED from
+  schema (`schema.prisma`, 38 models); the SQLite mirror is GENERATED from
   it (`scripts/sync-sqlite-schema.mjs`) — it cannot drift. Schema changes
   ship as versioned `prisma/migrations/` (22 today; SQLite provisions via
   `db push` in the setup path).

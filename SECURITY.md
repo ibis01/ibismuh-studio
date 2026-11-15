@@ -1,6 +1,6 @@
 # TubeForge — Security & Release Notes
 
-Last updated: 2026-11-13 (P2 opening — reconciled to the live source after the production-readiness arc S99–S108)
+Last updated: 2026-11-15 (S136 — the Stabilisation Gate posture addendum: the gitleaks by-commit baseline policy and the standing PAT-revocation reminder are now recorded here; the audit trail lives in docs/audits/s128-ext-ci-dispatch-record.md)
 
 ## ⚠️ If you already shared an archive of this project
 
@@ -134,3 +134,24 @@ and the first-come setup race, DELETE orphan gap, side-effecting music GET and
 `params.n` validation gaps are all fixed. Verification: typecheck clean, 46/46
 tests pass, live smoke test green. Remaining CRITICAL work is Stage 2
 (cross-tenant isolation). Full per-task status: `TASKS.md`.
+
+
+## S136 posture addendum (2026-11-15)
+
+- **Secret scanning is receipted per-commit.** The CI gitleaks job runs full history
+  (`fetch-depth: 0`) with the default ruleset extended; every baseline entry in
+  `.gitleaks.toml` carries a receipt naming its introducing commit (a per-run e2e
+  fixture credential, a dev-only auth secret, two false-positive echoes). New commits
+  stay fully scanned — the baseline never covers new code.
+- **Chat-exposed credentials are a standing operator action.** Four GitHub PATs were
+  pasted into a chat session (recorded as COMPROMISED-must-revoke in
+  `docs/audits/s128-ext-ci-dispatch-record.md`, `s127-roadmap-close.md`, and
+  `external-six-repo-reception.md`). None reached the repository (gitleaks-verified);
+  the operator must still revoke them at github.com/settings/tokens. Pushes from the
+  build machine ride a repo-scoped deploy key that never leaves the machine.
+- **Public-dir hygiene (S136).** `public/` is served statically in production: a
+  stale 1.4 MB repository snapshot (`public/tubeforge.zip`, 381 files, 2026-10-31)
+  was untracked, and patch artifacts are gitignored. The zip was scanned before
+  removal: no secrets (an empty `apiKey` in `.z-ai-config`, placeholder templates),
+  a dev-only `DATABASE_URL` file path, and source that was already public in this
+  public repository — removed as stale-weight and confusion, not as an exposure.

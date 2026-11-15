@@ -687,6 +687,49 @@ try {
     for (const id of MEASURED_ANALYSIS_IDS)
       oneOf(statusOf(r, id), ["pass", "fail"], `${id} on decodable input`);
   });
+
+  // S136 — the narration-sync verdicts (W1-4 acceptance: the fixture proves
+  // the QC check detects audio/video misalignment). The battery's ONLY
+  // A/V-sync-sanity check ran with narrationSec: null in every pre-S136
+  // fixture — the check existed, but nothing ever proved it verdicts. The
+  // asymmetric tolerance is the contract: a video may run LONGER than its
+  // narration (scene lead-ins, holds) but never meaningfully SHORTER — a
+  // video 6s under its narration is the words-got-cut class and fails hard.
+  await test("S136 narration-sync: +0.5s drift (lead-in band) PASSES the duration check", async () => {
+    const r = await runQcReport({ ...qcOpts(fadeMp4), narrationSec: 3.5 });
+    eq(statusOf(r, "duration"), "pass");
+    assertReportInvariants(r);
+  });
+
+  await test("S136 narration-sync: a video 6s SHORTER than its narration FAILS hard", async () => {
+    const r = await runQcReport({ ...qcOpts(fadeMp4), narrationSec: 10 });
+    eq(statusOf(r, "duration"), "fail", "words got cut — never ride the ±20% band on the short side");
+    assertReportInvariants(r);
+  });
+
+  // S136 — the caption alignment mechanism: detectSpeechRuns measures WHERE
+  // speech actually is (silencedetect on the real WAV), and caption cues
+  // anchor to those runs. A synthetic waveform with KNOWN speech windows
+  // (silence → tone → silence → tone → silence) must yield exactly two runs
+  // at the known offsets — the first time the aligner's measurement half is
+  // proven against ground truth.
+  await test("S136 caption alignment: detectSpeechRuns measures the known speech windows", async () => {
+    const { detectSpeechRuns } = await import("../src/lib/tubeforge/captions.ts");
+    const wav = path.join(tmp, "speech-runs.wav");
+    // 0.6s silence | 1.2s tone | 0.6s silence | 1.2s tone | 0.6s silence.
+    // The gate expression uses `+` (boolean OR for 0/1 terms) — the volume
+    // filter's expression evaluator rejects the `|` character.
+    await execFileAsync("ffmpeg", [
+      "-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=4.2",
+      "-af", "volume=enable='between(t,0.6,1.8)+between(t,2.4,3.6)':volume=1,volume=enable='1-(between(t,0.6,1.8)+between(t,2.4,3.6))':volume=0.001",
+      "-ar", "48000", "-ac", "1", wav,
+    ]);
+    const runs = await detectSpeechRuns(wav, 4.2);
+    eq(runs.length, 2, `two speech runs detected (got ${runs.length}: ${JSON.stringify(runs)})`);
+    approx(runs[0]?.start ?? -1, 0.6, 0.15, "the first run starts where the tone starts");
+    approx(runs[1]?.start ?? -1, 2.4, 0.15, "the second run starts where the tone restarts");
+    approx(runs[1]?.end ?? -1, 3.6, 0.2, "the second run ends where the tone ends");
+  });
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
@@ -2520,7 +2563,7 @@ await test("tenant-db: every org-scoped model matches the lowercased lookup", as
     "channel", "character", "video", "activity", "researchsession",
     "scheduleslot", "videostat", "voiceprofile", "musictrack", "job", "membership",
     "characterappearance", "location", "prop", "scenerevision", "sceneartifact",
-    "scenerepair",
+    "scenerepair", "graphicsimport", "whiteboardassetupload",
   ];
   for (const m of expected) {
     ok(ORG_SCOPED_MODELS.has(m), `"${m}" is org-scoped`);
@@ -9474,12 +9517,20 @@ await test("S75: the whiteboard render's duration probe runs BEFORE putFromPath 
   // moved-away file and every locally-stored whiteboard render recorded
   // videoDuration 0.0 (S3's scratch copy stays — production never saw it).
   const jobsSrc = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
-  const probeIdx = jobsSrc.indexOf("const durationSec = (await probeDurationSec(result.file)) ?? 0;");
+  // S136 re-anchor: the probe line gained the probe WALL (an unmeasurable
+  // render now THROWS instead of coalescing to 0), so the anchor is the new
+  // probedDuration line — and the wall itself must sit before the put too.
+  const probeIdx = jobsSrc.indexOf("const probedDuration = await probeDurationSec(result.file);");
+  const wallIdx = jobsSrc.indexOf("refusing to land a 0.0s");
   const putIdx = jobsSrc.indexOf('await putFromPath(`${videoId}/final.mp4`, result.file);');
-  ok(probeIdx !== -1 && putIdx !== -1, "the probe/put anchors moved — re-anchor this pin");
+  ok(probeIdx !== -1 && putIdx !== -1 && wallIdx !== -1, "the probe/put anchors moved — re-anchor this pin");
   ok(
     probeIdx < putIdx,
     "the duration probe moved AFTER the put again (0.0s rows under the local driver)"
+  );
+  ok(
+    wallIdx !== -1 && wallIdx < putIdx,
+    "the S136 probe wall guards the lane BEFORE the put (an unmeasurable render fails, never lands 0.0s)"
   );
 });
 
@@ -19245,6 +19296,55 @@ await test("S125-ext the ladder seat — authored inline rows tween and outrank 
   approx(impliedRotation((armL as { matrix: Matrix6 }).matrix), 0, 0.01, "the inline row wins over the poseId channel");
 });
 
+await test("S136 the mocap binding law — slot-keyed rows reach the parts they name (part ids ≠ slots)", () => {
+  // THE S136 REGRESSION (Stabilisation Gate blocker B1, fixed with its
+  // failing test 2026-11-15): buildMocapTimeline writes inline joints keyed
+  // by rig SLOT, but jointOf addresses by PART ID. On any rig whose ids
+  // differ from slots (the auto-rig keeps free-form kebab art ids), an
+  // uploaded capture silently outranked the compiled beats yet moved
+  // NOTHING — the statue. The pre-fix run of this law measured
+  // impliedRotation 0.00 (reproduction harness in the S136 receipt); the
+  // bridge in poseAt measures 45.00.
+  const offslot: typeof RIG_DOC = {
+    ...RIG_DOC,
+    parts: RIG_DOC.parts.map((p) => ({
+      ...p,
+      id: `x-${p.id}`,
+      parent: p.parent ? `x-${p.parent}` : undefined,
+    })),
+  };
+  ok(offslot.parts.every((p) => p.id !== p.slot), "the fixture's ids genuinely differ from its slots");
+  const timeline = {
+    durationMs: 2000,
+    rows: [
+      { tMs: 0, poseId: null, joints: { "arm-l": { rotateDeg: 0 } } },
+      { tMs: 1000, poseId: null, joints: { "arm-l": { rotateDeg: 45 } } },
+    ],
+  };
+  const settled = poseAt(offslot, timeline, 1000 + POSE_TWEEN_MS + 1);
+  const arm = settled.parts.find((p) => p.id === "x-arm-l");
+  ok(arm, "the remapped arm part exists");
+  approx(impliedRotation((arm as { matrix: Matrix6 }).matrix), 45, 0.01, "the slot-keyed capture binds the part it names (45°, was 0° pre-fix)");
+  // Part-id keys stay SENIOR: an explicit id key wins its own binding even
+  // when its slot twin is present.
+  const both = {
+    durationMs: 2000,
+    rows: [
+      { tMs: 0, poseId: null, joints: { "arm-l": { rotateDeg: 10 }, "x-arm-l": { rotateDeg: 60 } } },
+    ],
+  };
+  const senior = poseAt(offslot, both, POSE_TWEEN_MS + 1);
+  const arm2 = senior.parts.find((p) => p.id === "x-arm-l");
+  approx(impliedRotation((arm2 as { matrix: Matrix6 }).matrix), 60, 0.01, "the part-id key outranks its slot twin");
+  // Ids-equal-slots rigs (every pre-S136 fixture) behave byte-identically.
+  const legacy = poseAt(RIG_DOC, timeline, 1000 + POSE_TWEEN_MS + 1);
+  const legacyArm = legacy.parts.find((p) => p.id === "arm-l");
+  approx(impliedRotation((legacyArm as { matrix: Matrix6 }).matrix), 45, 0.01, "ids-equal-slots rigs are unchanged by the bridge");
+  // Unknown slot keys stay inert (they bind nothing — honest rest).
+  const inert = poseAt(offslot, { durationMs: 2000, rows: [{ tMs: 0, poseId: null, joints: { leg: { rotateDeg: 90 } } }] }, POSE_TWEEN_MS + 1);
+  ok(JSON.stringify(inert) === JSON.stringify(poseAt(offslot, { durationMs: 2000, rows: [] }, POSE_TWEEN_MS + 1)), "an unmapped joint key is inert (byte-identical to rest)");
+});
+
 await test("S125-ext the sidecar wiring — the clean-room boundary, the route, the hook ladder (source pins)", async () => {
   const route = await fsp.readFile("src/app/api/videos/[id]/character/mocap/route.ts", "utf8");
   const hook = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
@@ -19255,6 +19355,7 @@ await test("S125-ext the sidecar wiring — the clean-room boundary, the route, 
   ok(route.includes("parseBvh"), "the route rides the clean-room parser");
   ok(route.includes("scene-${sceneIndex}") || route.includes("`scene-${sceneIndex}`"), "the authored file keys by scene");
   ok(route.includes("hostInScene"), "mocap rides cast scenes only (the continuity law)");
+  ok(route.includes("boundParts") && route.includes("nothing would move"), "S136 — the route refuses a capture that binds no rig part and reports boundParts (the statue guard)");
   ok(hook.includes("character/mocap.json"), "the hook reads the authored-motion file");
   ok(hook.includes("authoredTimeline"), "the ladder's authored rung rides the hook");
   ok(hook.includes("authoredTimeline\n        ?"), "authored > compiled (the ladder order)");
@@ -19636,6 +19737,65 @@ await test("S135 pollScript watches the ARTIFACT — a flag-cleared unscripted r
   ok(createSrc.includes("whiteboard/scaffold") && createSrc.includes("graphics/scaffold"), "both engine scaffold routes are wired");
   ok(createSrc.includes("Motion graphics (2D)"), "the 2D engine lane is a pickable type");
   ok(createSrc.includes("Character animation"), "the rig channel is a pickable type");
+});
+
+await test("S136 the receipt guard rides every money lane — the S135 ordering law is repo-wide (source pins)", async () => {
+  // Blocker B2 (the Stabilisation Gate): S135 fixed the failure-receipt
+  // ordering in script-job ONLY; the same unguarded order (video update →
+  // activity create, neither guarded) remained in the sibling lanes and
+  // could lose BOTH writes to the post-timeout SQLite writer lock — the
+  // live incident class. The guard (video row FIRST with a bounded 500ms
+  // retried second attempt, Activity best-effort AFTER it) now rides all
+  // five money lanes: render, storyboard, scene, short, convert.
+  const src = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const guards = src.match(/const writeFailureState = \(\) =>/g)?.length ?? 0;
+  ok(guards >= 5, `the guarded writeFailureState closure rides all five money lanes (found ${guards}, need 5)`);
+  const retried = src.match(/setTimeout\(r, 500\)/g)?.length ?? 0;
+  ok(retried >= 5, `every guard carries the bounded second attempt (found ${retried}, need 5)`);
+  const bestEffort = src.match(/\.catch\(\(\) => \{\}\);\n    throw err;/g)?.length ?? 0;
+  ok(bestEffort >= 5, `the Activity row is best-effort BEFORE the rethrow in every lane (found ${bestEffort}, need 5)`);
+  // The lanes' guard comments name the law (the receipts stay readable).
+  for (const lane of ["render lane", "storyboard lane", "scene lane", "short lane", "convert lane"]) {
+    ok(src.includes(`ported to the ${lane}`), `the ${lane} names the S135 port`);
+  }
+});
+
+await test("S136 tenant-scope coverage — every organizationId model is scoped or a documented exception", async () => {
+  // The S1 finding (the Stabilisation Gate): GraphicsImport carried
+  // organizationId but was absent from ORG_SCOPED_MODELS — an oversight of
+  // exactly the T-4.14 class (the seam was safe; the defense-in-depth law
+  // was not). This pin scans the SCHEMA, so a future model can never join
+  // the same silent gap: every carrier must be scoped or on this list.
+  const schema = await fsp.readFile("prisma/schema.prisma", "utf8");
+  const carriers: string[] = [];
+  for (const m of schema.matchAll(/model\s+(\w+)\s+\{([\s\S]*?)\n\}/g)) {
+    if (/^\s*organizationId\s+String/m.test(m[2])) carriers.push(m[1].toLowerCase());
+  }
+  ok(carriers.includes("video") && carriers.includes("graphicsimport"), `the schema scan finds the carriers (${carriers.length} models with organizationId)`);
+  const { ORG_SCOPED_MODELS } = await import("../src/lib/tubeforge/tenant-db");
+  // The documented exceptions: Session resolves its tenant BEFORE the
+  // context exists; SpendReservation / StorageReservation / StorageUsage /
+  // UsageRecord are deliberate global accounting tables (explicit
+  // org/user filters at every call site).
+  const exceptions = new Set(["session", "spendreservation", "storagereservation", "storageusage", "usagerecord"]);
+  const unscoped = carriers.filter((m) => !ORG_SCOPED_MODELS.has(m) && !exceptions.has(m));
+  eq(unscoped.length, 0, `every organizationId model is scoped or documented (unscoped: ${unscoped.join(", ") || "none"})`);
+});
+
+await test("S136 the PATCH concurrency gate fires BEFORE the sweep (the route's ordering law)", async () => {
+  // The scene-editing blocker: the old PATCH swept artifacts + wrote the
+  // timeline doc BEFORE commitSceneChanges' version check — a 409 landed
+  // AFTER deleted renders (broken artifacts behind a green hasVideo flag).
+  // The route now resolves the SAME conflict before ANY mutation.
+  const src = await fsp.readFile("src/app/api/videos/[id]/scenes/route.ts", "utf8");
+  const gateAt = src.indexOf("checkExpectedVersion(expectedSceneVersion, head)");
+  const sweepAt = src.indexOf("await sweepInvalidArtifacts(id, plan)");
+  ok(gateAt >= 0 && sweepAt >= 0 && gateAt < sweepAt, "the up-front version gate precedes the artifact sweep");
+  ok(src.includes("status: 409"), "the up-front conflict maps to the SAME 409 shape");
+  // The UI adopts the gate: the editor sends the version (Stage 7 closed
+  // without adopting it — the Stabilisation Gate adopts it now).
+  const editor = await fsp.readFile("src/components/tubeforge/scene-editor.tsx", "utf8");
+  ok(editor.includes("expectedSceneVersion"), "the scene editor sends expectedSceneVersion (the 409 gate is reachable from the product)");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

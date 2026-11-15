@@ -385,13 +385,27 @@ export async function runStoryboardJob(videoId: string): Promise<void> {
       throw new JobCancelledError();
     }
     const message = errorText(err, "Storyboard failed");
-    await db.video.update({
-      where: { id: videoId },
-      data: {
-        hasStoryboard: await storyboardComplete(videoId, scenes),
-        error: message,
-      },
-    });
+    // S136 — the S135 ORDER REPAIR, ported to the storyboard lane: the video
+    // row's failure state lands FIRST (the money fact the honesty gate
+    // reads) with a bounded 500ms-retried second attempt, and the Activity
+    // row is best-effort AFTER it. The old unguarded order could lose BOTH
+    // writes to a Prisma throw under the post-timeout SQLite writer lock
+    // (the exact live incident S135 recorded) — leaving a "rendering" row
+    // with no error. The hasStoryboard recompute is itself a DB read: a
+    // failed recompute (null) leaves the flag untouched instead of lying.
+    const painted = await storyboardComplete(videoId, scenes).catch(() => null);
+    const failData =
+      painted === null
+        ? { error: message }
+        : { hasStoryboard: painted, error: message };
+    const writeFailureState = () =>
+      db.video
+        .update({ where: { id: videoId }, data: failData })
+        .catch(async () => {
+          await new Promise((r) => setTimeout(r, 500));
+          return db.video.update({ where: { id: videoId }, data: failData }).catch(() => {});
+        });
+    await writeFailureState();
     await db.activity.create({
       data: {
         organizationId: video.organizationId,
@@ -401,7 +415,7 @@ export async function runStoryboardJob(videoId: string): Promise<void> {
         level: "error",
         message: `Storyboard failed: ${message}`,
       },
-    });
+    }).catch(() => {});
     throw err;
   }
 }
@@ -513,7 +527,16 @@ export async function runSceneJob(
     }
   } catch (err) {
     const message = errorText(err, "Scene edit failed");
-    await db.video.update({ where: { id: videoId }, data: { error: message } });
+    // S136 — the S135 ORDER REPAIR, ported to the scene lane (the receipt
+    // guard: video row FIRST with a bounded retry, Activity best-effort).
+    const writeFailureState = () =>
+      db.video
+        .update({ where: { id: videoId }, data: { error: message } })
+        .catch(async () => {
+          await new Promise((r) => setTimeout(r, 500));
+          return db.video.update({ where: { id: videoId }, data: { error: message } }).catch(() => {});
+        });
+    await writeFailureState();
     await db.activity.create({
       data: {
         organizationId: video.organizationId,
@@ -523,7 +546,7 @@ export async function runSceneJob(
         level: "error",
         message: `Scene ${sceneIndex} ${mode === "edit" ? "edit" : "re-roll"} failed: ${message}`,
       },
-    });
+    }).catch(() => {});
     throw err;
   }
 }
@@ -1206,7 +1229,19 @@ export async function runRenderJob(
       throw err;
     }
     const message = errorText(err, "Render failed");
-    await db.video.update({ where: { id: videoId }, data: { error: message } });
+    // S136 — the S135 ORDER REPAIR, ported to the render lane: the video
+    // row's failure state lands FIRST (bounded 500ms-retried second
+    // attempt), the Activity row is best-effort AFTER it — the old
+    // unguarded order could lose both writes to the post-timeout SQLite
+    // writer lock and leave a "rendering" row with no error.
+    const writeFailureState = () =>
+      db.video
+        .update({ where: { id: videoId }, data: { error: message } })
+        .catch(async () => {
+          await new Promise((r) => setTimeout(r, 500));
+          return db.video.update({ where: { id: videoId }, data: { error: message } }).catch(() => {});
+        });
+    await writeFailureState();
     await db.activity.create({
       data: {
         organizationId: video.organizationId,
@@ -1216,7 +1251,7 @@ export async function runRenderJob(
         level: "error",
         message: `Render failed: ${message}`,
       },
-    });
+    }).catch(() => {});
     throw err;
   }
 }
@@ -1345,7 +1380,15 @@ export async function runShortJob(
     });
   } catch (err) {
     const message = errorText(err, "Short render failed");
-    await db.video.update({ where: { id: videoId }, data: { error: message } });
+    // S136 — the S135 receipt guard, ported to the short lane.
+    const writeFailureState = () =>
+      db.video
+        .update({ where: { id: videoId }, data: { error: message } })
+        .catch(async () => {
+          await new Promise((r) => setTimeout(r, 500));
+          return db.video.update({ where: { id: videoId }, data: { error: message } }).catch(() => {});
+        });
+    await writeFailureState();
     await db.activity.create({
       data: {
         organizationId: video.organizationId,
@@ -1355,7 +1398,7 @@ export async function runShortJob(
         level: "error",
         message: `Short render failed: ${message}`,
       },
-    });
+    }).catch(() => {});
     throw err;
   }
 }
@@ -1373,7 +1416,15 @@ export async function runConvertJob(videoId: string): Promise<void> {
     await convertClassicToScenes({ videoId });
   } catch (err) {
     const message = errorText(err, "Conversion failed");
-    await db.video.update({ where: { id: videoId }, data: { error: message } });
+    // S136 — the S135 receipt guard, ported to the convert lane.
+    const writeFailureState = () =>
+      db.video
+        .update({ where: { id: videoId }, data: { error: message } })
+        .catch(async () => {
+          await new Promise((r) => setTimeout(r, 500));
+          return db.video.update({ where: { id: videoId }, data: { error: message } }).catch(() => {});
+        });
+    await writeFailureState();
     await db.activity.create({
       data: {
         organizationId: video.organizationId,
@@ -1383,7 +1434,7 @@ export async function runConvertJob(videoId: string): Promise<void> {
         level: "error",
         message: `Scene conversion failed: ${message}`,
       },
-    });
+    }).catch(() => {});
     throw err;
   }
 }
@@ -2014,7 +2065,19 @@ export async function runWhiteboardJob(
     // the row records 0.0s — the E12 queue drill caught this live (the
     // recovery render landed, the duration probed 0). Under the S3 driver
     // the scratch copy stays, which is why production never saw it.
-    const durationSec = (await probeDurationSec(result.file)) ?? 0;
+    // S136 — THE PROBE WALL (the Stabilisation Gate, gate 4's blind spot):
+    // the old `?? 0` turned an unmeasurable file into a LANDED 0.0s
+    // "playable" row — the exact failure shape that hid S130's
+    // render-killer behind green flags. A render that cannot prove a
+    // readable duration is a failed render: throw, and the catch path's
+    // receipt records the honest error.
+    const probedDuration = await probeDurationSec(result.file);
+    if (probedDuration === null || probedDuration <= 0) {
+      throw new Error(
+        `the whiteboard render probed ${probedDuration === null ? "unreadable" : `${probedDuration}s`} — ffprobe found no playable duration; refusing to land a 0.0s "playable" row (the S136 wall)`
+      );
+    }
+    const durationSec = probedDuration;
 
     // The standard key — the existing player route, QC battery and ship gate
     // never learn whiteboard exists (the design's "peer MODE" law).
@@ -2249,7 +2312,15 @@ export async function runGraphicsJob(
     // Probe the render BEFORE it lands (the E12 receipt: putFromPath's
     // local-driver fast path RENAMES the source — a probe after the put
     // stats a moved-away file and the row records 0.0s).
-    const durationSec = (await probeDurationSec(result.file)) ?? 0;
+    // S136 — THE PROBE WALL (mirrors the whiteboard lane): an unmeasurable
+    // render is a FAILED render, never a landed 0.0s "playable" row.
+    const probedDuration = await probeDurationSec(result.file);
+    if (probedDuration === null || probedDuration <= 0) {
+      throw new Error(
+        `the graphics render probed ${probedDuration === null ? "unreadable" : `${probedDuration}s`} — ffprobe found no playable duration; refusing to land a 0.0s "playable" row (the S136 wall)`
+      );
+    }
+    const durationSec = probedDuration;
 
     // The standard key — the existing player route, QC battery and ship
     // gate never learn graphics exists (the peer-MODE law).
