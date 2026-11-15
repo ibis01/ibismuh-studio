@@ -17702,6 +17702,122 @@ await test("S125 classifySentence is exported and unchanged — one classifier, 
   }
 });
 
+// ---------------------------------------------------------------------------
+// S125 (K1) — the contract seats: the compose seam + the ONE applier, the
+// characterTracks projection (the S87 contract) and the delivered-count
+// preflight wall (R-1) (design record §5).
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S125 the contract seats (compose, tracks, preflight)");
+
+import { planFromTracks } from "../src/lib/tubeforge/composition-plan";
+import {
+  APPLY_RIG_FRAME_FN,
+  composeRigScene,
+  rigFramePayload,
+  rigPartNodeId,
+} from "../src/lib/tubeforge/characters/rig-compose";
+import { characterTracks, type RigSceneSlot } from "../src/lib/tubeforge/characters/tracks";
+import { assertRigBudget, rigBudgetReport, rigBudgetRefusal } from "../src/lib/tubeforge/characters/preflight";
+
+await test("S125 the compose skeleton — z-ordered rp- groups at rest, the closed mouth visible, sanitize on every fragment", () => {
+  const dirtyArt: RigPartArt[] = ART.map((a) =>
+    a.id === "head-art"
+      ? {
+          ...a,
+          svg: `<circle cx="540" cy="400" r="60" fill="#e8b98a" onclick="alert(1)"/><script>alert(2)</script>`,
+        }
+      : a
+  );
+  const { html } = composeRigScene(RIG_DOC, dirtyArt);
+  ok(html.includes(`id="${rigPartNodeId("head")}"`), "the head group carries the rp- id");
+  ok(!html.includes("onclick"), "event handlers are stripped (the sanitizer is the first line)");
+  ok(!html.includes("<script"), "script subtrees are stripped");
+  // Draw order: the torso group (z 10) precedes head (z 20) in the DOM.
+  const torsoAt = html.indexOf(`id="${rigPartNodeId("torso")}"`);
+  const headAt = html.indexOf(`id="${rigPartNodeId("head")}"`);
+  ok(torsoAt >= 0 && headAt > torsoAt, "the skeleton's DOM order is the z order");
+  // Mouth visibility at rest: closed shows, the others hide.
+  ok(html.includes(`id="${rigPartNodeId("mouth-closed")}"`), "the closed mouth group exists");
+  for (const v of ["open", "wide", "oh", "smile"]) {
+    const g = html.indexOf(`id="${rigPartNodeId(`mouth-${v}`)}"`);
+    ok(g >= 0, `the ${v} group exists`);
+    ok(html.slice(g, g + 140).includes('display="none"'), `the ${v} shape starts hidden (the rest mouth is closed)`);
+  }
+});
+
+await test("S125 the applier — absolute matrix/display writes, idempotence by construction (the source pin)", () => {
+  ok(APPLY_RIG_FRAME_FN.includes('"transform", "matrix("'), "the transform is an absolute matrix set");
+  ok(APPLY_RIG_FRAME_FN.includes('"display", part.visible ? "" : "none"'), "mouth visibility is an absolute display write");
+  ok(APPLY_RIG_FRAME_FN.includes("JSON.parse(payloadJson)"), "the payload string is parsed inside the page (the double-encode law)");
+  ok(!APPLY_RIG_FRAME_FN.includes("createElement"), "the applier creates nothing");
+  const frame = poseAt(RIG_DOC, { durationMs: 1000, rows: [{ tMs: 0, poseId: "arm-l-raise" }] }, 400);
+  const payload = rigFramePayload(frame);
+  eq(JSON.parse(payload).parts.length, RIG_DOC.parts.length, "one row per part, draw order");
+  eq(JSON.parse(payload).mouthVariant, frame.mouthVariant, "the variant rides");
+  const frame2 = poseAt(RIG_DOC, { durationMs: 1000, rows: [{ tMs: 0, poseId: "arm-l-raise" }] }, 400);
+  eq(rigFramePayload(frame2), payload, "equal frames serialize byte-identical");
+});
+
+await test("S125 characterTracks — the S87 projection: contiguous from zero at either fps, contract read-back", () => {
+  const slots: RigSceneSlot[] = [
+    { sceneIndex: 2, durationMs: 3000, voOn: true },
+    { sceneIndex: 5, durationMs: 2500 },
+  ];
+  for (const fps of [24, 30] as const) {
+    const tracks = characterTracks(slots, { fps, musicOn: true });
+    eq(tracks.length, 3, "visual + audio + subtitle (the shape-stable dispatch)");
+    eq(tracks[0].kind, "character", "the visual track is character-kind");
+    eq(tracks[0].clips.length, 2, "one clip per slot");
+    ok(tracks[0].clips[0].startSec === 0, "contiguous from zero");
+    approx(tracks[0].clips[1].startSec, tracks[0].clips[0].endSec, 1e-9, "the windows tile");
+    ok(tracks[0].clips.every((c) => c.asset === null && c.transitionIn === null && c.transitionOut === null), "engine-drawn, hard cuts, asset null");
+    eq(tracks[0].clips[0].sceneIndex, 2, "the story-row linkage rides");
+    eq(tracks[1].clips.map((c) => c.id), ["a-r0", "a-music"], "the VO slot + the bed clip");
+    // The contract read-back: the plan derives and the clocks agree.
+    const plan = planFromTracks({ tracks }, slots.length);
+    ok(plan !== null, `planFromTracks reads the projection at ${fps}`);
+    approx(
+      (plan as NonNullable<typeof plan>).totalSec,
+      tracks[0].clips[tracks[0].clips.length - 1].endSec,
+      0.011,
+      "the plan's clock ≡ the delivered windows"
+    );
+  }
+});
+
+await test("S125 the preflight wall — the DELIVERED arithmetic is the truth (R-1), the refusal names the cap", () => {
+  const slots: RigSceneSlot[] = [
+    { sceneIndex: 1, durationMs: 1018 },
+    { sceneIndex: 2, durationMs: 1018 },
+  ];
+  const report = rigBudgetReport(slots, 30);
+  eq(report.frames, 62, "Σ per-slot frames (31 + 31 — per-slot rounding)");
+  ok(report.frames > Math.round((2036 / 1000) * 30), "delivered > the whole-program figure (the two arithmetics differ)");
+  ok(report.ok, "62 frames is well under the wall");
+  eq(report.wall, 25_920, "one wall — the shared ANIM_FRAME_BUDGET");
+  approx(report.capSec, 25_920 / 30, 1e-9, "the cap derives from fps, never assumed");
+  const refusal = rigBudgetRefusal(30, 25_921, 900_000);
+  ok(refusal.includes("25920") && refusal.includes("864.0"), `the refusal names the wall and the ${25920 / 30}s cap`);
+  const over: RigSceneSlot[] = [{ sceneIndex: 1, durationMs: 900_001 }];
+  const overReport = rigBudgetReport(over, 30);
+  ok(!overReport.ok && overReport.refusal !== null, "an over-budget program refuses");
+  let threw = "";
+  try {
+    assertRigBudget(over, 30);
+  } catch (e) {
+    threw = e instanceof Error ? e.message : String(e);
+  }
+  ok(threw.includes("frame budget wall"), "the admission gate throws the named wall BEFORE chromium");
+  let emptyThrew = "";
+  try {
+    rigBudgetReport([], 30);
+  } catch (e) {
+    emptyThrew = e instanceof Error ? e.message : String(e);
+  }
+  ok(emptyThrew.includes("no slots"), "an empty slot list is a caller bug, refused loudly");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
