@@ -265,6 +265,25 @@ test.describe("S123 — motion graphics end-to-end", () => {
     //    never rides video.error for an engine-lane video (S69 lane
     //    attribution) — poll hasVideo only, attach the last error text.
     test.setTimeout(240_000);
+
+    // 9. THE FULL RENDER — explicit through the lane's own route (the
+    //    Studio's "Render full video" button = the {} grammar). The b6
+    //    draft law means the scene draft above NEVER lands hasVideo —
+    //    drafts are looks, never reviewable renders. Polling without
+    //    firing this POST was a structural break: the P4 rewrite dropped
+    //    the full-render trigger while keeping the poll below, so every
+    //    e2e run since has burned its whole window watching an artifact
+    //    nothing produces. Restored here in the exact shape of the ORDER
+    //    LAW receipt (12139f3), where the suite ran green on CI.
+    const fullRes = await request.post(`/api/videos/${videoId}/graphics/render`, {
+      headers: { cookie, "Content-Type": "application/json" },
+      data: {},
+    });
+    expect([200, 202]).toContain(fullRes.status());
+    const fullBody = (await fullRes.json()) as { accepted?: boolean; scope?: string };
+    expect(fullBody.accepted).not.toBe(false);
+    expect(fullBody.scope).toBe("full");
+
     let hasVideo = false;
     let videoUrl: string | null = null;
     let lastError: string | null = null;

@@ -752,7 +752,7 @@ export const APPLY_GRAPHICS_FRAME_FN = `(payloadJson) => {
   // S130 — the camera: one world→screen transform about the board's
   // center, read as ATTRIBUTES (never layout — the applier's idempotency
   // law holds). Absolute set; absent camera leaves the group untouched.
-  if (payload.camera) {
+  if (p.camera) {
     const gc = document.getElementById("gcam");
     if (gc) {
       const board = document.getElementById("board");
@@ -760,9 +760,9 @@ export const APPLY_GRAPHICS_FRAME_FN = `(payloadJson) => {
       const cy = Number(board.getAttribute("height")) / 2;
       gc.setAttribute(
         "transform",
-        "translate(" + cx + " " + cy + ") scale(" + payload.camera.zoom + ")" +
+        "translate(" + cx + " " + cy + ") scale(" + p.camera.zoom + ")" +
         " translate(" + (-cx) + " " + (-cy) + ")" +
-        " translate(" + payload.camera.tx + " " + payload.camera.ty + ")"
+        " translate(" + p.camera.tx + " " + p.camera.ty + ")"
       );
     }
   }

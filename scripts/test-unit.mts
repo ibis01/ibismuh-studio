@@ -16167,7 +16167,13 @@ await test("S130 graphicsFramePayload serializes the camera state; the applier b
     `the payload carries the world→screen inputs: ${JSON.stringify(payload.camera)}`);
   // The applier is a JS string — pin its camera block: the transform is
   // built from the board's own attributes about the center, one place.
-  ok(APPLY_GRAPHICS_FRAME_FN.includes("payload.camera"), "the applier reads the camera");
+  // S135 repair receipt: the original pin asserted `payload.camera` —
+  // pinning the BUG (a bare reference the parameter list never defined;
+  // every real render threw ReferenceError at the page.evaluate boundary).
+  // The correct name is the parsed `p`, and the S135 pin below actually
+  // EXECUTES the string so this class can't regress silently again.
+  ok(APPLY_GRAPHICS_FRAME_FN.includes("p.camera"), "the applier reads the camera off the parsed frame");
+  ok(!APPLY_GRAPHICS_FRAME_FN.includes("payload.camera"), "the bare `payload.camera` reference (the bug) is gone");
   ok(APPLY_GRAPHICS_FRAME_FN.includes('document.getElementById("gcam")'), "the applier targets the wrapper group");
   ok(APPLY_GRAPHICS_FRAME_FN.includes('board.getAttribute("width")'), "the applier reads board dims as attributes (never layout)");
 });
@@ -19504,6 +19510,80 @@ await test("Stage X the builder registry — the multi-kind gate is a registry, 
   const renderSrc = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
   ok(renderSrc.includes("validatePlanKinds("), "the wall consumes the registry");
   ok(renderSrc.includes("visual kinds without a compositor segment builder"), "the refusal names the registry law");
+});
+
+await test("S135 the graphics applier string EXECUTES — camera leg, absent-camera leg, and the bare-reference ban (the CI repair receipt)", async () => {
+  // The applier is a STRING evaluated remotely (page.evaluate in the
+  // renderer, iframe eval in the editor) — no battery test ever executed
+  // it, which is exactly how S130's camera leg shipped a bare `payload`
+  // reference (the parameter is `payloadJson`) past an 805-green battery:
+  // every real graphics render threw ReferenceError at the evaluate
+  // boundary and the e2e lane died CI-wide. This pin EXECUTES the string
+  // against a stub DOM so the failure class is structurally impossible.
+  const { APPLY_GRAPHICS_FRAME_FN } = await import("../src/lib/tubeforge/graphics/compose");
+
+  // The static half: inside the applier the ONLY payload name is the
+  // `payloadJson` parameter (and its parsed `p`). A bare `payload.` is the
+  // exact reference bug this receipt repairs.
+  ok(!/[^a-zA-Z]payload\./.test(APPLY_GRAPHICS_FRAME_FN), "no bare `payload.` reference survives in the applier string");
+
+  // A minimal DOM stub — the applier's full contract is setAttribute /
+  // getAttribute / scoped queries on a static skeleton (its idempotency law).
+  const nodes = new Map<string, Record<string, unknown>>();
+  const makeNode = (id: string, attrs: Record<string, string> = {}) => {
+    const n: Record<string, unknown> = {
+      id,
+      attrs: { ...attrs },
+      setAttribute(k: string, v: string) { (this.attrs as Record<string, string>)[k] = v; },
+      getAttribute(k: string) { return (this.attrs as Record<string, string>)[k] ?? null; },
+      hasAttribute(k: string) { return k in (this.attrs as Record<string, string>); },
+      querySelectorAll() { return []; },
+      querySelector() { return null; },
+    };
+    nodes.set(id, n);
+    return n;
+  };
+  makeNode("ge-h1");
+  makeNode("gcam");
+  makeNode("board", { width: "1920", height: "1080" });
+  // Indirect eval resolves `document` from globalThis — mount the stub for
+  // the applier's runtime window, restore whatever was there before.
+  const priorDocument = (globalThis as Record<string, unknown>).document;
+  (globalThis as Record<string, unknown>).document = {
+    getElementById: (id: string) => nodes.get(id) ?? null,
+  };
+  const apply = (0, eval)(`(${APPLY_GRAPHICS_FRAME_FN})`) as (payloadJson: string) => boolean;
+  const restoreDocument = () => {
+    if (priorDocument === undefined) delete (globalThis as Record<string, unknown>).document;
+    else (globalThis as Record<string, unknown>).document = priorDocument;
+  };
+
+  const frame = {
+    elements: [
+      { id: "h1", x: 120, y: 240, rotateDeg: 0, scale: 1.25, opacity: 0.8, progress: 0.5 },
+    ],
+  };
+
+  // The absent-camera leg — the exact call shape the render site makes
+  // (one JSON.stringify of the frame payload object; the applier parses).
+  try {
+    const absent = apply(JSON.stringify(frame));
+    ok(absent === true, "the absent-camera leg returns true");
+    const ge = nodes.get("ge-h1") as { attrs: Record<string, string> };
+    ok((ge.attrs["transform"] ?? "").includes("translate(120 240)"), "the element transform landed");
+    ok((ge.attrs["opacity"] ?? "") === "0.8", "the element opacity landed");
+
+    // The camera leg — S130's world→screen transform about the board center.
+    const withCamera = apply(JSON.stringify({ ...frame, camera: { zoom: 1.5, tx: 40, ty: -30 } }));
+    ok(withCamera === true, "the camera leg returns true");
+    const gcam = nodes.get("gcam") as { attrs: Record<string, string> };
+    const cam = gcam.attrs["transform"] ?? "";
+    ok(cam.includes("scale(1.5)"), "the camera zoom landed");
+    ok(cam.includes("translate(40 -30)"), "the camera translation landed");
+    ok(cam.includes("translate(960 540)"), "the camera pivots about the board center (1920/1080 halved)");
+  } finally {
+    restoreDocument();
+  }
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

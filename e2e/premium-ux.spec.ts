@@ -91,9 +91,15 @@ test.describe("Stage 4a premium UX", () => {
 
     // Step rail shows progress; the draft lands in localStorage.
     await expect(page.getByText("step 3 of 5")).toBeVisible();
-    await page.waitForTimeout(1200); // debounce (700ms) + margin
-    const draft = await page.evaluate(() => localStorage.getItem("tubeforge:create-draft"));
-    expect(draft).toContain("container ships");
+    // The debounced save fires 700ms after the LAST brief-field change —
+    // and the settings/fetch chain (defaults, voices, channels, characters)
+    // legitimately re-arms it for a few seconds on a cold dev server, so a
+    // guessed delay is a race against machine speed (the CI flake this
+    // replaces). Await the WRITE itself, never a sleep.
+    await expect(async () => {
+      const draft = await page.evaluate(() => localStorage.getItem("tubeforge:create-draft"));
+      expect(draft).toContain("container ships");
+    }).toPass({ timeout: 15_000 });
 
     // Reload + return to Create → banner + topic restored. The draft always
     // reopens at step 0 (the type picker) — walk to Concept to see the topic.
