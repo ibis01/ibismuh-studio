@@ -121,6 +121,36 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     );
   }
 
+  // S136 — the binding check (blocker B1's refuse/report half): the
+  // converter writes joints keyed by rig SLOT; the frame truth (poseAt)
+  // bridges slots onto the parts that carry them. When the rig exists but
+  // NO part carries a mapped slot (or the capture's slots), the capture
+  // would silently move nothing — refuse here, with the honest parts list,
+  // rather than land a statue that outranks the compiled beats.
+  let boundParts = 0;
+  let rigPartCount = 0;
+  if (character?.rigDoc) {
+    try {
+      const doc = JSON.parse(character.rigDoc) as { parts?: { id?: string; slot?: string }[] };
+      const parts = (doc.parts ?? []).filter((p): p is { id?: string; slot: string } => typeof p.slot === "string");
+      rigPartCount = parts.length;
+      const rowKeys = new Set<string>();
+      for (const row of timeline.rows) for (const k of Object.keys(row.joints ?? {})) rowKeys.add(k);
+      boundParts = parts.filter((p) => (p.id && rowKeys.has(p.id)) || rowKeys.has(p.slot)).length;
+      if (rigPartCount > 0 && boundParts === 0) {
+        return NextResponse.json(
+          {
+            error: `The capture maps slots ${[...rowKeys].sort().join(", ")} but no rig part carries them — nothing would move`,
+            errors: [`the rig carries: ${parts.map((p) => p.slot).sort().join(", ")}`],
+          },
+          { status: 422 }
+        );
+      }
+    } catch {
+      // junk rigDoc — nothing to check against (the default slot set stands)
+    }
+  }
+
   // Merge into the authored-motion file (scene-keyed; last-write-wins per
   // scene — the house rule).
   let body: MocapFile = {};
@@ -152,6 +182,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     rowWall: RIG_BUDGETS.timelineRows,
     mapped,
     skipped,
+    boundParts,
   });
 }
 

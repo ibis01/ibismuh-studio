@@ -361,23 +361,53 @@ export async function runQcReport(opts: {
   const isDesignedBlack = (start: number): boolean =>
     expectedBlack.some(([lo, hi]) => start >= lo - 0.1 && start <= hi + 0.1);
 
-  // 1) Playability — streams + duration readable.
+  // 1) Playability — streams + duration readable. S136 — the audio half is
+  //    judged against the render's OWN audio contract, not a blanket demand:
+  //    a narrated render must carry its speech (missing AAC = words cut —
+  //    blocking, the −34 s class), while a SILENT DRAFT is legal as a
+  //    video-only MP4 (the lanes' documented silent-draft law — a fully
+  //    silent project ships video-only scene encodes and a stream-copy
+  //    assembly; music may join at the bed, so AAC stays acceptable either
+  //    way). The old unconditional AAC demand shipped a BLOCKING playable=
+  //    fail on every silent draft — whiteboard and graphics alike — holding
+  //    perfectly playable exports behind a false finding (caught by the
+  //    S136 e2e QC-verdict pin, CI #324/#325 + the live row evidence).
   let duration = opts.videoDuration;
   let dimensions: { width?: number; height?: number } | null = null;
+  const narrated = opts.narrationSec != null && opts.narrationSec > 0;
+  // Any audio stream at all (any codec — the measurement lenses decode
+  // whatever ships; the AAC strictness stays playable-check-local).
+  let hasAudioStream = false;
+  // The applicability law is honest only over a MEASURED stream layout: an
+  // ffprobe that FAILED knows nothing — applicability there stays TRUE
+  // (fail-closed, the garbage-bytes law: failed analysis → unmeasured,
+  // never a lens silently dropped).
+  let probeClean = false;
   if (exists) {
     try {
       const info = await ffprobeJson(opts.mp4Path);
+      probeClean = true;
       const hasVideo = Boolean(info.streams?.some((s) => s.codec_type === "video" && s.codec_name === "h264"));
+      hasAudioStream = info.streams?.some((s) => s.codec_type === "audio") ?? false;
       const hasAudio = Boolean(info.streams?.some((s) => s.codec_type === "audio" && s.codec_name === "aac"));
       const probed = Number(info.format?.duration ?? 0);
       if (Number.isFinite(probed) && probed > 0) duration = probed;
       dimensions = info.streams?.find((s) => s.codec_type === "video") ?? null;
+      const playable = hasVideo && (hasAudio || !narrated);
       checks.push(
         check(
           "playable",
-          "Plays as a valid MP4 (H.264 video + AAC audio)",
-          hasVideo && hasAudio ? "pass" : "fail",
-          hasVideo && hasAudio ? `${duration.toFixed(1)}s readable` : "stream missing"
+          narrated
+            ? "Plays as a valid MP4 (H.264 video + AAC audio)"
+            : "Plays as a valid MP4 (H.264 video; a silent draft may ship video-only)",
+          playable ? "pass" : "fail",
+          playable
+            ? hasAudio
+              ? `${duration.toFixed(1)}s readable`
+              : `${duration.toFixed(1)}s readable (video-only silent draft)`
+            : hasVideo
+              ? "stream missing"
+              : "no H.264 video stream"
         )
       );
     } catch (err) {
@@ -388,6 +418,18 @@ export async function runQcReport(opts: {
   } else {
     checks.push(check("playable", "Output file exists", "fail", "final.mp4 missing"));
   }
+
+  // S136 — the audio lenses' APPLICABILITY law. A lens that measures sound
+  // runs only when the artifact carries a stream to measure, or when the
+  // contract demands one (narrated — fail-closed: missing evidence stays
+  // unmeasured, never clean). A silent draft's video-only file has nothing
+  // to grade: the audio lenses are NOT APPLICABLE there — the same
+  // contract-scoped emission the narration-sync check already follows
+  // ("absent contract = the check is not emitted") — never unmeasured
+  // noise, and never a spurious dead-air "pass" over a file with no audio
+  // at all. The video lenses (black/frozen/aspect/static/flicker/stutter)
+  // are unaffected: the shared analysis pass still runs for them.
+  const audioApplicable = !probeClean || hasAudioStream || narrated;
 
   // 2) Duration vs narration — audio/video sync sanity.
   if (opts.narrationSec && opts.narrationSec > 0) {
@@ -503,9 +545,11 @@ export async function runQcReport(opts: {
 
     // 3–7) Loudness family — one loudnorm analysis pass (I / true peak / LRA)
     // replaces the old ebur128 + volumedetect pair, and measures TRUE peak
-    // (inter-sample), not just the sample peak.
-    const lm = await measureLoudness(opts.mp4Path);
-    checks.push(
+    // (inter-sample), not just the sample peak. Applicability-gated (S136):
+    // nothing to measure on a video-only silent draft — no doomed run, no
+    // unmeasured noise.
+    const lm = audioApplicable ? await measureLoudness(opts.mp4Path) : null;
+    if (audioApplicable) checks.push(
       check(
         "loudness",
         `Broadcast loudness (${MIX_TARGETS.integratedLUFS} LUFS target)`,
@@ -518,7 +562,7 @@ export async function runQcReport(opts: {
           : `window ${LUFS_PASS_WINDOW[0]}…${LUFS_PASS_WINDOW[1]} LUFS`
       )
     );
-    checks.push(
+    if (audioApplicable) checks.push(
       check(
         "true-peak",
         "True peak ≤ -1 dBTP (no clipping after encode)",
@@ -529,7 +573,7 @@ export async function runQcReport(opts: {
         lm === null ? "loudness analysis failed" : "0.2 dB tolerance covers AAC inter-sample overshoot"
       )
     );
-    checks.push(
+    if (audioApplicable) checks.push(
       check(
         "loudness-range",
         "Consistent volume (loudness range)",
@@ -540,10 +584,27 @@ export async function runQcReport(opts: {
     );
 
     // Dead air: silence runs ≥1.5s fully inside the video (ignore lead-in/out).
-    const silences = [...stderr.matchAll(/\[silencedetect[^\]]*\]\s*(?:lavfi\.silencedetect\.)?silence_start:\s*(\d+(?:\.\d+)?)/g)]
-      .map((m) => Number(m[1]))
-      .filter((s) => s > 1 && s < duration - 2);
-    if (!analysisRan) {
+    // Applicability-gated (S136): "no voice or music always present" has no
+    // premise over an artifact with no audio stream at all — a silent
+    // contract's video-only file neither passes nor fails this lens; it is
+    // simply not asked.
+    const silences = audioApplicable
+      ? [...stderr.matchAll(/\[silencedetect[^\]]*\]\s*(?:lavfi\.silencedetect\.)?silence_start:\s*(\d+(?:\.\d+)?)/g)]
+          .map((m) => Number(m[1]))
+          .filter((s) => s > 1 && s < duration - 2)
+      : [];
+    if (!audioApplicable) {
+      /* not applicable — the lens is not emitted on a stream-less silent artifact */
+    } else if (!hasAudioStream) {
+      // Narrated contract but the artifact carries no audio at all: playable
+      // already carries the blocking finding (stream missing). Dead air stays
+      // fail-closed honest here — unmeasured, never a spurious "pass: none"
+      // over a file nothing could be heard from.
+      checks.push(
+        check("dead-air", "No dead air (voice or music always present)", "unmeasured", "no audio stream",
+          "the artifact carries no audio — the scan has nothing to listen to")
+      );
+    } else if (!analysisRan) {
       checks.push(
         check("dead-air", "No dead air (voice or music always present)", "unmeasured", "analysis failed",
           "ffmpeg could not complete the scan — this check did not run")
@@ -718,9 +779,10 @@ export async function runQcReport(opts: {
 
     // 7b) Abrupt ending — the final 0.4 s should sit in a fade/silence, not
     // mid-beat. Music beds fade out by design; a hard audio cut reads as a
-    // glitch (and YouTube viewers notice).
-    const tail = await tailVolume(opts.mp4Path, duration);
-    checks.push(
+    // glitch (and YouTube viewers notice). Applicability-gated (S136): an
+    // audio tail cannot fade on an artifact with no audio stream.
+    const tail = audioApplicable ? await tailVolume(opts.mp4Path, duration) : null;
+    if (audioApplicable) checks.push(
       check(
         "tail-fade",
         "Ends on a fade, not an abrupt cut",

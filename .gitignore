@@ -124,3 +124,6 @@ preview/venv/
 # land. A deliberate re-baseline updates the exception below on purpose.
 docs/baselines/w1-whiteboard-baseline-*.json
 !docs/baselines/w1-whiteboard-baseline-2026-11-13.json
+
+# S136 — patch artifacts must never ride the statically-served public dir
+public/*.patch

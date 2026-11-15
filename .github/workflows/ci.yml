@@ -194,6 +194,16 @@ jobs:
       - name: Shared rate limiter battery (P0.4)
         run: npm run test:rate
 
+      # S136 — the Stabilisation Gate (2026-11-15 audit, blocker B4): the
+      # scene-revision battery is the DECISIVE scene-editing proof (28 DB-
+      # backed tests: append-only immutability, surgical one-revision
+      # history, conflict law, rollback, drafts-never-leak, manifest
+      # staleness) — but it only ran inside local `npm run check`, never in
+      # CI, so the gate could not see it. It joins the check job here, same
+      # self-seeding/cleanup pattern as the billing battery above.
+      - name: Scene revision battery (surgical per-scene editing)
+        run: npm run test:scene-revisions
+
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes
       # → print the measured RTO. "A backup that has never been restored is
@@ -509,3 +519,26 @@ jobs:
       # /tmp (human review copies live in the audit record).
       - name: S87 acceptance battery (the Universal Timeline §4.C close)
         run: node --import tsx scripts/s87-acceptance-battery.mts --out /tmp/s87-battery
+
+      # S136 — the Stabilisation Gate (blocker B3): the K1 rig smoke joins CI.
+      # It renders a REAL character scene with chromium+ffmpeg and proves the
+      # acceptance evidence on pixels: a second fixture whose part ids differ
+      # from its slots receives a slot-keyed authored capture (the mocap
+      # converter's exact output) and the rendered frames must MOVE during
+      # the gesture window and HOLD byte-identical afterward — the B1 statue
+      # class can never ship green again. The structural/beats/determinism/
+      # cache receipts ride along unchanged.
+      - name: K1 rig smoke (rendered body-part movement, ids ≠ slots)
+        run: node --import tsx scripts/k1-rig-smoke.mts --out /tmp/k1-smoke
+
+      # S136 — the Stabilisation Gate (blocker B7): the E12 LIVE queue drill
+      # joins CI. Its Act C is the cancellation acceptance: a running
+      # whiteboard render passes a progress checkpoint, requestJobCancel
+      # fires (the Stop button's exact call), and the Job row must land
+      # "cancelled" — never "failed", never a retry — with video.error null
+      # and the promise recorded. No incorrectly reported successful job.
+      # Act A re-proves the registry-truth equality that caught a REAL
+      # production defect (the 400'd Stop button); Act B re-proves the
+      # dead-mid-run recovery render. ~25s.
+      - name: E12 queue drill (cancellation + live recovery)
+        run: npm run test:queue-drill

@@ -264,7 +264,7 @@ test.describe("S123 — motion graphics end-to-end", () => {
     //    job the create route auto-starts fails fast on CI and its poison
     //    never rides video.error for an engine-lane video (S69 lane
     //    attribution) — poll hasVideo only, attach the last error text.
-    test.setTimeout(240_000);
+    test.setTimeout(360_000);
 
     // 9. THE FULL RENDER — explicit through the lane's own route (the
     //    Studio's "Render full video" button = the {} grammar). The b6
@@ -287,19 +287,28 @@ test.describe("S123 — motion graphics end-to-end", () => {
     let hasVideo = false;
     let videoUrl: string | null = null;
     let lastError: string | null = null;
+    let landedDuration: number | null = null;
     for (let i = 0; i < 90; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       const dto = await request.get(`/api/videos/${videoId}`, { headers: { cookie } });
       if (!dto.ok()) continue;
-      const body = (await dto.json()) as { video?: { hasVideo?: boolean; videoUrl?: string | null; error?: string | null } };
+      const body = (await dto.json()) as { video?: { hasVideo?: boolean; videoUrl?: string | null; error?: string | null; videoDuration?: number | null } };
       lastError = body.video?.error ?? lastError;
       if (body.video?.hasVideo) {
         hasVideo = true;
         videoUrl = body.video.videoUrl ?? null;
+        landedDuration = body.video?.videoDuration ?? null;
         break;
       }
     }
     expect(hasVideo, `the full render must land within the poll window (last video.error: ${lastError})`).toBe(true);
+
+    // 9a-top. S136 — the PROBE WALL's positive face: the row's
+    //     videoDuration came from a real ffprobe of the landed file (the
+    //     lane refuses to land an unmeasurable render), so it must be a
+    //     positive number — never the old silent 0.0s "playable" badge.
+    expect(landedDuration, "the landed row carries a probed duration").not.toBeNull();
+    expect(landedDuration ?? 0).toBeGreaterThan(0);
 
     // 9b. The artifact SERVES — the standard mp4 route answers with video
     //     bytes (a DB flag without a servable file would be a lying badge).
@@ -307,6 +316,25 @@ test.describe("S123 — motion graphics end-to-end", () => {
     expect(mp4.status()).toBe(200);
     expect(mp4.headers()["content-type"] ?? "").toContain("video/");
     void videoUrl;
+
+    // 9c. S136 — the codebase's OWN definition of "playable" must agree:
+    //     the QC battery (runQcJob, best-effort after the landing) ffprobes
+    //     the final and verdicts the playable check. Poll briefly for the
+    //     report — a battery that never reports is an evidence gap, not a
+    //     pass (the S45 law keeps a crashed battery from failing the
+    //     render; it does not license the e2e to accept its absence).
+    //     The verdict travels the SAME wire every UI badge reads: the
+    //     serialized video's `qc` DTO (serialize.ts) — the battery's stored
+    //     JSON itself is row-internal and never leaves the server.
+    let qcPlayable: string | null = null;
+    for (let i = 0; i < 45 && !qcPlayable; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const dto = await request.get(`/api/videos/${videoId}`, { headers: { cookie } });
+      if (!dto.ok()) continue;
+      const body = (await dto.json()) as { video?: { qc?: { checks?: { id?: string; status?: string }[] } | null } };
+      qcPlayable = body.video?.qc?.checks?.find((c) => c.id === "playable")?.status ?? null;
+    }
+    expect(qcPlayable, "the QC battery's playable check must reach a verdict").toBe("pass");
 
     // 10. Cross-mode refusal — a classic (kenburns) video cannot render
     //     through the graphics lane (the peer-MODE law).

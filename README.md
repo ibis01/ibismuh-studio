@@ -9,8 +9,8 @@ standard + the content-policy visual scan under a restricted policy), and
 publishes to a connected YouTube channel — all inside a multi-user web
 application with metered AI spending and Stripe billing underneath.
 
-**Status:** S-series stage S120 + the W-track at W7 with W6+W7 LANDED (2026-11-14) — the whiteboard finishing track W1–W7 is COMPLETE; **S123 (milestone G1) landed the Motion Graphics Engine end-to-end (P0–P5)**; **S124 landed the element-level graphics editor (drag · scale · z-order, the Layout mode — the friction clean-room study, `docs/audits/external-friction-editor-study.md`)**; CI is 8/8
-green on `main` with the 597-test unit battery (the S123 execution branch carries 685; S124 carries 699). The production loop is
+**Status:** S135 landed the CI repair (the applier's camera leg — every graphics render since S130 died at the first frame apply — plus the storyboard refusal chain, the mode-aware Auto-Pilot, and the missing 2D/3D type picks; 806 → 807 tests); **S136 is the Stabilisation Wave (2026-11-15)** — the read-only Stabilisation Gate audit (9 exit conditions: 4 PASS / 5 PARTIAL / 0 FAIL) drove the proof-infrastructure waves with the feature freeze intact: the 28-test scene-revision battery joined the CI check job, the K1 rig smoke joined the e2e job and proves rendered body-part movement on pixels (a fixture whose part ids differ from its slots — the B1 statue class can never ship green again), the graphics artifact is ffprobe-decoded in the S87 battery (Part C), the narration-sync QC check got its verdict fixtures, the E12 cancellation drill joined CI, and the two defect classes (B1: slot-keyed mocap never reached id-addressed parts; B2: unguarded failure receipts in the render/storyboard/scene/short/convert lanes) are fixed with failing-first regression pins — 807 → 814 tests. CI is 8/8
+green on `main` with the 814-test unit battery. The production loop is
 feature-complete, and the production-readiness arc (S99–S108) closed every
 reliability gate with CI evidence — clean-clone bootstrap, queue leases +
 fencing, atomic storage admission, shared rate limiting + trusted-proxy IP law,
@@ -113,7 +113,7 @@ voice-server setup — see [`SETUP.md`](SETUP.md).
 | Command | What it proves |
 | --- | --- |
 | `npm run check` | typecheck + lint + the unit/regression suite + the billing integration suite (against the local SQLite DB) |
-| `npm run test:e2e` | 5 Playwright suites (boots its own dev server): smoke, cross-tenant isolation, mobile sweep, premium UX, full production pipeline |
+| `npm run test:e2e` | 10 Playwright suites (boots its own dev server): smoke, CSP, cross-tenant isolation, mobile sweep, premium UX, creator intelligence, scene editing, graphics, whiteboard, full production pipeline — plus the S87 acceptance battery, the K1 rig smoke (rendered movement) and the E12 cancellation drill |
 | `npm run test:queue` | the queue contract + worker-restart recovery: interrupted jobs resume, unknown kinds never pollute video rows |
 | `npm run backup` | SQLite backup + restore roundtrip against the live DB |
 
@@ -149,7 +149,7 @@ runner stalls — see the worklog's CI-flake receipts).
 | [`SECURITY.md`](SECURITY.md) | security requirements + audit findings |
 | [`ROADMAP.md`](ROADMAP.md) / [`MASTER_PLAN.md`](MASTER_PLAN.md) | the original development programme (Stages 1–7, all closed at the code level) + the Post-Stage-7 2.0 tracks (Whiteboard, Creator Intelligence, the shared quality systems) |
 | [`WHITEBOARD_ENGINE_DESIGN.md`](WHITEBOARD_ENGINE_DESIGN.md) | the Whiteboard Engine's laws, budgets, and the E0–E12 milestone matrix |
-| [`TASKS.md`](TASKS.md) | task ledgers per stage **+ the S-series drift-closure index (S1→S65) and the S47 integrity ledger** — the living trail through S120 and the W-track is `worklog.md` |
+| [`TASKS.md`](TASKS.md) | task ledgers per stage **+ the S-series drift-closure index (S1→S65) and the S47 integrity ledger** — the living trail through S135 and the W-track is `worklog.md` |
 | [`RISK_REGISTER.md`](RISK_REGISTER.md) | technical debt and risk register |
 | `worklog.md` | the audit-trail worklog — every stage's final gate, in order |
 

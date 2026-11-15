@@ -174,6 +174,31 @@ function jointOf(pose: RigPose | null, partId: string): Required<RigJointState> 
   return j ? { ...REST_JOINT, ...j } : { ...REST_JOINT };
 }
 
+/**
+ * S136 — the mocap binding bridge. Authored rows arrive with joints keyed
+ * by rig SLOT (the converter's vocabulary); parts are addressed by PART ID.
+ * Expand slot keys onto the ids of the parts that carry that slot, so the
+ * capture reaches the parts it names. Rules, in order:
+ *   1. a part-id key is SENIOR — an explicit `joints[part.id]` is never
+ *      overwritten by its slot twin;
+ *   2. the slot twin binds only through a part that actually carries that
+ *      slot (unknown slot keys stay inert — they bind nothing);
+ *   3. the original keys survive (a rig whose ids EQUAL its slots — every
+ *      pre-S136 fixture — behaves byte-identically).
+ * Pure; deterministic; runs only on rows that carry inline joints.
+ */
+function jointsReachableByParts(
+  rig: CharacterRigDoc,
+  rowJoints: Record<string, RigJointState>
+): Record<string, RigJointState> {
+  const bridged: Record<string, RigJointState> = { ...rowJoints };
+  for (const part of rig.parts) {
+    const fromSlot = rowJoints[part.slot];
+    if (fromSlot && bridged[part.id] === undefined) bridged[part.id] = fromSlot;
+  }
+  return bridged;
+}
+
 // ---------------------------------------------------------------------------
 // The syllable counter (the beat-sync arithmetic — deterministic, honest
 // about being an approximation)
@@ -336,11 +361,25 @@ export function poseAt(
   // K1-ext — inline authored joints override the pose channel (the mocap
   // ladder's seniority: authored DATA > compiled beats > sheet poses). A
   // synthetic pose carries the row's joints; pose resolution stays one call.
+  //
+  // S136 — THE MOCAP BINDING LAW: buildMocapTimeline writes inline joints
+  // keyed by rig SLOT (BVH joints map through MOCAP_JOINT_MAP into the
+  // closed slot vocabulary), but parts address their joints by PART ID
+  // (rig2d's part.id is free-form kebab — the auto-rig keeps the art ids).
+  // A slot-keyed row therefore reached jointOf(pose, part.id), missed, and
+  // every bound part resolved to rest: an uploaded capture silently
+  // outranked the compiled beats yet moved NOTHING — the silent statue
+  // (reproduced 2026-11-15: id "upper-limb-left" slot "arm-l", row joint
+  // "arm-l" 45° → impliedRotation 0.00). The bridge lives HERE, the one
+  // seam every consumer shares (the render hook and the editor preview both
+  // read poseAt): slot keys expand to the parts carrying them; part-id keys
+  // stay senior (id-keyed authored data wins its own binding); unknown
+  // keys stay inert (they bind nothing).
   const targetPose: RigPose | null = row?.joints
-    ? { id: "__row__", name: "row", joints: row.joints }
+    ? { id: "__row__", name: "row", joints: jointsReachableByParts(rig, row.joints) }
     : poseById(rig.poses, row ? row.poseId : null);
   const prevPose: RigPose | null = prevRow?.joints
-    ? { id: "__row__", name: "row", joints: prevRow.joints }
+    ? { id: "__row__", name: "row", joints: jointsReachableByParts(rig, prevRow.joints) }
     : poseById(rig.poses, prevRow ? prevRow.poseId : null);
   const ease: EaseName = row?.ease && isEaseName(row.ease) ? row.ease : "ease-in-out";
   const u =

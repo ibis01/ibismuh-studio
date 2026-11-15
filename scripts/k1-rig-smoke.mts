@@ -32,6 +32,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 
 import { renderRigScene, ensureRigClip, rigClipHash } from "../src/lib/tubeforge/characters/rig-render";
@@ -44,7 +45,12 @@ import { planFromTracks } from "../src/lib/tubeforge/composition-plan";
 
 const execFileP = promisify(execFile);
 
-const OUT_DIR = path.resolve("validation/s125");
+const OUT_DIR = (() => {
+  // S136 — CI passes --out (the e2e job's artifacts land in /tmp); the
+  // default stays the gitignored validation/s125/ receipt home.
+  const i = process.argv.indexOf("--out");
+  return i > 0 && process.argv[i + 1] ? path.resolve(process.argv[i + 1]) : path.resolve("validation/s125");
+})();
 const failures: string[] = [];
 let passed = 0;
 const ok = (cond: unknown, msg: string): asserts cond => {
@@ -211,6 +217,72 @@ async function main(): Promise<void> {
   ok(planRead !== null && Math.abs(planRead.totalSec - result.plan.totalSec) <= 0.011, "render: the contract read-back agrees with the engine plan");
   const tracks = characterTracks([{ sceneIndex: 1, durationMs: sceneMs }], { fps });
   ok(tracks[0].kind === "character" && tracks[0].clips[0].asset === null, "render: the projection is character-kind, asset null");
+
+  // --- S136: the mocap binding law + RENDERED movement (the K1 acceptance)
+  // Gate blocker B1: the converter writes authored joints keyed by rig SLOT;
+  // parts are addressed by PART ID. The main fixture's seeds use ids EQUAL
+  // to their slots, so it can never catch the mismatch — THIS fixture uses
+  // genuinely different slot names and part ids (the S136 mandate). The
+  // evidence is measured on rendered PIXELS, not just the frame truth.
+  console.log("  S136 — the mocap binding + rendered-movement leg");
+  const OFFSLOT_SEEDS = SEEDS.map((p) => ({
+    ...p,
+    id: `x-${p.id}`,
+    parent: p.parent ? `x-${p.parent}` : undefined,
+  }));
+  ok(OFFSLOT_SEEDS.every((p) => p.id !== p.slot), "S136: the mocap fixture's part ids genuinely differ from its slots");
+  const scaffoldOff = scaffoldRigDoc({ parts: OFFSLOT_SEEDS, art: ART });
+  ok(scaffoldOff.doc !== null, "S136: the off-slot rig scaffolds");
+  const docOffCheck = scaffoldOff.doc
+    ? validateRigDoc({ ...scaffoldOff.doc, poses: [] }, artCheck.parts)
+    : { doc: null, errors: ["scaffold refused"], warnings: [] };
+  ok(docOffCheck.doc !== null, "S136: the off-slot rig doc validates");
+  if (!docOffCheck.doc || !artCheck.parts)
+    throw new Error("the S136 mocap fixture must validate");
+  const rigOff = docOffCheck.doc;
+  // What buildMocapTimeline emits: slot-keyed inline rows (the capture's
+  // vocabulary). The arm lifts 80° at t=1s, then HOLDS.
+  const mocapTimeline = {
+    durationMs: sceneMs,
+    rows: [
+      { tMs: 0, poseId: null, joints: { "arm-l": { rotateDeg: 0 } } },
+      { tMs: 1000, poseId: null, joints: { "arm-l": { rotateDeg: 80 } } },
+    ],
+  };
+  const frameRest = poseAt(rigOff, mocapTimeline, 500, { segments: [], speaking: false });
+  const frameLift = poseAt(rigOff, mocapTimeline, 1000 + POSE_TWEEN_MS + 1, { segments: [], speaking: false });
+  const armRest = frameRest.parts.find((p) => p.id === "x-arm-l");
+  const armLift = frameLift.parts.find((p) => p.id === "x-arm-l");
+  const rotOf = (m: readonly number[]): number => (Math.atan2(m[1], m[0]) * 180) / Math.PI;
+  ok(armRest && Math.abs(rotOf(armRest.matrix)) <= 0.5, "S136: the arm rests before the gesture window");
+  ok(armLift && Math.abs(rotOf(armLift.matrix) - 80) <= 0.5, "S136: the slot-keyed capture binds the off-id arm part (80°, was 0° pre-fix)");
+  // The REAL evidence: a rendered clip whose frames MOVE during the gesture
+  // window and HOLD true afterward — silent mouth (no speech), so every
+  // pixel delta is the body part itself.
+  const mocapOutDir = path.join(OUT_DIR, "mocap-render");
+  fs.rmSync(mocapOutDir, { recursive: true, force: true });
+  fs.mkdirSync(mocapOutDir, { recursive: true });
+  const mocapResult = await renderRigScene({
+    rig: rigOff,
+    art,
+    timeline: mocapTimeline,
+    speech: { segments: [], speaking: false },
+    slot: { sceneIndex: 1, durationMs: sceneMs },
+    opts: { outDir: mocapOutDir, canvas: { width: 1920, height: 1080 }, fps, onProgress: (l) => process.stdout.write(`    ${l}\r`) },
+  });
+  process.stdout.write("\n");
+  const mocapProbed = await probeDurationSec(mocapResult.file);
+  ok(Math.abs(mocapProbed - sceneMs / 1000) <= 0.1, `S136: the mocap clip's probed duration ${mocapProbed.toFixed(2)}s ≡ the delivered ${(sceneMs / 1000).toFixed(2)}s`);
+  const frameSha = async (sec: number): Promise<string> => {
+    const png = path.join(mocapOutDir, `frame-${sec}.png`);
+    await execFileP("ffmpeg", ["-y", "-ss", String(sec), "-i", mocapResult.file, "-frames:v", "1", png], { maxBuffer: 1024 * 1024 });
+    return createHash("sha256").update(fs.readFileSync(png)).digest("hex");
+  };
+  const shaRest = await frameSha(0.5);
+  const shaLift = await frameSha(4.0);
+  const shaHold = await frameSha(7.0);
+  ok(shaRest !== shaLift, "S136: the rendered frames MOVE during the authored gesture window (actual body-part movement, measured on pixels)");
+  ok(shaLift === shaHold, "S136: the authored hold is a true hold (byte-identical frames after the tween)");
 
   // --- cache: reuse on unchanged inputs, re-render on any change ------------
   const clipPath = path.join(OUT_DIR, "cache", "scene-rig-01.mp4");
