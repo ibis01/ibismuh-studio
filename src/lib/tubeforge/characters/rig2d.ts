@@ -347,7 +347,7 @@ export function writeRigParts(parts: RigPartArt[]): string {
 // The rig doc validator
 // ---------------------------------------------------------------------------
 
-function parsePose(raw: unknown, partIds: Set<string>, errors: string[]): RigPose | null {
+function parsePose(raw: unknown, partIds: Set<string>, errors: string[], stageMax: number): RigPose | null {
   const r = asRecord(raw);
   if (!r) {
     errors.push("a pose is not an object");
@@ -408,8 +408,20 @@ function parsePose(raw: unknown, partIds: Set<string>, errors: string[]): RigPos
       errors.push(`${where}: joint "${partId}" scale must be a finite number`);
       return null;
     }
-    if (x !== null) state.x = x as number;
-    if (y !== null) state.y = y as number;
+    if (x !== null) {
+      if (Math.abs(x as number) > stageMax) {
+        errors.push(`${where}: joint "${partId}" x ${x} outside the stage band (±${Math.round(stageMax)}px)`);
+        return null;
+      }
+      state.x = x as number;
+    }
+    if (y !== null) {
+      if (Math.abs(y as number) > stageMax) {
+        errors.push(`${where}: joint "${partId}" y ${y} outside the stage band (±${Math.round(stageMax)}px)`);
+        return null;
+      }
+      state.y = y as number;
+    }
     if (scale !== null) {
       if ((scale as number) < RIG_JOINT_BANDS.scaleMin || (scale as number) > RIG_JOINT_BANDS.scaleMax) {
         errors.push(
@@ -419,6 +431,7 @@ function parsePose(raw: unknown, partIds: Set<string>, errors: string[]): RigPos
       }
       state.scale = scale as number;
     }
+    joints[partId] = state;
   }
   for (const partId of keys) {
     if (!partIds.has(partId)) {
@@ -641,8 +654,9 @@ export function validateRigDoc(raw: unknown, parts: RigPartArt[] | null): RigVal
   }
   const poseSeen = new Set<string>();
   const poses: RigPose[] = [];
+  const stageMax = Math.max(width, height) * RIG_JOINT_BANDS.offsetFactorMax;
   for (const rawPose of root.poses) {
-    const pose = parsePose(rawPose, partIds, errors);
+    const pose = parsePose(rawPose, partIds, errors, stageMax);
     if (!pose) continue;
     if (poseSeen.has(pose.id)) {
       errors.push(`pose "${pose.id}": duplicate id`);

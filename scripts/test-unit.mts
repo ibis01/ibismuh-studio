@@ -17452,6 +17452,256 @@ await test("S125 the ease reader — the shared check for the doc and the timeli
   eq(readEase("spin"), "linear", "junk falls back to linear (motion is honest before it is pretty)");
 });
 
+// ---------------------------------------------------------------------------
+// S125 (K1) — the rig frame truth: poseAt (FK, pose rows, tween windows),
+// the mouth schedule (W4 word anchors → syllable-counted beats) and the
+// one-classifier-two-consumers law (design record §4).
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S125 the rig frame truth (rig-frame)");
+
+import { classifySentence } from "../src/lib/tubeforge/whiteboard/beat-plan";
+import {
+  MOUTH_MIN_OPEN_MS,
+  POSE_TWEEN_MS,
+  SPEECH_CYCLE,
+  countSyllables,
+  mouthBeatsFromSpans,
+  mouthSchedule,
+  poseAt,
+  restRigFrame,
+  wordSpansFromAnchors,
+  type Matrix6,
+  type WordSpan,
+} from "../src/lib/tubeforge/characters/rig-frame";
+
+const RIG_DOC = mustValidateDoc(rigDocInput(), ART, "frame-truth fixture");
+const RIG_POSES = new Map(RIG_DOC.poses.map((p) => [p.id, p]));
+
+/** The arm rotation an absolute matrix implies about its pivot (deg) — the
+ *  FK pins read this, not internal matrices. */
+function impliedRotation(m: Matrix6): number {
+  return Math.atan2(m[1], m[0]) * (180 / Math.PI);
+}
+
+function finiteMatrix(m: Matrix6): boolean {
+  return m.every(Number.isFinite);
+}
+
+await test("S125 poseAt is deterministic — same inputs, byte-identical frame states", () => {
+  const timeline = {
+    durationMs: 4000,
+    rows: [
+      { tMs: 0, poseId: "arm-l-raise" },
+      { tMs: 2000, poseId: "arm-r-point", ease: "pop" as const },
+    ],
+  };
+  const a = poseAt(RIG_DOC, timeline, 1300, { segments: [], speaking: false });
+  const b = poseAt(RIG_DOC, timeline, 1300, { segments: [], speaking: false });
+  eq(JSON.stringify(a), JSON.stringify(b), "byte-identical evaluation");
+  ok(a.parts.every((p) => p.matrix.every(Number.isFinite)), "all matrices finite");
+});
+
+await test("S125 the FK chain — a torso rotation carries the head, brow and arms with it", () => {
+  const rest = poseAt(RIG_DOC, { durationMs: 4000, rows: [] }, 0);
+  const timeline = { durationMs: 4000, rows: [{ tMs: 0, poseId: null }] };
+  const turned = poseAt(RIG_DOC, timeline, 0);
+  eq(JSON.stringify(turned), JSON.stringify(rest), "rest rows ≡ no rows");
+
+  const withTurn = poseAt(
+    RIG_DOC,
+    { durationMs: 4000, rows: [{ tMs: 0, poseId: "arm-r-point" }] },
+    POSE_TWEEN_MS + 1
+  );
+  // arm-r-point rotates arm-r AND the head 6°: the head's absolute matrix
+  // differs from rest, the torso's does not (only arm-r + head are jointed).
+  const headRest = rest.parts.find((p) => p.id === "head");
+  const headMoved = withTurn.parts.find((p) => p.id === "head");
+  const torsoRest = rest.parts.find((p) => p.id === "torso");
+  const torsoMoved = withTurn.parts.find((p) => p.id === "torso");
+  ok(headRest && headMoved, "head frames exist");
+  ok(torsoRest && torsoMoved, "torso frames exist");
+  eq(JSON.stringify(torsoRest.matrix), JSON.stringify(torsoMoved.matrix), "the untwisted parent keeps rest");
+  ok(JSON.stringify(headRest.matrix) !== JSON.stringify(headMoved.matrix), "the child rides its own joint");
+});
+
+await test("S125 a parent rotation carries children — FK, not per-part absolutes", () => {
+  // Author a pose that rotates the TORSO: the head's absolute matrix must
+  // move even though the head carries no joint in the pose.
+  const sheetPose = { id: "lean", name: "Lean", joints: { torso: { rotateDeg: 30 } } };
+  const leanDoc = mustValidateDoc(
+    rigDocInput({ poses: [...(rigDocInput().poses as unknown[]), sheetPose] }),
+    ART,
+    "lean fixture"
+  );
+  const rest = poseAt(leanDoc, { durationMs: 2000, rows: [] }, 0);
+  const lean = poseAt(leanDoc, { durationMs: 2000, rows: [{ tMs: 0, poseId: "lean" }] }, POSE_TWEEN_MS + 1);
+  const headRest = rest.parts.find((p) => p.id === "head");
+  const headLean = lean.parts.find((p) => p.id === "head");
+  const torsoLean = lean.parts.find((p) => p.id === "torso");
+  ok(headRest && headLean && torsoLean, "frames exist");
+  ok(
+    JSON.stringify(headRest.matrix) !== JSON.stringify(headLean.matrix),
+    "the head moved without its own joint — the chain carried it"
+  );
+  approx(impliedRotation(torsoLean.matrix), 30, 0.001, "the torso itself reads 30°");
+  approx(impliedRotation(headLean.matrix), 30, 0.001, "the head reads the carried 30°");
+});
+
+await test("S125 pose rows hold; the tween window clamps; rest before the first row", () => {
+  const timeline = { durationMs: 6000, rows: [{ tMs: 1000, poseId: "arm-l-raise" }] };
+  const before = poseAt(RIG_DOC, timeline, 999);
+  const atStart = poseAt(RIG_DOC, timeline, 1000);
+  const mid = poseAt(RIG_DOC, timeline, 1000 + POSE_TWEEN_MS / 2);
+  const settled = poseAt(RIG_DOC, timeline, 1000 + POSE_TWEEN_MS + 1);
+  const armL = (f: ReturnType<typeof poseAt>) => f.parts.find((p) => p.id === "arm-l");
+  const rotOf = (f: ReturnType<typeof poseAt>) => impliedRotation((armL(f) as { matrix: Matrix6 }).matrix);
+  const target = (RIG_POSES.get("arm-l-raise")?.joints["arm-l"]?.rotateDeg ?? 0);
+  approx(rotOf(before), 0, 0.01, "rest before the row");
+  approx(rotOf(atStart), 0, 0.01, "the tween starts at the previous pose (u=0)");
+  const midRot = rotOf(mid);
+  ok(midRot !== 0 && Math.abs(midRot - target) > 0.01, "mid-tween is between rest and target");
+  approx(rotOf(settled), target, 0.01, "the pose holds after the tween");
+  const held = poseAt(RIG_DOC, timeline, 5999);
+  approx(rotOf(held), target, 0.01, "hold to the end — no drift");
+});
+
+await test("S125 an unknown pose id resolves to rest — authored timelines stay honest", () => {
+  const timeline = { durationMs: 2000, rows: [{ tMs: 0, poseId: "no-such-pose" }] };
+  const f = poseAt(RIG_DOC, timeline, POSE_TWEEN_MS + 1);
+  const armL = f.parts.find((p) => p.id === "arm-l");
+  ok(armL, "the arm frame exists");
+  approx(impliedRotation((armL as { matrix: Matrix6 }).matrix), 0, 0.01, "unknown → rest, not a crash");
+});
+
+await test("S125 the syllable counter — deterministic vowel-group beats (beat-sync, not phonemes)", () => {
+  eq(countSyllables("cat"), 1, "one group");
+  eq(countSyllables("money"), 2, "mon-ey (the ey group)");
+  eq(countSyllables("tube"), 1, "the silent trailing e");
+  eq(countSyllables("beautiful"), 3, "eau-ti-ful → 3 groups");
+  eq(countSyllables(""), 1, "junk still beats once (a closed-open pulse, never zero)");
+  eq(countSyllables("character"), 3, "cha-rac-ter");
+});
+
+await test("S125 mouth beats land STRICTLY INSIDE their word spans (the W4 tolerance pin)", () => {
+  const spans: WordSpan[] = [
+    { word: "hello", startMs: 0, endMs: 400 },
+    { word: "there", startMs: 500, endMs: 800 },
+  ];
+  const beats = mouthBeatsFromSpans(spans, 1000);
+  ok(beats.length > 0, "beats exist");
+  for (const b of beats) {
+    const owner = spans.find((s) => b.startMs >= s.startMs && b.endMs <= s.endMs);
+    ok(owner !== undefined, `beat ${b.startMs}..${b.endMs} inside its word span`);
+  }
+  ok(!beats.some((b) => b.startMs >= 400 && b.endMs <= 500), "the gap between words stays closed");
+  const expectedFirst = SPEECH_CYCLE[0];
+  eq(beats[0].variant, expectedFirst, "the cycle opens on the first speech variant");
+  const short = mouthBeatsFromSpans([{ word: "a", startMs: 0, endMs: 50 }], 100);
+  eq(short.length, 1, "a sub-floor span carries ONE beat");
+  ok(short[0].endMs - short[0].startMs >= Math.min(MOUTH_MIN_OPEN_MS, 50 * 0.55) - 0.001, "the open floor holds");
+});
+
+await test("S125 the schedule ladder — anchors first, estimator fallback, no narration → closed", () => {
+  const narration = "hello extraordinary friend";
+  const tokens = narration.split(" ");
+  const anchors = {
+    byWord: [
+      { index: 0, startMs: 0, endMs: 150 },
+      { index: 1, startMs: 150, endMs: 500 },
+      { index: 2, startMs: 500, endMs: 600 },
+    ],
+  };
+  const spansA = wordSpansFromAnchors(narration, anchors, 600);
+  ok(spansA !== null, "anchored spans resolve");
+  eq(spansA?.map((s) => s.word), tokens, "the tokenizer index space lines up");
+  eq(spansA?.[1].endMs, 500, "the anchored span rides its own clock (uneven)");
+  const anchored = mouthSchedule({ narration, anchors, durationMs: 600 });
+  const est = mouthSchedule({ narration, anchors: null, durationMs: 600 });
+  ok(anchored.segments.length > 0 && est.segments.length > 0, "both paths beat");
+  ok(JSON.stringify(anchored.segments) !== JSON.stringify(est.segments), "the estimator is a different clock (the fallback is honest about it)");
+  const silent = mouthSchedule({ narration: "", anchors: null, durationMs: 600 });
+  eq(silent.segments.length, 0, "no narration → no beats (closed mouth)");
+  eq(silent.speaking, false, "the rig will not fake speech");
+  const mismatch = wordSpansFromAnchors(narration, { byWord: anchors.byWord.slice(0, 1) }, 600);
+  eq(mismatch, null, "an index-space mismatch degrades to null → the estimator");
+});
+
+await test("S125 the mouth visibility swap — one shape visible, the rest hidden, closed at rest", () => {
+  const timeline = { durationMs: 4000, rows: [] };
+  const speech = {
+    segments: [{ startMs: 0, endMs: 300, variant: "open" as const }],
+    speaking: true,
+  };
+  const open = poseAt(RIG_DOC, timeline, 100, speech);
+  eq(open.mouthVariant, "open", "the speech segment owns the variant");
+  ok(open.speaking, "speaking reads true on an open beat");
+  const visibleMouths = open.parts.filter((p) => p.id.startsWith("mouth-") && p.visible);
+  eq(visibleMouths.map((p) => p.id), ["mouth-open"], "exactly the open shape shows");
+  const after = poseAt(RIG_DOC, timeline, 400, speech);
+  eq(after.mouthVariant, "closed", "between beats the mouth closes");
+  eq(
+    after.parts.filter((p) => p.id.startsWith("mouth-") && p.visible).map((p) => p.id),
+    ["mouth-closed"],
+    "exactly the closed shape shows between beats"
+  );
+  const rest = restRigFrame(RIG_DOC);
+  eq(rest.mouthVariant, "closed", "the poster frame is closed");
+  eq(
+    rest.parts.filter((p) => p.id.startsWith("mouth-") && p.visible).map((p) => p.id),
+    ["mouth-closed"],
+    "the closed mouth art is the rest state"
+  );
+});
+
+await test("S125 the gesture mouth override wins its window — smile is a gesture, never speech", () => {
+  const timeline = {
+    durationMs: 4000,
+    rows: [
+      { tMs: 1000, poseId: "arm-l-raise", mouth: "smile" as const },
+      { tMs: 2500, poseId: null },
+    ],
+  };
+  const speech = {
+    segments: [{ startMs: 1200, endMs: 2000, variant: "open" as const }],
+    speaking: true,
+  };
+  eq(poseAt(RIG_DOC, timeline, 1500, speech).mouthVariant, "smile", "the override owns its window");
+  eq(poseAt(RIG_DOC, timeline, 1200, speech).mouthVariant, "smile", "…from the row's tMs");
+  eq(poseAt(RIG_DOC, timeline, 2501, speech).mouthVariant, "closed", "the window ends at the next row");
+  eq(poseAt(RIG_DOC, timeline, 500, speech).mouthVariant, "closed", "before the row, speech governs");
+});
+
+await test("S125 never-NaN at the band edges — ±360°, scale 0.2/3, offset extremes stay finite", () => {
+  const edgePose = {
+    id: "edges",
+    name: "Edges",
+    joints: {
+      torso: { rotateDeg: 360, x: 1600, y: -1600, scale: 3 },
+      "arm-l": { rotateDeg: -360, scale: 0.2 },
+      head: { rotateDeg: 359.9, y: 800 },
+    },
+  };
+  const edgeDoc = mustValidateDoc(
+    rigDocInput({ poses: [...(rigDocInput().poses as unknown[]), edgePose] }),
+    ART,
+    "edge fixture"
+  );
+  const f = poseAt(edgeDoc, { durationMs: 1000, rows: [{ tMs: 0, poseId: "edges" }] }, POSE_TWEEN_MS + 1);
+  ok(f.parts.every((p) => finiteMatrix(p.matrix)), "every matrix finite at the band edges");
+  const tweening = poseAt(edgeDoc, { durationMs: 1000, rows: [{ tMs: 0, poseId: "edges" }] }, POSE_TWEEN_MS / 2);
+  ok(tweening.parts.every((p) => finiteMatrix(p.matrix)), "finite mid-tween too");
+});
+
+await test("S125 classifySentence is exported and unchanged — one classifier, two consumers", () => {
+  eq(classifySentence("Imagine a world where money grows on trees.", 0), "setup", "the opener reads setup");
+  eq(classifySessionlessEmphasis(), "emphasis", "emphasis wins over everything");
+  eq(classifySentence("Then the flow moves to the next stage.", 2), "action", "action cues read");
+  function classifySessionlessEmphasis(): string {
+    return classifySentence("This is the crucial point!", 3);
+  }
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
