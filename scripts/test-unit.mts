@@ -20775,6 +20775,101 @@ await test("S139 the naturalist pen laws — eased lockstep, tremble, breathing,
   ok(wbPage.APPLY_FRAME_FN.includes('"0.5"') && wbPage.APPLY_FRAME_FN.includes('"0.75"'), "the applier caps overdraw (0.5) and hatch (0.75) opacity");
 });
 
+await test("S140 F1 — the import admission compensates every byte when it fails (nothing is admitted unless the row commits)", async () => {
+  const storeMod = await import("../src/lib/tubeforge/graphics/import-store");
+  const { UPLOAD_ROOT } = await import("../src/lib/tubeforge/storage");
+  const videoId = `s140-f1-${crypto.randomBytes(4).toString("hex")}`;
+  const importId = `imp-${crypto.randomBytes(6).toString("hex")}`;
+  const importDir = path.join(UPLOAD_ROOT, videoId, "graphics", "imports", importId);
+
+  // Blocker: a DIRECTORY at the second object's path — put #2 throws
+  // (EISDIR) AFTER put #1 already landed bytes. The old code left those
+  // bytes orphaned forever (the audit's F1); the compensation sweep must
+  // take the whole import directory with the failed admission.
+  await fsp.mkdir(path.join(importDir, "f0001.png"), { recursive: true });
+  let threw: unknown = null;
+  try {
+    await storeMod.saveImport(
+      { id: videoId, organizationId: `s140-f1-org-${videoId}` },
+      {
+        importId,
+        layout: "sequence",
+        mime: "image/png",
+        frames: 2,
+        fps: 24,
+        frameW: 8,
+        frameH: 8,
+        source: null,
+        license: null,
+      },
+      [
+        { name: "f0000.png", bytes: Buffer.from("fake-png-frame-0") },
+        { name: "f0001.png", bytes: Buffer.from("fake-png-frame-1") },
+      ],
+      "s140-f1-user"
+    );
+  } catch (err) {
+    threw = err;
+  }
+  ok(threw !== null, "a mid-list put failure propagates (the admission refuses honestly)");
+  ok(!fs.existsSync(path.join(importDir, "f0000.png")), "the FIRST file's already-landed bytes were swept with the failed admission");
+  ok(!fs.existsSync(path.join(importDir, "f0001.png")), "the blocker itself was swept (the WHOLE import directory dies with the attempt)");
+
+  // The traversal guard: the sweep runs on the import prefix, so a
+  // traversal-shaped importId must fail closed BEFORE any storage touch —
+  // otherwise the sweep would aim at the video prefix (other imports die).
+  let guardThrew = false;
+  try {
+    await storeMod.saveImport(
+      { id: videoId, organizationId: `s140-f1-org-${videoId}` },
+      {
+        importId: "../escape",
+        layout: "sheet",
+        mime: "image/png",
+        frames: 1,
+        fps: 24,
+        frameW: 8,
+        frameH: 8,
+        source: null,
+        license: null,
+      },
+      [],
+      "s140-f1-user"
+    );
+  } catch (err) {
+    guardThrew = String((err as Error).message).includes("single path segment");
+  }
+  ok(guardThrew, "a traversal-shaped importId fails closed before any storage touch");
+
+  const refusal = new storeMod.ImportCountRefusal("video", 8, 8);
+  ok(refusal.message.includes("cap 8") && refusal.message.includes("8 graphics imports"), "the count refusal speaks the wall's numbers (named reasons, never bare statuses)");
+});
+
+await test("S140 F2 — the count wall rides the admission transaction (the S101 pattern mirrored for gate 6's count half)", async () => {
+  const store = fs.readFileSync("src/lib/tubeforge/graphics/import-store.ts", "utf8");
+  // The walls and the create share ONE transaction client — the read-check-
+  // write-write race is dead: the loser counts the winner's committed row.
+  ok(store.includes("tx.graphicsImport.count({ where: { videoId: video.id } })"), "the video wall counts INSIDE the admission transaction");
+  ok(store.includes("tx.graphicsImport.count({ where: { organizationId: video.organizationId } })"), "the org wall counts INSIDE the admission transaction");
+  ok(store.includes("tx.graphicsImport.create"), "the manifest create rides the same transaction client");
+  ok(store.indexOf("tx.graphicsImport.count") < store.indexOf("tx.graphicsImport.create"), "the walls run BEFORE the create (refuse before write)");
+  ok(store.includes('isolationLevel: "Serializable"'), "Postgres runs Serializable — the conflict is the law's enforcer");
+  ok(store.includes("timeout: 60_000"), "the admission transaction carries the S135 budget law (contended BEGIN waits resolve INSIDE the txn — the drill caught the 5s default expiring mid-callback)");
+  ok(store.includes("enqueueAdmission"), "the admission critical section serializes in-process racers through the gate (the drill's deadlock finding: 3+ concurrent interactive txns stall the engine until the budget expires)");
+  ok(store.includes("P2034"), "P2034 retries against the winner's committed rows");
+  ok(store.includes("removePrefix(prefix).catch"), "the compensation sweep rides EVERY failure path");
+  ok(store.includes('importId.includes("/")'), "the traversal guard fails closed before any storage touch");
+
+  const route = fs.readFileSync("src/app/api/videos/[id]/graphics/import/route.ts", "utf8");
+  ok(route.includes("ImportCountRefusal"), "the route maps the store's authoritative refusal");
+  ok(route.includes("UX only"), "the route's pre-check is documented as the UX fast-fail (advisory, never authoritative)");
+  ok(route.includes("probeName"), "the DELETE probe names the import's OWN first object (the sequence verified-flag bug)");
+
+  const pkg = JSON.parse(fs.readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
+  ok(Boolean(pkg.scripts["test:import-wall"]), "the concurrent import-wall drill is wired into the package scripts");
+  ok(fs.existsSync("scripts/s140-import-wall-drill.mts"), "the drill script exists (the REAL race proof lives there, not in pins)");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

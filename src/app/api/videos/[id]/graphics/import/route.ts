@@ -20,6 +20,7 @@ import {
   validateSheetImport,
 } from "@/lib/tubeforge/graphics/import-validate";
 import {
+  ImportCountRefusal,
   deleteVideoImport,
   graphicsImportKey,
   importCountWalls,
@@ -144,6 +145,12 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (err instanceof ImportRefusal) {
       return NextResponse.json({ error: err.message, errors: err.errors }, { status: err.status });
     }
+    // S140 — the authoritative count wall lives inside saveImport's
+    // admission transaction; its refusal surfaces here as the same 409 the
+    // fast pre-check produces (F2: no concurrent import can slip past it).
+    if (err instanceof ImportCountRefusal) {
+      return NextResponse.json({ error: err.message }, { status: 409 });
+    }
     if (err instanceof StorageQuotaError)
       return NextResponse.json({ error: err.message }, { status: 413 });
     throw err;
@@ -157,6 +164,10 @@ class ImportRefusal extends Error {
   }
 }
 
+/** The FAST pre-check (UX only — bounce an over-cap video before the heavy
+ *  decode/upload work). S140: the AUTHORITATIVE wall lives inside
+ *  saveImport's admission transaction; this read can lose a race with a
+ *  concurrent import and the store's wall will still refuse honestly. */
 async function countWallsOrFail(organizationId: string, videoId: string): Promise<void> {
   const walls = await importCountWalls(organizationId, videoId);
   if (walls.videoCount >= walls.videoCap)
@@ -405,9 +416,13 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
   if (!deleted)
     return NextResponse.json({ error: `No import "${importId}" on this video` }, { status: 404 });
 
+  // The verification probe names the import's OWN first object — the old
+  // probe hardcoded "sheet.png", which is ALWAYS absent for a sequence, so
+  // its `verified` flag read true even with every frame still on disk.
+  const probeName = importObjectNames(rows.find((r) => r.importId === importId) ?? { layout: "sheet", frames: 1 })[0];
   let verified = false;
   try {
-    await get(graphicsImportKey(id, importId, "sheet.png"));
+    await get(graphicsImportKey(id, importId, probeName));
   } catch {
     verified = true;
   }

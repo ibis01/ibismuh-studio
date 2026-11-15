@@ -26,6 +26,7 @@
     "test": "node --import tsx scripts/test-unit.mts",
     "test:queue": "node --import tsx scripts/test-queue.mts",
     "test:queue-drill": "node --import tsx scripts/s75-e12-queue-drill.mts",
+    "test:import-wall": "node --import tsx scripts/s140-import-wall-drill.mts",
     "test:coverage": "node scripts/test-coverage.mjs",
     "worker": "node --import tsx scripts/worker.mts",
     "worker:daemon": "python3 scripts/daemonize.py scripts/worker-daemon.log npm run worker",
