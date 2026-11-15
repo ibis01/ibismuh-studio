@@ -619,6 +619,7 @@ try {
   const abruptMp4 = path.join(tmp, "abrupt.mp4");
   const quietMp4 = path.join(tmp, "quiet.mp4");
   const deadAirMp4 = path.join(tmp, "deadair.mp4");
+  const silentOnlyMp4 = path.join(tmp, "silent-only.mp4");
   const garbageMp4 = path.join(tmp, "garbage.mp4");
   const missingMp4 = path.join(tmp, "never-rendered.mp4");
 
@@ -627,6 +628,7 @@ try {
   await genFixture(abruptMp4, abruptArgs());
   await genFixture(quietMp4, quietArgs());
   await genFixture(deadAirMp4, deadAirArgs());
+  await genFixture(silentOnlyMp4, ["-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24:duration=4", ...FFMPEG_COMMON]);
   fs.writeFileSync(garbageMp4, Buffer.from(Array.from({ length: 8192 }, (_, i) => (i * 37) % 251)));
 
   const qcOpts = (file: string) => ({
@@ -650,6 +652,43 @@ try {
     for (const id of MEASURED_ANALYSIS_IDS)
       eq(statusOf(r, id), "unmeasured", `${id} on undecodable input`);
     ok(!r.passed, "garbage must never pass QC");
+    assertReportInvariants(r);
+  });
+
+  await test("S136 silent-draft law: video-only MP4 + silent contract → playable PASSES, audio lenses not applicable", async () => {
+    // The lanes' documented silent-draft shape (a fully silent project ships
+    // video-only scene encodes + a stream-copy assembly): a video-only final
+    // under a silent contract is PLAYABLE, not a finding. The old blanket
+    // AAC demand shipped a blocking playable=fail on every silent draft
+    // (whiteboard + graphics alike — CI #324/#325 + live row evidence).
+    const r = await runQcReport(qcOpts(silentOnlyMp4));
+    const ids = r.checks.map((c) => c.id);
+    eq(statusOf(r, "playable"), "pass", "a silent draft that decodes is playable");
+    const playable = r.checks.find((c) => c.id === "playable");
+    ok(playable !== undefined, "playable emitted");
+    eq(playable?.value, "4.0s readable (video-only silent draft)");
+    // The audio lenses are NOT APPLICABLE on a stream-less silent artifact —
+    // never unmeasured noise, never the spurious dead-air pass.
+    for (const audioId of ["loudness", "true-peak", "loudness-range", "dead-air", "tail-fade"])
+      ok(!ids.includes(audioId), `audio lens ${audioId} is not asked on a stream-less silent draft`);
+    // The video lenses still run — the artifact's pixels are judged as ever.
+    ok(ids.includes("black-frames") && ids.includes("aspect"), "the video lenses still judge the artifact");
+    assertReportInvariants(r);
+  });
+
+  await test("S136 narrated contract kept strict: video-only MP4 + narration → playable FAILS, audio lenses stay fail-closed", async () => {
+    // The audio half's strictness is CONTRACT-scoped, not weakened: a render
+    // built to carry speech must still carry its AAC — words cut stays a
+    // blocking finding under the narrated contract, and the audio lenses
+    // remain emitted (missing evidence = unmeasured, never clean).
+    const r = await runQcReport({ ...qcOpts(silentOnlyMp4), narrationSec: 4 });
+    eq(statusOf(r, "playable"), "fail", "a narrated contract without audio is still a finding");
+    const playable = r.checks.find((c) => c.id === "playable");
+    ok(playable !== undefined, "playable emitted");
+    eq(playable?.value, "stream missing");
+    for (const audioId of ["loudness", "true-peak", "loudness-range", "dead-air"])
+      eq(statusOf(r, audioId), "unmeasured", `${audioId} stays emitted + fail-closed under a narrated contract`);
+    ok(!r.passed, "the narrated shape must not pass");
     assertReportInvariants(r);
   });
 
