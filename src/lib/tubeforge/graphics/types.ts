@@ -89,6 +89,67 @@ export interface ElementMotion {
   ease: GraphicsEase;
 }
 
+// ---------------------------------------------------------------------------
+// S129 (PAE-1) — the element tween directive: keyframed per-channel motion.
+//
+// The 8 fixed motion kinds in their 3 fixed slots (enter/exit/emphasis)
+// cover the house choreography vocabulary; the tween directive is the
+// AUTHOR's channel-level extension — a window on the scene clock plus
+// per-channel keyframe tracks, evaluated through the shared Stage-S
+// substrate (anim/keyframe evalAt — the substrate finally reaches the doc
+// level). It unlocks what the fixed kinds cannot express (rotation, custom
+// paths, multi-phase sequences) WITHOUT a second clock, a new renderer, or
+// a new dependency: every tween evaluates on the SCENE-LOCAL clock frameAt
+// already resolves, folds through the existing channels, and renders
+// through the existing applier.
+//
+// Semantics (the motion clamp law, tween form): each tween owns the window
+// [delayMs, delayMs + durationMs]; a channel's value before its first key
+// and after its last key HOLDS (clamped evalAt) — so channels stay
+// continuous and finite for ALL t (the never-NaN pin), and the author
+// controls both edge states by writing the first/last keys. Keys are
+// WINDOW-RELATIVE (0..durationMs) and strictly ascending; the segment
+// arriving at a key is eased by THAT key's ease (the destination-key
+// convention every consumer shares — anim/keyframe.ts).
+// ---------------------------------------------------------------------------
+
+/** The closed tween channel set: the frame engine's modulatable channels.
+ *  dx/dy are additive scene-unit offsets, scale a multiplicative factor,
+ *  rotateDeg an ADDITIVE delta (S129 unlocks rotation — v1 motions never
+ *  rotate), opacity/progress multiplicative factors — all composable with
+ *  the enter/exit/emphasis layers. */
+export const TWEEN_CHANNELS = [
+  "dx", "dy", "scale", "rotateDeg", "opacity", "progress",
+] as const;
+export type TweenChannel = (typeof TWEEN_CHANNELS)[number];
+
+/** One keyframe in a tween track: window-relative time, the value the
+ *  channel holds there, the ease of the segment ARRIVING at it (absent ⇒
+ *  linear — the destination-key convention). */
+export interface TweenKeyframe {
+  tMs: number;
+  value: number;
+  ease?: GraphicsEase;
+}
+
+/** One channel's keyframe track inside a tween. */
+export interface TweenChannelTrack {
+  channel: TweenChannel;
+  keys: TweenKeyframe[];
+}
+
+/** The tween directive: a scene-clock window + per-channel keyframe
+ *  tracks. Composition order stays FIXED (the G1.2 pin, tween form):
+ *  enter → tweens (array order) → exit → emphasis — emphasis stays LAST
+ *  so it still shapes the final state. */
+export interface ElementTween {
+  /** ≥ 0, validator-pinned against the scene clock. */
+  delayMs: number;
+  /** > 0, validator-pinned. */
+  durationMs: number;
+  channels: TweenChannelTrack[];
+}
+
 export const GRAPHICS_ELEMENT_KINDS = [
   "headline", "subhead", "bullet", "counter", "bar", "barChart",
   "icon", "callout", "shape", "group", "sprite",
@@ -223,6 +284,11 @@ export interface SpritePayload {
 export interface GraphicsElement {
   id: string;
   kind: GraphicsElementKind;
+  /** S129 — keyframed tween directives (optional, decoration-class:
+   *  junk-shaped tracks drop with warnings; time-sanity violations are
+   *  errors like every motion's). Absence changes nothing (the
+   *  byte-identity law). */
+  tweens?: ElementTween[];
   /** Scene-space placement — the whiteboard's Placement (svg.ts): one
    *  placement shape across engines, never a second one. Junk/absent
    *  falls back honestly to the origin placement (the scene3d position
@@ -360,6 +426,13 @@ export const GRAPHICS_BUDGETS = {
   /** S126 — max frames per sprite import (a sheet's grid cells or a
    *  sequence's file count). A longer animation is a design-doc slice. */
   spriteFramesMax: 48,
+  /** S129 — max tween directives per element. More phases than this and
+   *  the choreography belongs in the planner, not the doc (decorations
+   *  beyond the wall warn-drop, the tolerance law). */
+  tweensPerElementMax: 4,
+  /** S129 — max keyframes per tween channel track. A longer curve is a
+   *  design-doc slice (the easing table's law, mirrored). */
+  tweenKeysPerChannelMax: 16,
 } as const;
 
 /** Borrowed readable-ink wall (the whiteboard's WB_STROKE_WIDTH_MAX
@@ -404,7 +477,8 @@ const HEX_RE = /^#[0-9a-fA-F]{6}$/;
  *  unknown field (warning + dropped). */
 const ELEMENT_KEYS = new Set([
   "id", "kind", "at", "text", "counter", "bar", "icon", "callout",
-  "shape", "group", "sprite", "enter", "exit", "emphasis", "opacity",
+  "shape", "group", "sprite", "enter", "exit", "emphasis", "tweens",
+  "opacity",
 ]);
 
 const DOC_KEYS = new Set(["version", "title", "width", "height", "fps", "scenes"]);
@@ -521,6 +595,221 @@ function parseMotion(
   if (ease === null || !isEaseName(ease)) return reject(`ease "${String(raw.ease)}" is not a Stage-S curve`);
   warnUnknownKeys(raw, new Set(["kind", "durationMs", "delayMs", "ease"]), `${where} ${slot} motion`, warnings);
   return { kind: kind as GraphicsMotionKind, durationMs, delayMs, ease };
+}
+
+// ---------------------------------------------------------------------------
+// S129 — the tween parser. Decoration-class: junk-shaped directives and
+// tracks warn-drop (the optional-motion law — the element still renders);
+// TIME-SANITY violations are ERRORS (the motions-loop law: a window past
+// the scene clock is a planner bug, never tolerated junk); a progress
+// track on a kind whose reveal channel it cannot drive is an ERROR (the
+// compatibility-table law). Value bounds are named walls the drop reasons
+// cite, so tests pin the names (the S128 convention).
+// ---------------------------------------------------------------------------
+
+/** S129 tween value bounds — the closed numeric domain per channel. The
+ *  NAMES are the contract (cited in drop reasons); the values are
+ *  receipts to tune. */
+export const TWEEN_VALUE_BOUNDS = {
+  /** |dx|/|dy| offset cap (scene units) — beyond ±2048 the element leaves
+   *  every house surface. */
+  offsetMax: 2048,
+  /** the multiplicative scale factor's domain. */
+  scaleMin: 0.05,
+  scaleMax: 8,
+  /** |rotateDeg| delta cap — four full spins; more is junk, not
+   *  choreography. */
+  rotateMax: 1440,
+  /** opacity/progress factors — multipliers, never amplifiers. */
+  factorMin: 0,
+  factorMax: 1,
+} as const;
+
+/** The kinds whose reveal channel progress actually drives — DERIVED from
+ *  the closed MOTION_KINDS_BY_ELEMENT table (the same kinds whose legal
+ *  motions include the reveal mechanics wipe/grow/draw). On every other
+ *  kind a progress tween would be a lie the composer never reads. */
+const PROGRESS_TWEEN_KINDS: ReadonlySet<GraphicsElementKind> = new Set(
+  GRAPHICS_ELEMENT_KINDS.filter((k) =>
+    legalMotions(k).some((m) => m === "wipe" || m === "grow" || m === "draw"),
+  ),
+);
+
+const TWEEN_KEYS = new Set(["delayMs", "durationMs", "channels"]);
+const TWEEN_TRACK_KEYS = new Set(["channel", "keys"]);
+const TWEEN_KEYFRAME_KEYS = new Set(["tMs", "value", "ease"]);
+
+function tweenValueLegal(channel: TweenChannel, value: number): boolean {
+  switch (channel) {
+    case "dx":
+    case "dy":
+      return Math.abs(value) <= TWEEN_VALUE_BOUNDS.offsetMax;
+    case "scale":
+      return value >= TWEEN_VALUE_BOUNDS.scaleMin && value <= TWEEN_VALUE_BOUNDS.scaleMax;
+    case "rotateDeg":
+      return Math.abs(value) <= TWEEN_VALUE_BOUNDS.rotateMax;
+    case "opacity":
+    case "progress":
+      return value >= TWEEN_VALUE_BOUNDS.factorMin && value <= TWEEN_VALUE_BOUNDS.factorMax;
+  }
+}
+
+function parseTweenTrack(
+  raw: unknown,
+  where: string,
+  warnings: string[],
+): TweenChannelTrack | null {
+  if (!isObj(raw)) {
+    warnings.push(`${where}: tween track dropped — not an object`);
+    return null;
+  }
+  warnUnknownKeys(raw, TWEEN_TRACK_KEYS, where, warnings);
+  const channel = str(raw.channel);
+  if (channel === null || !TWEEN_CHANNELS.includes(channel as TweenChannel)) {
+    warnings.push(
+      `${where}: tween track dropped — channel "${String(raw.channel)}" is not in the closed tween set (${TWEEN_CHANNELS.join(", ")})`,
+    );
+    return null;
+  }
+  const ch = channel as TweenChannel;
+  const keysRawAll = raw.keys;
+  if (!Array.isArray(keysRawAll) || keysRawAll.length === 0) {
+    warnings.push(`${where}: the ${ch} tween track dropped — it carries no keys`);
+    return null;
+  }
+  let keysRaw = keysRawAll;
+  if (keysRaw.length > GRAPHICS_BUDGETS.tweenKeysPerChannelMax) {
+    warnings.push(
+      `${where}: the ${ch} tween track dropped ${keysRaw.length - GRAPHICS_BUDGETS.tweenKeysPerChannelMax} keys past the tweenKeysPerChannelMax wall (${GRAPHICS_BUDGETS.tweenKeysPerChannelMax})`,
+    );
+    keysRaw = keysRaw.slice(0, GRAPHICS_BUDGETS.tweenKeysPerChannelMax);
+  }
+  const keys: TweenKeyframe[] = [];
+  let prev = -Infinity;
+  for (const kRaw of keysRaw) {
+    if (!isObj(kRaw)) {
+      warnings.push(`${where}: the ${ch} tween track dropped — a key is unreadable (not an object)`);
+      return null;
+    }
+    warnUnknownKeys(kRaw, TWEEN_KEYFRAME_KEYS, where, warnings);
+    const tMs = num(kRaw.tMs);
+    const value = num(kRaw.value);
+    if (tMs === null || value === null) {
+      warnings.push(`${where}: the ${ch} tween track dropped — a key carries a non-finite tMs or value`);
+      return null;
+    }
+    if (tMs < 0 || tMs > 2_147_483_647) {
+      warnings.push(`${where}: the ${ch} tween track dropped — a key time (${String(tMs)}ms) is outside the window-relative domain [0, 2^31)`);
+      return null;
+    }
+    if (tMs <= prev) {
+      warnings.push(
+        `${where}: the ${ch} tween track dropped — keys must strictly ascend (${String(tMs)}ms after ${String(prev)}ms)`,
+      );
+      return null;
+    }
+    prev = tMs;
+    let ease: GraphicsEase | undefined;
+    if (kRaw.ease !== undefined) {
+      const easeStr = str(kRaw.ease);
+      if (easeStr === null || !isEaseName(easeStr)) {
+        warnings.push(`${where}: the ${ch} tween track dropped — a key ease "${String(kRaw.ease)}" is not a Stage-S curve`);
+        return null;
+      }
+      ease = easeStr;
+    }
+    if (!tweenValueLegal(ch, value)) {
+      warnings.push(
+        `${where}: the ${ch} tween track dropped — a key value (${String(value)}) leaves the ${ch} domain (bounds: |offset| ≤ ${TWEEN_VALUE_BOUNDS.offsetMax}, scale ∈ [${TWEEN_VALUE_BOUNDS.scaleMin}, ${TWEEN_VALUE_BOUNDS.scaleMax}], |rotate| ≤ ${TWEEN_VALUE_BOUNDS.rotateMax}, factors ∈ [${TWEEN_VALUE_BOUNDS.factorMin}, ${TWEEN_VALUE_BOUNDS.factorMax}])`,
+      );
+      return null;
+    }
+    keys.push(ease !== undefined ? { tMs, value, ease } : { tMs, value });
+  }
+  return { channel: ch, keys };
+}
+
+/** The element's tween directives — optional choreography. See the S129
+ *  block comment for the class split (junk drops, time-sanity refuses). */
+function parseTweens(
+  raw: unknown,
+  where: string,
+  elKind: GraphicsElementKind,
+  sceneMs: number,
+  warnings: string[],
+  errors: string[],
+): ElementTween[] | null {
+  if (raw === undefined) return null;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    warnings.push(`${where}: tweens dropped — not a non-empty array`);
+    return null;
+  }
+  let list = raw;
+  if (list.length > GRAPHICS_BUDGETS.tweensPerElementMax) {
+    warnings.push(
+      `${where}: tweens dropped ${list.length - GRAPHICS_BUDGETS.tweensPerElementMax} directives past the tweensPerElementMax wall (${GRAPHICS_BUDGETS.tweensPerElementMax})`,
+    );
+    list = list.slice(0, GRAPHICS_BUDGETS.tweensPerElementMax);
+  }
+  const out: ElementTween[] = [];
+  for (const tRaw of list) {
+    if (!isObj(tRaw)) {
+      warnings.push(`${where}: a tween directive dropped — not an object`);
+      continue;
+    }
+    warnUnknownKeys(tRaw, TWEEN_KEYS, where, warnings);
+    const delayMs = num(tRaw.delayMs);
+    const durationMs = num(tRaw.durationMs);
+    if (delayMs === null || delayMs < 0 || durationMs === null || durationMs <= 0) {
+      warnings.push(
+        `${where}: a tween directive dropped — delayMs/durationMs junk (need finite delayMs ≥ 0, durationMs > 0)`,
+      );
+      continue;
+    }
+    const spanEnd = delayMs + durationMs;
+    if (spanEnd > sceneMs) {
+      errors.push(
+        `${where}: the tween window ends at ${spanEnd}ms, past the scene clock (${sceneMs}ms)`,
+      );
+      return null;
+    }
+    const channelsRaw = tRaw.channels;
+    if (!Array.isArray(channelsRaw) || channelsRaw.length === 0) {
+      warnings.push(`${where}: a tween directive dropped — it carries no channel tracks`);
+      continue;
+    }
+    const trackWhere = `${where} tween [${delayMs}..${spanEnd}ms]`;
+    const channels: TweenChannelTrack[] = [];
+    const seen = new Set<string>();
+    for (const cRaw of channelsRaw) {
+      const track = parseTweenTrack(cRaw, trackWhere, warnings);
+      if (track === null) continue; // decoration drop — sibling tracks may survive
+      if (seen.has(track.channel)) {
+        warnings.push(`${trackWhere}: the duplicate ${track.channel} track dropped (one track per channel per tween)`);
+        continue;
+      }
+      if (track.channel === "progress" && !PROGRESS_TWEEN_KINDS.has(elKind)) {
+        errors.push(
+          `${trackWhere}: the ${track.channel} tween is not legal on a "${elKind}" (progress drives only the reveal kinds: ${[...PROGRESS_TWEEN_KINDS].join(", ")})`,
+        );
+        return null;
+      }
+      if (track.keys[track.keys.length - 1].tMs > durationMs) {
+        warnings.push(
+          `${trackWhere}: the ${track.channel} track dropped — a key sits past the tween window (${durationMs}ms)`,
+        );
+        continue;
+      }
+      seen.add(track.channel);
+      channels.push(track);
+    }
+    if (channels.length === 0) {
+      warnings.push(`${where}: a tween directive dropped — every channel track was junk`);
+      continue;
+    }
+    out.push({ delayMs, durationMs, channels });
+  }
+  return out.length > 0 ? out : null;
 }
 
 // --- per-kind payload parsers: shape violations are ERRORS (a payload
@@ -872,6 +1161,11 @@ function parseElement(
     }
   }
 
+  // S129 — the tween directives (decoration-class parse, error-class time
+  // sanity — the class split is the parser's block comment).
+  const tweens = parseTweens(raw.tweens, where, elKind, sceneMs, warnings, errors);
+  if (errors.length > 0) return null;
+
   // Payload-per-kind: payloads parked under the WRONG slot are
   // unknown-field noise to a v1 reader (warning + ignored); the element's
   // own slot parses strictly (shape violations are errors); an absent
@@ -889,6 +1183,7 @@ function parseElement(
     at: parsePlacement(raw.at, where, warnings),
     enter,
   };
+  if (tweens !== null) el.tweens = tweens;
   const ownRaw = raw[ownSlot];
   let ownParsed = false;
   switch (ownSlot) {
@@ -1243,6 +1538,26 @@ function serializeMotion(m: ElementMotion): Rec {
   return { kind: m.kind, durationMs: m.durationMs, delayMs: m.delayMs, ease: m.ease };
 }
 
+/** S129 — strict tween write: exactly the declared fields, declared
+ *  order — the tween block round-trips byte-stable like everything else
+ *  on the element. */
+function serializeTweenKeyframe(k: TweenKeyframe): Rec {
+  const out: Rec = { tMs: k.tMs, value: k.value };
+  if (k.ease !== undefined) out.ease = k.ease;
+  return out;
+}
+
+function serializeTweens(tweens: ElementTween[]): Rec[] {
+  return tweens.map((t) => ({
+    delayMs: t.delayMs,
+    durationMs: t.durationMs,
+    channels: t.channels.map((c) => ({
+      channel: c.channel,
+      keys: c.keys.map(serializeTweenKeyframe),
+    })),
+  }));
+}
+
 /** Strict advisory write (D2): exactly the declared hint fields, declared
  *  order — the routing block round-trips byte-stable like everything else
  *  on the scene. */
@@ -1344,6 +1659,7 @@ function serializeElement(el: GraphicsElement): Rec {
   out.enter = serializeMotion(el.enter);
   if (el.exit !== undefined) out.exit = serializeMotion(el.exit);
   if (el.emphasis !== undefined) out.emphasis = serializeMotion(el.emphasis);
+  if (el.tweens !== undefined) out.tweens = serializeTweens(el.tweens);
   if (el.opacity !== undefined) out.opacity = el.opacity;
   return out;
 }

@@ -25,12 +25,21 @@
 //                 no motion drives it
 //     counterValue counter kind only — the tweened number
 //
-//   Composition order is FIXED: enter → exit → emphasis (the G1.2
+//   Composition order is FIXED: enter → tweens → exit → emphasis (the G1.2
 //   precedence pin, emphasis > exit > enter, manifests as composition
 //   order — emphasis is applied LAST, so it shapes the final state over
-//   whatever the exit/enter layers produced):
+//   whatever the tween/exit/enter layers produced):
 //     enter  drives its channels from their start state to the placed
 //            state (clamped: the start state holds pre-window);
+//     tweens (S129, PAE-1) are the AUTHOR's keyframed directives: each
+//            directive's per-channel keys are delay-shifted onto the
+//            scene clock and evaluated through the SHARED Stage-S
+//            substrate (anim/keyframe evalAt — clamped holds outside the
+//            keys, the destination key's ease drives the segment), then
+//            folded in array order — additive channels (dx/dy/rotateDeg)
+//            SUM, multiplicative channels (scale/opacity/progress)
+//            MULTIPLY. Rotation is the tween's alone (v1 motions never
+//            rotate — the delta is the only writer of rotateDelta);
 //     exit   multiplies the placed state down to its end state (a fade
 //            exits 1→0, a wipe un-reveals ×(1−e), a count drains the
 //            captured value back to `from` — captured at the exit's start
@@ -56,8 +65,9 @@
 // external geometry to resolve.
 import { frameCountOf } from "../anim/clock";
 import { evalEase } from "../anim/easing";
+import { evalAt } from "../anim/keyframe";
 import { estimateNarrationMs } from "../whiteboard/timing";
-import type { ElementMotion, GraphicsDoc, GraphicsElement } from "./types";
+import type { ElementMotion, ElementTween, GraphicsDoc, GraphicsElement } from "./types";
 
 /** The v1 motion semantics — ONE source, cited by the pins and the design
  *  record. Values are receipts to tune; the names are the contract. */
@@ -164,6 +174,9 @@ interface Channels {
   dx: number;
   dy: number;
   scaleFactor: number;
+  /** S129 — the tween fold's additive rotation delta (the ONLY writer;
+   *  v1 motions never rotate). */
+  rotateDelta: number;
   progress: number;
   /** the counter value the ENTER layer produces at clamped progress —
    *  captured by the exit's drain (continuity at the exit boundary). */
@@ -188,6 +201,28 @@ function enterChannels(el: GraphicsElement, tMs: number, out: Channels): void {
   if (m.kind === "slide") out.dx -= GRAPHICS_MOTION_SEMANTICS.slidePx * (1 - e);
   if (m.kind === "pop") out.scaleFactor = GRAPHICS_MOTION_SEMANTICS.popFrom + (1 - GRAPHICS_MOTION_SEMANTICS.popFrom) * e;
   if (m.kind === "count") out.counterFromEnter = counterAtEnter(el, m, tMs);
+}
+
+/** S129 — the tween fold. The validator guarantees finite values and
+ *  strictly-ascending window-relative keys, so evalAt's refusals are
+ *  unreachable here (the Part F law: validate once, schedule purely). */
+function tweenChannels(tweens: readonly ElementTween[], tMs: number, out: Channels): void {
+  for (const tw of tweens) {
+    for (const track of tw.channels) {
+      const v = evalAt(
+        track.keys.map((k) => ({ tMs: tw.delayMs + k.tMs, value: k.value, ease: k.ease })),
+        tMs,
+      );
+      switch (track.channel) {
+        case "dx": out.dx += v; break;
+        case "dy": out.dy += v; break;
+        case "scale": out.scaleFactor *= v; break;
+        case "rotateDeg": out.rotateDelta += v; break;
+        case "opacity": out.opacityFactor *= v; break;
+        case "progress": out.progress *= v; break;
+      }
+    }
+  }
 }
 
 function exitChannels(el: GraphicsElement, exit: ElementMotion, tMs: number, out: Channels): void {
@@ -227,10 +262,12 @@ function elementFrame(el: GraphicsElement, tMs: number): GraphicsElementFrame {
     dx: 0,
     dy: 0,
     scaleFactor: 1,
+    rotateDelta: 0,
     progress: 1,
     counterFromEnter: el.counter !== undefined ? el.counter.to : 0,
   };
   enterChannels(el, tMs, out);
+  if (el.tweens !== undefined) tweenChannels(el.tweens, tMs, out);
   if (el.exit !== undefined) exitChannels(el, el.exit, tMs, out);
   if (el.emphasis !== undefined) emphasisChannels(el.emphasis, tMs, out);
   const frame: GraphicsElementFrame = {
@@ -239,7 +276,7 @@ function elementFrame(el: GraphicsElement, tMs: number): GraphicsElementFrame {
     x: el.at.x + out.dx,
     y: el.at.y + out.dy,
     scale: el.at.scale * out.scaleFactor,
-    rotateDeg: el.at.rotateDeg,
+    rotateDeg: el.at.rotateDeg + out.rotateDelta,
     progress: clamp01(out.progress),
   };
   if (el.counter !== undefined) frame.counterValue = out.counterFromEnter;

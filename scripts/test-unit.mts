@@ -15716,6 +15716,240 @@ await test("G1.1 parseGraphicsDoc nulls on junk JSON and non-objects", () => {
 });
 
 // ---------------------------------------------------------------------------
+// S129 (PAE-1) — the element tween directive: keyframed per-channel motion
+// on the scene clock, evaluated through the shared Stage-S substrate.
+// Pins: validator class split (junk warn-drops, time-sanity + compat-table
+// refusals), the named walls (tweensPerElementMax / tweenKeysPerChannelMax),
+// value-domain bounds, the byte-stable round-trip, the frame fold (additive
+// channels sum, multiplicative channels multiply, rotation unlocked,
+// emphasis STILL shapes the final state — the G1.2 pin in its tween form),
+// multi-tween phases, pre/post-window holds, tween-less byte-identity.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S129 (PAE-1) the tween directive");
+
+function twChannel(channel: string, keys: Array<Record<string, unknown>>): Record<string, unknown> {
+  return { channel, keys };
+}
+
+const TW_KEYS_LINEAR = [
+  { tMs: 0, value: -120 },
+  { tMs: 500, value: 0 },
+];
+
+await test("S129 a tweened doc round-trips byte-identical (strict write, declared order)", () => {
+  const raw = gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" },
+      tweens: [
+        { delayMs: 500, durationMs: 500, channels: [twChannel("dx", TW_KEYS_LINEAR)] },
+        {
+          delayMs: 1200, durationMs: 600,
+          channels: [
+            twChannel("rotateDeg", [{ tMs: 0, value: 0 }, { tMs: 300, value: 45, ease: "ease-out" }, { tMs: 600, value: 90 }]),
+            twChannel("scale", [{ tMs: 0, value: 1 }, { tMs: 600, value: 1.2 }]),
+          ],
+        },
+      ],
+    }),
+  ], { durationMs: 3000 })]);
+  const doc = mustValidate(raw, "the tweened doc");
+  eq(doc.scenes[0]?.elements[0]?.tweens?.length, 2, "both directives kept");
+  eq(doc.scenes[0]?.elements[0]?.tweens?.[1]?.channels.length, 2, "both channel tracks kept");
+  const json1 = writeGraphicsDoc(doc);
+  const doc2 = mustParse(json1, "the written tweened doc");
+  eq(writeGraphicsDoc(doc2), json1, "write→parse→write is byte-identical");
+});
+
+await test("S129 the tweensPerElementMax wall — excess directives warn-drop with the wall name", () => {
+  const tweens = [0, 1, 2, 3, 4].map((i) => ({
+    delayMs: 0, durationMs: 100, channels: [twChannel("dx", [{ tMs: 0, value: i === 0 ? -1 : 1 }, { tMs: 100, value: 0 }])],
+  }));
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { tweens })], { durationMs: 3000 })]));
+  ok(r.doc !== null, "the doc survives (decorations warn-drop, the tolerance law)");
+  ok(r.warnings.some((w) => w.includes("tweensPerElementMax wall (4)")), `the wall name is cited: ${r.warnings.join(" | ")}`);
+  eq(r.doc?.scenes[0]?.elements[0]?.tweens?.length, 4, "the first four kept");
+});
+
+await test("S129 the tweenKeysPerChannelMax wall — excess keys warn-drop with the wall name", () => {
+  const keys = Array.from({ length: 17 }, (_, i) => ({ tMs: i * 10, value: 0 }));
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("h1", "headline", { tweens: [{ delayMs: 0, durationMs: 500, channels: [twChannel("dy", keys)] }] }),
+  ], { durationMs: 3000 })]));
+  ok(r.doc !== null, "the doc survives");
+  ok(r.warnings.some((w) => w.includes("tweenKeysPerChannelMax wall (16)")), `the wall name is cited: ${r.warnings.join(" | ")}`);
+  eq(r.doc?.scenes[0]?.elements[0]?.tweens?.[0]?.channels[0]?.keys.length, 16, "the first sixteen keys kept");
+});
+
+await test("S129 tween time-sanity — a window past the scene clock REFUSES (the motions-loop law)", () => {
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      tweens: [{ delayMs: 2500, durationMs: 600, channels: [twChannel("dx", TW_KEYS_LINEAR)] }],
+    }),
+  ], { durationMs: 3000 })]));
+  const errors = mustReject(r, "the past-the-clock tween");
+  ok(errors.some((e) => e.includes("the tween window ends at 3100ms, past the scene clock (3000ms)")), errors.join(" | "));
+});
+
+await test("S129 a progress tween on a non-reveal kind REFUSES; on a bar it parses (the compat-table law)", () => {
+  const progressTween = { delayMs: 0, durationMs: 500, channels: [twChannel("progress", [{ tMs: 0, value: 1 }, { tMs: 500, value: 0.5 }])] };
+  const bad = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { tweens: [progressTween] })], { durationMs: 3000 })]));
+  const badErrors = mustReject(bad, "progress on a headline");
+  ok(badErrors.some((e) => e.includes("the progress tween is not legal on a \"headline\"") && e.includes("progress drives only the reveal kinds")), badErrors.join(" | "));
+  const good = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("br", "bar", { enter: { kind: "wipe", durationMs: 500, delayMs: 0, ease: "linear" }, tweens: [progressTween] }),
+  ], { durationMs: 3000 })]));
+  ok(good.doc !== null && good.doc.scenes[0]?.elements[0]?.tweens?.length === 1, "progress parses on a bar");
+});
+
+await test("S129 junk tween tracks warn-drop with their reasons; the element still renders", () => {
+  // Split across two elements — the tweensPerElementMax wall (4) would
+  // slice a single element's list before the later junk cases parse.
+  const junkA = [
+    { delayMs: 0, durationMs: 500, channels: [twChannel("spin", TW_KEYS_LINEAR)] }, // unknown channel
+    { delayMs: 0, durationMs: 500, channels: [twChannel("dx", [])] }, // no keys
+    { delayMs: 0, durationMs: 500, channels: [twChannel("dx", [{ tMs: 300, value: 0 }, { tMs: 100, value: 1 }])] }, // not ascending
+    { delayMs: 0, durationMs: 500, channels: [twChannel("dx", [{ tMs: 0, value: 3000 }, { tMs: 500, value: 0 }])] }, // offset domain
+  ];
+  const junkB = [
+    { delayMs: 0, durationMs: 500, channels: [twChannel("rotateDeg", [{ tMs: 0, value: 0 }, { tMs: 500, value: 90, ease: "zigzag" }])] }, // junk ease
+    { delayMs: 0, durationMs: 500, channels: [twChannel("dy", [{ tMs: 0, value: 0 }, { tMs: 700, value: 1 }])] }, // key past the window
+    { delayMs: 0, durationMs: 500, channels: [twChannel("dx", TW_KEYS_LINEAR), twChannel("dx", TW_KEYS_LINEAR)] }, // duplicate channel
+  ];
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("a", "headline", { tweens: junkA }),
+    gEl("b", "subhead", { tweens: junkB }),
+  ], { durationMs: 3000 })]));
+  ok(r.doc !== null, "the doc survives every junk track");
+  ok(r.warnings.some((w) => w.includes("not in the closed tween set")), "unknown channel cited");
+  ok(r.warnings.some((w) => w.includes("carries no keys")), "empty track cited");
+  ok(r.warnings.some((w) => w.includes("keys must strictly ascend")), "non-ascending cited");
+  ok(r.warnings.some((w) => w.includes("leaves the dx domain")), "value bound cited");
+  ok(r.warnings.some((w) => w.includes("not a Stage-S curve")), "junk ease cited");
+  ok(r.warnings.some((w) => w.includes("sits past the tween window (500ms)")), "key-past-window cited");
+  ok(r.warnings.some((w) => w.includes("duplicate dx track dropped")), "duplicate cited");
+  ok(r.doc?.scenes[0]?.elements[0]?.tweens === undefined, "element a's all-junk tweens parse to absent");
+  eq(r.doc?.scenes[0]?.elements[1]?.tweens?.length, 1, "element b keeps the tween whose duplicate track left one legal channel");
+  eq(r.doc?.scenes[0]?.elements[1]?.tweens?.[0]?.channels[0]?.channel, "dx", "the surviving track is the first dx");
+});
+
+await test("S129 unknown keys inside tween objects warn-drop (the id law rides every level)", () => {
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      tweens: [{ delayMs: 0, durationMs: 500, channels: [twChannel("dx", TW_KEYS_LINEAR)], secret: 1 }],
+    }),
+  ], { durationMs: 3000 })]));
+  ok(r.doc !== null, "the doc survives");
+  ok(r.warnings.some((w) => w.includes("secret")), `the unknown key is named: ${r.warnings.join(" | ")}`);
+});
+
+await test("S129 the fold — additive dx holds pre/post-window and glides linearly in between", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 100, delayMs: 0, ease: "linear" },
+      tweens: [{ delayMs: 500, durationMs: 500, channels: [twChannel("dx", TW_KEYS_LINEAR)] }],
+    }),
+  ], { durationMs: 3000 })]));
+  eq(g2ElById(frameAt(doc, 0), "h1").x, 0, "pre-window: the first key's offset holds (120 − 120)");
+  eq(g2ElById(frameAt(doc, 499), "h1").x, 0, "just before the window: still the hold");
+  eq(g2ElById(frameAt(doc, 750), "h1").x, 60, "mid-window: −120 + 120 × 0.5");
+  eq(g2ElById(frameAt(doc, 2500), "h1").x, 120, "post-window: the last key's value holds (the placement)");
+});
+
+await test("S129 the fold — rotateDeg unlocks rotation; the eased segment follows the destination key", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      at: { x: 120, y: 96, scale: 1, rotateDeg: 10 },
+      enter: { kind: "fade", durationMs: 100, delayMs: 0, ease: "linear" },
+      tweens: [{ delayMs: 0, durationMs: 400, channels: [twChannel("rotateDeg", [{ tMs: 0, value: 0 }, { tMs: 200, value: 90, ease: "ease-out" }, { tMs: 400, value: 0, ease: "linear" }])] }],
+    }),
+  ], { durationMs: 3000 })]));
+  const at100 = g2ElById(frameAt(doc, 100), "h1");
+  ok(Math.abs(at100.rotateDeg - (10 + 90 * (1 - Math.pow(1 - 0.5, 3)))) < 1e-9,
+    `the ease-out segment at u=0.5: ${at100.rotateDeg} ≈ 10 + 90 × 0.875`);
+  eq(g2ElById(frameAt(doc, 300), "h1").rotateDeg, 10 + 45, "the linear segment mid-way");
+  eq(g2ElById(frameAt(doc, 2000), "h1").rotateDeg, 10, "post-window hold returns to the placement rotation");
+});
+
+await test("S129 the fold — multiplicative channels compose with enter (progress × reveal, opacity × fade)", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("br", "bar", {
+      enter: { kind: "wipe", durationMs: 500, delayMs: 0, ease: "linear" },
+      opacity: 0.8,
+      tweens: [{ delayMs: 0, durationMs: 500, channels: [
+        twChannel("progress", [{ tMs: 0, value: 1 }, { tMs: 500, value: 0.5 }]),
+        twChannel("opacity", [{ tMs: 0, value: 0.5 }, { tMs: 500, value: 1 }]),
+      ] }],
+    }),
+  ], { durationMs: 3000 })]));
+  const f = g2ElById(frameAt(doc, 250), "br");
+  eq(f.progress, 0.375, "wipe assigns 0.5, the tween factor multiplies ×0.75");
+  ok(Math.abs(f.opacity - 0.8 * 0.75) < 1e-9, `base 0.8 × tween factor 0.75 (wipe never drives opacity): ${f.opacity}`);
+});
+
+await test("S129 composition order — emphasis STILL shapes the final state over tweens (the G1.2 pin, tween form)", () => {
+  const mk = (withEmphasis: boolean) => mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 100, delayMs: 0, ease: "linear" },
+      tweens: [{ delayMs: 0, durationMs: 1000, channels: [twChannel("scale", [{ tMs: 0, value: 1 }, { tMs: 1000, value: 2 }])] }],
+      ...(withEmphasis ? { emphasis: { kind: "pop", durationMs: 400, delayMs: 1000, ease: "linear" } } : {}),
+    }),
+  ], { durationMs: 3000 })]));
+  const withEmph = g2ElById(frameAt(mk(true), 1200), "h1").scale; // emphasis midpoint (env = 1)
+  const without = g2ElById(frameAt(mk(false), 1200), "h1").scale;
+  eq(without, 2, "tween holds its last key past the window");
+  ok(Math.abs(withEmph - 2 * (1 + GRAPHICS_MOTION_SEMANTICS.emphasisPopScale)) < 1e-9,
+    `emphasis pulses the tween state: ${withEmph} ≈ 2 × ${1 + GRAPHICS_MOTION_SEMANTICS.emphasisPopScale}`);
+});
+
+await test("S129 multi-tween phases fold in array order — move left, then right", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 100, delayMs: 0, ease: "linear" },
+      tweens: [
+        { delayMs: 0, durationMs: 500, channels: [twChannel("dx", [{ tMs: 0, value: -100 }, { tMs: 500, value: 0 }])] },
+        { delayMs: 500, durationMs: 500, channels: [twChannel("dx", [{ tMs: 0, value: 0 }, { tMs: 500, value: 100 }])] },
+      ],
+    }),
+  ], { durationMs: 3000 })]));
+  eq(g2ElById(frameAt(doc, 250), "h1").x, 120 - 50, "phase 1 mid-glide; phase 2 holds its first key");
+  eq(g2ElById(frameAt(doc, 750), "h1").x, 120 + 50, "phase 1 holds its last key; phase 2 mid-glide");
+  eq(g2ElById(frameAt(doc, 2000), "h1").x, 120 + 100, "both phases hold their ends");
+});
+
+await test("S129 tween-less byte-identity — an element's frames are untouched by OTHER elements' tweens", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("a", "headline"),
+    gEl("b", "subhead", {
+      enter: { kind: "fade", durationMs: 100, delayMs: 0, ease: "linear" },
+      tweens: [{ delayMs: 0, durationMs: 1000, channels: [twChannel("scale", [{ tMs: 0, value: 1 }, { tMs: 1000, value: 3 }])] }],
+    }),
+  ], { durationMs: 3000 })]));
+  const plain = mustValidate(gDoc([gScene("s1", [gEl("a", "headline"), gEl("b", "subhead")], { durationMs: 3000 })]), "plain doc");
+  eq(g2ElById(frameAt(doc, 500), "a").x, g2ElById(frameAt(plain, 500), "a").x, "element a identical with and without b's tween");
+  eq(JSON.stringify(frameAt(doc, 500).elements.find((e) => e.id === "a")), JSON.stringify(frameAt(plain, 500).elements.find((e) => e.id === "a")), "a's full frame state identical");
+});
+
+await test("S129 the tween fold is deterministic — the tweened sweep is byte-identical across two passes", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "rise", durationMs: 400, delayMs: 0, ease: "ease-out" },
+      exit: { kind: "fade", durationMs: 400, delayMs: 2200, ease: "linear" },
+      tweens: [
+        { delayMs: 400, durationMs: 800, channels: [
+          twChannel("dx", [{ tMs: 0, value: 0 }, { tMs: 400, value: 200, ease: "ease-in-out" }, { tMs: 800, value: 0 }]),
+          twChannel("rotateDeg", [{ tMs: 0, value: 0 }, { tMs: 800, value: 360 }]),
+        ] },
+      ],
+    }),
+  ], { durationMs: 3000 })]));
+  const a = g2Sweep(doc, 50, 3000);
+  const b = g2Sweep(doc, 50, 3000);
+  eq(a.length, b.length, "same frame count");
+  ok(a.every((f, i) => f === b[i]), "every frame byte-identical across passes");
+});
+
+// ---------------------------------------------------------------------------
 // G1.2 — frame truth (Part B): frameAt is the ONE source of motion truth.
 // Pins: determinism (sweep hash over a fixed doc), the fixed composition
 // order (emphasis > exit > enter — applied last), element state never
