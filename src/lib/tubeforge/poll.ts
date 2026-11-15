@@ -292,6 +292,14 @@ export function pollConvert(videoId: string, opts?: PollOpts) {
  * Poll until the script (re)generation job finishes. Watches the job flag
  * (not the artifact) so it works for BOTH first-time generation (retry after
  * a failed create) and re-rolls of an existing script.
+ *
+ * S135 — the flag alone LIED: a script job that dies without writing
+ * video.error (the S69 engine-lane law keeps the field clean for
+ * whiteboard/graphics, and a secondary failure in the catch path can skip
+ * the write entirely) clears its flag, and this poll returned an
+ * unscripted video — the Auto-Pilot chain then marched on and the
+ * storyboard honestly refused ("Video has no scenes"). The ARTIFACT is the
+ * contract now: the flag clears AND the row says "scripted".
  */
 export async function pollScript(
   videoId: string,
@@ -307,6 +315,12 @@ export async function pollScript(
 
     if (!data.generating?.script) {
       if (data.video.error) throw new Error(data.video.error);
+      if (data.video.status !== "scripted") {
+        throw new Error(
+          "The script job ended without landing a script — retry the script step. " +
+            `(row status: ${data.video.status ?? "unknown"})`
+        );
+      }
       return data.video;
     }
 

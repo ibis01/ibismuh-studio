@@ -19586,6 +19586,58 @@ await test("S135 the graphics applier string EXECUTES — camera leg, absent-cam
   }
 });
 
+await test("S135 pollScript watches the ARTIFACT — a flag-cleared unscripted row is a failure, not a pass", async () => {
+  const { pollScript } = await import("../src/lib/tubeforge/poll");
+  const realFetch = globalThis.fetch;
+  // Two probes, then the trap: the job flag CLEARS while the row is still
+  // "scripting" with NO video.error (the S69 engine-lane law + the
+  // secondary-failure skip — the exact shape that read as step-1 green and
+  // marched Auto-Pilot into the storyboard's honest refusal). The OLD poll
+  // returned the unscripted video; the artifact gate must refuse.
+  const payloads = [
+    { video: { id: "v1", status: "scripting", error: null }, generating: { script: true } },
+    { video: { id: "v1", status: "scripting", error: null }, generating: { script: false } },
+  ];
+  let i = 0;
+  (globalThis as Record<string, unknown>).fetch = (async () =>
+    new Response(JSON.stringify(payloads[Math.min(i++, payloads.length - 1)]), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })) as typeof fetch;
+  try {
+    let threw: string | null = null;
+    try {
+      await pollScript("v1", { intervalMs: 1 });
+    } catch (e) {
+      threw = e instanceof Error ? e.message : String(e);
+    }
+    ok(threw !== null, "the unscripted flag-cleared row throws (no silent pass)");
+    ok((threw ?? "").includes("ended without landing a script"), "the refusal names the artifact contract");
+    ok((threw ?? "").includes("scripting"), "the refusal names the row's actual status");
+
+    // The happy path: flag clears AND the row says scripted — the pass.
+    i = 0;
+    payloads[1] = { video: { id: "v1", status: "scripted", error: null }, generating: { script: false } };
+    const v = await pollScript("v1", { intervalMs: 1 });
+    ok(v.status === "scripted", "the scripted row passes");
+  } finally {
+    (globalThis as Record<string, unknown>).fetch = realFetch;
+  }
+
+  // The landing write's budget is explicit (the S135 receipt) — a source
+  // pin, because the default 5s was the whole bug.
+  const revSrc = await fsp.readFile("src/lib/tubeforge/scene-revisions.ts", "utf8");
+  ok(revSrc.includes("timeout: 60_000"), "the scene-commit transaction carries an explicit 60s budget");
+  ok(revSrc.includes("maxWait: 15_000"), "the transaction's acquisition window is bounded too");
+
+  // The Auto-Pilot chain is mode-aware: engine lanes scaffold, art lanes paint.
+  const createSrc = await fsp.readFile("src/components/tubeforge/views/create-view.tsx", "utf8");
+  ok(createSrc.includes("startEngineDoc"), "the chain knows the engine-doc scaffold leg");
+  ok(createSrc.includes("whiteboard/scaffold") && createSrc.includes("graphics/scaffold"), "both engine scaffold routes are wired");
+  ok(createSrc.includes("Motion graphics (2D)"), "the 2D engine lane is a pickable type");
+  ok(createSrc.includes("Character animation"), "the rig channel is a pickable type");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

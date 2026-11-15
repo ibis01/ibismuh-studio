@@ -351,7 +351,16 @@ export async function commitSceneChanges(input: CommitSceneChangesInput): Promis
   const backfills: SceneRevision[] = [];
 
   try {
-    await db.$transaction(async (tx: RevisionClient) => {
+    // S135 — the explicit budget: Prisma's interactive-transaction default
+    // is 5s, and this commit is the script job's LANDING WRITE (video row +
+    // per-scene findFirst + backfill + revision rows, all or nothing). On a
+    // cold disk under load it blew the default and the whole epoch rolled
+    // back — title, script and scenes with it — leaving "0 words · 0 scenes"
+    // and the downstream "Video has no scenes" refusal. 60s of budget with
+    // a 15s acquisition window is still bounded (a wedged lock fails fast
+    // into the job's own retry/error path), it just stops lying about 5s.
+    await db.$transaction(
+      async (tx: RevisionClient) => {
       await tx.video.update({
         where: { id: video.id },
         data: {
@@ -430,7 +439,7 @@ export async function commitSceneChanges(input: CommitSceneChangesInput): Promis
           })
         );
       }
-    });
+    }, { timeout: 60_000, maxWait: 15_000 });
   } catch (err) {
     // The hard floor (law 5): a racing writer minted the same version —
     // surface it as the same conflict the polite gate produces.

@@ -212,40 +212,65 @@ export async function runScriptJob(
       }
 
       // Final round (or a non-rate-limit error) — surface the failure.
-      await db.activity.create({
-        data: {
-          organizationId: video.organizationId,
-          videoId,
-          stage: "script",
-          level: "error",
-          message: `Script generation failed: ${message}`,
-        },
-      });
+      // S135 — ORDER REPAIR: the video row's failure state lands FIRST (it
+      // is the money fact — pollScript's honesty gate reads it), and the
+      // Activity row is best-effort AFTER it. The old order wrote the
+      // activity first and a secondary failure there (a Prisma transaction
+      // error under the post-timeout SQLite lock, seen live at the
+      // 2026-11-15 dispatch receipts) skipped BOTH writes, leaving a
+      // "scripting" row with no error — which the poll then read as
+      // success.
       // S69 — the video.error LANE-ATTRIBUTION decision (the S68 close's
-      // follow-up question, answered): a WHITEBOARD-mode video's error badge
+      // follow-up question, answered): an ENGINE-lane video's error badge
       // belongs to its render lane. The auto-started story-lane script job
-      // is a convenience for whiteboard videos (its scenes feed the
-      // scaffold); when it fails there, the failure stays in the Activity
-      // feed + the row's status (the scaffold's honest "no scenes" gate and
-      // the studio's empty state carry the explanation), and video.error is
-      // NOT written — the S68 CI race (a script failure poisoning the
-      // shared field the whiteboard render's success path clears, timing
-      // either way) is gone by construction. Classic videos keep the
-      // historical write: for them the script lane IS the money path.
-      // renderMode is re-read FRESH — the mode may have switched while this
-      // job was retrying.
+      // is a convenience for whiteboard AND graphics videos (its scenes
+      // feed the scaffold); when it fails there, the failure stays in the
+      // Activity feed + the row's status (the scaffold's honest "no scenes"
+      // gate and the studio's empty state carry the explanation), and
+      // video.error is NOT written — the S68 CI race (a script failure
+      // poisoning the shared field the engine render's success path clears,
+      // timing either way) is gone by construction. S123: the engine lanes
+      // are a SET, not a case — graphics joins whiteboard under the same
+      // law. Classic videos keep the historical write: for them the script
+      // lane IS the money path. renderMode is re-read FRESH — the mode may
+      // have switched while this job was retrying.
       const fresh = await db.video.findUnique({
         where: { id: videoId },
         select: { renderMode: true },
       });
-      const whiteboardMode = fresh?.renderMode === "whiteboard";
-      // The video row may have been deleted mid-flight — tolerate that.
-      await db.video
-        .update({
-          where: { id: videoId },
-          data: whiteboardMode
-            ? { status: "failed" }
-            : { status: "failed", error: message },
+      const engineMode = fresh?.renderMode === "whiteboard" || fresh?.renderMode === "graphics";
+      // The video row may have been deleted mid-flight — tolerate that. A
+      // bounded second attempt: the first write after a blown transaction
+      // can meet the lingering SQLite writer lock.
+      const writeFailureState = () =>
+        db.video
+          .update({
+            where: { id: videoId },
+            data: engineMode
+              ? { status: "failed" }
+              : { status: "failed", error: message },
+          })
+          .catch(async () => {
+            await new Promise((r) => setTimeout(r, 500));
+            return db.video
+              .update({
+                where: { id: videoId },
+                data: engineMode
+                  ? { status: "failed" }
+                  : { status: "failed", error: message },
+              })
+              .catch(() => {});
+          });
+      await writeFailureState();
+      await db.activity
+        .create({
+          data: {
+            organizationId: video.organizationId,
+            videoId,
+            stage: "script",
+            level: "error",
+            message: `Script generation failed: ${message}`,
+          },
         })
         .catch(() => {});
       throw err; // job registry marks the row "failed"

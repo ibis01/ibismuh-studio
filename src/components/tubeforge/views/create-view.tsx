@@ -59,6 +59,8 @@ import {
   Film,
   PenTool,
   Presentation,
+  BarChart3,
+  PersonStanding,
   ListVideo,
   ChevronDown,
   ChevronLeft,
@@ -121,6 +123,24 @@ const VIDEO_TYPES = [
     desc: "A hand draws every scene in real time — narrated whiteboard animation.",
     icon: PenTool,
     accent: "text-sky-300",
+  },
+  {
+    id: "graphics2d",
+    title: "Motion graphics (2D)",
+    format: "story",
+    renderMode: "graphics",
+    desc: "A native 2D engine animates headlines, counters, bar charts and icons from a declarative doc — kinetic and $0, no image generation.",
+    icon: BarChart3,
+    accent: "text-emerald-300",
+  },
+  {
+    id: "character",
+    title: "Character animation",
+    format: "story",
+    renderMode: "kenburns",
+    desc: "Your Cast character performs the story — attach a rigged character and the native rig channel draws it pose-by-pose into every scene; without one, storyboard art carries the scene.",
+    icon: PersonStanding,
+    accent: "text-fuchsia-300",
   },
   {
     id: "slides",
@@ -324,6 +344,9 @@ export function CreateView() {
   const [justCopied, setJustCopied] = useState(false);
 
   const isStory = format === "story";
+  // S135 — the engine lanes draw natively (whiteboard pen, graphics doc);
+  // their "storyboard" leg scaffolds the doc instead of painting AI art.
+  const isEngineLaneMode = renderMode === "whiteboard" || renderMode === "graphics";
   const sceneCount = SCENE_COUNTS[length] ?? 6;
 
   // The Concept step (1) needs a topic (or a pasted script) before the brief
@@ -840,6 +863,27 @@ export function CreateView() {
       .then(async () => (await api<{ video: VideoDTO }>(`/api/videos/${id}`)).video);
   }, []);
 
+  // S135 — the ENGINE lanes' "storyboard" leg: the scaffold route builds
+  // the engine doc straight from the landed scenes (native planner — $0,
+  // no AI dependency), and NOTHING paints AI images: the whiteboard and
+  // graphics engines draw natively, so the old unconditional storyboard
+  // pass billed image generations the render never consumes. The chain is
+  // now mode-aware: art lanes paint, engine lanes scaffold.
+  const startEngineDoc = useCallback(
+    (id: string, mode: "whiteboard" | "graphics") => {
+      setRenderLabel(mode === "whiteboard" ? "Scaffolding the whiteboard doc…" : "Scaffolding the motion-graphics doc…");
+      const route =
+        mode === "whiteboard"
+          ? `/api/videos/${id}/whiteboard/scaffold`
+          : `/api/videos/${id}/graphics/scaffold`;
+      return api<{ doc: unknown }>(route, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }).then(async () => (await api<{ video: VideoDTO }>(`/api/videos/${id}`)).video);
+    },
+    [],
+  );
+
   const startStock = useCallback((id: string) => {
     setRenderLabel("Matching stock footage…");
     return api(`/api/videos/${id}/stock`, {
@@ -950,11 +994,21 @@ export function CreateView() {
         bumpRefresh();
 
         if (autopilot && isStory) {
-          // Story pipeline: storyboard (skipped for slides) → (stock b-roll) →
-          // voiceover → thumbnail → render. Keynote slides design their own
-          // deck at render time — no image generation pass needed.
+          // Story pipeline: engine doc (whiteboard/graphics — the native
+          // planner scaffolds the doc from the landed scenes; NO AI image
+          // spend) → art storyboard (kenburns/stock/animated — AI paints
+          // every scene) → (stock b-roll) → voiceover → thumbnail → render.
+          // Keynote slides design their own deck at render time — no
+          // image/doc pass needed.
+          const isEngineLane = isEngineLaneMode;
           if (renderMode !== "slides") {
-            const boarded = await runStage("storyboard", () => startStoryboard(v.id));
+            const boarded = await runStage(
+              "storyboard",
+              () =>
+                isEngineLane
+                  ? startEngineDoc(v.id, renderMode as "whiteboard" | "graphics")
+                  : startStoryboard(v.id),
+            );
             if (!boarded) return;
           }
 
@@ -1026,6 +1080,8 @@ export function CreateView() {
       startVoiceover,
       startThumbnail,
       startRender,
+      startEngineDoc,
+      isEngineLaneMode,
       autoVoice,
       autoThumb,
       bumpRefresh,
@@ -1247,12 +1303,23 @@ export function CreateView() {
           />
           <div className="grid grid-cols-2 gap-2.5">
             {VIDEO_TYPES.map((t) => {
+              // S135 — the highlight semantics with six types: kenburns now
+              // serves TWO story presets (scene story vs character
+              // animation), so the format+mode pair alone is lossy. The
+              // discriminator is the cast: a cast character = character
+              // animation; no cast = scene story.
               const active =
                 t.id === "classic"
                   ? format === "script"
-                  : format === "story" &&
-                    (t.renderMode === renderMode ||
-                      (t.id === "story" && (renderMode === "kenburns" || renderMode === "stock")));
+                  : t.id === "character"
+                    ? format === "story" &&
+                      renderMode === "kenburns" &&
+                      characterId !== "none"
+                    : t.id === "story"
+                      ? format === "story" &&
+                        (renderMode === "kenburns" || renderMode === "stock") &&
+                        characterId === "none"
+                      : format === "story" && t.renderMode === renderMode;
               const Icon = t.icon;
               return (
                 <button
@@ -2009,7 +2076,13 @@ export function CreateView() {
                   </div>
                   <p className="text-sm font-medium mt-2.5">{def.label}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
-                    {isStory ? def.storyDesc : def.desc}
+                    {/* S135 — engine lanes scaffold the doc from the landed
+                        scenes (native planner, $0); only art lanes paint. */}
+                    {isStory
+                      ? stage === "storyboard" && isEngineLaneMode
+                        ? "Builds the engine doc from the scene script (native planner, $0)"
+                        : def.storyDesc
+                      : def.desc}
                   </p>
                   {state === "error" && video && (
                     <Button
