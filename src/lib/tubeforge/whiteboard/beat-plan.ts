@@ -201,6 +201,29 @@ const MIN_BEAT_WORDS = 4;
  *  agree on where drawing can live inside ANY scene clock. */
 const MIN_DRAW_SPAN_MS = 1200;
 
+/** R1 — the opening-stroke threshold (ANCHORS world). A board that sits
+ *  EMPTY past this many scene-milliseconds reads as dead air AND the QC
+ *  frozen-frames lens fails runs of the ~2.3s class on exactly those
+ *  stretches (the 265s rich-render receipt: frozen at scene-local 4.7s
+ *  and 7.4s where every placement had bound to a later sentence's SPOKEN
+ *  window). The first work-carrying beat that would open later than this
+ *  pulls its first placement forward to the opening sentence's window.
+ *  Chosen UNDER the lens's run class and ABOVE the W2 pins' estimator
+ *  openings (the pinned "coin → the money sentence" case opens at
+ *  ~2.08s — semantic binding survives). */
+export const OPENING_STROKE_MAX_MS = 2200;
+
+/** R1 — the estimator-world twin. The SAME dead-air shape receipts in the
+ *  estimator world too (the re-render's 174.4s freeze: an ASR word-count
+ *  mismatch on spoken numbers degraded the scene to the estimator, whose
+ *  word-proportional windows pushed the first asset ~8.9s deep). The
+ *  threshold is deliberately LENIENT: the W2 pins freeze the estimator's
+ *  semantic binding ("the coin WAITS for its sentence" at 3.75s), so the
+ *  guarantee fires only on waits that are unambiguously dead air. A blind
+ *  score can tighten this later — the operator call is recorded in the
+ *  R-plan's decision points. */
+export const OPENING_STROKE_ESTIMATOR_MAX_MS = 4000;
+
 export interface PlanBeatsOptions {
   durationMs: number;
   /** The scene's geometry — which placements still carry unclaimed
@@ -328,6 +351,7 @@ export function planBeats(
   const sortedWords =
     opts.anchors && env ? [...opts.anchors.byWord].sort((a, b) => a.index - b.index) : null;
   let windows: { startMs: number; endMs: number }[] | null = null;
+  let anchored = false;
   if (sortedWords && sortedWords.length === flatWordCount) {
     const candidate: { startMs: number; endMs: number }[] = [];
     let off = 0;
@@ -346,7 +370,10 @@ export function planBeats(
     for (let i = 1; sane && i < candidate.length; i++) {
       if (candidate[i].startMs < candidate[i - 1].endMs) sane = false;
     }
-    if (sane) windows = candidate;
+    if (sane) {
+      windows = candidate;
+      anchored = true;
+    }
   }
   if (!windows) {
     // Word-proportional windows across the draw span (the fill law's
@@ -375,7 +402,36 @@ export function planBeats(
       endMs: window.endMs,
     });
   }
-  return beats.sort((a, b) => a.sentence - b.sentence);
+  beats.sort((a, b) => a.sentence - b.sentence);
+
+  // R1 — the opening-stroke guarantee (see the two thresholds): when the
+  // earliest asset-carrying beat opens past its world's threshold, its
+  // FIRST placement (draw order) pulls forward to sentence 0's window; the
+  // rest of its mentions keep their sentence. A closer-card-only scene
+  // stays put — pulling a close card to the opening would invert the
+  // closer's design. Deterministic.
+  const firstBeat = beats[0];
+  const closerOnly =
+    firstBeat.sentence === sentences.length - 1 &&
+    beats.length === 1 &&
+    firstBeat.assetIds.every((id) => CARD_LAST.has(id));
+  const openingMax = anchored ? OPENING_STROKE_MAX_MS : OPENING_STROKE_ESTIMATOR_MAX_MS;
+  if (firstBeat.sentence > 0 && firstBeat.startMs > openingMax && !closerOnly) {
+    const moved = firstBeat.assetIds.shift();
+    if (firstBeat.assetIds.length === 0) beats.shift();
+    if (moved) {
+      beats.unshift({
+        id: "beat-1",
+        purpose: classifySentence(sentences[0], 0),
+        sentence: 0,
+        phrase: sentences[0],
+        assetIds: [moved],
+        startMs: windows[0].startMs,
+        endMs: windows[0].endMs,
+      });
+    }
+  }
+  return beats;
 }
 
 // ---------------------------------------------------------------------------
