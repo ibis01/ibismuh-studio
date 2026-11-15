@@ -119,6 +119,20 @@ const POSE_SHEET = [
   { id: "welcoming", name: "Welcoming", joints: { "arm-l": { rotateDeg: -120 }, "arm-r": { rotateDeg: 60 } } },
 ];
 
+// S128 — exported for the blind re-score kit (scripts/blind-rescore-kit.mts):
+// the kit renders the SAME fixture twice (compiled gestures vs a rest-only
+// sheet) so the scorers' control arm differs ONLY in the gesture layer.
+// The smoke still runs standalone — main() is gated on direct invocation.
+export const K1_SMOKE_FIXTURE = {
+  stage: STAGE,
+  art: ART,
+  seeds: SEEDS,
+  poseSheet: POSE_SHEET,
+  narration: "Imagine a tiny workshop of ideas. Then the machine turns the crank and the wheel moves. This is the crucial part!",
+  sceneMs: 8000,
+  fps: 30 as const,
+};
+
 async function main(): Promise<void> {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   console.log("S125 (K1) — the rig smoke");
@@ -142,9 +156,9 @@ async function main(): Promise<void> {
   const rig = docCheck.doc;
   const art = artCheck.parts;
 
-  const narration = "Imagine a tiny workshop of ideas. Then the machine turns the crank and the wheel moves. This is the crucial part!";
-  const sceneMs = 8000;
-  const fps = 30 as const;
+  const narration = K1_SMOKE_FIXTURE.narration;
+  const sceneMs = K1_SMOKE_FIXTURE.sceneMs;
+  const fps = K1_SMOKE_FIXTURE.fps;
   const budget = rigBudgetReport([{ sceneIndex: 1, durationMs: sceneMs }], fps);
   ok(budget.ok, `structural: the preflight wall passes (${budget.frames} delivered frames at ${fps} fps)`);
   const beforeReport = assertRigBudget([{ sceneIndex: 1, durationMs: sceneMs }], fps);
@@ -243,7 +257,14 @@ async function main(): Promise<void> {
   process.exit(failures.length > 0 ? 1 : 0);
 }
 
-main().catch((err) => {
+// S128 — gate main() on DIRECT invocation (node --import tsx scripts/k1-rig-smoke.mts):
+// the blind-rescore kit imports this module for the fixture and must not
+// re-run the whole smoke on import.
+import { pathToFileURL } from "node:url";
+const invokedDirectly = process.argv[1]
+  ? import.meta.url === pathToFileURL(process.argv[1]).href
+  : false;
+if (invokedDirectly) main().catch((err) => {
   console.error(err);
   process.exit(1);
 });

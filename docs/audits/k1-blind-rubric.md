@@ -47,6 +47,28 @@
       is recorded, never a fake pass).
 - [ ] The composite + per-dimension deltas recorded here.
 
+## 4. The kit session is now ONE command (S128)
+
+`scripts/blind-rescore-kit.mts` (S128, the 2026-11-15 external audit's
+action 3) assembles the whole session mechanically:
+
+- renders the compiled-gesture arm through the committed smoke pipeline,
+  renders the G1 proof arm, and renders IN-PROCESS the rest-only control:
+  the SAME fixture — same art, same narration, same 8.00s clock, the same
+  mouth schedule — with the pose sheet stripped to rests, so the A/B's
+  only variable is the compiled gesture layer. A kit assertion fails the
+  run if any gesture row leaks into the control or the control stops
+  speaking.
+- codenames + shuffles (`TFR-<8hex>.mp4`), writes three per-scorer sheets
+  with the §1 rows verbatim, the gitignored key, the manifest (sha256),
+  and a README that states the scoring is NOT the kit's to do.
+
+**Protocol deviation, recorded not hidden:** the original control arm was
+"the S93 breath baseline (still portrait + zoompan)". The shipped kit uses
+the rest-only arm instead — a strictly better-controlled A/B for the
+gesture rows (it keeps art, narration, clock, and audio identical), with
+the S93 portrait render still available via `scripts/s93-rig-smoke.mts`.
+
 **This record stays PENDING until the scorers run** — the same standing item
 as S123's blind rescore. S125's machine evidence (unit battery 734 green, the
 smoke 23/23 green with the real render, the lane pins, the cache receipts)

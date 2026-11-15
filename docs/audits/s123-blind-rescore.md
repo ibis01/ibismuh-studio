@@ -33,4 +33,13 @@
 - [ ] **≥ 3 human scorers** watch the shuffled artifacts and score the sheet — the whole point of the gate is that no author (human or model) grades its own work unblinded.
 - [ ] The composite + per-dimension deltas recorded here.
 
+## 4. The kit session is now ONE command (S128)
+
+`scripts/blind-rescore-kit.mts` (S128, the 2026-11-15 external audit's
+action 3) spawns the committed proof pipeline fresh (or `--skip-g1` reuses
+its artifacts), codenames + shuffles the render into the session's `kit/`,
+and writes the per-scorer sheets with the §1 rows verbatim, the gitignored
+key, and the sha256 manifest. The K1 character artifacts ride the same
+session (one command, two rubric sheets) — see `k1-blind-rubric.md` §4.
+
 **This record stays PENDING until the scorers run.** It is listed as the one open item of S123's close in `docs/audits/s123-motion-graphics.md` §8 — the stage's other evidence (unit battery 685 green, the proof GATE GREEN, the lane pins, the draft-speed receipt, the QC calibrations) is complete and machine-verified.
