@@ -16293,6 +16293,115 @@ await test("S132 the manifest io — round-trip through a real dir; corrupt/wron
 });
 
 // ---------------------------------------------------------------------------
+// S133 (PAE-5) — the animation QC lenses: the readcheck (the opuscar TEXTS
+// law, nativized) + the determinism sweep elevation. Pins: the read-time
+// formula, the visibility window (enter-end → exit-start, scene end when
+// no exit, 0 when they overlap), the longest-string rule, the sweep's
+// stability/finite/grid pins, the NaN tripwire, the matrix rows, the hold
+// windows extended by tweens + camera keys.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S133 (PAE-5) the QC lenses");
+
+await test("S133 the read-time formula — clamp(400 + 30 ms/char, 400, 4000), ONE home", async () => {
+  const { readcheckMinMs } = await import("../src/lib/tubeforge/graphics/qc");
+  eq(readcheckMinMs(0), 400, "the floor");
+  eq(readcheckMinMs(10), 700, "400 + 300");
+  eq(readcheckMinMs(100), 3400, "400 + 3000");
+  eq(readcheckMinMs(120), 4000, "the cap starts");
+  eq(readcheckMinMs(300), 4000, "the cap holds");
+});
+
+await test("S133 the readcheck lens — the visibility window math and the longest-string rule", async () => {
+  const { graphicsReadcheck, readcheckMinMs } = await import("../src/lib/tubeforge/graphics/qc");
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("ok", "headline", { enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" } }),
+    gEl("brief", "headline", {
+      text: { text: "Read me now" },
+      enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" },
+      exit: { kind: "fade", durationMs: 300, delayMs: 800, ease: "linear" },
+    }),
+    gEl("overlap", "subhead", {
+      enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" },
+      exit: { kind: "fade", durationMs: 300, delayMs: 200, ease: "linear" },
+    }),
+    gEl("chart", "barChart", {
+      enter: { kind: "wipe", durationMs: 400, delayMs: 100, ease: "linear" },
+      bar: { data: [{ label: "a", value: 1 }, { label: "long-label", value: 2 }] },
+    }),
+  ])], { durationMs: 3000 }));
+  const findings = graphicsReadcheck(doc);
+  const brief = findings.find((f) => f.elementId === "brief");
+  ok(brief !== undefined, "the too-brief headline is found");
+  eq(brief?.chars, 11, "the text payload's chars");
+  eq(brief?.visibleMs, 300, "enter-end 500 → exit-start 800");
+  eq(brief?.minMs, readcheckMinMs(11), "the floor from the ONE formula");
+  const overlap = findings.find((f) => f.elementId === "overlap");
+  ok(overlap !== undefined && overlap.visibleMs === 0, "an exit overlapping the enter → zero visibility");
+  const chart = findings.find((f) => f.elementId === "chart");
+  ok(chart === undefined, "the chart holds 2600ms — the longest label (10 chars → 700ms floor) passes");
+  ok(!findings.some((f) => f.elementId === "ok"), "the scene-end-window headline passes");
+});
+
+await test("S133 the determinism sweep — stable hash, finite channels, the ≤600 grid, the NaN tripwire", async () => {
+  const { graphicsDeterminismSweep } = await import("../src/lib/tubeforge/graphics/qc");
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "rise", durationMs: 400, delayMs: 0, ease: "ease-out" },
+      tweens: [{ delayMs: 400, durationMs: 800, channels: [twChannel("rotateDeg", [{ tMs: 0, value: 0 }, { tMs: 800, value: 90 }])] }],
+    }),
+  ], { durationMs: 3000 })]));
+  const a = graphicsDeterminismSweep(doc);
+  const b = graphicsDeterminismSweep(doc);
+  eq(a.hash, b.hash, "two sweeps of the same doc hash identically");
+  eq(a.finite, true, "every sampled channel finite");
+  eq(a.samples, 31, "3000ms at the 100ms floor step → 31 samples");
+  // The tripwire: a NaN smuggled past the validator (a caller bug the Part
+  // F law forbids) turns the sweep RED — evidence, not silence.
+  const broken = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2000 })]), "clean doc");
+  (broken.scenes[0].elements[0].at as { x: number }).x = Number.NaN;
+  eq(graphicsDeterminismSweep(broken).finite, false, "a non-finite channel flips the sweep");
+});
+
+await test("S133 the matrix rows — G1-READ-1 and G1-DET-1 ride the pre-render evidence", async () => {
+  const good = graphicsQcMatrix(mustValidate(gDoc([gScene("s1", [gEl("h", "headline")], { durationMs: 3000 })])), 0);
+  const readRow = good.rows.find((r) => r.id === "G1-READ-1");
+  const detRow = good.rows.find((r) => r.id === "G1-DET-1");
+  ok(readRow !== undefined && readRow.status === "pass", "a readable doc passes G1-READ-1");
+  ok(detRow !== undefined && detRow.status === "pass", "a validated doc passes G1-DET-1");
+  ok(good.passed, "the whole matrix stays green for an honest doc");
+  const brief = graphicsQcMatrix(mustValidate(gDoc([gScene("s1", [
+    gEl("h", "headline", {
+      enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" },
+      exit: { kind: "fade", durationMs: 300, delayMs: 800, ease: "linear" },
+    }),
+  ])], { durationMs: 3000 })), 0);
+  const briefRow = brief.rows.find((r) => r.id === "G1-READ-1");
+  ok(briefRow !== undefined && briefRow.status === "fail", "a too-brief text fails G1-READ-1");
+  ok(!brief.passed, "the matrix stays red for the readability defect (never silently shipped)");
+  ok(briefRow?.detail?.includes("s1/h"), "the finding names the scene/element");
+});
+
+await test("S133 the hold windows — tween and camera windows extend the legal hold start", async () => {
+  const { graphicsHoldWindows: holds } = await import("../src/lib/tubeforge/graphics/qc");
+  const plain = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", { enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" } }),
+  ])], { durationMs: 3000 }));
+  eq(holds(plain)[0]?.startSec, 0.5, "enter-only → the hold starts at the enter's end");
+  const tweened = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" },
+      tweens: [{ delayMs: 500, durationMs: 1000, channels: [twChannel("dx", [{ tMs: 0, value: 0 }, { tMs: 1000, value: 100 }])] }],
+    }),
+  ])], { durationMs: 3000 }));
+  eq(holds(tweened)[0]?.startSec, 1.5, "the tween's end extends the hold");
+  const cam = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", { enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" } }),
+  ], { durationMs: 3000, camera: [gCamKey(0, 1, 0, 0), gCamKey(2000, 2, 0, 0)] })]));
+  eq(holds(cam)[0]?.startSec, 2, "the camera's last key extends the hold (a hold under a panning board is not a hold)");
+});
+
+// ---------------------------------------------------------------------------
 // G1.2 — frame truth (Part B): frameAt is the ONE source of motion truth.
 // Pins: determinism (sweep hash over a fixed doc), the fixed composition
 // order (emphasis > exit > enter — applied last), element state never
