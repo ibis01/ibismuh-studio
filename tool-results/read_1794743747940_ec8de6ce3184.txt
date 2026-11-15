@@ -1,0 +1,2002 @@
+     1→// Video compositor — assembles the final MP4 from storyboard art + per-scene
+     2→// voiceover using ffmpeg, in three modes:
+     3→//   • kenburns  — cinematic pans/zooms over still art (fast, ~realtime/3)
+     4→//   • stock     — real Pexels/Pixabay footage per matched scene, Smart Motion
+     5→//                 art for the rest (the hybrid)
+     6→//   • animated  — every scene animated via CogVideoX image-to-video (~4 min/scene)
+     7→// Pipeline: per-scene segments (video+audio) -> transitions/concat ->
+     8→// subtitles/music pass. "cut" stitches with the stream-copy concat demuxer;
+     9→// any other transition (src/lib/tubeforge/transitions.ts) runs one chained
+    10→// xfade/acrossfade pass so scenes blend instead of snapping.
+    11→// All commands run via execFile (no shell) so filter strings need only
+    12→// ffmpeg-internal quoting, never shell quoting.
+    13→
+    14→import { execFile } from "child_process";
+    15→import fs from "fs";
+    16→import os from "os";
+    17→import path from "path";
+    18→import { promisify } from "util";
+    19→import type { Scene } from "./types";
+    20→import { sceneImageFile, sceneWavFile, buildSrtFromSegments } from "./story";
+    21→import { buildSmartSrt, captionOverridesFor } from "./captions";
+    22→import { videoDir } from "./ai";
+    23→import { zaiClientFor } from "./zai-client";
+    24→import { zaiVideoViaClient } from "./providers/zai-video-core";
+    25→import * as storage from "./storage";
+    26→import { aiCall } from "./budget";
+    27→import { db } from "./tenant-db";
+    28→import { beginSceneArtifact, finalizeSceneArtifact } from "./scene-artifacts";
+    29→import { log } from "./log";
+    30→import { ensureSfx } from "./sfx";
+    31→import { resolveSoundChoice, SFX_CATALOG, AMBIENCE_CATALOG } from "./studio-sound";
+    32→import {
+    33→  voiceSplitChain,
+    34→  bedChain,
+    35→  droneBedChain,
+    36→  duckChain,
+    37→  mixTail,
+    38→  measureLoudness,
+    39→  normalizationFilter,
+    40→  sanitizeDuckIntensity,
+    41→  musicLevelAutomation,
+    42→  type DuckIntensity,
+    43→} from "./audiomix";
+    44→import { getCapability, VIDEO_DEFAULT_MODEL } from "./providers/settings";
+    45→import { runProcess } from "./proc";
+    46→import {
+    47→  planSlides,
+    48→  renderSlidePngs,
+    49→  slidePngPath,
+    50→  slideMotionPlan,
+    51→  slideSegmentGraph,
+    52→  type SlideBrand,
+    53→} from "./slides";
+    54→import { validatePlanKinds, type CompositionPlan, type PlanVisualKind } from "./composition-plan";
+    55→import {
+    56→  planSceneMovements,
+    57→  sceneFilterGraph,
+    58→  multiShotSceneGraph,
+    59→  shotGraphJoins,
+    60→  focalForScene,
+    61→  sanitizeMotion,
+    62→  studioCameraPlan,
+    63→  PALINDROME_LOOP_GRAPH,
+    64→  OUTPUT_SIZES,
+    65→  type MotionScenePlan,
+    66→  type MotionSettings,
+    67→  type MoveKind,
+    68→  type SceneContext,
+    69→  type ShotJoinMark,
+    70→} from "./motion";
+    71→import { rigPlan } from "./character-rig";
+    72→import { ensureRigClip } from "./characters/rig-render";
+    73→import { planRigTimeline } from "./characters/rig-director";
+    74→import { mouthSchedule as mouthScheduleFrom, type RigPoseTimeline } from "./characters/rig-frame";
+    75→import { parseRigDoc, parseRigParts, type CharacterRigDoc, type RigPartArt } from "./characters/rig2d";
+    76→import { sceneVoiceAnchors } from "./whiteboard/voice-anchors";
+    77→import {
+    78→  gradeFilter,
+    79→  titleDrawtextFilter,
+    80→  chromaFilterChain,
+    81→  pipOverlayFilter,
+    82→  QUALITY_ENCODING,
+    83→  captionAssStyle,
+    84→  type SceneGrade,
+    85→  type SceneTitle,
+    86→  type SceneCameraKeys,
+    87→  type SceneChroma,
+    88→  type ScenePip,
+    89→  type ExportQuality,
+    90→} from "./studio-doc";
+    91→import { getApprovedMotionMap, getApprovedAudioMap, getApprovedPlan, type DirectorScene } from "./director-plan";
+    92→import { buildSceneShots, ensureShotImages, PSEUDO_CROPS, type SceneShotPlan } from "./shots";
+    93→import { sanitizePromptForPolicy } from "./restricted-subjects";
+    94→import { getVideoContentPolicy } from "./story";
+    95→// S35 — Universal Scene Liveliness: the per-scene channel selector + the
+    96→// plan-aware i2v motion prompt. The renderer reads the world once (plan,
+    97→// provider, stock files) and the PURE selector decides who plays.
+    98→import {
+    99→  selectChannels,
+   100→  i2vMotionPrompt,
+   101→  type LivelinessChannel,
+   102→  type LivelinessDecision,
+   103→} from "./liveliness";
+   104→import { ensureAmbience } from "./ambience";
+   105→import {
+   106→  BLEND_GROUP_MAX,
+   107→  sanitizeTransition,
+   108→  sanitizeTransitionStyle,
+   109→  buildTransitionGraphMulti,
+   110→  fadeblackWindowsMulti,
+   111→  partitionByCuts,
+   112→  planBlendGroupsMulti,
+   113→  shiftSegmentsForBlendMulti,
+   114→  TRANSITION_IDS,
+   115→  type TransitionSettings,
+   116→} from "./transitions";
+   117→import type { DocSceneSettings } from "./timeline";
+   118→import { MUSIC_SLIDER_GAIN } from "./music";
+   119→import { expectedCutsForTimeline } from "./render-qc";
+   120→import type { ExpectedCuts } from "./render-qc";
+   121→
+   122→// S57/T-57.2 — the module's logger (the old [render] prefix became a binding).
+   123→const renderLog = log.child({ mod: "render" });
+   124→
+   125→const _execFileAsync = promisify(execFile);
+   126→
+   127→const FPS = 30;
+   128→export const LEAD_SEC = 0.35; // silence before narration starts in each scene
+   129→export const TAIL_SEC = 0.85; // breathing room after narration ends
+   130→export const MIN_SEG_SEC = 2.0;
+   131→// S6 — the caption looks moved to studio-doc.ts's CAPTION_STYLES catalog
+   132→// (one vocabulary for the studio pick, the render burn and the preview).
+   133→// captionAssStyle(null, false/true) reproduces the pre-S6 constants
+   134→// byte-for-byte; a hostile pick can only ever select a catalog look.
+   135→// The classic finishing grade moved to studio-doc.ts's gradeFilter (null →
+   136→// "eq=contrast=1.05:saturation=1.08,vignette=PI/5") — ONE function owns the
+   137→// default so the doc override and the fallback can never drift.
+   138→
+   139→/**
+   140→ * S2 wave 2 — the per-scene grade: the doc's edited grade wins scene by
+   141→ * scene; null/absent falls back to the classic look. One function owns the
+   142→ * mapping so the preview badge and the render can never drift.
+   143→ */
+   144→function gradeForScene(docGrade: SceneGrade | null | undefined): string {
+   145→  return gradeFilter(docGrade);
+   146→}
+   147→
+   148→/** A library music track resolved for this render (music.ts). */
+   149→export interface ResolvedTrack {
+   150→  filePath: string; // absolute path to the track file (flac/wav)
+   151→  gain: number; // linear bed gain (track is anchored at -16 LUFS)
+   152→  fadeInSec: number;
+   153→  fadeOutSec: number;
+   154→  /** How hard the bed ducks under the voice (audiomix.ts catalog). */
+   155→  duckIntensity: DuckIntensity;
+   156→}
+   157→
+   158→export interface RenderOptions {
+   159→  videoId: string;
+   160→  scenes: Scene[];
+   161→  mode: "kenburns" | "animated" | "stock" | "slides";
+   162→  burnSubtitles: boolean;
+   163→  smartCaptions: boolean; // audio-synced cues (silence + ASR alignment) vs one caption per scene
+   164→  music: boolean;
+   165→  musicNiche?: string; // selects the per-niche music bed profile (drone fallback)
+   166→  musicTrack?: ResolvedTrack | null; // library track — wins over the drone when set
+   167→  /** Ducking intensity for the synthesized-drone fallback path. */
+   168→  musicDuck?: DuckIntensity;
+   169→  /** Sound-effect cues on/off (Settings → Sound; default on). */
+   170→  sfx?: boolean;
+   171→  sceneLimit?: number; // render only the first N scenes (preview render)
+   172→  /** S114 — Scene-Level Editing, Stage 3: render ONE scene (the caller
+   173→   *  narrows `scenes`/`docScenes` to it) as scene-preview-NN.mp4 — the
+   174→   *  story-lane twin of the whiteboard lane's preview-<sceneId>.mp4.
+   175→   *  Naming + preview semantics only (no subtitles.srt export); the
+   176→   *  caller owns everything else: no row flags, no project QC — a scene
+   177→   *  preview is not a certified final (the proposal's law). */
+   178→  scenePreview?: { sceneIndex: number };
+   179→  /** S116 — Scene-Level Editing, Stage 5: render a BOUNDARY PAIR (the
+   180→   *  scenes the caller passes are exactly two — N and N+1) through the same
+   181→   *  segment + transition machinery, landing scene-boundary-NN.mp4 (NN =
+   182→   *  afterScene). The seam renders EXACTLY as the full render would cut it
+   183→   *  (same durations fold, same per-boundary transition from the doc), so
+   184→   *  the recheck's boundary lens can measure the join without a full
+   185→   *  render. Preview semantics: no srt export, no row flags, no project QC. */
+   186→  boundaryPreview?: { afterScene: number };
+   187→  /** Smart Motion settings (null/undefined = defaults — Smart Motion on, 12%). */
+   188→  motion?: MotionSettings | null;
+   189→  /** Scene transitions (undefined = built-in default — crossfade 0.5s). */
+   190→  transition?: TransitionSettings | null;
+   191→  /** Video-level context so scene classification can read tone/niche. */
+   192→  motionContext?: SceneContext;
+   193→  /** S93 — the video's cast character (portrait-backed) — the rig's
+   194→   *  eligibility. Null/absent = no cast, the rig never applies.
+   195→   *  S125 (K1) — the raw rig columns ride along: rigDoc/parts are the
+   196→   *  character's stored JSON (additive parse — null/junk = no rig, the
+   197→   *  byte-identical legacy path). */
+   198→  character?: { hasPortrait: boolean; rigDoc?: string | null; parts?: string | null } | null;
+   199→  /** Video topic — drives the slide deck's art direction (slides mode). */
+   200→  topic?: string;
+   201→  /** Brand kit overrides for keynote slides (accent recolor + logo badge). */
+   202→  brand?: SlideBrand | null;
+   203→  /** Stage 6 (T-6.8) — per-render aspect ratio override (default "16:9";
+   204→   *  slides mode is always "9:16"; "1:1" is honored for the other modes). */
+   205→  aspectRatio?: "16:9" | "9:16" | "1:1";
+   206→  /** Stage 6 (T-6.8) — per-render frame-rate override (24 | 30 | 60). The
+   207→   *  render pipeline's FPS constant becomes a runtime value; downstream
+   208→   *  ffmpeg `-r` and `-framerate` flags read this instead. Default 30. */
+   209→  frameRate?: 24 | 30 | 60;
+   210→  /** Stage 6 (T-6.10) — per-scene durations (seconds) from the assembled
+   211→   *  timeline. When present and aligned to the scene list, these OVERRIDE
+   212→   *  the per-scene voiceover-derived durations (so the Editing Studio's
+   213→   *  trims survive the render). Out-of-range or malformed values fall back
+   214→   *  to the measured WAV durations — the timeline is a projection, never
+   215→   *  the source of truth. */
+   216→  sceneDurationsSec?: number[];
+   217→  /** S2 — per-scene settings from the SAVED timeline doc (the Timeline
+   218→   *  Studio's edited projection): per-boundary transition styles, per-scene
+   219→   *  voice/music/SFX/ambience levels, per-scene caption text. Aligned BY
+   220→   *  POSITION to `scenes` (the sceneOrder contract keeps row and doc in the
+   221→   *  same play order); null/absent fields fall back to the video-level
+   222→   *  behavior, so a missing or stale doc changes nothing. */
+   223→  docScenes?: DocSceneSettings[] | null;
+   224→  /** S3 — delivery encode tier (draft CRF 26 / standard 20 / high 18;
+   225→   *  default standard). Rides the segments, the blend masters and the
+   226→   *  subtitle-burn pass. */
+   227→  quality?: ExportQuality;
+   228→  /** S6 — the timeline doc's caption-style pick (a CAPTION_STYLES id, already
+   229→   *  sanitized by the doc parse). null/absent = the classic look. Slides
+   230→   *  mode burns the pick's vertical variant. */
+   231→  captionStyleId?: string | null;
+   232→  /** S87 slice 2 — the composition plan from the timeline contract: when
+   233→   *  the doc is schema 2, the per-scene visual KIND + asset source + the
+   234→   *  boundary transitions are read from the tracks projection (the job
+   235→   *  derives it via compositionPlan; v1 docs get the scenes derivation,
+   236→   * origin "scenes"). Null/absent = the legacy mode-keyed path verbatim
+   237→   *  (no-doc renders, "render without timeline"). Parity-pinned: the two
+   238→   *  derivations agree exactly on every doc today's engines write. */
+   239→  timelinePlan?: CompositionPlan | null;
+   240→  onProgress?: (current: number, total: number, label: string) => void;
+   241→}
+   242→
+   243→export interface RenderResult {
+   244→  fileName: string; // "final.mp4" | "preview.mp4" | "scene-preview-NN.mp4" (S114)
+   245→  durationSec: number;
+   246→  fileBytes: number;
+   247→  /** Frame geometry — "9:16" for keynote-slide renders, "1:1" for square
+   248→   *  renders, "16:9" otherwise. */
+   249→  aspect: "16:9" | "9:16" | "1:1";
+   250→  /** Designed black-dip windows (fadeblack blends) for the transition-aware QC gate. */
+   251→  blackWindows?: [number, number][];
+   252→  /** S36 — where the assembled timeline says cuts and blend windows sit on
+   253→   *  the blended clock; the QC cut-alignment lens holds the pixels to it. */
+   254→  expectedCuts?: ExpectedCuts;
+   255→  /** S35 — the per-scene liveliness ledger: which channel played and why.
+   256→   *  Reflects what PLAYED (an i2v scene that fell back mid-render reports
+   257→   *  the fallback), so the render row and the worklog can audit the
+   258→   *  selector's decisions against the pixels. */
+   259→  liveliness: LivelinessDecision[];
+   260→}
+   261→
+   262→/**
+   263→ * DELETE artifacts that become stale when the storyboard, slide designs, or
+   264→ * brand kit change: rendered MP4s, subtitles, animated scene clips and
+   265→ * (optionally) the cached slide PNGs. Routes call this after any visual
+   266→ * mutation so a stale video can never be served or marked hasVideo.
+   267→ *
+   268→ * Stage 4a (T-4.0): storage-backed — list + targeted remove through the
+   269→ * driver, so it works under s3 (where a raw readdir sees nothing) and
+   270→ * decrements the org quota. Local scratch copies die with the same pass
+   271→ * (the local driver's remove() IS the scratch file).
+   272→ */
+   273→export async function invalidateRenderedArtifacts(
+   274→  videoId: string,
+   275→  opts: { slidePngs?: boolean; sceneIndex?: number } = {}
+   276→): Promise<void> {
+   277→  // S67 — whiteboard artifacts join the stale set: the per-scene encodes and
+   278→  // the scene previews die with everything else when the storyboard, the
+   279→  // whiteboard project doc, the slide designs or the brand kit change
+   280→  // (design §2.3: a project edit invalidates final.mp4 + previews exactly
+   281→  // the way slide-design edits do). The preview-<id> charset is the engine's
+   282→  // id law ([A-Za-z0-9_.-], storyboard.ts), so the pattern cannot miss a
+   283→  // legal id — and a hostile id can never reach this key space anyway.
+   284→  // S123 (G1) — the graphics lane's artifacts ride the same sweep: the
+   285→  // per-scene encodes under graphics/scene-N.mp4 (same $0-regeneration
+   286→  // class) and the labelled drafts under graphics/draft-*.mp4 (a doc edit
+   287→  // stales every look at it — they are cheap looks, not evidence).
+   288→  //
+   289→  // S113 — the over-invalidation fix (the S111 reconciliation's §8.3 cost
+   290→  // bug): a SINGLE-scene change (art re-roll, AI edit, one-slide rescreenshot)
+   291→  // passes sceneIndex, and then ONLY that scene's clip/encode dies alongside
+   292→  // the video-level renders (the union — final/preview/srt always stale when
+   293→  // any scene changed). Every OTHER scene's scene-NN.mp4 survives, and the
+   294→  // render already reuses cached clips (ensureSceneClip) — so a one-scene
+   295→  // fix no longer re-pays the whole video's clip generation.
+   296→  // Video-level artifacts (the union — final/preview/srt always die when any
+   297→  // scene changed; the whiteboard preview-<sceneId> files are keyed by the
+   298→  // ENGINE's scene ids, unmappable from a numeric index, so they ride the
+   299→  // video-level set — they are $0 local encodes, cheap to regenerate). The
+   300→  // whole-project slide set rides too — EXCEPT in the scene-scoped case,
+   301→  // where only the changed scene's own slide png is index-addressable (it
+   302→  // joins the scene set below); the others' slides are still current.
+   303→  const videoLevel =
+   304→    "\\/(final\\.mp4|preview\\.mp4|subtitles\\.srt" +
+   305→    (opts.slidePngs && opts.sceneIndex == null ? "|slide-\\d{2}\\.png" : "") +
+   306→    "|whiteboard\\/preview-[A-Za-z0-9_.-]+\\.mp4" +
+   307→    "|graphics\\/draft-[A-Za-z0-9_.-]+\\.mp4)$";
+   308→  // Scene-scoped clips/encodes: EVERY scene's (whole-project change), or
+   309→  // exactly the changed one (sceneIndex set — the S113 fix).
+   310→  const nn = opts.sceneIndex != null ? String(opts.sceneIndex).padStart(2, "0") : null;
+   311→  const sceneClips =
+   312→    nn != null
+   313→      ? `/scene-${nn}\\.mp4$|/whiteboard/scene-${opts.sceneIndex}\\.mp4$|/graphics/scene-${opts.sceneIndex}\\.mp4$` +
+   314→        (opts.slidePngs ? `|/slide-${nn}\\.png$` : "")
+   315→      : "/(scene-\\d{2}\\.mp4|whiteboard/scene-\\d+\\.mp4|graphics/scene-\\d+\\.mp4)$";
+   316→  const stalePattern = new RegExp(`${videoLevel}|${sceneClips}`);
+   317→  const keys = await storage.list(videoId).catch(() => [] as string[]);
+   318→  const stale = keys.filter((k) => stalePattern.test(k));
+   319→  await Promise.all(stale.map((k) => storage.remove(k).catch(() => {})));
+   320→}
+   321→
+   322→/** Run ffmpeg/ffprobe, surfacing the useful tail of stderr on failure.
+   323→ * Uses the zombie-aware runner (proc.ts): under bun, after Playwright has
+   324→ * lived in this process, the runtime intermittently stops reaping children —
+   325→ * ffmpeg finishes but execFile's promise never resolves. runProcess decides
+   326→ * completion itself, so a hung reaper can't stall a render. */
+   327→async function run(
+   328→  bin: string,
+   329→  args: string[],
+   330→  timeoutMs = 10 * 60 * 1000
+   331→): Promise<string> {
+   332→  const { stdout, stderr } = await runProcess(bin, args, { timeoutMs });
+   333→  return stdout || stderr;
+   334→}
+   335→
+   336→/** Media duration in seconds via ffprobe. */
+   337→export async function probeDuration(file: string): Promise<number> {
+   338→  const out = await run("ffprobe", [
+   339→    "-v", "error",
+   340→    "-show_entries", "format=duration",
+   341→    "-of", "json",
+   342→    file,
+   343→  ]);
+   344→  const parsed = JSON.parse(out) as { format?: { duration?: string } };
+   345→  const d = Number(parsed.format?.duration ?? 0);
+   346→  if (!Number.isFinite(d) || d <= 0) throw new Error(`Could not probe duration of ${path.basename(file)}`);
+   347→  return d;
+   348→}
+   349→
+   350→/**
+   351→ * S116 — the ONE scene-duration fold, extracted from renderVideo's loop so
+   352→ * the scene-scoped recheck (scene-qc.ts) can derive EXACTLY the durations a
+   353→ * render used for a scene / a boundary pair — the seam expectation must be
+   354→ * computed from the same math that placed the seam, or the boundary check
+   355→ * judges a fabricated timeline (the S113 lesson: derive, never copy).
+   356→ *
+   357→ * `wavDuration` is the voiceover-derived base (the LEAD+TAIL / MIN_SEG
+   358→ * floor is applied inside); `timelineDuration` is the doc's pick when the
+   359→ * timeline aligns (NaN = no doc value); `docSpeed` compresses the narration
+   360→ * floor when the doc plays the scene faster (values outside 0.5–2 or within
+   361→ * 0.02 of 1 read as 1 — the docSpeedOf rule, now owned here). The laws,
+   362→ * verbatim from T-6.10: a doc value may EXTEND a scene (up to 3× the
+   363→ * narration) or trim its tail padding, but can NEVER shorten it below what
+   364→ * its narration needs. Pure.
+   365→ */
+   366→export function resolveSceneDuration(
+   367→  wavDuration: number,
+   368→  timelineDuration: number,
+   369→  docSpeed: number
+   370→): number {
+   371→  const d = Math.max(wavDuration + LEAD_SEC + TAIL_SEC, MIN_SEG_SEC);
+   372→  const t = timelineDuration;
+   373→  if (typeof t !== "number" || !Number.isFinite(t)) return d;
+   374→  if (t < MIN_SEG_SEC) return d;
+   375→  const sp =
+   376→    typeof docSpeed === "number" && docSpeed >= 0.5 && docSpeed <= 2 && Math.abs(docSpeed - 1) > 0.02
+   377→      ? docSpeed
+   378→      : 1;
+   379→  const narrationFloor = Math.max((d - TAIL_SEC) / sp + LEAD_SEC + 0.3, MIN_SEG_SEC);
+   380→  return Math.min(Math.max(t, narrationFloor), d * 3);
+   381→}
+   382→
+   383→// ---------- Ken Burns (Smart Motion) ----------
+   384→// The camera plans and the ffmpeg graph live in motion.ts — the reusable,
+   385→// unit-tested Smart Motion module. render.ts only orchestrates.
+   386→
+   387→// ---------- Animated (CogVideoX i2v) ----------
+   388→
+   389→/**
+   390→ * Generate (or reuse a cached) 5s animated clip for one scene via
+   391→ * CogVideoX image-to-video, seeded from the storyboard image.
+   392→ *
+   393→ * S35 — the motion prompt is plan-aware (i2vMotionPrompt in liveliness.ts):
+   394→ * an approved Director camera (crane-up, handheld, drone…) drives the
+   395→ * generation instead of the old five-id map that degraded everything else
+   396→ * to generic drift, and a per-scene-kind SUBJECT-motion clause names what
+   397→ * actually moves — the thing Ken Burns cannot produce.
+   398→ */
+   399→async function ensureSceneClip(
+   400→  videoId: string,
+   401→  scene: Scene,
+   402→  directorScene: DirectorScene | null
+   403→): Promise<string> {
+   404→  const clipPath = path.join(videoDir(videoId), `scene-${String(scene.index).padStart(2, "0")}.mp4`);
+   405→  if (fs.existsSync(clipPath) && fs.statSync(clipPath).size > 10_000) return clipPath;
+   406→
+   407→  const imagePath = path.join(videoDir(videoId), sceneImageFile(scene.index));
+   408→  const imageB64 = fs.readFileSync(imagePath).toString("base64");
+   409→
+   410→  // Video generation is Z.ai CogVideoX — validate the provider up front so
+   411→  // misconfigured installs fail with a actionable message instead of an
+   412→  // opaque SDK error deep inside the render.
+   413→  const videoConfig = await getCapability("video");
+   414→  if (videoConfig.provider !== "zai") {
+   415→    throw new Error(
+   416→      "Scene animation only supports Z.ai CogVideoX — fix it in Settings → AI Providers, or render with Ken Burns mode (no AI video needed)"
+   417→    );
+   418→  }
+   419→  const videoModel = videoConfig.model?.trim() || VIDEO_DEFAULT_MODEL;
+   420→
+   421→  // S50 — the i2v motion prompt rides the content policy like every other
+   422→  // generation surface (the S49 L3 gap in the VIDEO path: the storyboard
+   423→  // image was sanitized, but the motion prompt that animates it was not —
+   424→  // a noncompliant scene.visual could steer the clip toward depicting a
+   425→  // restricted figure). sanitizePromptForPolicy is the identity under the
+   426→  // standard policy.
+   427→  const motionPrompt = sanitizePromptForPolicy(
+   428→    i2vMotionPrompt(scene, directorScene),
+   429→    await getVideoContentPolicy(videoId)
+   430→  ).prompt;
+   431→
+   432→  // S113 — provenance: the i2v clip is the most expensive per-scene
+   433→  // artifact; its registration is what makes the over-invalidation fix's
+   434→  // savings measurable (a surviving cached clip = a skipped paid call).
+   435→  const clipVideo = await db.video.findUnique({
+   436→    where: { id: videoId },
+   437→    select: { id: true, organizationId: true, scenes: true },
+   438→  });
+   439→  const clipAttribution = clipVideo
+   440→    ? await beginSceneArtifact({
+   441→        video: clipVideo,
+   442→        sceneIndex: scene.index,
+   443→        type: "video",
+   444→        storageKey: `${videoId}/scene-${String(scene.index).padStart(2, "0")}.mp4`,
+   445→        prompt: motionPrompt,
+   446→      })
+   447→    : null;
+   448→
+   449→  const zai = await zaiClientFor("video");
+   450→  const clip = await aiCall(
+   451→    "video",
+   452→    `scene ${scene.index} i2v`,
+   453→    async () => {
+   454→      // S36-audit wiring — the submit/poll/download loop now lives in the
+   455→      // tested core (providers/zai-video-core.ts), shared with the provider
+   456→      // adapter; this site keeps the clip cache, the 10s×60 window and the
+   457→      // aiCall retry it always had.
+   458→      const buf = await zaiVideoViaClient(
+   459→        zai,
+   460→        {
+   461→          prompt: motionPrompt,
+   462→          imagePngBase64: imageB64,
+   463→        },
+   464→        {
+   465→          model: videoModel,
+   466→          duration: 5,
+   467→          fps: FPS,
+   468→          size: "1920x1080",
+   469→          pollMs: 10_000,
+   470→          maxPolls: 60,
+   471→        },
+   472→      );
+   473→      fs.writeFileSync(clipPath, buf);
+   474→      return clipPath;
+   475→    },
+   476→    { attempts: 2, baseDelayMs: 8000 }, // one retry — these are long calls
+   477→    clipAttribution ?? undefined
+   478→  );
+   479→
+   480→  await finalizeSceneArtifact(clipAttribution, {
+   481→    input: `${motionPrompt}|image=${imageB64.length}b|model=${videoModel}`,
+   482→    prompt: motionPrompt,
+   483→    bytes: fs.existsSync(clipPath) ? fs.statSync(clipPath).size : null,
+   484→  });
+   485→
+   486→  return clip;
+   487→}
+   488→
+   489→/**
+   490→ * S50 — a seamless loop source for clips shorter than their scene. The raw
+   491→ * `-stream_loop -1` forward loop REWINDS visibly every clip-length seconds —
+   492→ * the 5s "groundhog day" jump-cut on any longer scene (most narration scenes
+   493→ * run 8–18s). The palindrome (forward + reverse) never rewinds: its only
+   494→ * artifacts are single duplicated frames at the two turning points (33 ms at
+   495→ * 30 fps — imperceptible), and looping the palindrome crosses the boundary
+   496→ * with a 1-frame step. Cached beside the clip; built once per clip.
+   497→ */
+   498→async function ensureSceneLoop(clipPath: string, fps: number): Promise<string> {
+   499→  const loopPath = clipPath.replace(/(\.\w+)$/, "-loop.mp4");
+   500→  if (fs.existsSync(loopPath) && fs.statSync(loopPath).size > 10_000) return loopPath;
+   501→  await run("ffmpeg", [
+   502→    "-i", clipPath,
+   503→    "-filter_complex", PALINDROME_LOOP_GRAPH,
+   504→    "-map", "[v]",
+   505→    "-r", String(fps),
+   506→    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+   507→    "-pix_fmt", "yuv420p",
+   508→    "-an", "-y", loopPath,
+   509→  ]);
+   510→  return loopPath;
+   511→}
+   512→
+   513→// ---------- Per-niche music beds ----------
+   514→
+   515→/**
+   516→ * A synthesized ambient bed profile. Each niche gets its own tonal center,
+   517→ * interval stack, breathing rate and filter so a Motivation video doesn't
+   518→ * sound like a Mysteries one. All beds are slow evolving pads — they sit
+   519→ * UNDER narration (ducked later) and must never carry a melody or rhythm
+   520→ * that competes with the voice.
+   521→ */
+   522→interface MusicProfile {
+   523→  /** Stacked sine partials (Hz) with relative gains — root + color intervals. */
+   524→  partials: [freq: number, gain: number][];
+   525→  /** Breathing LFO rate (Hz) + depth (0-1) — how much the pad swells. */
+   526→  lfoRate: number;
+   527→  lfoDepth: number;
+   528→  /** Lowpass ceiling (Hz) — lower = darker, further from the voice band. */
+   529→  lowpassHz: number;
+   530→  /** Bed gain before ducking. */
+   531→  level: number;
+   532→}
+   533→
+   534→const MUSIC_PROFILES: Record<string, MusicProfile> = {
+   535→  // Warm uplifting A-minor stack with a slow sunrise swell.
+   536→  Motivation: {
+   537→    partials: [[55, 0.05], [110.4, 0.034], [164.8, 0.02], [220.5, 0.012]],
+   538→    lfoRate: 0.07, lfoDepth: 0.22, lowpassHz: 1000, level: 1.0,
+   539→  },
+   540→  // Light, curious C-major-ish stack, a touch brighter and quicker.
+   541→  "Fun Facts": {
+   542→    partials: [[65.4, 0.05], [130.8, 0.032], [196.2, 0.022], [261.8, 0.011]],
+   543→    lfoRate: 0.11, lfoDepth: 0.18, lowpassHz: 1200, level: 0.95,
+   544→  },
+   545→  // Solemn epic D — low, wide, slowest breathing in the catalog.
+   546→  History: {
+   547→    partials: [[36.7, 0.055], [73.4, 0.036], [110.2, 0.02], [146.9, 0.012]],
+   548→    lfoRate: 0.05, lfoDepth: 0.26, lowpassHz: 850, level: 1.0,
+   549→  },
+   550→  // Cold minimal G — sparse, steady, businesslike.
+   551→  Finance: {
+   552→    partials: [[49.0, 0.05], [98.1, 0.03], [147.0, 0.018]],
+   553→    lfoRate: 0.06, lfoDepth: 0.14, lowpassHz: 800, level: 0.9,
+   554→  },
+   555→  // Introspective E — soft, round, slightly airy.
+   556→  Psychology: {
+   557→    partials: [[41.2, 0.05], [82.4, 0.033], [123.5, 0.02], [164.8, 0.01]],
+   558→    lfoRate: 0.08, lfoDepth: 0.2, lowpassHz: 950, level: 0.95,
+   559→  },
+   560→  // Vast airy A fifth — space, orbital, weightless.
+   561→  "Space & Science": {
+   562→    partials: [[55.0, 0.05], [82.5, 0.03], [110.0, 0.022], [165.2, 0.01]],
+   563→    lfoRate: 0.06, lfoDepth: 0.24, lowpassHz: 1100, level: 1.0,
+   564→  },
+   565→  // Clean neutral F fifth — precise, digital, unobtrusive.
+   566→  Technology: {
+   567→    partials: [[58.3, 0.05], [116.6, 0.03], [174.7, 0.018]],
+   568→    lfoRate: 0.09, lfoDepth: 0.15, lowpassHz: 1150, level: 0.9,
+   569→  },
+   570→  // Dark F#-C tension — unease without ever becoming a jump-scare.
+   571→  Mysteries: {
+   572→    partials: [[46.2, 0.05], [69.3, 0.034], [92.6, 0.02], [139.0, 0.012]],
+   573→    lfoRate: 0.045, lfoDepth: 0.28, lowpassHz: 780, level: 1.0,
+   574→  },
+   575→};
+   576→
+   577→const DEFAULT_MUSIC_PROFILE: MusicProfile = MUSIC_PROFILES.Motivation;
+   578→
+   579→/** Pick the ambient bed for a video niche (unknown niches get the default). */
+   580→export function musicProfileForNiche(niche: string | undefined | null): MusicProfile {
+   581→  return (niche && MUSIC_PROFILES[niche]) || DEFAULT_MUSIC_PROFILE;
+   582→}
+   583→
+   584→/** Build the aevalsrc expression for a profile's breathing pad. */
+   585→export function droneSource(profile: MusicProfile): string {
+   586→  const tones = profile.partials
+   587→    .map(([f, g]) => `${g.toFixed(4)}*sin(2*PI*${f}*t)`)
+   588→    .join("+");
+   589→  const breath = `(1-${profile.lfoDepth.toFixed(2)}+${profile.lfoDepth.toFixed(2)}*sin(2*PI*${profile.lfoRate}*t))`;
+   590→  return `aevalsrc='(${tones})*${breath}':s=48000`;
+   591→}
+   592→
+   593→// ---------- Segments & assembly ----------
+   594→
+   595→/** M2 — project a SceneShotPlan onto concrete ffmpeg shot inputs. Images that
+   596→ *  went missing between generation and composition (cleaned scratch dir,
+   597→ *  interrupted re-render) demote to pseudo crops over the scene art — the
+   598→ *  render always receives a full shot list (spec §1.8 floor). S48: the
+   599→ *  per-shot focal anchor + moveSpeed multiplier ride through verbatim. S50:
+   600→ *  the hand-off rides too (transitionOut → the shot graph's xfade). */
+   601→function resolveShotInputs(
+   602→  dir: string,
+   603→  plan: SceneShotPlan,
+   604→  sceneImg: string
+   605→): { file: string; moveKind: MoveKind; sec: number; crop?: { w: number; h: number; x: number; y: number }; focal?: { x: number; y: number }; speed?: number; transitionOut?: string }[] {
+   606→  const out: {
+   607→    file: string;
+   608→    moveKind: MoveKind;
+   609→    sec: number;
+   610→    crop?: { w: number; h: number; x: number; y: number };
+   611→    focal?: { x: number; y: number };
+   612→    speed?: number;
+   613→    transitionOut?: string;
+   614→  }[] = [];
+   615→  for (const sh of plan.available) {
+   616→    const file = path.join(dir, sh.imageFile);
+   617→    if (sh.source === "scene" || fs.existsSync(file)) {
+   618→      out.push({ file, moveKind: sh.moveKind, sec: sh.sec, crop: sh.crop, focal: sh.focal, speed: sh.speed, transitionOut: sh.transitionOut });
+   619→      continue;
+   620→    }
+   621→    out.push({
+   622→      file: sceneImg,
+   623→      moveKind: sh.moveKind,
+   624→      sec: sh.sec,
+   625→      crop: sh.crop ?? PSEUDO_CROPS[sh.shotIndex % PSEUDO_CROPS.length],
+   626→      focal: sh.focal,
+   627→      speed: sh.speed,
+   628→      transitionOut: sh.transitionOut,
+   629→    });
+   630→  }
+   631→  return out;
+   632→}
+   633→
+   634→/** Build one scene segment: visual track of exactly `dur` + narration audio
+   635→ * (+ SFX cue + director-planned ambience bed). */
+   636→async function buildSegment(opts: {
+   637→  videoId: string;
+   638→  scene: Scene;
+   639→  dur: number;
+   640→  mode: "kenburns" | "animated" | "stock" | "slides";
+   641→  /** S87 slice 2 — the scene's visual kind from the composition plan
+   642→   *  ("image" = the designed PNG IS the frame). Absent → the mode key
+   643→   *  (the pre-S87 path verbatim). */
+   644→  visualKind?: PlanVisualKind;
+   645→  /** S87 slice 2 — the scene's asset source from the plan's clip ("stock"
+   646→   *  routes the footage path; the on-disk guard below stays
+   647→   *  belt-and-braces). Absent → the mode key. */
+   648→  assetSource?: "ai" | "stock" | "slides" | null;
+   649→  motion: MotionSettings;
+   650→  plan?: MotionScenePlan;
+   651→  sfx: boolean;
+   652→  /** S5 — the RESOLVED sound pick for this scene: the timeline doc's studio
+   653→   *  pick outranks the plan's cue, which outranks the story pass's row value
+   654→   *  (resolveSoundChoice at the call site — the one precedence rule). */
+   655→  sfxKind?: string;
+   656→  /** Module E: materialized ambience bed path for this scene (null = none). */
+   657→  ambiencePath?: string | null;
+   658→  /** S2: per-scene mix levels from the timeline doc (null = classic mix). */
+   659→  docLevels?: SceneAudioLevels | null;
+   660→  /** S2 wave 2 — per-scene creative layer. All optional (null = classic). */
+   661→  docGrade?: SceneGrade | null;
+   662→  docTitle?: SceneTitle | null;
+   663→  docCamera?: SceneCameraKeys | null;
+   664→  docSpeed?: number | null;
+   665→  /** S2 wave 2 — narration fades (sanitized) + the measured WAV length the
+   666→   *  fade-out anchors to. */
+   667→  docFades?: { inSec: number; outSec: number } | null;
+   668→  wavDur?: number;
+   669→  /** S3 — chroma key settings for this scene (null = none; slides never key). */
+   670→  docChroma?: SceneChroma | null;
+   671→  /** S3 — corner logo overlay settings (null = none; requires a brand logo). */
+   672→  docPip?: ScenePip | null;
+   673→  /** S3 — encode quality tier (default "standard": CRF 20 / veryfast). */
+   674→  quality?: ExportQuality;
+   675→  /** M2: the approved Director shot list for this scene — when present, the
+   676→   * scene renders through the multi-image shot graph instead of the single-
+   677→   * image Smart Motion graph (docs/director-m1-m2-spec.md §1.7). */
+   678→  shotPlan?: SceneShotPlan;
+   679→  outPath: string;
+   680→  /** Stage 6 (T-6.8) — per-render aspect ratio (default "16:9"). */
+   681→  aspect?: "16:9" | "9:16" | "1:1";
+   682→  /** Stage 6 (T-6.8) — per-render frame rate (default 30). */
+   683→  fps?: number;
+   684→  /** S35 — the liveliness selector's per-scene channel. Absent → the mode's
+   685→   *  own default, so any caller that doesn't know about the selector keeps
+   686→   *  its exact pre-S35 behavior. */
+   687→  channel?: LivelinessChannel;
+   688→  /** S35 — the scene's approved Director row (drives the i2v motion prompt). */
+   689→  directorScene?: DirectorScene | null;
+   690→  /** S35 — fired when the i2v channel degrades to Ken Burns (per-scene picks
+   691→   *  never break the render; the orchestrator turns this into a progress
+   692→   *  note so the degradation is VISIBLE, never silent). */
+   693→  onI2vFallback?: (sceneIndex: number, reason: string) => void;
+   694→  /** S55 (T-55.3a) — fired when the scene renders through the M2 multi-shot
+   695→   *  graph, with the joins that ACTUALLY executed (scene-local clock — the
+   696→   *  same fitted allocation the graph runs). The orchestrator books them
+   697→   * into RenderResult.expectedCuts so the QC cut-alignment lens reads the
+   698→   *  graph's own flips as designed boundaries, not strays. */
+   699→  onShotJoins?: (joins: ShotJoinMark[]) => void;
+   700→  /** S125 (K1) — the parsed rig pair for native-rig scenes (the selector's
+   701→   *  channel is the authority; a native-rig scene without a rig here is a
+   702→   *  wiring bug and degrades honestly to Ken Burns with the reason). */
+   703→  rig?: { rig: CharacterRigDoc; art: RigPartArt[] } | null;
+   704→  /** S125 (K1) — fired when the native-rig channel degrades to Ken Burns
+   705→   *  (the i2v degradation shape: visible, never silent). */
+   706→  onRigFallback?: (sceneIndex: number, reason: string) => void;
+   707→}): Promise<void> {
+   708→  const { scene, dur, mode, motion, plan, shotPlan, outPath } = opts;
+   709→  const dir = videoDir(opts.videoId);
+   710→  const wav = path.join(dir, sceneWavFile(scene.index));
+   711→  const leadMs = Math.round(LEAD_SEC * 1000);
+   712→  const aspect = opts.aspect ?? "16:9";
+   713→  const fps = opts.fps ?? FPS;
+   714→  // S2 wave 2 — the per-scene creative layer resolves ONCE: the grade (the
+   715→  // classic look is the default), the title overlay chain (null = none) and
+   716→  // the footage playback rate (1 = no setpts).
+   717→  const grade = gradeForScene(opts.docGrade);
+   718→  // S87 slice 2 — the kind dispatch reads the composition plan when the
+   719→  // caller carries one (schema-2 docs); the mode stays the fallback for
+   720→  // v1 docs and no-doc renders (the pre-S87 branch, verbatim).
+   721→  const isImage =
+   722→    opts.visualKind === "image" || (opts.visualKind == null && mode === "slides");
+   723→  // S3 — keying + corner overlay. Slides keep their designed-deck grammar
+   724→  // (no grade, no keying, no overlay — the brand kit owns the logo there).
+   725→  const chroma = !isImage ? (opts.docChroma ?? null) : null;
+   726→  const pip = !isImage ? (opts.docPip ?? null) : null;
+   727→  // The logo is a storage object — materialize to a local path for ffmpeg.
+   728→  // SVGs can't be read by this build; the overlay is skipped with a note.
+   729→  let pipLogoPath: string | null = null;
+   730→  if (pip) {
+   731→    for (const ext of ["png", "webp"]) {
+   732→      const key = `${opts.videoId}/brand-logo.${ext}`;
+   733→      if (await storage.exists(key)) {
+   734→        pipLogoPath = await storage.materialize(key);
+   735→        break;
+   736→      }
+   737→    }
+   738→    if (!pipLogoPath)
+   739→      renderLog.warn("PIP set but no png/webp brand logo — overlay skipped", { scene: scene.index });
+   740→  }
+   741→  const speed =
+   742→    opts.docSpeed && opts.docSpeed > 0.49 && opts.docSpeed < 2.01 && Math.abs(opts.docSpeed - 1) > 0.02
+   743→      ? opts.docSpeed
+   744→      : null;
+   745→  // S3 post-base chain: chroma → PIP → title, chained onto the base graph's
+   746→  // [v] tail. Chroma keys PRE-grade (a graded key color would poison the
+   747→  // key) and re-applies the grade to the composite; the title then consumes
+   748→  // the chain's tail label.
+   749→  const [W, H] = OUTPUT_SIZES[aspect].out;
+   750→  const postParts: string[] = [];
+   751→  let tail = "[v]";
+   752→  if (chroma) {
+   753→    const c = chromaFilterChain(chroma, { w: W, h: H, dur, fps, grade });
+   754→    postParts.push(c.chain);
+   755→    tail = c.outLabel;
+   756→  }
+   757→  const hasPip = pip != null && pipLogoPath != null;
+   758→  const pipChainFor = (idx: number): string =>
+   759→    hasPip && pip && pipLogoPath
+   760→      ? pipOverlayFilter(pip, { pipInput: idx, frameW: W, frameH: H, inLabel: tail }).chain
+   761→      : "";
+   762→  if (hasPip) tail = "[vp]";
+   763→  const titleChain = titleDrawtextFilter(opts.docTitle ?? null, dur, aspect !== "16:9", tail);
+   764→  // vMap follows the chain's tail so input order and labels can never drift.
+   765→  const vMap = titleChain ? "[vt]" : tail;
+   766→  const fullVisual = (base: string, pipIdx: number | null): string => {
+   767→    const parts = [base, ...postParts];
+   768→    if (pipIdx != null && hasPip) parts.push(pipChainFor(pipIdx));
+   769→    if (titleChain) parts.push(titleChain);
+   770→    return parts.join(";");
+   771→  };
+   772→  const pipInputs = hasPip && pipLogoPath
+   773→    ? ["-loop", "1", "-framerate", String(fps), "-t", (dur + 0.5).toFixed(3), "-i", pipLogoPath]
+   774→    : [];
+   775→  const visualSuffix = (inputLabel: string): string => {
+   776→    // Stock/animated footage: the doc's playback rate is a setpts on the
+   777→    // clip itself (the loop covers the shorter effective length). With a
+   778→    // chroma key the grade moves AFTER the composite (keying sees raw art).
+   779→    const speedLead = speed ? `setpts=PTS/${speed.toFixed(4)},` : "";
+   780→    const inner = [speedLead, chroma ? "" : grade].filter(Boolean).join("");
+   781→    return `[${inputLabel}:v]${inner || "null"}[v]`;
+   782→  };
+   783→  const FOOTAGE = "0"; // the clip's input index in both footage paths
+   784→  const quality = QUALITY_ENCODING[opts.quality ?? "standard"];
+   785→  // One helper owns BOTH the extra audio inputs and the graph, so input
+   786→  // order and stream labels can never drift apart.
+   787→  const audio = await sceneAudio(
+   788→    opts.sfx,
+   789→    opts.sfxKind ?? scene.sfx,
+   790→    opts.ambiencePath ?? null,
+   791→    leadMs,
+   792→    dur,
+   793→    opts.docLevels ?? null,
+   794→    // S2 wave 2 — narration pace: the doc's playback rate + voice fades,
+   795→    // anchored to the measured WAV length (probed once per render).
+   796→    opts.docSpeed || opts.docFades
+   797→      ? {
+   798→          speed: speed,
+   799→          wavDur: opts.wavDur ?? 0,
+   800→          fades: opts.docFades ?? null,
+   801→        }
+   802→      : undefined
+   803→  );
+   804→
+   805→  const common = [
+   806→    "-map", vMap, "-map", "[a]",
+   807→    "-t", dur.toFixed(3),
+   808→    "-r", String(fps),
+   809→    "-c:v", "libx264", "-preset", quality.preset, "-crf", quality.crf,
+   810→    "-pix_fmt", "yuv420p",
+   811→    "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2",
+   812→    "-y", outPath,
+   813→  ];
+   814→
+   815→  // Keynote slides: the designed PNG IS the frame — 9:16 geometry, the
+   816→  // pipeline's finishing grade would only muddy its tuned palette. The still
+   817→  // enters ONCE and zoompan emits the shot (no looped-image demuxer — large
+   818→  // looped PNGs deadlock this ffmpeg build's teardown).
+   819→  if (isImage) {
+   820→    const slidePath = slidePngPath(opts.videoId, scene.index);
+   821→    if (!fs.existsSync(slidePath))
+   822→      throw new Error(`Scene ${scene.index} has no slide image — the slide deck step was skipped`);
+   823→    const vChain = slideSegmentGraph({
+   824→      dur,
+   825→      plan:
+   826→        plan ?? {
+   827→          sceneType: "standard",
+   828→          move: "Static hold",
+   829→          shots: [{ kind: "hold", zStart: 1, zEnd: 1, focal: { x: 0.5, y: 0.5 }, travel: 0, sec: 99 }],
+   830→          staticImage: true,
+   831→        },
+   832→      settings: motion,
+   833→      fps,
+   834→    });
+   835→    const aChain = audio.graph;
+   836→    await run("ffmpeg", [
+   837→      "-i", slidePath,
+   838→      "-i", wav,
+   839→      ...audio.inputs,
+   840→      "-filter_complex", `${vChain};${aChain}`,
+   841→      ...common,
+   842→    ]);
+   843→    return;
+   844→  }
+   845→  if ((opts.assetSource ?? (mode === "stock" ? "stock" : null)) === "stock") {
+   846→    // Hybrid: matched stock footage when the scene has a clip on disk,
+   847→    // otherwise fall through to the art path below. (S35: the selector only
+   848→    // names "stock" when the clip exists — this fs guard is belt-and-braces.)
+   849→    const clip = scene.stock
+   850→      ? path.join(dir, scene.stock.file)
+   851→      : null;
+   852→    if (clip && fs.existsSync(clip)) {
+   853→      await run("ffmpeg", [
+   854→        "-stream_loop", "-1", "-t", dur.toFixed(3), "-i", clip,
+   855→        "-i", wav,
+   856→        ...audio.inputs,
+   857→        ...pipInputs,
+   858→        "-filter_complex", `${fullVisual(visualSuffix(FOOTAGE), hasPip ? 2 + audio.inputs.filter((a) => a === "-i").length : null)};${audio.graph}`,
+   859→        ...common,
+   860→      ]);
+   861→      return;
+   862→    }
+   863→  }
+   864→
+   865→  // S35 — the scene's execution channel: the selector's verdict, or the
+   866→  // mode's own default for callers that predate the selector. (Slides and
+   867→  // animated callers that bypass the selector: slides already returned above;
+   868→  // animated maps to i2v — the pre-S35 behavior, unchanged.)
+   869→  const chan: LivelinessChannel = opts.channel ?? (mode === "animated" ? "i2v" : mode);
+   870→
+   871→  // S35 — the Ken Burns executor (the M2 multi-shot Director graph, or the
+   872→  // single-image Smart Motion graph), extracted so an i2v scene that cannot
+   873→  // produce its clip degrades HERE — the liveliness pick never breaks the
+   874→  // render, it just plays the next-liveliest channel.
+   875→  const runKenburns = async (): Promise<void> => {
+   876→    const img = path.join(dir, sceneImageFile(scene.index));
+   877→
+   878→    // M2 — the approved Director shot list drives the scene (spec §1.7):
+   879→    // per-shot image (scene art / fresh AI render / pseudo crop), per-shot
+   880→    // camera move, per-shot reconciled duration. motion.ts stays the ONLY
+   881→    // zoompan math engine (multiShotSceneGraph → shotZoompan). The scene-
+   882→    // level motion-map override does NOT apply here — per-shot Director
+   883→    // decisions are senior; it keeps governing plan-less scenes (§1.3).
+   884→    const shotInputs = shotPlan?.available?.length
+   885→      ? resolveShotInputs(dir, shotPlan, img)
+   886→      : null;
+   887→    if (shotInputs) {
+   888→      const audioInputCount = audio.inputs.filter((a) => a === "-i").length;
+   889→      const inputFor = new Map<string, number>([[img, 0]]);
+   890→      const extraInputs: string[] = [];
+   891→      // Input order: 0 = scene image, 1 = narration, 2.. = audio extras,
+   892→      // then one still input per distinct shot image. The +1s of slack is
+   893→      // free — each branch trims to its exact frame count, the pad only
+   894→      // guarantees a stream never ends before its trim point.
+   895→      let nextInput = 2 + audioInputCount;
+   896→      // Get-once: assign each distinct shot image its input index as the
+   897→      // list is walked — first sighting claims the next index AND pushes the
+   898→      // still input; later sightings reuse it. Order is identical to the
+   899→      // old two-pass loop, so indices cannot drift.
+   900→      const shotList = shotInputs.map((sh) => {
+   901→        let input = inputFor.get(sh.file);
+   902→        if (input === undefined) {
+   903→          input = nextInput++;
+   904→          inputFor.set(sh.file, input);
+   905→          extraInputs.push(
+   906→            "-loop", "1", "-framerate", String(fps), "-t", (sh.sec + 1).toFixed(3), "-i", sh.file
+   907→          );
+   908→        }
+   909→        return {
+   910→          kind: sh.moveKind,
+   911→          sec: sh.sec,
+   912→          input,
+   913→          crop: sh.crop,
+   914→          focal: sh.focal,
+   915→          speed: sh.speed,
+   916→          transitionOut: sh.transitionOut,
+   917→        };
+   918→      });
+   919→      const vChain = multiShotSceneGraph({
+   920→        dur,
+   921→        settings: motion,
+   922→        fps,
+   923→        aspect,
+   924→        grade: chroma ? "" : grade,
+   925→        focal: focalForScene(scene),
+   926→        shots: shotList,
+   927→      });
+   928→      // S55 (T-55.3a) — record the graph's own boundaries (the SAME fitted
+   929→      // allocation the graph just executed) for the render→QC contract.
+   930→      opts.onShotJoins?.(shotGraphJoins({ dur, shots: shotList, fps }));
+   931→      // The PIP logo rides AFTER the shot stills (input order: 0 = scene
+   932→      // image, 1 = narration, 2.. = audio extras, then stills, then logo —
+   933→      // the index is positional, nextInput counts it).
+   934→      if (hasPip) extraInputs.push(...pipInputs);
+   935→      const pipIdxShot = hasPip ? nextInput : null;
+   936→      await run("ffmpeg", [
+   937→        "-loop", "1", "-framerate", String(fps), "-t", dur.toFixed(3), "-i", img,
+   938→        "-i", wav,
+   939→        ...audio.inputs,
+   940→        ...extraInputs,
+   941→        "-filter_complex", `${fullVisual(vChain, pipIdxShot)};${audio.graph}`,
+   942→        ...common,
+   943→      ]);
+   944→      return;
+   945→    }
+   946→
+   947→    // Smart Motion: scene-aware plan (from motion.ts) -> ffmpeg filter graph.
+   948→    const vChain = sceneFilterGraph({
+   949→      dur,
+   950→      plan: plan ?? { sceneType: "standard", move: "Static hold", shots: [{ kind: "hold", zStart: 1, zEnd: 1, focal: { x: 0.5, y: 0.5 }, travel: 0, sec: 99 }], staticImage: true },
+   951→      settings: motion,
+   952→      fps,
+   953→      aspect,
+   954→      grade: chroma ? "" : grade,
+   955→    });
+   956→    await run("ffmpeg", [
+   957→      "-loop", "1", "-framerate", String(fps), "-t", dur.toFixed(3), "-i", img,
+   958→      "-i", wav,
+   959→      ...audio.inputs,
+   960→      ...pipInputs,
+   961→      "-filter_complex", `${fullVisual(vChain, hasPip ? 2 + audio.inputs.filter((a) => a === "-i").length : null)};${audio.graph}`,
+   962→      ...common,
+   963→    ]);
+   964→  };
+   965→
+   966→  // S35 — the i2v channel: subject-real motion for the scenes the approved
+   967→  // plan (or the video-level animated pick) sent here. The generation rides
+   968→  // aiCall("video") — metered under the $5 gate like every other dispatch.
+   969→  if (chan === "i2v") {
+   970→    try {
+   971→      const clip = await ensureSceneClip(opts.videoId, scene, opts.directorScene ?? null);
+   972→      // S50 — scenes longer than the generated clip loop a PALINDROME
+   973→      // (forward + reverse) instead of the raw forward loop's visible
+   974→      // rewind every clip-length seconds. Clips shorter than the scene keep
+   975→      // their exact file (byte-identical legacy path).
+   976→      let loopSrc = clip;
+   977→      try {
+   978→        const clipDur = await probeDuration(clip);
+   979→        if (dur > clipDur - 0.2) loopSrc = await ensureSceneLoop(clip, fps);
+   980→      } catch {
+   981→        // A probe/palindrome failure never fails the render — the raw loop
+   982→        // is the pre-S50 behavior and still plays.
+   983→      }
+   984→      await run("ffmpeg", [
+   985→        "-stream_loop", "-1", "-t", dur.toFixed(3), "-i", loopSrc,
+   986→        "-i", wav,
+   987→        ...audio.inputs,
+   988→        ...pipInputs,
+   989→        "-filter_complex", `${fullVisual(visualSuffix(FOOTAGE), hasPip ? 2 + audio.inputs.filter((a) => a === "-i").length : null)};${audio.graph}`,
+   990→        ...common,
+   991→      ]);
+   992→      return;
+   993→    } catch (err) {
+   994→      // Honest degradation, two contracts:
+   995→      //  • video-level "animated": the user asked for FULL animation — a
+   996→      //    failed clip fails the render (a silently different product would
+   997→      //    be a lie). Pre-S35 behavior, unchanged.
+   998→      //  • per-scene liveliness picks (the Director's needsI2V): the render
+   999→      //    falls back to the Ken Burns executor and the orchestrator reports
+  1000→      //    the fallback — visible, never silent.
+  1001→      if (mode === "animated") throw err;
+  1002→      opts.onI2vFallback?.(
+  1003→        scene.index,
+  1004→        err instanceof Error ? err.message : String(err).slice(0, 160)
+  1005→      );
+  1006→      await runKenburns();
+  1007→      return;
+  1008→    }
+  1009→  }
+  1010→
+  1011→  // S125 (K1) — the native-rig channel: the rigged character DRAWS this
+  1012→  // scene's pixels ($0, identity-locked, deterministic). The clip renders
+  1013→  // (or reuses the hash-keyed cache) at the program's rate with the 30fps
+  1014→  // shared-timebase cap, then composes through the SAME footage path i2v
+  1015→  // uses — the segment's audio graph stays the ONE mix (the rig never
+  1016→  // carries a second VO path). ANY failure degrades honestly to the Ken
+  1017→  // Burns executor (the i2v degradation shape): the liveliness pick never
+  1018→  // breaks the render, the fallback is reported.
+  1019→  if (chan === "native-rig") {
+  1020→    try {
+  1021→      if (!opts.rig) throw new Error("the native-rig channel carries no rig (a wiring bug)");
+  1022→      const sceneMs = Math.round(dur * 1000);
+  1023→      // The W4 anchors — the $0 ladder (silence-run refined windows, no
+  1024→      // paid ASR): null degrades to the word-proportional estimator inside
+  1025→      // the planner (anchors are inputs, never stored).
+  1026→      const voSec = await probeDuration(wav).catch(() => 0);
+  1027→      const anchors = await sceneVoiceAnchors({
+  1028→        narration: scene.narration,
+  1029→        voPath: wav,
+  1030→        voDurationSec: voSec,
+  1031→        sceneDurationMs: sceneMs,
+  1032→        asr: false,
+  1033→      });
+  1034→      // K1-ext — the ladder's top rung: an AUTHORED mocap timeline (the
+  1035→      // BVH sidecar adapter's output, keyed scene-<n>) outranks the
+  1036→      // compiled gesture beats. Absent/corrupt → the compile stands (the
+  1037→      // byte-identical legacy path); the mouth schedule rides either way
+  1038→      // (a capture carries no speech — beat-sync stays the honest claim).
+  1039→      let authoredTimeline: RigPoseTimeline | null = null;
+  1040→      try {
+  1041→        const mocapBuf = await storage.get(`${opts.videoId}/character/mocap.json`);
+  1042→        const mocapBody = JSON.parse(mocapBuf.toString("utf8")) as Record<string, RigPoseTimeline>;
+  1043→        const authored = mocapBody[`scene-${scene.index}`];
+  1044→        if (authored && Array.isArray(authored.rows)) authoredTimeline = { durationMs: sceneMs, rows: authored.rows };
+  1045→      } catch {
+  1046→        authoredTimeline = null; // no capture — the compile owns the scene
+  1047→      }
+  1048→      const rigPlanCompiled = authoredTimeline
+  1049→        ? { timeline: authoredTimeline, speech: mouthScheduleFrom({ narration: scene.narration, anchors, durationMs: sceneMs }) }
+  1050→        : planRigTimeline({
+  1051→            narration: scene.narration,
+  1052→            rig: opts.rig.rig,
+  1053→            durationMs: sceneMs,
+  1054→            anchors,
+  1055→          });
+  1056→      const [W, H] = OUTPUT_SIZES[aspect].out;
+  1057→      const clip = await ensureRigClip(
+  1058→        path.join(videoDir(opts.videoId), `scene-rig-${String(scene.index).padStart(2, "0")}.mp4`),
+  1059→        {
+  1060→          rig: opts.rig.rig,
+  1061→          art: opts.rig.art,
+  1062→          timeline: rigPlanCompiled.timeline,
+  1063→          speech: rigPlanCompiled.speech,
+  1064→          slot: { sceneIndex: scene.index, durationMs: sceneMs },
+  1065→          opts: { outDir: videoDir(opts.videoId), canvas: { width: W, height: H }, fps },
+  1066→        }
+  1067→      );
+  1068→      await run("ffmpeg", [
+  1069→        "-stream_loop", "-1", "-t", dur.toFixed(3), "-i", clip,
+  1070→        "-i", wav,
+  1071→        ...audio.inputs,
+  1072→        ...pipInputs,
+  1073→        "-filter_complex", `${fullVisual(visualSuffix(FOOTAGE), hasPip ? 2 + audio.inputs.filter((a) => a === "-i").length : null)};${audio.graph}`,
+  1074→        ...common,
+  1075→      ]);
+  1076→      return;
+  1077→    } catch (err) {
+  1078→      renderLog.warn("native rig render failed — Ken Burns fallback", {
+  1079→        scene: scene.index,
+  1080→        err,
+  1081→      });
+  1082→      opts.onRigFallback?.(
+  1083→        scene.index,
+  1084→        err instanceof Error ? err.message : String(err).slice(0, 160)
+  1085→      );
+  1086→      await runKenburns();
+  1087→      return;
+  1088→    }
+  1089→  }
+  1090→
+  1091→  await runKenburns();
+  1092→}
+  1093→
+  1094→/** Per-scene audio levels for one segment's graph (S2 — from the timeline
+  1095→ *  doc's edited projection; defaults preserve the pre-S2 mix exactly). */
+  1096→export interface SceneAudioLevels {
+  1097→  voice: number; // narration gain, 0..1 (1 = full)
+  1098→  sfx: number; // SFX cue weight (amix weight, 0 = skip the cue)
+  1099→  ambient: number; // ambience bed weight (amix weight, 0 = skip the bed)
+  1100→}
+  1101→
+  1102→const SCENE_AUDIO_DEFAULTS: SceneAudioLevels = { voice: 1, sfx: 0.35, ambient: 0.1 };
+  1103→
+  1104→/** Clamp a doc level into the graph's legal range. */
+  1105→function clampLevel(v: number | null | undefined, fallback: number): number {
+  1106→  const n = Number(v);
+  1107→  if (!Number.isFinite(n) || n < 0) return fallback;
+  1108→  return Math.min(n, 1);
+  1109→}
+  1110→
+  1111→/**
+  1112→ * Audio inputs + graph for one scene, built together so input order and
+  1113→ * stream labels can never drift apart:
+  1114→ *   [1:a] narration, delayed to its lead-in, padded to the scene length;
+  1115→ *   [2:a] the scene's SFX cue fired 40 ms after the cut (when enabled);
+  1116→ *   [3:a] the director-planned ambience bed, looped for the scene and riding
+  1117→ *         well under the voice (module E).
+  1118→ * `sfx` = false (Settings → Sound) silences every synthesized extra — cues
+  1119→ * AND beds — for the render. The voice pad is FINITE (apad whole_dur) — every
+  1120→ * stream in the graph then ends on its own, so ffmpeg always tears down
+  1121→ * cleanly. normalize=0 keeps the amix weights as literal gains (default
+  1122→ * normalization would scale every source down by 1/Σw).
+  1123→ *
+  1124→ * S2: `levels` (from the timeline doc) scales the narration and REPLACES the
+  1125→ * historic cue/bed weights — the studio's inspector sliders are the mix now.
+  1126→ * A zero level drops the cue/bed input entirely (cheaper than mixing silence)
+  1127→ * but the narration chain always stays: apad on [voice] is the amix's
+  1128→ * duration anchor, so the segment's length never depends on the extras.
+  1129→ */
+  1130→export async function sceneAudio(
+  1131→  sfx: boolean,
+  1132→  sfxKind: string,
+  1133→  ambiencePath: string | null,
+  1134→  leadMs: number,
+  1135→  totalSec: number,
+  1136→  levels?: SceneAudioLevels | null,
+  1137→  pace?: {
+  1138→    /** S2 wave 2 — per-scene playback rate (0.5..2, null = normal). Applied
+  1139→     *  to the narration as atempo BEFORE the fades (a compressed read ends
+  1140→     *  earlier; the fade-out must chase the compressed end). */
+  1141→    speed: number | null;
+  1142→    /** The scene WAV's measured length — the fade-out anchors to the
+  1143→     *  narration's real end (compressed), never the padded window. */
+  1144→    wavDur: number;
+  1145→    /** Narration fade in/out (seconds), sanitized by studio-doc. */
+  1146→    fades: { inSec: number; outSec: number } | null;
+  1147→  }
+  1148→): Promise<{ inputs: string[]; graph: string }> {
+  1149→  const lv = levels
+  1150→    ? {
+  1151→        voice: clampLevel(levels.voice, SCENE_AUDIO_DEFAULTS.voice),
+  1152→        sfx: clampLevel(levels.sfx, SCENE_AUDIO_DEFAULTS.sfx),
+  1153→        ambient: clampLevel(levels.ambient, SCENE_AUDIO_DEFAULTS.ambient),
+  1154→      }
+  1155→    : SCENE_AUDIO_DEFAULTS;
+  1156→  const voiceGain = Math.abs(lv.voice - 1) < 0.001 ? "" : `,volume=${lv.voice.toFixed(3)}`;
+  1157→  // S2 wave 2 — pace the narration: atempo compresses/stretches the read
+  1158→  // (pitch-preserving, no words lost), afade shapes its head/tail. The fade
+  1159→  // out anchors to the COMPRESSED end (wavDur/speed) so a sped-up read fades
+  1160→  // where it actually stops, not where the original would have.
+  1161→  let voiceHead = "[1:a]";
+  1162→  if (pace?.speed) voiceHead += `atempo=${pace.speed.toFixed(4)},`;
+  1163→  if (pace?.fades) {
+  1164→    const { inSec, outSec } = pace.fades;
+  1165→    const compressed = pace.wavDur / (pace.speed ?? 1);
+  1166→    if (inSec >= 0.02) voiceHead += `afade=t=in:st=0:d=${Math.min(inSec, compressed).toFixed(3)},`;
+  1167→    if (outSec >= 0.02) {
+  1168→      const st = Math.max(0, compressed - outSec).toFixed(3);
+  1169→      voiceHead += `afade=t=out:st=${st}:d=${outSec.toFixed(3)},`;
+  1170→    }
+  1171→  }
+  1172→  const voice = `${voiceHead}adelay=${leadMs}:all=1,apad=whole_dur=${totalSec.toFixed(3)}${voiceGain}[voice]`;
+  1173→  // SFX lands 40 ms after the cut so the impact sits with the first frame,
+  1174→  // not in the file's leading edge; the doc's per-scene level is the mix
+  1175→  // weight (0.35 classic default; the assembly seeds boom=0.55, riser=0.4,
+  1176→  // sting=0.45 — the render now honors those too). The ambience bed rides
+  1177→  // lower (0.10 classic): synthesized noise beds any louder read as hiss.
+  1178→  const sfxPath = sfx && lv.sfx > 0.001 ? await ensureSfx(sfxKind) : null;
+  1179→  const ambPath = sfx && lv.ambient > 0.001 ? ambiencePath : null; // one switch, every synthesized extra
+  1180→  if (!sfxPath && !ambPath) return { inputs: [], graph: `${voice};[voice]anull[a]` };
+  1181→
+  1182→  const inputs: string[] = [];
+  1183→  const chains: string[] = [];
+  1184→  const labels: string[] = [];
+  1185→  const weights: string[] = ["1"];
+  1186→  let idx = 2;
+  1187→  if (sfxPath) {
+  1188→    inputs.push("-i", sfxPath);
+  1189→    chains.push(`[${idx}:a]adelay=40:all=1[sfx]`);
+  1190→    labels.push("[sfx]");
+  1191→    weights.push(lv.sfx.toFixed(3));
+  1192→    idx++;
+  1193→  }
+  1194→  if (ambPath) {
+  1195→    inputs.push("-stream_loop", "-1", "-t", totalSec.toFixed(3), "-i", ambPath);
+  1196→    // The bed's own highpass stays; its MIX WEIGHT is the doc's level.
+  1197→    chains.push(`[${idx}:a]volume=0.85,highpass=f=120[amb]`);
+  1198→    labels.push("[amb]");
+  1199→    weights.push(lv.ambient.toFixed(3));
+  1200→  }
+  1201→  return {
+  1202→    inputs,
+  1203→    graph:
+  1204→      `${voice};${chains.join(";")};` +
+  1205→      `${["[voice]", ...labels].join("")}amix=inputs=${labels.length + 1}:duration=first:normalize=0:weights='${weights.join(" ")}'[a]`,
+  1206→  };
+  1207→}
+  1208→
+  1209→/** Concat segment files (identical codecs) into one MP4. */
+  1210→async function concatSegments(segPaths: string[], outPath: string): Promise<void> {
+  1211→  const listFile = outPath.replace(/\.mp4$/, "-list.txt");
+  1212→  fs.writeFileSync(listFile, segPaths.map((p) => `file '${p}'`).join("\n") + "\n");
+  1213→  await run("ffmpeg", ["-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", "-y", outPath]);
+  1214→  fs.rmSync(listFile, { force: true });
+  1215→}
+  1216→
+  1217→/**
+  1218→ * Blend ONE run of ≥2 segments (no "cut" inside) into `outPath`, honoring
+  1219→ * each boundary's own style + duration. Memory-bounded grouping: a full
+  1220→ * N-input xfade chain buffers frames for every not-yet-consumed input —
+  1221→ * measured at 2.4–3.1 GB RSS for 12×1080p inputs, which the kernel
+  1222→ * OOM-kills in a 4 GB container — so blending runs in bounded GROUPS
+  1223→ * (planBlendGroupsMulti, ≤groupMax inputs per ffmpeg pass), then blends the
+  1224→ * group outputs, recursing until one master remains. Group intermediates
+  1225→ * re-encode at crf 16 (near-transparent) so at most one extra generation
+  1226→ * touches any frame before the final join.
+  1227→ *
+  1228→ * Between rounds, the boundary settings CARRY OVER: the next round's inputs
+  1229→ * are the group outputs, and the boundary between group k and k+1 is the
+  1230→ * original boundary at segment groups[k].to — so a per-scene transition
+  1231→ * survives regrouping exactly.
+  1232→ */
+  1233→async function blendRun(
+  1234→  segPaths: string[],
+  1235→  durationsSec: number[],
+  1236→  settings: TransitionSettings[],
+  1237→  outPath: string,
+  1238→  groupMax: number,
+  1239→  quality: { crf: string; preset: string } = QUALITY_ENCODING.standard
+  1240→): Promise<void> {
+  1241→  const tmp = (i: number, round: number) =>
+  1242→    outPath.replace(/\.mp4$/, `.blend-r${round}-${i}.mp4`);
+  1243→
+  1244→  // Round 0 inputs are the real segments; later rounds blend group outputs.
+  1245→  let round = 0;
+  1246→  let paths = segPaths.slice();
+  1247→  let durations = durationsSec.slice();
+  1248→  let boundaries = settings.slice();
+  1249→
+  1250→  while (paths.length > 1) {
+  1251→    const groups = planBlendGroupsMulti(durations, boundaries, groupMax);
+  1252→    const nextPaths: string[] = [];
+  1253→    const nextDurations: number[] = [];
+  1254→    const nextBoundaries: TransitionSettings[] = [];
+  1255→    const singlePass = groups.length === 1 && groups[0].to - groups[0].from + 1 === paths.length;
+  1256→
+  1257→    for (const [gi, g] of groups.entries()) {
+  1258→      const groupPaths = paths.slice(g.from, g.to + 1);
+  1259→      const groupDurations = durations.slice(g.from, g.to + 1);
+  1260→      if (groupPaths.length === 1) {
+  1261→        // Pass-through: no blend needed inside a lone segment group.
+  1262→        nextPaths.push(groupPaths[0]);
+  1263→        nextDurations.push(groupDurations[0]);
+  1264→      } else {
+  1265→        // Internal boundaries only (from..to−1) — the group's outer seams
+  1266→        // belong to the NEXT round, between group outputs.
+  1267→        const groupSettings = boundaries.slice(g.from, g.to);
+  1268→        const graph = buildTransitionGraphMulti(groupDurations, groupSettings);
+  1269→        if (!graph) throw new Error("blend group too small for xfade");
+  1270→        // The last group of the last round writes the real output; every other
+  1271→        // pass writes a near-lossless intermediate.
+  1272→        const isFinal = singlePass && gi === groups.length - 1;
+  1273→        const groupOut = isFinal ? outPath : tmp(gi, round);
+  1274→        const args: string[] = [];
+  1275→        for (const p of groupPaths) args.push("-i", p);
+  1276→        args.push(
+  1277→          "-filter_complex", `${graph.video};${graph.audio}`,
+  1278→          "-map", "[v]", "-map", "[a]",
+  1279→          // Intermediates at crf 16 (near-transparent) — only the final master
+  1280→          // uses the delivery quality the downstream passes expect.
+  1281→          "-c:v", "libx264", "-preset", isFinal ? quality.preset : "veryfast", "-crf", isFinal ? quality.crf : "16",
+  1282→          "-pix_fmt", "yuv420p",
+  1283→          "-c:a", "aac", "-b:a", isFinal ? "160k" : "256k",
+  1284→          "-ar", "48000", "-ac", "2",
+  1285→          "-y", groupOut
+  1286→        );
+  1287→        await run("ffmpeg", args);
+  1288→        // Verify the pass actually wrote a playable file. An OOM-killed ffmpeg
+  1289→        // resolves "successfully" through the zombie poll (its stderr carries no
+  1290→        // failure signature — just truncated progress lines), leaving a file
+  1291→        // without a moov atom that fails HERE instead of in the next round with
+  1292→        // a confusing message about the wrong file.
+  1293→        try {
+  1294→          await probeDuration(groupOut);
+  1295→        } catch {
+  1296→          throw new Error(
+  1297→            `Blend pass ${round}.${gi} (${groupPaths.length} inputs) wrote an unreadable file — the machine most likely ran out of memory mid-encode. Free RAM or retry; small-RAM hosts automatically use lighter blend groups.`
+  1298→          );
+  1299→        }
+  1300→        nextPaths.push(groupOut);
+  1301→        nextDurations.push(g.outDurationSec);
+  1302→      }
+  1303→      // The boundary AFTER this group becomes a next-round boundary (the
+  1304→      // last group has none — its tail is the run's end).
+  1305→      if (gi < groups.length - 1) nextBoundaries.push(boundaries[g.to]);
+  1306→    }
+  1307→
+  1308→    // Clean up the consumed intermediates. A singleton group passes its
+  1309→    // segment through UNTOUCHED into nextPaths — deleting every previous
+  1310→    // round file would destroy it before the next round reads it (this
+  1311→    // fires with a small group cap: 3 inputs → groups of 2 + 1). Anything
+  1312→    // still referenced by the next round must survive.
+  1313→    if (round > 0) {
+  1314→      const stillNeeded = new Set(nextPaths);
+  1315→      for (const p of paths) {
+  1316→        if (!stillNeeded.has(p)) fs.rmSync(p, { force: true });
+  1317→      }
+  1318→    }
+  1319→
+  1320→    paths = nextPaths;
+  1321→    durations = nextDurations;
+  1322→    boundaries = nextBoundaries;
+  1323→    round++;
+  1324→  }
+  1325→
+  1326→  // Single-segment survivor (every round pass-through): the segment IS the
+  1327→  // run's output.
+  1328→  if (paths.length === 1 && paths[0] !== outPath) {
+  1329→    fs.copyFileSync(paths[0], outPath);
+  1330→  }
+  1331→}
+  1332→
+  1333→/**
+  1334→ * Stitch segments with the timeline doc's PER-BOUNDARY transitions (S2):
+  1335→ * each seam blends with its own style + duration; "cut" seams are STITCH
+  1336→ * points, not blends. All-cut (or single-segment) renders take the classic
+  1337→ * stream-copy concat; a video with no cuts blends in one run (the classic
+  1338→ * behavior, now per-boundary); a MIXED doc partitions at the cuts — each
+  1339→ * run blends internally (memory-bounded, per-boundary), then the runs join
+  1340→ * with the stream-copy concat, so a hard cut lands exactly where the doc
+  1341→ * says and costs no re-encode.
+  1342→ */
+  1343→async function stitchSegments(opts: {
+  1344→  segPaths: string[];
+  1345→  durationsSec: number[];
+  1346→  /** One sanitized {style, durationSec} per boundary (N−1 for N segments). */
+  1347→  settings: TransitionSettings[];
+  1348→  outPath: string;
+  1349→  /** S3 — delivery encode tier for blend masters (default standard). */
+  1350→  quality?: { crf: string; preset: string };
+  1351→}): Promise<void> {
+  1352→  const n = opts.segPaths.length;
+  1353→  const boundaries = opts.settings.slice(0, Math.max(0, n - 1));
+  1354→  const q = opts.quality ?? QUALITY_ENCODING.standard;
+  1355→  if (n < 2 || boundaries.length === 0 || boundaries.every((s) => s.style === "cut")) {
+  1356→    await concatSegments(opts.segPaths, opts.outPath);
+  1357→    return;
+  1358→  }
+  1359→
+  1360→  // Memory-scaled group cap: the default cap of 4 was measured ~1 GB peak RSS
+  1361→  // on the reference VM. On smaller hosts (≤6 GB total, e.g. a 4 GB sandbox
+  1362→  // or small VPS) drop to 2 — an OOM-killed pass resolves via the zombie
+  1363→  // poll with a truncated intermediate, and the next round then dies with
+  1364→  // the cryptic "moov atom not found" instead of the real cause.
+  1365→  const groupMax = os.totalmem() <= 6 * 1024 * 1024 * 1024 ? 2 : BLEND_GROUP_MAX;
+  1366→
+  1367→  const runs = partitionByCuts(n, boundaries);
+  1368→
+  1369→  // No cuts at all → one run covers everything → today's single-master path.
+  1370→  if (runs.length === 1) {
+  1371→    await blendRun(opts.segPaths, opts.durationsSec, boundaries, opts.outPath, groupMax, q);
+  1372→    return;
+  1373→  }
+  1374→
+  1375→  // Mixed cuts + blends: blend each run into its own master (delivery
+  1376→  // quality — the concat copies these streams untouched), then join at the cuts.
+  1377→  const runOutputs: string[] = [];
+  1378→  for (const [ri, run] of runs.entries()) {
+  1379→    const paths = opts.segPaths.slice(run.from, run.to + 1);
+  1380→    if (paths.length === 1) {
+  1381→      runOutputs.push(paths[0]); // a lone segment between cuts passes through
+  1382→      continue;
+  1383→    }
+  1384→    const runOut = opts.outPath.replace(/\.mp4$/, `.run${ri}.mp4`);
+  1385→    await blendRun(
+  1386→      paths,
+  1387→      opts.durationsSec.slice(run.from, run.to + 1),
+  1388→      boundaries.slice(run.from, run.to),
+  1389→      runOut,
+  1390→      groupMax,
+  1391→      q
+  1392→    );
+  1393→    runOutputs.push(runOut);
+  1394→  }
+  1395→  await concatSegments(runOutputs, opts.outPath);
+  1396→  // The .runN.mp4 masters are fully consumed by the concat.
+  1397→  for (const p of runOutputs) {
+  1398→    if (/\.run\d+\.mp4$/.test(p)) fs.rmSync(p, { force: true });
+  1399→  }
+  1400→}
+  1401→
+  1402→/**
+  1403→ * Final pass — burn subtitles and lay the ducked music bed under the
+  1404→ * narration, ALWAYS loudness-normalized to the delivery targets.
+  1405→ *
+  1406→ * Three stages (audiomix.ts contract), fixing the -24.6 LUFS hole where a
+  1407→ * narration-only render shipped raw TTS audio:
+  1408→ *   A. Build the pre-normalization mix (WAV next to the base, auto-cleaned):
+  1409→ *      music → voice split + ducked bed + amix; no music → measure the base
+  1410→ *      audio directly.
+  1411→ *   B. Measure it — one loudnorm analysis pass (I / TP / LRA / threshold).
+  1412→ *   C. Normalize + finish — subtitles burn + LINEAR two-pass loudnorm
+  1413→ *      (-16 LUFS, -1 dBTP) + safety limiter → AAC. Dynamic single-pass only
+  1414→ *      when measurement was impossible (pure silence), so the output is
+  1415→ *      never raw.
+  1416→ */
+  1417→async function finalize(opts: {
+  1418→  base: string;
+  1419→  out: string;
+  1420→  burnSubtitles: boolean;
+  1421→  music: boolean;
+  1422→  musicNiche?: string;
+  1423→  musicTrack?: ResolvedTrack | null;
+  1424→  musicDuck?: DuckIntensity;
+  1425→  srtPath: string | null;
+  1426→  scenes: Scene[];
+  1427→  segments: { start: number; duration: number }[];
+  1428→  /** Caption look — vertical style for 9:16 renders (undefined = 16:9 default). */
+  1429→  subtitleStyle?: string;
+  1430→  /** S2 — prebuilt per-scene music-bed automation chain ([music]→[mvol],
+  1431→   *  from musicLevelAutomation on the blended segments); null = plain bed. */
+  1432→  musicAutomation?: string | null;
+  1433→  /** S3 — delivery encode tier for the subtitle-burn pass (default standard). */
+  1434→  quality?: { crf: string; preset: string };
+  1435→}): Promise<void> {
+  1436→  const { base, out, burnSubtitles, music } = opts;
+  1437→  const workDir = path.dirname(base);
+  1438→
+  1439→  // Library track with a readable file wins; otherwise the synthesized drone.
+  1440→  const track =
+  1441→    music && opts.musicTrack && fs.existsSync(opts.musicTrack.filePath)
+  1442→      ? opts.musicTrack
+  1443→      : null;
+  1444→  const duck = sanitizeDuckIntensity(track?.duckIntensity ?? opts.musicDuck);
+  1445→  const total = await probeDuration(base);
+  1446→
+  1447→  // ---- Stage A: the pre-normalization mix ----
+  1448→  const mixWav = path.join(workDir, "mix.wav");
+  1449→  if (music) {
+  1450→    const args: string[] = ["-i", base];
+  1451→    const filters: string[] = [voiceSplitChain()];
+  1452→    if (track) {
+  1453→      const fadeIn = Math.min(track.fadeInSec, Math.max(total / 3, 0.2));
+  1454→      const fadeOut = Math.min(track.fadeOutSec, Math.max(total / 3, 0.2));
+  1455→      args.push("-stream_loop", "-1", "-i", track.filePath);
+  1456→      // S2 — per-scene bed levels ride between the bed chain and the ducker
+  1457→      // (the automation's [mvol] output label; without it the bed is [music]).
+  1458→      const automation =
+  1459→        opts.musicAutomation && /^\[music\]/.test(opts.musicAutomation) ? opts.musicAutomation : null;
+  1460→      filters.push(
+  1461→        bedChain({ totalSec: total, gain: track.gain, fadeInSec: fadeIn, fadeOutSec: fadeOut }),
+  1462→        ...(automation ? [automation] : []),
+  1463→        duckChain(duck, automation ? "mvol" : "music"),
+  1464→        mixTail(1, 1)
+  1465→      );
+  1466→    } else {
+  1467→      const profile = musicProfileForNiche(opts.musicNiche);
+  1468→      args.push(
+  1469→        "-f", "lavfi", "-t", total.toFixed(3), "-i", droneSource(profile)
+  1470→      );
+  1471→      filters.push(
+  1472→        droneBedChain({ totalSec: total, lowpassHz: profile.lowpassHz, fadeInSec: 3, fadeOutSec: 4 }),
+  1473→        duckChain(duck),
+  1474→        mixTail(1, 0.85)
+  1475→      );
+  1476→    }
+  1477→    await run("ffmpeg", [
+  1478→      ...args,
+  1479→      "-filter_complex", filters.join(";"),
+  1480→      "-map", "[mix]",
+  1481→      "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2",
+  1482→      "-y", mixWav,
+  1483→    ]);
+  1484→  }
+  1485→
+  1486→  // ---- Stage B: measure (the mix, or the base audio when music is off) ----
+  1487→  const measured = await measureLoudness(music ? mixWav : base);
+  1488→
+  1489→  // ---- Stage C: subtitles + normalization + encode ----
+  1490→  // Subtitle burn re-encodes video through the filter graph; without a burn
+  1491→  // the video is STREAM-COPIED — a `[0:v]null[v]` graph fed to `-c:v copy`
+  1492→  // is illegal ffmpeg (filtering + streamcopy are mutually exclusive, and the
+  1493→  // copy also saved the no-caption path a pointless full re-encode).
+  1494→  const burn = burnSubtitles && Boolean(opts.srtPath);
+  1495→  const q = opts.quality ?? QUALITY_ENCODING.standard;
+  1496→  const stageC = burn
+  1497→    ? ([
+  1498→        "-filter_complex",
+  1499→        `[0:v]subtitles=f='${opts.srtPath}':force_style='${opts.subtitleStyle ?? captionAssStyle(null, false)}'[v];[1:a]${normalizationFilter(measured)}[a]`,
+  1500→        "-map", "[v]", "-map", "[a]",
+  1501→        "-c:v", "libx264", "-preset", q.preset, "-crf", q.crf, "-pix_fmt", "yuv420p",
+  1502→      ] as string[])
+  1503→    : ([
+  1504→        "-filter_complex", `[1:a]${normalizationFilter(measured)}[a]`,
+  1505→        "-map", "0:v:0", "-map", "[a]",
+  1506→        "-c:v", "copy",
+  1507→      ] as string[]);
+  1508→
+  1509→  await run(
+  1510→    "ffmpeg",
+  1511→    [
+  1512→      "-i", base,
+  1513→      "-i", music ? mixWav : base,
+  1514→      ...stageC,
+  1515→      "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+  1516→      "-movflags", "+faststart", "-y", out,
+  1517→    ],
+  1518→    15 * 60 * 1000
+  1519→  );
+  1520→  fs.rmSync(mixWav, { force: true });
+  1521→}
+  1522→
+  1523→/** Read the final or preview MP4 (or a byte range of it). */
+  1524→export async function readVideoFile(
+  1525→  videoId: string,
+  1526→  variant: "final" | "preview"
+  1527→): Promise<{ buffer: Buffer; fileName: string } | null> {
+  1528→  const fileName = variant === "final" ? "final.mp4" : "preview.mp4";
+  1529→  // Storage seam (T-3.7): driver-aware read.
+  1530→  const s = await storage.stat(`${videoId}/${fileName}`);
+  1531→  if (!s) return null;
+  1532→  return { buffer: await storage.get(`${videoId}/${fileName}`), fileName };
+  1533→}
+  1534→
+  1535→/**
+  1536→ * Stat the final/preview MP4 WITHOUT reading it (Stage 3, T-3.6 — D-23).
+  1537→ * The streaming route opens the file lazily per Range request; memory stays
+  1538→ * constant instead of one full copy per concurrent viewer.
+  1539→ */
+  1540→/** S114 — stat one scene's preview (the mp4 route's scene-preview variant). */
+  1541→export async function statScenePreviewFile(
+  1542→  videoId: string,
+  1543→  sceneIndex: number
+  1544→): Promise<{ key: string; size: number; fileName: string } | null> {
+  1545→  if (!Number.isInteger(sceneIndex) || sceneIndex < 1) return null;
+  1546→  const fileName = `scene-preview-${String(sceneIndex).padStart(2, "0")}.mp4`;
+  1547→  const key = `${videoId}/${fileName}`;
+  1548→  const s = await storage.stat(key);
+  1549→  if (!s) return null;
+  1550→  return { key, size: s.size, fileName };
+  1551→}
+  1552→
+  1553→/** S116 — stat the boundary-pair render (scene-boundary-NN.mp4, NN = the
+  1554→ * scene the seam comes AFTER). Serves the mp4 route's
+  1555→ * ?variant=scene-boundary&n= lane — authed, org-scoped, same path family. */
+  1556→export async function statSceneBoundaryFile(
+  1557→  videoId: string,
+  1558→  afterScene: number
+  1559→): Promise<{ key: string; size: number; fileName: string } | null> {
+  1560→  if (!Number.isInteger(afterScene) || afterScene < 1) return null;
+  1561→  const fileName = `scene-boundary-${String(afterScene).padStart(2, "0")}.mp4`;
+  1562→  const key = `${videoId}/${fileName}`;
+  1563→  const s = await storage.stat(key);
+  1564→  if (!s) return null;
+  1565→  return { key, size: s.size, fileName };
+  1566→}
+  1567→
+  1568→export async function statVideoFile(
+  1569→  videoId: string,
+  1570→  variant: "final" | "preview"
+  1571→): Promise<{ key: string; size: number; fileName: string } | null> {
+  1572→  const fileName = variant === "final" ? "final.mp4" : "preview.mp4";
+  1573→  const key = `${videoId}/${fileName}`;
+  1574→  const s = await storage.stat(key);
+  1575→  if (!s) return null;
+  1576→  return { key, size: s.size, fileName };
+  1577→}
+  1578→
+  1579→// ---------- Orchestrator ----------
+  1580→
+  1581→/** Compose the video. Caller (route job) updates the DB afterwards. */
+  1582→export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
+  1583→  const dir = videoDir(opts.videoId);
+  1584→  const scenes = opts.sceneLimit
+  1585→    ? opts.scenes.slice(0, opts.sceneLimit)
+  1586→    : opts.scenes;
+  1587→  // S2 — the timeline doc's per-scene settings, aligned BY POSITION to the
+  1588→  // scenes this render will actually cut. A doc for the FULL list is sliced
+  1589→  // to the preview render's head; a doc that matches neither length is
+  1590→  // dropped whole — the same all-or-nothing guard as the durations.
+  1591→  const docScenes =
+  1592→    opts.docScenes && opts.docScenes.length === opts.scenes.length
+  1593→      ? opts.docScenes.slice(0, scenes.length)
+  1594→      : opts.docScenes && opts.docScenes.length === scenes.length
+  1595→        ? opts.docScenes
+  1596→        : null;
+  1597→  const isPreview =
+  1598→    Boolean(opts.sceneLimit && opts.sceneLimit < opts.scenes.length) ||
+  1599→    Boolean(opts.scenePreview) ||
+  1600→    Boolean(opts.boundaryPreview);
+  1601→  const outName = opts.scenePreview
+  1602→    ? `scene-preview-${String(opts.scenePreview.sceneIndex).padStart(2, "0")}.mp4`
+  1603→    : opts.boundaryPreview
+  1604→      ? `scene-boundary-${String(opts.boundaryPreview.afterScene).padStart(2, "0")}.mp4`
+  1605→      : isPreview
+  1606→        ? "preview.mp4"
+  1607→        : "final.mp4";
+  1608→
+  1609→  // S87 slice 2 — the per-scene visual kind from the composition plan
+  1610→  // (schema-2 docs read the tracks projection; the job derives the plan).
+  1611→  // Null plan / absent scene → the mode key verbatim (v1 docs, no-doc
+  1612→  // renders). Homogeneous docs make the two reads identical — the parity
+  1613→  // pins hold them to it.
+  1614→  const planScenes = opts.timelinePlan?.scenes ?? null;
+  1615→  // S87 slice 3 — the routing wall: whiteboard-kind clips execute through
+  1616→  // the Whiteboard lane (peer ENGINE, shared CONTRACT); runRenderJob routes
+  1617→  // mode-whiteboard videos there before this entry. A whiteboard plan
+  1618→  // reaching the compositor's segment builders means a routing bug — refuse
+  1619→  // BEFORE any paid motion planning or geometry work runs.
+  1620→  // S123 (G1) — the graphics lane rides the SAME wall: graphics-kind clips
+  1621→  // execute through the graphics lane only.
+  1622→  // Stage X — the refusal reads the BUILDER REGISTRY (composition-plan's
+  1623→  // COMPOSITOR_SEGMENT_KINDS), not a hard-coded kind list: a kind without a
+  1624→  // segment builder refuses with the registry's name (the per-scene
+  1625→  // dispatch lands kind by kind; the wall message stays one string).
+  1626→  {
+  1627→    const unsupported = validatePlanKinds((planScenes ?? []).map((ps) => ps.kind)).unsupported;
+  1628→    if (unsupported.length > 0)
+  1629→      throw new Error(
+  1630→        `visual kinds without a compositor segment builder (${unsupported.join(", ")}) execute through their engine lanes — the compositor received an engine plan, which is a routing bug (not a render input problem)`
+  1631→      );
+  1632→  }
+  1633→  const sceneKindOf = (i: number): PlanVisualKind =>
+  1634→    planScenes?.[i]?.kind ?? (opts.mode === "slides" ? "image" : "video");
+  1635→  const assetSourceOf = (i: number): "ai" | "stock" | "slides" | null =>
+  1636→    planScenes?.[i]?.assetSource ?? null;
+  1637→  // Geometry truth for image-kind renders (the deck is 9:16): ALL scenes
+  1638→  // image → the deck geometry; mixed docs (no engine writes them yet —
+  1639→  // slice 4 defines mixed geometry) keep the video default.
+  1640→  const allImage = planScenes
+  1641→    ? planScenes.every((ps) => ps.kind === "image")
+  1642→    : opts.mode === "slides";
+  1643→  const outPath = path.join(dir, outName);
+  1644→
+  1645→  if (scenes.length === 0) throw new Error("No scenes to render");
+  1646→
+  1647→  // Validate inputs up-front with actionable messages. S87 slice 4 — the
+  1648→  // first legacy branch COLLAPSES onto the contract: the storyboard-art
+  1649→  // gate reads the composition plan's per-scene KIND (an image-kind
+  1650→  // scene's frame IS the designed deck PNG — no storyboard art needed),
+  1651→  // with the mode as the no-plan fallback (v1 docs, "render without
+  1652→  // timeline"). Parity-pinned identical for every doc the engines write
+  1653→  // (slides → image everywhere, kenburns/animated/stock → video
+  1654→  // everywhere); a mixed doc (no engine writes one yet) gets the
+  1655→  // per-scene truth instead of the video-level proxy. Narration timing
+  1656→  // is still mandatory in every mode.
+  1657→  for (const [i, scene] of scenes.entries()) {
+  1658→    if (sceneKindOf(i) !== "image" && !fs.existsSync(path.join(dir, sceneImageFile(scene.index))))
+  1659→      throw new Error(`Scene ${scene.index} has no storyboard image — generate the storyboard first`);
+  1660→    if (!fs.existsSync(path.join(dir, sceneWavFile(scene.index))))
+  1661→      throw new Error(`Scene ${scene.index} has no voiceover — generate the voiceover first`);
+  1662→  }
+  1663→
+  1664→  const tmpDir = path.join(dir, "render-tmp");
+  1665→  fs.rmSync(tmpDir, { recursive: true, force: true });
+  1666→  fs.mkdirSync(tmpDir, { recursive: true });
+  1667→
+  1668→  try {
+  1669→    // 1) Scene timings from the per-scene narration audio.
+  1670→    const report = (i: number, label: string) =>
+  1671→      opts.onProgress?.(i + 1, scenes.length + 1, label);
+  1672→
+  1673→    const wavs = await Promise.all(
+  1674→      scenes.map((s) => probeDuration(path.join(dir, sceneWavFile(s.index))))
+  1675→    );
+  1676→    // Stage 6 (T-6.10) — when the assembled timeline supplied per-scene
+  1677→    // durations, override the voiceover-derived defaults. Only honor values
+  1678→    // that align to the scene list AND sit inside a sane range. A timeline
+  1679→    // value may EXTEND a scene (deliberate dramatic hold, up to 3× the
+  1680→    // narration) or trim its tail padding — but it can NEVER shorten a scene
+  1681→    // below what its narration needs: cutting words mid-sentence is how a
+  1682→    // −34 s drift video ships (Battle Yamuk: an approved director plan's
+  1683→    // invented 111 s of pacing silenced the last 34 s of a 143 s narration).
+  1684→    // The floor keeps narration + lead-in + a slim 0.3 s tail; the full
+  1685→    // 0.85 s breathing tail may be trimmed by an editor.
+  1686→    //
+  1687→    // S116 — the fold itself now lives in ONE exported pure function
+  1688→    // (resolveSceneDuration above): the scene-scoped recheck derives the
+  1689→    // SAME durations a render used for a scene or a boundary pair from the
+  1690→    // same math that placed the seam, instead of a drifting copy.
+  1691→    const timelineDurations = opts.sceneDurationsSec ?? [];
+  1692→    const durations = wavs.map((rawWav, i) =>
+  1693→      resolveSceneDuration(rawWav, timelineDurations[i] ?? NaN, docScenes?.[i]?.speed ?? NaN)
+  1694→    );
+  1695→    const segments = durations.map((d, i) => ({
+  1696→      start: durations.slice(0, i).reduce((a, b) => a + b, 0),
+  1697→      duration: d,
+  1698→    }));
+  1699→
+  1700→    // Smart Motion — one camera plan per scene, sized to each scene's real
+  1701→    // duration (defaults to Smart Motion on when settings are absent).
+  1702→    // Stock mode: only the fallback scenes (no footage) need a camera plan.
+  1703→    // Slides mode: deterministic gentle push plans (no LLM camera pass).
+  1704→    const motion = sanitizeMotion(opts.motion ?? null);
+  1705→    // Stage 6 (T-6.8) — the motion planner needs to know the frame geometry
+  1706→    // (16:9 / 9:16 / 1:1) so it can size the camera plan to match. Slides
+  1707→    // mode is always 9:16; otherwise honor opts.aspectRatio (default 16:9).
+  1708→    const motionAspect: "16:9" | "9:16" | "1:1" =
+  1709→      allImage ? "9:16" : (opts.aspectRatio ?? "16:9");
+  1710→    const motionFps = opts.frameRate ?? FPS;
+  1711→
+  1712→    // S35 — Universal Scene Liveliness: derive ONE execution channel per
+  1713→    // scene before anything else plans against the mode. The world is read
+  1714→    // ONCE here (approved plan, human motion map, video provider, stock
+  1715→    // files on disk, doc camera keys) and handed to the PURE selector —
+  1716→    // every downstream block (camera plans, shot plans, overrides, segment
+  1717→    // execution) now keys off the channel instead of re-deriving the mode
+  1718→    // arithmetic inline.
+  1719→    //
+  1720→    // The loop this closes: the approved plan's per-scene needsI2V flag was
+  1721→    // already written by the Director pass, already approved by the human,
+  1722→    // and already trusted by the QC pacing gate as a motion channel — but
+  1723→    // the default render mode never consumed it. Now it does: a flagged
+  1724→    // scene animates (metered under the $5 gate), degrading honestly to
+  1725→    // Ken Burns when no video provider is configured or the clip fails.
+  1726→    const hasStock = scenes.map(
+  1727→      (s) => Boolean(s.stock && fs.existsSync(path.join(dir, s.stock.file)))
+  1728→    );
+  1729→    // One read each — the shot-plan block and the module-D override block
+  1730→    // consume the same rows instead of re-querying.
+  1731→    const approvedPlan = await getApprovedPlan(opts.videoId).catch((err) => {
+  1732→      renderLog.warn("director plan unavailable — liveliness falls back to Ken Burns", { err });
+  1733→      return null;
+  1734→    });
+  1735→    const motionOverrides = await getApprovedMotionMap(opts.videoId).catch(() => new Map<number, "zoom" | "pan" | "off">());
+  1736→    let i2vReady = false;
+  1737→    if (opts.mode !== "slides" && opts.mode !== "animated") {
+  1738→      // Only the per-scene picks need this check; animated mode doesn't ask
+  1739→      // (it IS i2v — the provider error surfaces from ensureSceneClip itself,
+  1740→      // as it always has) and slides/stock-with-clips never generate.
+  1741→      try {
+  1742→        i2vReady = (await getCapability("video")).provider === "zai";
+  1743→      } catch {
+  1744→        i2vReady = false; // no provider configured — honest KB fallback below
+  1745→      }
+  1746→    }
+  1747→    const planNeedsI2V = scenes.map(
+  1748→      (s) => approvedPlan?.scenes.find((p) => p.sceneIndex === s.index)?.needsI2V === true
+  1749→    );
+  1750→    const planMotionOff = scenes.map(
+  1751→      (s) => approvedPlan?.scenes.find((p) => p.sceneIndex === s.index)?.motion === "off"
+  1752→    );
+  1753→    const humanMotionOff = scenes.map((s) => motionOverrides.get(s.index) === "off");
+  1754→    const docCameraKeys = scenes.map((s) => docScenes?.[s.index - 1]?.cameraKeys != null);
+  1755→    // S125 (K1) — the native rig's inputs: the character's stored rig columns
+  1756→    // parsed ONCE (additive — junk/null = no rig, the byte-identical legacy
+  1757→    // path). The rig is cast-scene-only (the continuity law) and the flags
+  1758→    // feed the selector's rule 4.5 (native-first, between KB and i2v).
+  1759→    const rigInputs: { rig: CharacterRigDoc; art: RigPartArt[] } | null = (() => {
+  1760→      if (!opts.character?.rigDoc) return null;
+  1761→      const rig = parseRigDoc(opts.character.rigDoc, opts.character.parts ?? null);
+  1762→      const art = parseRigParts(opts.character.parts ?? null);
+  1763→      return rig && art ? { rig, art } : null;
+  1764→    })();
+  1765→    const nativeRig = scenes.map((s) => Boolean(rigInputs && s.hostInScene));
+  1766→    const channels = selectChannels({
+  1767→      mode: opts.mode,
+  1768→      motionOff: motion.mode === "off" || motion.intensity < 1,
+  1769→      planNeedsI2V,
+  1770→      planMotionOff,
+  1771→      humanMotionOff,
+  1772→      docCameraKeys,
+  1773→      hasStock,
+  1774→      i2vReady,
+  1775→      nativeRig,
+  1776→    });
+  1777→    // Mutable copy for the result: an i2v scene that falls back mid-render
+  1778→    // updates its decision, so RenderResult.liveliness reports what PLAYED,
+  1779→    // not what was planned.
+  1780→    const liveliness: LivelinessDecision[] = channels.map((d) => ({ ...d }));
+  1781→    const directorSceneByIndex = new Map(
+  1782→      (approvedPlan?.scenes ?? []).map((s) => [s.sceneIndex, s])
+  1783→    );
+  1784→
+  1785→    const needsPlan = channels.some((d) => d.channel === "kenburns");
+  1786→    const plans =
+  1787→      opts.mode === "animated"
+  1788→        ? []
+  1789→        : opts.mode === "slides"
+  1790→          ? scenes.map((s) => slideMotionPlan(s, motion))
+  1791→          : needsPlan
+  1792→            ? planSceneMovements(scenes, motion, {
+  1793→                aspect: motionAspect,
+  1794→                ctx: opts.motionContext,
+  1795→                durationsSec: durations,
+  1796→              })
+  1797→            : [];
+  1798→    // S87 slice 2 — the plan's per-scene kind overlays the mode-keyed list:
+  1799→    // image scenes take the slide plan (the designed PNG IS the frame),
+  1800→    // video scenes keep the movement planning above. Homogeneous docs →
+  1801→    // identical lists (the parity pins); mixed docs get per-scene truth.
+  1802→    if (planScenes) {
+  1803→      for (let i = 0; i < scenes.length; i++) {
+  1804→        if (sceneKindOf(i) === "image") plans[i] = slideMotionPlan(scenes[i], motion);
+  1805→      }
+  1806→    }
+  1807→
+  1808→    // M2 — the approved Director shot list becomes the authoritative shot
+  1809→    // plan of every Ken Burns scene (docs/director-m1-m2-spec.md §1.3). ONE
+  1810→    // plan read for the whole video (hoisted into the S35 block above — the
+  1811→    // selector consumes the same rows); per scene: buildSceneShots (pure) →
+  1812→    // ensureShotImages (≤3 extra AI images, failures demote to pseudo). ANY
+  1813→    // failure here falls back to the legacy single-image path — the render
+  1814→    // never breaks on the Director. No approved plan → this block is skipped
+  1815→    // entirely and every scene renders bit-identical to the pre-M2 path.
+  1816→    let shotPlans: (SceneShotPlan | undefined)[] | null = null;
+  1817→    if (needsPlan && approvedPlan && approvedPlan.scenes.length > 0) {
+  1818→      try {
+  1819→        const byScene = new Map(approvedPlan.scenes.map((s) => [s.sceneIndex, s]));
+  1820→        const shotPlans2: (SceneShotPlan | undefined)[] = [];
+  1821→        let plannedScenes = 0;
+  1822→        for (const [i, scene] of scenes.entries()) {
+  1823→          // S35: the channel list IS the Ken Burns set — stock scenes with
+  1824→          // footage, i2v-picked scenes and slides keep their own visual path
+  1825→          // (their motion plans are ignored too).
+  1826→          if (channels[i]?.channel !== "kenburns") {
+  1827→            shotPlans2.push(undefined);
+  1828→            continue;
+  1829→          }
+  1830→          const sp = buildSceneShots({
+  1831→            scene,
+  1832→            planScene: byScene.get(scene.index) ?? null,
+  1833→            measuredSec: durations[i],
+  1834→          });
+  1835→          shotPlans2.push(await ensureShotImages({ videoId: opts.videoId, scene, plan: sp }));
+  1836→          if (byScene.has(scene.index)) plannedScenes++;
+  1837→        }
+  1838→        // A plan that matches no rendered scene (scenes edited after
+  1839→        // approval) has no bearing on this video — legacy path everywhere.
+  1840→        if (plannedScenes > 0) shotPlans = shotPlans2;
+  1841→      } catch (err) {
+  1842→        renderLog.warn("director shot plan unavailable — legacy motion path", { err });
+  1843→        shotPlans = null;
+  1844→      }
+  1845→    }
+  1846→
+  1847→    // Stage 5 (module D) — an APPROVED director plan overrides the video-level
+  1848→    // motion mode PER SCENE (the director picks the movement channel per shot
+  1849→    // list; "off" deliberately stills a scene, zoom/pan narrow it). Only the
+  1850→    // Ken Burns channel is overridden: slides keep their deterministic deck
+  1851→    // plans, stock plays real footage, and i2v scenes move for real (S35 —
+  1852→    // a Ken Burns override on a true-motion scene would contradict the pick;
+  1853→    // "off" was already honored upstream by the selector).
+  1854→    if (needsPlan && opts.mode !== "slides" && plans.length === scenes.length) {
+  1855→      if (motionOverrides.size > 0) {
+  1856→        for (let i = 0; i < scenes.length; i++) {
+  1857→          const mode = motionOverrides.get(scenes[i].index);
+  1858→          if (!mode) continue;
+  1859→          if (shotPlans?.[i]) continue; // M2: the Director's per-shot moves are senior (spec §1.3)
+  1860→          if (channels[i]?.channel !== "kenburns") continue; // S35: overrides steer the KB camera only
+  1861→          plans[i] = planSceneMovements(
+  1862→            [scenes[i]],
+  1863→            { ...motion, mode },
+  1864→            {
+  1865→              aspect: motionAspect,
+  1866→              ctx: opts.motionContext,
+  1867→              durationsSec: [durations[i]],
+  1868→            }
+  1869→          )[0];
+  1870→        }
+  1871→      }
+  1872→    }
+  1873→
+  1874→    // S93 — the character rig: cast-character scenes on the Ken Burns
+  1875→    // channel WITHOUT a Director shot plan read their motion from the rig
+  1876→    // (the breath cycle, character-rig.ts) instead of the generic
+  1877→    // scene-aware plan. The rig sits at the BOTTOM of the seniority ladder:
+  1878→    // the M2 per-shot plan is senior (skipped), the studio motion overrides
+  1879→    // are senior (skipped — the block above already re-planned those), and
+  1880→    // the S2 camera keyframes below keep the LAST word. The rig itself
+  1881→    // honors the stillness contract (motion off → a hold plan). Rig off
+  1882→    // (no cast/portrait) → this loop never runs → plans untouched,
+  1883→    // byte-identical legacy path.
+  1884→    // Stage 5 (module E) — the APPROVED plan's audio direction is HOISTED
+  1885→    // here: the rig's breath rate reads the same pacing hints the voiceover
+  1886→    // applied (one read, one truth — the module E section below consumes
+  1887→    // the same map).
+  1888→    const planAudio = await getApprovedAudioMap(opts.videoId);
+  1889→    if (
+  1890→      opts.character?.hasPortrait &&
+  1891→      needsPlan &&
+  1892→      opts.mode !== "slides" &&
+  1893→      plans.length === scenes.length
+  1894→    ) {
+  1895→      for (let i = 0; i < scenes.length; i++) {
+  1896→        if (shotPlans?.[i]) continue; // M2: the Director's per-shot moves are senior
+  1897→        if (channels[i]?.channel !== "kenburns") continue; // S35: footage modes keep their own motion
+  1898→        if (motionOverrides.has(scenes[i].index)) continue; // Stage 5 D: the override is senior
+  1899→        if (!scenes[i].hostInScene) continue; // the rig moves CAST scenes only (the continuity law)
+  1900→        plans[i] = rigPlan({
+  1901→          sceneIndex: scenes[i].index,
+  1902→          durationSec: durations[i] ?? 4,
+  1903→          intensity: motion.intensity,
+  1904→          motionMode: motion.mode,
+  1905→          pacingHint: planAudio.pacing.get(scenes[i].index),
+  1906→        });
+  1907→      }
+  1908→    }
+  1909→
+  1910→    // S2 wave 2 — the studio's per-scene CAMERA KEYFRAMES outrank every auto
+  1911→    // camera (LAST word, after the Director's motion map): the doc's two-key
+  1912→    // plan replaces the motion plan AND drops the Director's shot graph for
+  1913→    // that scene — an explicit user edit is senior by definition; the
+  1914→    // Director keeps every scene the user didn't touch. Ken Burns scenes
+  1915→    // only: footage modes play real clips, where camera keys have no
+  1916→    // purchase (the inspector says so on those scenes).
+  1917→    if (docScenes && needsPlan && opts.mode === "kenburns") {
+  1918→      for (let i = 0; i < scenes.length; i++) {
+  1919→        const cam = docScenes[i]?.cameraKeys ?? null;
+  1920→        if (!cam) continue;
+  1921→        plans[i] = studioCameraPlan(cam, durations[i]);
+  1922→        if (shotPlans) shotPlans[i] = undefined;
+  1923→      }
+  1924→    }
+  1925→
+  1926→    // Stage 5 (module E) — audio direction from an APPROVED plan: per-scene
+  1927→    // ambience beds (synthesized once, looped under the narration) + the
+  1928→    // director's scene-boundary cue suggestions. The plan can only ADD a
+  1929→    // cue — it never removes one the story pass already chose.
+  1930→    // S5 — the doc's studio picks outrank the plan's; beds materialize
+  1931→    // ON DEMAND (a doc-only pick synthesizes its own bed — the old
+  1932→    // plan-prebuilt map could never have heard it).
+  1933→    // (S93: the planAudio read is HOISTED above the rig block — one read.)
+  1934→    const ambienceCache = new Map<string, string | null>();
+  1935→    const ambiencePathFor = async (kind: string | null): Promise<string | null> => {
+  1936→      if (!kind) return null;
+  1937→      if (!ambienceCache.has(kind)) {
+  1938→        ambienceCache.set(kind, await ensureAmbience(kind).catch(() => null));
+  1939→      }
+  1940→      return ambienceCache.get(kind) ?? null;
+  1941→    };
+  1942→
+  1943→    // 1.5) Keynote slides — design the deck (LLM, cached) and screenshot it.
+  1944→    // (Cancellation rides the same onProgress checkpoints as every stage —
+  1945→    // the deck render itself is ~1 s per slide, no mid-pass checkpoint.)
+  1946→    // S87 slice 2 — the gate reads the composition plan's kinds (allImage
+  1947→    // carries the mode fallback for plan-less renders).
+  1948→    if (allImage) {
+  1949→      report(scenes.length, "Designing slide deck");
+  1950→      const deck = await planSlides(opts.videoId, scenes, {
+  1951→        topic: opts.topic ?? null,
+  1952→        niche: opts.motionContext?.niche ?? null,
+  1953→        tone: opts.motionContext?.tone ?? null,
+  1954→      });
+  1955→      try {
+  1956→        await renderSlidePngs(
+  1957→          opts.videoId,
+  1958→          scenes.map((scene, i) => ({ scene, spec: deck.specs[i] })),
+  1959→          {
+  1960→            brand: opts.brand ?? null,
+  1961→            onProgress: (_done, _total, label) => {
+  1962→              opts.onProgress?.(scenes.length + 1, scenes.length + 1, label);
+  1963→            },
+  1964→          }
+  1965→        );
+  1966→      } catch (err) {
+  1967→        throw new Error(
+  1968→          `Slide rendering failed — Playwright/Chromium is required for keynote slides (${String(err).slice(0, 160)})`
+  1969→        );
+  1970→      }
+  1971→    }
+  1972→
+  1973→    // 2) One segment per scene (visual + narration audio, exact duration).
+  1974→    const segPaths: string[] = [];
+  1975→    // S55 — the M2 shot-graph joins per scene (scene-local clock), recorded
+  1976→    // by the segments that actually rendered through the multi-shot path —
+  1977→    // i2v/stock/slides scenes carry none (their channels have no intra-scene
+  1978→    // flips), and neither do M2 scenes that fell back before the graph ran.
+  1979→    const shotJoinMarks: (ShotJoinMark[] | undefined)[] = [];
+  1980→    for (const [i, scene] of scenes.entries()) {
+  1981→      // S35 — the label tells the truth about WHO is playing: the channel
+  1982→      // decides, and a per-scene i2v pick says so by name.
+  1983→      const chan = channels[i]?.channel;
+  1984→      const label =
+  1985→        chan === "i2v"
+  1986→          ? opts.mode === "animated"
+  1987→            ? `Animating scene ${i + 1}`
+  1988→            : `Animating scene ${i + 1} — director's true-motion pick`
+  1989→          : chan === "native-rig"
+  1990→            ? `Posing the character — scene ${i + 1} (the native rig)`
+  1991→            : chan === "stock"
+  1992→              ? `Cutting stock footage — scene ${i + 1}`
+  1993→              : `Composing scene ${i + 1}`;
+  1994→      report(i, label);
+  1995→      const segPath = path.join(tmpDir, `seg-${String(i + 1).padStart(2, "0")}.mp4`);
+  1996→      const doc = docScenes?.[i] ?? null;
+  1997→      // S5 — the one precedence rule: the doc's studio pick, then the plan's,
+  1998→      // then the story pass's row value; null everywhere = no sound. The
+  1999→      // resolver sanitizes ALL three sources (a plan row is data too).
+  2000→      const sfxKind =
+
+[showing lines 1-2000 of 2236; use offset=2001 with limit to continue reading]

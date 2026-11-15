@@ -1,0 +1,297 @@
+     1→# TubeForge — Production-Readiness Roadmap (governing, adopted 2026-11-13)
+     2→
+     3→**Formal decision (adopted at S98, HEAD `d023a01`):** major feature development
+     4→is FROZEN. Until every gate below is closed, the only allowed changes are
+     5→security fixes, reliability improvements, bug fixes, and maintenance. No new
+     6→video engine starts before the exit criteria pass.
+     7→
+     8→The 13-engine roadmap is complete. TubeForge's next competitive advantage is
+     9→operational reliability, not another AI engine. Each stage below lands as a
+    10→numbered worklog stage with the established discipline: unit pins, full local
+    11→gates, and a CI-green push before the stage is marked done.
+    12→
+    13→## Why (the evidence)
+    14→
+    15→The S60 production incident proved that a Postgres-only regression can ship
+    16→with zero automated coverage when every CI surface runs SQLite — the S61 lane
+    17→closed that specific hole, but the pattern generalizes. The queue's recovery
+    18→logic still assumes same-host claimants (insufficient for distributed
+    19→workers), storage quota checks are read-check-write rather than atomic
+    20→reservations, the rate limiter is an in-memory Map with a spoofable
+    21→`X-Forwarded-For` trust boundary, production CSP still allows
+    22→`unsafe-inline`/`unsafe-eval`, and the Dockerfile's fidelity to a real
+    23→deployment is unevidenced. These are the classes of failure that cost users,
+    24→not features that attract them.
+    25→
+    26→## The eight priorities (validated against HEAD `d023a01`, S98)
+    27→
+    28→| #   | Priority                                            | Status at adoption                                                                                                                                 |
+    29→| --- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+    30→| 1   | Deterministic Prisma generation + clean-clone CI    | PARTIAL — postinstall selects SQLite/Postgres schemas by URL protocol; the S61 CI lane covers clean PostgreSQL migration + recovery; no strict clean-clone verification gate existed |
+    31→| 2   | Queue leases/fencing + storage reservations         | OPEN — atomic DB claims exist, but no renewable leases or fencing tokens; storage quota checks are not atomic reservations (concurrent uploads can exceed quota) |
+    32→| 3   | Shared rate limiting + trusted proxy IPs            | OPEN — limiter is an in-memory Map (per-instance, reset on restart); client IP trusts the first `X-Forwarded-For` value |
+    33→| 4   | CSP + SVG ingestion hardening                       | PARTIAL — SVG ingestion sanitizes before storage and rasterizes before trust; CSP still permits `unsafe-inline` and `unsafe-eval` |
+    34→| 5   | Docker production smoke                             | PARTIAL — Dockerfile generates Prisma for Postgres and ships FFmpeg + Chromium; no full-topology smoke evidence |
+    35→| 6   | Monitoring + recovery                               | PARTIAL — structured logging and backup scripts exist; restore drill pending; alerts not operationally evidenced |
+    36→| 7   | Module decomposition + warning reduction            | OPEN — 0 lint errors but 20 existing warnings; TypeScript 7 blocked by typescript-eslint (PR #10 stays open) |
+    37→| 8   | Feature freeze                                      | ADOPTED at S98 — the decision above is the record |
+    38→
+    39→## Execution order
+    40→
+    41→| Stage | Deliverable                                | Exit condition                                                                                                                                              | Status |
+    42→| ----- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
+    43→| P0.1  | Prisma + clean-clone CI                    | A fresh clone installs, bootstraps, and generates both dialect clients deterministically — without hidden local state                                        | **S99** — `scripts/test-clean-clone.mts` + CI `clean-clone` job + unit pins |
+    44→| P0.2  | Queue leases + fencing                     | Renewable lease expiration, monotonic fencing tokens, conditional completion with the current token, expired-claim recovery; concurrent-worker and stale-worker tests pass | **S100** — renewable leases + monotonic `leaseToken`, fenced terminal writes, reap-with-token-bump (`test:queue` phase C) |
+    45→| P0.3  | Storage reservations                       | Durable reservations with atomic accounting, expiry, and release-on-failure; concurrent uploads cannot exceed quota                                          | **S101** — serialized admission + durable `StorageReservation` holds + expiry sweep + release-on-failure (`test:storage`) |
+    46→| P0.4  | Shared rate limiting + proxy trust         | Multi-instance limits hold (key-value backend); trusted-proxy chain design; spoofing tests pass                                                              | **S102** — `proxy-trust.ts` right-to-left trusted walk + DB-backed `RateLimitCounter` enforced at requireUser (`test:rate`) |
+    47→| P0.5  | CSP + SVG security                         | Security regression suite passes; production CSP drops `unsafe-inline`/`unsafe-eval`                                                                          | **S104** — nonce-based CSP (scripts + styles), middleware extended to pages, e2e CSP regression |
+    48→| P0.6  | Docker production smoke                    | The full production topology renders successfully end-to-end (see the target topology below)                                                                  | **S105** — `docker-smoke.sh` walks postgres + the S3 store + web + worker: HTTP register→create, ffmpeg render, S3 round-trip, cross-process job, worker-restart recovery (CI job on main pushes); **S108** — the walk now also renders a REAL whiteboard project IN-CONTAINER through the worker's chromium (DEPLOYMENT §5.1's recorded tail: launch args, frames, encode, artifact, ffprobe'd duration) |
+    49→| P1.1  | Monitoring + restore drills                | Measured recovery time and actionable alerts                                                                                                                  | **S103** — measured restore drill (CI, RTO printed) + `alert:probe` (8 actionable checks) + runbook §4.1 |
+    50→| P1.2  | Module decomposition                       | Reduced complexity and zero avoidable warnings                                                                                                                 | **S106** — 20 warnings fixed at the site (eslint 0/0); storage.ts (768 lines) split into facade + `storage-s3.ts` + `storage-quota.ts` with re-exports |
+    51→| P2    | Feature expansion                          | Remains frozen until the gates above close                                                                                                                     | **OPENED (S109, 2026-11-13)** — the operator's explicit call, against the fully-gated baseline; the entry queue is recorded below |
+    52→
+    53→## P2 entry queue (adopted 2026-11-13, from the operator's review at HEAD `8e76c6b`)
+    54→
+    55→The freeze is lifted. The review's verdict sets the order — "the next best
+    56→step is not another feature" — so P2 opens with operations, not engines:
+    57→
+    58→1. **Security-doc drift closed** — S109 (this record): SECURITY.md reconciled to
+    59→   the live source (the stale 2025-10-28 posture, the wrong backup.sh-absent note,
+    60→   the pre-account checklist), README re-dated (S109, the real eight-job CI lane),
+    61→   ROADMAP's arc note records the lift.
+    62→2. **Staging provisioned** per DEPLOYMENT §3 — `tubeforge-staging` on Fly (same
+    63→   image), a Neon branch, a separate R2 bucket, Stripe TEST-mode keys + webhook,
+    64→   console email, fresh secrets. Requires operator accounts; the provisioning kit
+    65→   and drill scripts land as the next stages so provisioning is one command once
+    66→   the accounts exist. **Kit landed (S110)**: `fly.staging.toml` +
+    67→   `scripts/staging-provision.sh` (one command, `--dry-run` verified) +
+    68→   `scripts/staging-drill.mts` (the HTTP harness: health/billing/pipeline
+    69→   suites, proven live — 2 PASS · 1 SKIP · 0 FAIL against a dev server) +
+    70→   `scripts/staging-drills.sh` + `docs/runbooks/staging.md` (incl. the RC gate,
+    71→   §7). Remaining: the operator's accounts (runbook §1) → provision → drills.
+    72→3. **Launch drills ON staging** — the Stripe checkout → webhook → portal
+    73→   lifecycle, the YouTube test-channel publish smoke, backup restore, the k6 load
+    74→   run (`scripts/load-test.js`), and worker recovery under load.
+    75→4. **Release-candidate tag** — tag `vX.Y.Z-rc1` at the post-drill HEAD; cut the
+    76→   GitHub Release from the worklog entry.
+    77→
+    78→Standing cleanups that ride alongside: the rate limiter's fail-open posture is
+    79→monitored aggressively (the alert probe; a `RateLimitCounter write failed`
+    80→announcement is an incident, not a log line); `frame-ancestors` moves to an
+    81→allowlist the moment the preview architecture is proven compatible; the largest
+    82→UI/rendering files are split BEFORE new engines arrive (the S106 decomposition
+    83→pattern); PR #10 (TypeScript 7) stays parked on typescript-eslint's peer ceiling.
+    84→
+    85→**First P2 feature track (adopted 2026-11-13): scene-level editing & repair.**
+    86→The operator delivered the architecture ("a Scene-Level Production Control
+    87→Layer on top of existing production infrastructure"); Stage 0 — the read-only
+    88→repository reconciliation — landed as **S111**
+    89→(docs/design/scene-level-editing-reconciliation.md): capability map against
+    90→live code, the five requirements vs reality, three architectural surprises
+    91→(positional scene identity, the two-document content split, the eleven
+    92→mutators), two found defects (the dead storyboard/upload route; unaudited
+    93→scene edits), and the file-by-file Stage 1–7 plan with the proposal's exit
+    94→criteria restated as tests. **The operator's go came with the build
+    95→order (2026-11-13, "start, don't stop"), and the four §10 decision
+    96→points resolved to their recommended defaults**: revision rows are kept
+    97→forever (only superseded ARTIFACTS are GC candidates), render consumes
+    98→the latest APPROVED revision per scene, spend ceilings are opt-in per
+    99→video, and whole-script regens/converts are EPOCHS. **Stage 1 landed as
+   100→S112** — the SceneRevision table (immutable, append-only, unique on
+   101→(videoId, sceneId, version)), stable Scene.id minting (carry for
+   102→interactive mutators, fresh-against-history for epochs), the union-slice
+   103→content snapshot (row scene + timeline doc scene), optimistic
+   104→concurrency twice over (expectedSceneVersion → 409+current, and the
+   105→unique index as the hard floor), first-touch backfill (the pre-edit
+   106→state records as v1, so even the first edit has a rollback target),
+   107→rollback-as-new-revision (never a delete; history is never erased),
+   108→approved heads never superseded, and ALL ELEVEN scenes-column mutators
+   109→retrofitted through one commit path (a source pin enforces it). New
+   110→API surface: GET /scenes/[n]/revisions + POST /scenes/[n]/rollback.
+   111→Exit criteria pinned by a new DB-backed battery (12 tests, in `check`).
+   112→**Stage 2 landed as S113** — the declarative dependency map
+   113→(scene-deps.ts: field → this scene's stale artifacts / video-level
+   114→renders / merged-voice / boundary, with PATCH + rollback both enforcing
+   115→it — the scattered if-branches became one pinned table), the
+   116→SceneArtifact provenance registry (the full composed prompt — which S111
+   117→found was discarded — the input hash, provider/model, the head revision,
+   118→and accumulated cost through the UsageRecord bridge columns
+   119→videoId/sceneIndex/artifactId; pending→ready lifecycle, idempotent on
+   120→same inputs, supersede-on-new-input), registration at the four
+   121→generation sites (scene image incl. instruction edits, per-scene TTS,
+   122→i2v clips, whiteboard scene encodes), and **the §8.3 over-invalidation
+   123→cost bug FIXED and measured**: a one-scene art change now kills exactly
+   124→that scene's clip + the video-level renders — the other scenes' cached
+   125→clips survive and the render reuses them (ensureSceneClip), so a
+   126→one-scene fix no longer re-pays the whole video's paid clip generation.
+   127→Battery now 18 tests. **Stage 3 landed as S114** — the scene preview
+   128→lane: POST /render {sceneIndex} (mutually exclusive with the sceneLimit
+   129→prefix grammar) renders ONE scene through the same segment machinery as
+   130→scene-preview-NN.mp4 — the story-lane twin of the whiteboard lane's
+   131→per-scene preview — and touches NOTHING else (no other scene's
+   132→artifacts, no final/preview, no row flags, no project QC, no srt: "a
+   133→scene preview is not a certified final video" is the lane's own law).
+   134→The preview registers as a type-preview artifact carrying the revision
+   135→it was built from; artifactStaleness (current/stale/unknown vs the
+   136→scene's head) labels it, surfaced by GET /scenes/[n]/artifacts (with the
+   137→mp4 route's scene-preview variant streaming the file, authed +
+   138→org-scoped). Battery now 20 (the preview pin is a REAL ffmpeg render:
+   139→three scenes' fixtures, preview scene 2, assert scene-preview-02.mp4
+   140→landed and every other key untouched). **Stage 4 landed as S115** —
+   141→repair + cost authorization + job idempotency: the propose→approve→reject
+   142→ladder (POST /scenes/[n]/repair: estimate from the admission's own cost
+   143→table, the affected-asset list from Stage 2's map shown BEFORE approval,
+   144→no code path generating before the approvedBy stamp — requirement D's
+   145→"no silent paid calls" as the ladder's shape), the SceneRepair table
+   146→(the durable form of the critic/VCE proposals), Job.idempotencyKey
+   147→(unique; done/pending/running rows resolve retries to the standing row
+   148→— the retry-after-done double-bill path is dead; failed rows re-queue
+   149→honestly, conditionally per the S100 fencing law), Video.spendCeilingMicro
+   150→(opt-in per project, enforced in the same admission window as the credit
+   151→hold via cost-guard.ts: video-scoped spend + estimate ≤ ceiling, else
+   152→402 with the numbers), and the render route joining both gates. Battery
+   153→23/23 incl. the double-bill pin and the ladder. **Stage 5 landed as S116**
+   154→— the scene QC + boundary validation + the approval gate: the
+   155→scene-scoped recheck (POST /scenes/[n]/recheck — run arm enqueues a
+   156→bounded "scene-recheck" job; approve arm is synchronous) re-runs the
+   157→whole-file battery's probes on ONE scene's standing preview (the qc.ts
+   158→builders exported and reused, never forked), slices the captions check
+   159→to the scene's doc window when an SRT stands (the battery's own
+   160→emit-only-when-present precedent), and runs the S49 restricted-visual
+   161→scan at scene scope under a restricted policy. THE BOUNDARY LENS: a new
+   162→render grammar POST /render {boundaryAfter: N} renders scenes N+N+1
+   163→with their seam (scene-boundary-NN.mp4, the doc's durations through the
+   164→ONE exported duration fold resolveSceneDuration — render loop and seam
+   165→expectation consume the same math, pinned), and the recheck's
+   166→alignSeam holds the detected cuts to it (a CUT seam must appear within
+   167→tolerance, a BLEND seam has no must-appear obligation — the T-55.2 law
+   168→— and strays in the seam's neighborhood fail; interior detections
+   169→belong to the full battery). The verdict is stored ON the head revision
+   170→(SceneRevision.recheck, an annotation — content byte-identical, pinned)
+   171→and records the revisionVersion it judged; the approval gate
+   172→(approvalBlocker, pure + pinned) requires a PASSING verdict for the
+   173→HEAD'S OWN version: no verdict / a verdict for an older revision / a
+   174→failed verdict all refuse (409), approval is a status flip only and
+   175→idempotent, and an approved head survives newer drafts (the S112 law).
+   176→Never-silently-clean holds at scene scope: unmeasured seams (no pair
+   177→rendered — each carries the exact command that would render it) keep
+   178→the report red. Battery now 26/26 (a real-ffmpeg recheck pin: 13 probes
+   179→measured on a real preview, the annotation-immutability pin, a real
+   180→boundary-pair render with the seam verdict measured through the shared
+   181→fold, and the full approval-gate ladder). **Stage 6 landed as S117** —
+   182→final assembly from approved revisions + the render manifest: the full
+   183→render consumes, per scene, the latest APPROVED revision (draft edits
+   184→never leak into a final; nothing approved → the v1 baseline — the
+   185→pre-draft state; no history → the row), with the union slice restored at
+   186→the current position (the doc-half swap rides the assembly's timeline;
+   187→previews and boundary pairs deliberately bypass the assembly — they are
+   188→looks at the working draft). Video.renderManifest records the exact
+   189→revision set the final was assembled from (per scene: sceneId, source,
+   190→revisionVersion); renderStaleness compares it LIVE against the current
+   191→assembly sources — any newer draft, any new approval (an approval changes
+   192→the source even without an edit), any scene-list change ⇒ stale with
+   193→reasons; history + no manifest ⇒ unknown (a pre-S117 final cannot prove
+   194→its assembly — re-render). BOTH ship gates extend their existing 409
+   195→seam: publish and export refuse a stale or unprovable final, with NO
+   196→override — unlike a QC finding a human may accept, staleness is a fact
+   197→about WHICH bytes ship. The render status surface exposes the manifest +
+   198→the live verdict. Battery now 28/28 (the assembly pin: a drafted scene
+   199→falls back to the v1 backfill, the approved revision wins, the restored
+   200→content sits at the current position; the manifest pin: a REAL runRenderJob
+   201→render assembles the baseline — the draft never leaks — records the
+   202→manifest, fresh → approval stales it → cleared manifest reads unknown;
+   203→plus 3 unit pins on the pure laws and the wiring). **Stage 7 landed as
+   204→S118 — the track is COMPLETE**: the §8.1 dead route closed (POST
+   205→/storyboard/upload answers the components' multipart contract through
+   206→replaceSceneImage, with S113's scene-scoped invalidation, provenance
+   207→registration, the §8.2 audit row, and the S79 preference-gated targeted
+   208→re-check — an upload IS a repaint); the §8.2 audit law closed (PATCH
+   209→/scenes and PUT /assemble leave Activity rows naming their revisions);
+   210→the VCE emitter rewire (both engine write sites persist their proposals
+   211→as SceneRepair rows — origin "vce", estimate + affected assets attached,
+   212→dedup-guarded so re-running the engine never spams the inbox, lazily
+   213→imported to break the module cycle); the operator surface (the Scene
+   214→Trust Panel in the Scene Studio: revisions with restore, the recheck
+   215→verdict + approval with the blocker reasons shown, the repair inbox with
+   216→estimates, the seam render buttons; the board's per-video cost + ceiling
+   217→column — the "no per-video attribution" note retired); the e2e contract
+   218→spec (e2e/scene-editing.spec.ts — auth gates, format guards, the
+   219→sceneless refusals) and the operator runbook
+   220→(docs/runbooks/scene-editing.md, with the twelve-scenario → pin mapping).
+   221→Battery now 29/29 (the VCE persistence ladder: estimates attached, born
+   222→proposed, dedup guard, changed-instruction-is-new) + 2 unit source pins.
+   223→The track rode the existing queue, storage, budget, and QC systems end
+   224→to end: no second timeline engine, no separate job queue, no parallel
+   225→budget system, no separate publishing pipeline — exactly the
+   226→reconciliation's §11 law.
+   227→
+   228→## P0.1 spec — what the gate asserts
+   229→
+   230→`scripts/test-clean-clone.mts` (local: `npm run verify:clone`; CI: the
+   231→`clean-clone` job in `.github/workflows/ci.yml`):
+   232→
+   233→1. Fresh `git clone --depth 1` of the committed HEAD into a clean temp dir.
+   234→2. **Forbidden-state law** — `node_modules`, `.env`, `.next`, `coverage`,
+   235→   `next-env.d.ts`, `test-results`, `playwright-report`, `.vercel` are NOT
+   236→   tracked; `db/` carries only `.gitkeep`.
+   237→3. **Boot proof** — `npm ci` with NO injected `DATABASE_URL`; postinstall must
+   238→   select SQLite by URL protocol, create `.env`
+   239→   (`DATABASE_URL=file:../db/custom.db`), provision
+   240→   `TUBEFORGE_AUTH_SECRET` + `TUBEFORGE_ENCRYPTION_KEY`, create
+   241→   `next-env.d.ts`, generate the client, `db push` the SQLite database, and
+   242→   run the stage-2 migration.
+   243→4. **Boot probe** — the generated client queries the pushed Stage-2 schema
+   244→   (`organization.count()` succeeds against `db/custom.db`).
+   245→5. **Determinism law** — regenerating the SQLite client yields a
+   246→   byte-identical sha256 manifest of `node_modules/.prisma/client`; the
+   247→   POSTGRES client generates cleanly in the same clone and regenerates
+   248→   byte-identically; the two dialect manifests DIFFER (a silent provider swap
+   249→   cannot pass).
+   250→6. **Hygiene law** — install + generation mutate no tracked file
+   251→   (`git status --porcelain` stays empty inside the clone).
+   252→
+   253→Unit pins (suite): the committed SQLite mirror is byte-identical to what
+   254→`scripts/sync-sqlite-schema.mjs` derives from `schema.prisma`; the migration
+   255→chain is Postgres-owned (`migration_lock.toml`) and every migration carries
+   256→SQL; `.gitignore` buries every runtime artifact; the postinstall dialect
+   257→selection and the verifier's own contract are pinned.
+   258→
+   259→## P0.6 target topology (the acceptance test, for the record)
+   260→
+   261→```
+   262→TubeForge Web (Next.js · authentication · API)
+   263→        │
+   264→PostgreSQL (Prisma migrations + data)     queue worker (jobs + recovery)
+   265→        │                                          │
+   266→        └──────────── object storage (MinIO / S3-compatible)
+   267→                          with FFmpeg + Chromium doing the real rendering
+   268→```
+   269→
+   270→Acceptance: register → create project → generate assets → enqueue job →
+   271→render MP4 → store artifact → retrieve artifact → restart worker → verify
+   272→recovery.
+   273→
+   274→## Evidence ledger
+   275→
+   276→| Stage | Commit | CI evidence                          | Receipt        |
+   277→| ----- | ------ | ------------------------------------ | -------------- |
+   278→| P0.1  | S99    | push-gate run recorded in worklog.md | worklog.md §S99 |
+   279→| P0.2  | S100   | CI run 43282465637 (success)         | worklog.md §S100 |
+   280→| P0.3  | S101   | push-gate run recorded in worklog.md | worklog.md §S101 |
+   281→| P0.4  | S102   | push-gate run recorded in worklog.md | worklog.md §S102 |
+   282→| P0.5  | S104   | push-gate run recorded in worklog.md | worklog.md §S104 |
+   283→| P0.6  | S105    | the full production topology walks the acceptance sequence in CI (run 43305937761, HEAD `27ef67b`) — the gate caught THREE real findings: the compose wedged on a clean Postgres (the S60 fingerprint, fixed by booting migrate-stage2's self-heal), MinIO's Docker Hub org is PURGED (topology re-based on an S3-compatible store, Hub-free image sourcing via ECR Public), and the standalone bundle missed the Prisma query engine (outputFileTracingIncludes) | worklog.md §S105 |
+   284→| P1.1  | S103   | the restore drill is MEASURED (RTO printed per run) and the alert probe prints actionable ALERT lines (8 checks) | worklog.md §S103 |
+   285→| P1.2  | S106   | 20 lint warnings → 0 (fixed at site, none suppressed); storage.ts decomposed into storage-s3.ts + storage-quota.ts + facade; S101 source pins caught a reversion of the admission law mid-refactor | worklog.md §S106 |
+   286→| P0.6 (extension) | S108 | the topology smoke closes DEPLOYMENT §5.1's last unverified tail — a real whiteboard render IN-CONTAINER rides the walk on every main push; FIRST run green (CI run 43339795242 at `0afbabb`, all 8 jobs): worker chromium launch → 96 frames → encode in ~11s, final.mp4 155,656 bytes through the s3 driver, ffprobe exactly 4s, the video row updated | worklog.md §S108 |
+   287→| P2 opening | S109 | the operator's explicit call (2026-11-13) against the fully-gated baseline at HEAD `8e76c6b` — the fresh review re-validated every gate on a clean checkout (npm ci, typecheck, lint, unit, billing, storage, rate, backup drill ~57 ms RTO, alert probe HEALTH 0, the CI-covered Docker smoke) and upgraded the assessment to "technically strong, approaching paid-beta readiness"; the entry queue above is the review's own ordering | worklog.md §S109 |
+   288→| P2 queue item 2 | S110 | the staging kit: DEPLOYMENT §3 made executable — the provisioner (one command, fresh secrets every run, --dry-run verified), the HTTP drill harness (health/billing/pipeline suites, self-skipping when prerequisites are missing; proven live against a dev server: 2 PASS · 1 SKIP · 0 FAIL, the pipeline suite walking scenes → native scaffold → render job → final.mp4 4.29 MB through the authed route), the orchestrator (harness + k6 + the printed operator-step sequences), the runbook with the RC gate (§7). Provisioning itself awaits the operator's accounts | worklog.md §S110 |
+   289→| Feature track Stage 0 | S111 | the read-only repository reconciliation of the operator's scene-level editing architecture (docs/design/scene-level-editing-reconciliation.md): capability map, the five requirements vs reality, three architectural surprises, two live defects found, the file-by-file Stage 1–7 plan | worklog.md §S111 |
+   290→| Feature track Stage 7 (COMPLETE) | S118 | the track closes: the §8.1 dead upload route (multipart → replaceSceneImage → scene-scoped invalidation + provenance + audit + the S79 targeted re-check), the §8.2 audit rows on PATCH /scenes + PUT /assemble, the VCE→SceneRepair persistence (dedup-guarded, cycle-broken), the Scene Trust Panel (revisions/recheck/approval/repairs/seams in the Scene Studio), the board's per-video cost + ceiling column, the e2e contract spec, and the operator runbook with the twelve-scenario → pin mapping | worklog.md §S118 |
+   291→| Feature track Stage 6 | S117 | final assembly from approved revisions + the render manifest: the full render consumes the latest APPROVED revision per scene (drafts never leak; nothing approved → the v1 baseline; no history → the row; the union slice restored at the current position), Video.renderManifest records the assembled revision set, renderStaleness compares it live (newer draft / new approval / scene-list change ⇒ stale with reasons; history + no manifest ⇒ unknown), and both ship gates (publish + export) refuse a stale or unprovable final with no override — staleness is a fact, not a judgment | worklog.md §S117 |
+   292→| Feature track Stage 5 | S116 | scene QC + boundary validation + the approval gate: the scene-scoped recheck (the whole-file battery's probes reused through exported builders — playable/black/frozen/aspect/loudness family/dead-air/static/flicker/stutter/duration via the shared fold/scene-sliced captions/S49 at scene scope), the boundary-pair render lane ({boundaryAfter} → scene-boundary-NN.mp4 through the doc's durations + seam transition) with alignSeam (cut must appear, blend need not, neighborhood strays fail), the verdict stored on the head revision (annotation; content byte-identical), and approval gated on a passing verdict for the head's own version (pure approvalBlocker; idempotent; approved survives drafts) | worklog.md §S116 |
+   293→| Feature track Stage 4 | S115 | repair + cost authorization + idempotency: the propose→approve→reject ladder (estimate + affected assets stored before any spend; approving twice cannot spend twice), SceneRepair (the durable critic/VCE proposal form), Job.idempotencyKey (unique; done rows never re-enqueued — the double-bill killer, pinned; failed rows re-queue conditionally per the fencing law), the opt-in per-project spend ceiling enforced beside the credit hold (cost-guard.ts, 402 with the numbers), the render route gated + keyed | worklog.md §S115 |
+   294→| Feature track Stage 3 | S114 | the scene preview lane: render {sceneIndex} → scene-preview-NN.mp4 through the same segment machinery (mutually exclusive with sceneLimit; the render job branches to its own orchestrator — no finalize, no QC, no flags), preview artifacts registered with built-from revision + the stale law (current/stale/unknown), GET /scenes/[n]/artifacts + the mp4 route's scene-preview variant; the preview pin is a real end-to-end ffmpeg render asserting nothing else moves | worklog.md §S114 |
+   295→| Feature track Stage 2 | S113 | the dependency map + artifact provenance: scene-deps.ts (the declarative table, unit-pinned; PATCH /scenes + rollbackScene both sweep through it — the private regex copies are gone), SceneArtifact (prompt persisted, input hash, revision linkage, cost accumulated through the UsageRecord bridge), registration at the image/TTS/i2v/whiteboard sites, and the §8.3 over-invalidation fix measured by pin (one-scene art change: scenes 1+3's clips survive, scene 2's + the renders die); verified by the 18-test battery + 5 new unit pins + the full chain + build | worklog.md §S113 |
+   296→| Feature track Stage 1 | S112 | the revision foundation: SceneRevision (append-only, unique (videoId, sceneId, version)), stable Scene.id, the union-slice snapshot, expectedSceneVersion optimistic concurrency (409 + current head), first-touch backfill, rollback-as-new-revision, approved-never-superseded, all eleven mutators converged through commitSceneChanges (source-pinned), GET /scenes/[n]/revisions + POST /scenes/[n]/rollback; verified by the new 12-test DB battery + 8 unit pins + the full check chain + production build. Two real bugs the new battery caught and fixed at the site: parseScenes dropped the minted id on read; the diff counted minted ids as content changes | worklog.md §S112 |
+   297→

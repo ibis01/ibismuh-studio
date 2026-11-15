@@ -1,0 +1,2002 @@
+     1→#!/usr/bin/env node
+     2→/**
+     3→ * TubeForge unit + regression suite — audio mixer, QC gate, music mood logic.
+     4→ *
+     5→ *   node --import tsx scripts/test-unit.mts          (also wired into `npm run check`)
+     6→ *
+     7→ * Two layers:
+     8→ *   1. PURE units — filter-chain builders, loudnorm JSON parsing, static-run
+     9→ *      collapsing, SRT parsing, mood-tag mapping. No ffmpeg, no DB, no I/O.
+    10→ *   2. REAL FIXTURES — tiny MP4s rendered by the sandbox ffmpeg (fade-out,
+    11→ *      abrupt cut, near-silence, partial dead-air, garbage bytes, missing
+    12→ *      file) pushed through runQcReport. These pin the QC three-state
+    13→ *      contract: a check that could not run reports "unmeasured" and NEVER
+    14→ *      reads as clean — the exact class of bug this suite exists to prevent.
+    15→ */
+    16→
+    17→import { execFile } from "child_process";
+    18→import crypto from "node:crypto";
+    19→import fs from "fs";
+    20→import fsp from "fs/promises";
+    21→import os from "os";
+    22→import path from "path";
+    23→import { promisify } from "util";
+    24→
+    25→import {
+    26→  DUCK_INTENSITIES,
+    27→  bedChain,
+    28→  droneBedChain,
+    29→  duckChain,
+    30→  duckParams,
+    31→  frameMeanDiff,
+    32→  isDuckIntensity,
+    33→  mixTail,
+    34→  normalizationFilter,
+    35→  parseLoudnormJson,
+    36→  sanitizeDuckIntensity,
+    37→  staticRunsDetail,
+    38→  staticRunsFromFrames,
+    39→  voiceSplitChain,
+    40→  type LoudnessMeasurement,
+    41→} from "../src/lib/tubeforge/audiomix";
+    42→import { isMusicMoodId, moodTags, NICHE_MOODS } from "../src/lib/tubeforge/music";
+    43→import { parseSrt, runQcReport } from "../src/lib/tubeforge/qc";
+    44→import {
+    45→  applyQcPolicy,
+    46→  parseQcReport,
+    47→  qcEnforcementMode,
+    48→  qcOverrideValid,
+    49→  QC_BLOCKING_COUNT,
+    50→  QC_ENFORCEMENT_MATRIX,
+    51→  QC_POLICY_VERSION,
+    52→  type QcReportLike,
+    53→} from "../src/lib/tubeforge/qc-policy";
+    54→import {
+    55→  describeVoiceHealth,
+    56→  isClonedVoiceId,
+    57→  sanitizeVoice,
+    58→  voiceCatalog,
+    59→} from "../src/lib/tubeforge/providers/tts";
+    60→import {
+    61→  cleanCloneName,
+    62→  isValidSampleUrl,
+    63→  MAX_SAMPLE_SEC,
+    64→  MIN_SAMPLE_SEC,
+    65→} from "../src/lib/tubeforge/voice-clone";
+    66→import {
+    67→  closestPriorDistance,
+    68→  dHashFromGray9x8,
+    69→  hammingDistanceHex,
+    70→  imageHash,
+    71→  sceneImageHashes,
+    72→} from "../src/lib/tubeforge/arthash";
+    73→import { sceneQueries } from "../src/lib/tubeforge/stock-query";
+    74→import {
+    75→  clipKey,
+    76→  configuredSources,
+    77→  mergeIntoIndex,
+    78→  pexelsParse,
+    79→  pixabayParse,
+    80→  type SceneIndexEntry,
+    81→  type StockCandidate,
+    82→} from "../src/lib/tubeforge/stock-index";
+    83→import {
+    84→  candidateFloors,
+    85→  combineFrameVerdicts,
+    86→  DUPLICATE_PENALTY,
+    87→  rankCandidates,
+    88→  semanticFactor,
+    89→  stockFrameTimes,
+    90→} from "../src/lib/tubeforge/stock-ranker";
+    91→import {
+    92→  costEfficiencyFromMicroUsd,
+    93→  DEFAULT_WEIGHTS,
+    94→  latencyBlend,
+    95→  nominalChatCostMicroUsd,
+    96→  parseScoreWeights,
+    97→  priorsComplete,
+    98→  priorsFor,
+    99→  reliabilityBlend,
+   100→  RELIABILITY_PRIOR,
+   101→  scoreProviders,
+   102→  UNKNOWN_COST_FACTOR,
+   103→} from "../src/lib/tubeforge/provider-score";
+   104→import { deriveBoardStages, deriveCheckpoints } from "../src/lib/tubeforge/production-board";
+   105→import { rigEligible, rigPlan, RIG_HEAD_FOCAL } from "../src/lib/tubeforge/character-rig";
+   106→import { cameraAt as camera3dAt, parseScene3D, scaffoldScene3D, serializeScene3D } from "../src/lib/tubeforge/scene3d";
+   107→import {
+   108→  bandOf,
+   109→  countWords,
+   110→  pacingProposal,
+   111→  pacingReport,
+   112→  ROLE_TARGETS,
+   113→  sceneRole,
+   114→  sceneWpm,
+   115→  WPM_BANDS,
+   116→} from "../src/lib/tubeforge/pacing";
+   117→import { selfhostEndpoint, sharedVoiceServer } from "../src/lib/tubeforge/shared-voice";
+   118→import {
+   119→  LOGIN_MAX_FAILURES,
+   120→  LOGIN_WINDOW_MS,
+   121→  loginWindowDecision,
+   122→} from "../src/lib/tubeforge/auth-throttle";
+   123→import type { AssembledTimeline, TimelineScene } from "../src/lib/tubeforge/timeline";
+   124→import {
+   125→  cameraAt,
+   126→  formatTimecode,
+   127→  PREVIEW_DEFAULTS,
+   128→  previewSettingsFrom,
+   129→  projectLanes,
+   130→  resolveFrame,
+   131→  seamBoundaries,
+   132→  snapToBoundaries,
+   133→  type PreviewSettings,
+   134→} from "../src/lib/tubeforge/preview-lanes";
+   135→import type { Scene } from "../src/lib/tubeforge/types";
+   136→import type {
+   137→  WhiteboardProject,
+   138→  WhiteboardScene,
+   139→} from "../src/lib/tubeforge/whiteboard/storyboard";
+   140→import {
+   141→  applyDeleteToDoc,
+   142→  applyDuplicateToDoc,
+   143→  applySplitToDoc,
+   144→  sceneSegmentSec,
+   145→  splitNarrationAt,
+   146→} from "../src/lib/tubeforge/clip-ops";
+   147→import { ANIM_FRAME_BUDGET, frameCountOf, framePlanWindows } from "../src/lib/tubeforge/anim/clock";
+   148→import {
+   149→  GRAPHICS_BUDGETS,
+   150→  GRAPHICS_ELEMENT_KINDS,
+   151→  GRAPHICS_FRAME_BUDGET,
+   152→  GRAPHICS_ROUTING_REASON_MAX,
+   153→  GRAPHICS_VERSION,
+   154→  legalMotions,
+   155→  MOTION_KINDS_BY_ELEMENT,
+   156→  parseGraphicsDoc,
+   157→  validGraphicsId,
+   158→  validateGraphicsDoc,
+   159→  writeGraphicsDoc,
+   160→  type GraphicsDoc,
+   161→  type GraphicsScene,
+   162→} from "../src/lib/tubeforge/graphics/types";
+   163→import { scaffoldGraphicsDoc } from "../src/lib/tubeforge/graphics/planner";
+   164→import {
+   165→  frameAt,
+   166→  graphicsFrameCount,
+   167→  graphicsSceneDurationsMs,
+   168→  GRAPHICS_MOTION_SEMANTICS,
+   169→  type GraphicsFrameState,
+   170→} from "../src/lib/tubeforge/graphics/frame";
+   171→import {
+   172→  APPLY_GRAPHICS_FRAME_FN,
+   173→  composeGraphicsScene,
+   174→  formatCounter,
+   175→  GRAPHICS_COMPOSE_DEFAULTS,
+   176→  graphicsFramePayload,
+   177→  graphicsGroupClaims,
+   178→  placedGraphicsFrame,
+   179→} from "../src/lib/tubeforge/graphics/compose";
+   180→import {
+   181→  assertGraphicsBudget,
+   182→  graphicsBudgetReport,
+   183→} from "../src/lib/tubeforge/graphics/preflight";
+   184→import { graphicsTracks } from "../src/lib/tubeforge/graphics/tracks";
+   185→// S123 P3 — the engine renderer's pure seams, the draft viewport law and
+   186→// the graphics QC group (the matrix + the lane-aware battery helpers).
+   187→import {
+   188→  graphicsEncodeArgs,
+   189→  graphicsAssemblyArgs,
+   190→  sceneCursorMs,
+   191→} from "../src/lib/tubeforge/graphics/render";
+   192→import {
+   193→  GRAPHICS_DRAFT_SCALES,
+   194→  draftSurfaceDim,
+   195→  graphicsDraftDoc,
+   196→  graphicsDraftKey,
+   197→  graphicsDraftPlan,
+   198→  isGraphicsDraftScale,
+   199→} from "../src/lib/tubeforge/graphics/draft";
+   200→import {
+   201→  graphicsExpectedCuts,
+   202→  graphicsHoldWindows,
+   203→  graphicsQcMatrix,
+   204→} from "../src/lib/tubeforge/graphics/qc";
+   205→import { judgeFreezes, judgeStaticRuns } from "../src/lib/tubeforge/qc";
+   206→// S124 — the element editor's pure laws (hit-test, placement math, the
+   207→// slots-law z-order) + the composer's placed-frame truth and claim map.
+   208→import {
+   209→  applyZOrder,
+   210→  ELEMENT_EDITOR_LIMITS,
+   211→  movedPlacement,
+   212→  scaledPlacement,
+   213→  topmostElementAt,
+   214→} from "../src/lib/tubeforge/graphics/editor";
+   215→
+   216→const execFileAsync = promisify(execFile);
+   217→
+   218→// ---------- micro framework ----------
+   219→
+   220→let passed = 0;
+   221→let failed = 0;
+   222→const failures: string[] = [];
+   223→let suite = "";
+   224→
+   225→function suiteStart(name: string) {
+   226→  suite = name;
+   227→  console.log(`\n◆ ${name}`);
+   228→}
+   229→
+   230→async function test(name: string, fn: () => void | Promise<void>) {
+   231→  try {
+   232→    await fn();
+   233→    passed++;
+   234→    console.log(`  ✓ ${name}`);
+   235→  } catch (err) {
+   236→    failed++;
+   237→    const msg = err instanceof Error ? err.message : String(err);
+   238→    failures.push(`[${suite}] ${name} — ${msg}`);
+   239→    console.log(`  ✗ ${name}\n      ${msg.split("\n")[0]}`);
+   240→  }
+   241→}
+   242→
+   243→function ok(cond: unknown, msg: string): asserts cond {
+   244→  if (!cond) throw new Error(msg);
+   245→}
+   246→
+   247→function eq<T>(actual: T, expected: T, label = "value") {
+   248→  const a = JSON.stringify(actual);
+   249→  const b = JSON.stringify(expected);
+   250→  if (a !== b) throw new Error(`${label}: expected ${b}, got ${a}`);
+   251→}
+   252→
+   253→function approx(actual: number, expected: number, tol: number, label = "number") {
+   254→  if (!(Math.abs(actual - expected) <= tol))
+   255→    throw new Error(`${label}: expected ${expected} ±${tol}, got ${actual}`);
+   256→}
+   257→
+   258→function oneOf<T>(actual: T, options: readonly T[], label = "value") {
+   259→  if (!options.includes(actual))
+   260→    throw new Error(`${label}: expected one of ${JSON.stringify(options)}, got ${JSON.stringify(actual)}`);
+   261→}
+   262→
+   263→const statusOf = (report: { checks: { id: string; status: string }[] }, id: string) => {
+   264→  const c = report.checks.find((x) => x.id === id);
+   265→  if (!c) throw new Error(`check "${id}" missing from report`);
+   266→  return c.status;
+   267→};
+   268→
+   269→// ---------- fixtures ----------
+   270→
+   271→const FFMPEG_COMMON = [
+   272→  "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30", "-pix_fmt", "yuv420p",
+   273→  "-c:a", "aac", "-b:a", "96k",
+   274→];
+   275→
+   276→async function genFixture(file: string, args: string[]) {
+   277→  await execFileAsync("ffmpeg", ["-hide_banner", "-nostats", "-y", ...args, file], {
+   278→    timeout: 120_000,
+   279→    maxBuffer: 16 * 1024 * 1024,
+   280→  });
+   281→}
+   282→
+   283→/** 4s clip whose audio fades out over the final 1.2s (healthy ending).
+   284→ * NOTE: lavfi `sine` generates at 1/8 amplitude (≈ -21 dB mean) — loud
+   285→ * enough that an UNFADED tail sits well above the -25 dB fade threshold. */
+   286→function fadeOutArgs(): string[] {
+   287→  return [
+   288→    "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=24:duration=4",
+   289→    "-f", "lavfi", "-i", "sine=frequency=440:duration=4",
+   290→    "-af", "afade=t=out:st=2.8:d=1.2",
+   291→    ...FFMPEG_COMMON, "-shortest",
+   292→  ];
+   293→}
+   294→
+   295→/** 4s clip cut mid-tone — the classic abrupt ending. */
+   296→function abruptArgs(): string[] {
+   297→  return [
+   298→    "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=24:duration=4",
+   299→    "-f", "lavfi", "-i", "sine=frequency=440:duration=4",
+   300→    ...FFMPEG_COMMON, "-shortest",
+   301→  ];
+   302→}
+   303→
+   304→/** 4s clip at -40ish dBFS: decodable and measurable, but far below target. */
+   305→function quietArgs(): string[] {
+   306→  return [
+   307→    "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=24:duration=4",
+   308→    "-f", "lavfi", "-i", "sine=frequency=330:duration=4",
+   309→    "-af", "volume=0.01",
+   310→    ...FFMPEG_COMMON, "-shortest",
+   311→  ];
+   312→}
+   313→
+   314→/** 6s clip: 2s of tone then 4s of digital silence → dead air. */
+   315→function deadAirArgs(): string[] {
+   316→  return [
+   317→    "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=24:duration=6",
+   318→    "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+   319→    "-t", "4", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+   320→    "-filter_complex", "[1:a]volume=0.25[t];[t][2:a]concat=n=2:v=0:a=1[a]",
+   321→    "-map", "0:v", "-map", "[a]",
+   322→    ...FFMPEG_COMMON, "-shortest",
+   323→  ];
+   324→}
+   325→
+   326→const MEASURED_ANALYSIS_IDS = [
+   327→  "black-frames", "frozen-frames", "dead-air", "loudness",
+   328→  "true-peak", "loudness-range", "static-shots", "tail-fade",
+   329→] as const;
+   330→
+   331→/** Legacy-compat invariant: pass flag always derives from status, and any
+   332→ * unmeasured check drags the whole report out of "passed". */
+   333→function assertReportInvariants(report: {
+   334→  passed: boolean;
+   335→  checks: { id: string; status: string; pass: boolean }[];
+   336→}) {
+   337→  ok(report.checks.length > 0, "report must contain checks");
+   338→  for (const c of report.checks)
+   339→    eq(c.pass, c.status === "pass", `check ${c.id}: legacy pass flag`);
+   340→  const hasUnmeasured = report.checks.some((c) => c.status === "unmeasured");
+   341→  if (hasUnmeasured) ok(!report.passed, "any unmeasured check must fail the report");
+   342→  else eq(report.passed, report.checks.every((c) => c.status === "pass"), "overall passed");
+   343→}
+   344→
+   345→// ---------- suite: audio mix chain builders (pure) ----------
+   346→
+   347→suiteStart("audiomix — ducking configuration");
+   348→
+   349→await test("sanitizeDuckIntensity: valid ids pass through, junk → standard", () => {
+   350→  eq(sanitizeDuckIntensity("off"), "off");
+   351→  eq(sanitizeDuckIntensity("subtle"), "subtle");
+   352→  eq(sanitizeDuckIntensity("strong"), "strong");
+   353→  eq(sanitizeDuckIntensity("standard"), "standard");
+   354→  eq(sanitizeDuckIntensity("bogus"), "standard");
+   355→  eq(sanitizeDuckIntensity(42), "standard");
+   356→  eq(sanitizeDuckIntensity(null), "standard");
+   357→});
+   358→
+   359→await test("isDuckIntensity validates exactly the catalog ids", () => {
+   360→  for (const d of DUCK_INTENSITIES) ok(isDuckIntensity(d.id), `catalog id ${d.id} must validate`);
+   361→  ok(!isDuckIntensity("loud"), "non-catalog id must reject");
+   362→  ok(!isDuckIntensity(7), "non-string must reject");
+   363→});
+   364→
+   365→await test("duckParams: deeper intensity = lower threshold, higher ratio", () => {
+   366→  eq(duckParams("off"), null, "off must disable ducking");
+   367→  const subtle = duckParams("subtle");
+   368→  const standard = duckParams("standard");
+   369→  const strong = duckParams("strong");
+   370→  ok(subtle != null && standard != null && strong != null, "all three intensities carry params");
+   371→  ok(subtle.threshold > standard.threshold && standard.threshold > strong.threshold,
+   372→    "threshold must fall as intensity rises");
+   373→  ok(subtle.ratio < standard.ratio && standard.ratio < strong.ratio,
+   374→    "ratio must rise as intensity rises");
+   375→  approx(subtle.threshold, 0.06, 1e-9);
+   376→  approx(standard.threshold, 0.03, 1e-9);
+   377→  approx(strong.threshold, 0.015, 1e-9);
+   378→});
+   379→
+   380→await test("duckChain: off = passthrough that still sinks the sidechain", () => {
+   381→  const chain = duckChain("off", "music", "sc", "mduck");
+   382→  ok(chain.includes("[sc]anullsink"), "sidechain label must stay bound");
+   383→  ok(chain.includes("[music]anull[mduck]"), "music must pass through untouched");
+   384→  ok(!chain.includes("sidechaincompress"), "off must not compress");
+   385→});
+   386→
+   387→await test("duckChain: standard encodes the sidechaincompress parameters", () => {
+   388→  const chain = duckChain("standard");
+   389→  ok(chain.includes("sidechaincompress=threshold=0.03:ratio=9"), chain);
+   390→  ok(chain.includes("[music][sc]sidechaincompress") && chain.endsWith("[mduck]"), chain);
+   391→});
+   392→
+   393→await test("voiceSplitChain binds voice + sidechain stems", () => {
+   394→  const chain = voiceSplitChain();
+   395→  ok(chain.includes("asplit=2[voice][sc]"), chain);
+   396→});
+   397→
+   398→suiteStart("audiomix — bed chains");
+   399→
+   400→await test("bedChain: gain + in/out fades with correct fade-out start", () => {
+   401→  const chain = bedChain({ totalSec: 60, gain: 0.5, fadeInSec: 2, fadeOutSec: 3 });
+   402→  ok(chain.includes("volume=0.500"), chain);
+   403→  ok(chain.includes("afade=t=in:d=2.00"), chain);
+   404→  ok(chain.includes("afade=t=out:st=57.00:d=3.00"), chain);
+   405→});
+   406→
+   407→await test("bedChain: zero-length fade never produces NaN", () => {
+   408→  const chain = bedChain({ totalSec: 5, gain: 1, fadeInSec: 0, fadeOutSec: 0 });
+   409→  ok(!chain.includes("NaN"), chain);
+   410→  ok(chain.includes("afade=t=out:st=5.00:d=0.00"), chain);
+   411→});
+   412→
+   413→await test("droneBedChain: lowpass + fades", () => {
+   414→  const chain = droneBedChain({ totalSec: 30, lowpassHz: 800, fadeInSec: 1.5, fadeOutSec: 2 });
+   415→  ok(chain.includes("lowpass=f=800"), chain);
+   416→  ok(chain.includes("afade=t=in:d=1.50"), chain);
+   417→  ok(chain.includes("afade=t=out:st=28.00:d=2.00"), chain);
+   418→});
+   419→
+   420→await test("mixTail: two inputs, first-bounded, weights preserved", () => {
+   421→  const chain = mixTail(1, 0.8);
+   422→  ok(chain.includes("amix=inputs=2:duration=first:normalize=0"), chain);
+   423→  ok(chain.includes("weights='1 0.8'"), chain);
+   424→  ok(chain.endsWith("[mix]"), chain);
+   425→});
+   426→
+   427→// ---------- suite: loudness (pure) ----------
+   428→
+   429→suiteStart("audiomix — loudnorm parsing + normalization");
+   430→
+   431→const GOOD_MEASURE: LoudnessMeasurement = {
+   432→  integratedLUFS: -14.2,
+   433→  truePeakDBTP: -1.3,
+   434→  lra: 6.1,
+   435→  threshLUFS: -24.3,
+   436→  offsetLU: -0.2,
+   437→};
+   438→
+   439→await test("parseLoudnormJson: extracts the measurement from noisy stderr", () => {
+   440→  const stderr = `frame=1 fps=0.0 q=-0.0 size=N/A time=00:00:00.04 bitrate=N/A speed=0.05x
+   441→[Parsed_loudnorm_0 @ 0x55] Here is some noise {
+   442→        "input_i" : "-14.20",
+   443→        "input_tp" : "-1.30",
+   444→        "input_lra" : "6.10",
+   445→        "input_thresh" : "-24.30",
+   446→        "output_i" : "-15.90",
+   447→        "output_tp" : "-2.00",
+   448→        "output_lra" : "5.70",
+   449→        "output_thresh" : "-26.10",
+   450→        "normalization_type" : "linear",
+   451→        "target_offset" : "-0.20"
+   452→}
+   453→size=N/A time=00:00:04.00 bitrate=N/A speed=0.1x`;
+   454→  const m = parseLoudnormJson(stderr);
+   455→  ok(m !== null, "happy-path stderr must parse");
+   456→  approx(m.integratedLUFS, -14.2, 1e-9);
+   457→  approx(m.truePeakDBTP, -1.3, 1e-9);
+   458→  approx(m.lra, 6.1, 1e-9);
+   459→  approx(m.threshLUFS, -24.3, 1e-9);
+   460→  approx(m.offsetLU, -0.2, 1e-9);
+   461→});
+   462→
+   463→await test("parseLoudnormJson: -inf integrated loudness (silence) → null", () => {
+   464→  const stderr = `{
+   465→        "input_i" : "-inf",
+   466→        "input_tp" : "-inf",
+   467→        "input_lra" : "0.00",
+   468→        "input_thresh" : "-inf",
+   469→        "target_offset" : "0.00"
+   470→}`;
+   471→  eq(parseLoudnormJson(stderr), null, "silent audio cannot drive a linear pass");
+   472→});
+   473→
+   474→await test("parseLoudnormJson: malformed / empty / non-JSON → null", () => {
+   475→  eq(parseLoudnormJson(""), null);
+   476→  eq(parseLoudnormJson("no json at all here"), null);
+   477→  eq(parseLoudnormJson("{ not json }"), null);
+   478→});
+   479→
+   480→await test("normalizationFilter(null): dynamic fallback, no measured_ fields", () => {
+   481→  const f = normalizationFilter(null);
+   482→  ok(!f.includes("measured_"), "fallback must not carry measurement fields");
+   483→  ok(f.includes("loudnorm=I="), f);
+   484→  // 0.841 linear = −1.5 dBFS sample ceiling: true-peak-safe for the AAC
+   485→  // overshoot the QC gate measures on the encoded file.
+   486→  ok(f.includes("alimiter=limit=0.841:level=false"), f);
+   487→  ok(f.includes("aresample=48000"), f);
+   488→});
+   489→
+   490→await test("normalizationFilter(m): linear two-pass with measurement + limiter + 48k", () => {
+   491→  const f = normalizationFilter(GOOD_MEASURE);
+   492→  ok(f.includes("measured_I=-14.20"), f);
+   493→  ok(f.includes("measured_TP=-1.30"), f);
+   494→  ok(f.includes("measured_LRA=6.10"), f);
+   495→  ok(f.includes("measured_thresh=-24.30"), f);
+   496→  ok(f.includes("offset=-0.20:linear=true"), f);
+   497→  ok(f.includes("alimiter=limit=0.841"), f);
+   498→  ok(f.includes("aresample=48000"), f);
+   499→});
+   500→
+   501→// ---------- suite: static-run detection (pure) ----------
+   502→
+   503→suiteStart("audiomix — static-run collapsing");
+   504→
+   505→await test("frameMeanDiff: identical frames → 0, different → >0, mismatch → ∞", () => {
+   506→  approx(frameMeanDiff(new Uint8Array([10, 20, 30]), new Uint8Array([10, 20, 30])), 0, 1e-9);
+   507→  ok(frameMeanDiff(new Uint8Array([10, 20, 30]), new Uint8Array([40, 20, 30])) > 0);
+   508→  eq(frameMeanDiff(new Uint8Array([1]), new Uint8Array([1, 2])), Number.POSITIVE_INFINITY);
+   509→  eq(frameMeanDiff(new Uint8Array([]), new Uint8Array([])), Number.POSITIVE_INFINITY);
+   510→});
+   511→
+   512→await test("staticRunsFromFrames: 9.5s identical stretch is flagged", () => {
+   513→  // 21 frames of 4 bytes: frames 0..19 identical, frame 20 different.
+   514→  const frames = new Uint8Array(21 * 4);
+   515→  frames.fill(7, 0, 20 * 4);
+   516→  frames.fill(200, 20 * 4);
+   517→  const runs = staticRunsFromFrames(frames, 4, { fps: 2, diffThreshold: 0.9, minRunSec: 6 });
+   518→  eq(runs.length, 1, "one run expected");
+   519→  approx(runs[0].startSec, 0, 1e-9);
+   520→  approx(runs[0].endSec, 9.5, 1e-9);
+   521→});
+   522→
+   523→await test("staticRunsFromFrames: a 4.5s stretch is below the 6s floor", () => {
+   524→  const frames = new Uint8Array(11 * 4);
+   525→  frames.fill(7, 0, 10 * 4);
+   526→  frames.fill(200, 10 * 4);
+   527→  const runs = staticRunsFromFrames(frames, 4, { fps: 2, diffThreshold: 0.9, minRunSec: 6 });
+   528→  eq(runs.length, 0, "short stretch must not flag");
+   529→});
+   530→
+   531→await test("staticRunsFromFrames: fully static input flags via the final flush", () => {
+   532→  const frames = new Uint8Array(30 * 4).fill(9);
+   533→  const runs = staticRunsFromFrames(frames, 4, { fps: 2, diffThreshold: 0.9, minRunSec: 6 });
+   534→  eq(runs.length, 1, "all-static input must flag once");
+   535→  approx(runs[0].startSec, 0, 1e-9);
+   536→});
+   537→
+   538→await test("staticRunsFromFrames: too few samples → no runs, no crash", () => {
+   539→  eq(staticRunsFromFrames(new Uint8Array(4), 4), []);
+   540→  eq(staticRunsFromFrames(new Uint8Array(0), 4), []);
+   541→});
+   542→
+   543→await test("staticRunsDetail formats ranges", () => {
+   544→  eq(staticRunsDetail([{ startSec: 0, endSec: 10 }, { startSec: 20.4, endSec: 30 }]), "0–10s, 20–30s");
+   545→  eq(staticRunsDetail([]), "");
+   546→});
+   547→
+   548→// ---------- suite: QC pure helpers ----------
+   549→
+   550→suiteStart("qc — SRT parsing (pure)");
+   551→
+   552→await test("parseSrt: two clean cues", () => {
+   553→  const srt = [
+   554→    "1",
+   555→    "00:00:01,000 --> 00:00:02,500",
+   556→    "Hello world",
+   557→    "",
+   558→    "2",
+   559→    "00:00:03,000 --> 00:00:04,000",
+   560→    "Second cue",
+   561→    "",
+   562→  ].join("\n");
+   563→  const cues = parseSrt(srt);
+   564→  eq(cues.length, 2, "cue count");
+   565→  approx(cues[0].start, 1, 1e-9);
+   566→  approx(cues[0].end, 2.5, 1e-9);
+   567→  approx(cues[1].start, 3, 1e-9);
+   568→  approx(cues[1].end, 4, 1e-9);
+   569→});
+   570→
+   571→await test("parseSrt: garbage and empty inputs → no cues, no crash", () => {
+   572→  eq(parseSrt("this is not a subtitle file"), []);
+   573→  eq(parseSrt(""), []);
+   574→});
+   575→
+   576→await test("formatSrtCues: hard non-overlap — the earlier cue always yields (Battle Yamuk 54 overlaps)", async () => {
+   577→  const { formatSrtCues } = await import("../src/lib/tubeforge/captions.ts");
+   578→  // Cue 1 runs into cue 2's window; cue 2 runs past cue 3's start; cue 4
+   579→  // arrives out of order (blended-timeline shift). NONE may overlap after
+   580→  // the pass, whatever the inputs do.
+   581→  const srt = formatSrtCues([
+   582→    { start: 0, end: 3.0, text: "first cue too long" },
+   583→    { start: 2.0, end: 6.0, text: "second overlaps third" },
+   584→    { start: 5.5, end: 7.0, text: "third" },
+   585→    { start: 1.0, end: 1.6, text: "disordered early blip" },
+   586→  ]);
+   587→  const cues = parseSrt(srt);
+   588→  eq(cues.length, 4, "all cues survive");
+   589→  // Sorted by start: first(0.0), blip(1.0), second(2.0), third(5.5).
+   590→  approx(cues[0].start, 0.0, 1e-9, "earliest cue first");
+   591→  // The out-of-order blip (start 1.0, end 1.6) landed in slot 2.
+   592→  approx(cues[1].start, 1.0, 1e-9, "out-of-order cue sorted into place");
+   593→  approx(cues[1].end, 1.6, 1e-9, "blip end preserved (nothing to yield to)");
+   594→  for (let i = 1; i < cues.length; i++) {
+   595→    ok(cues[i].start >= cues[i - 1].end, `cue ${i + 1} starts at/after cue ${i} ends (${cues[i - 1].end} → ${cues[i].start})`);
+   596→  }
+   597→  // The yielding cue still got its 50ms gap, not a hard cut to equal.
+   598→  ok(cues[2].end <= cues[3].start, "gap respected");
+   599→});
+   600→
+   601→await test("formatSrtCues: sane cues pass through untouched", async () => {
+   602→  const { formatSrtCues } = await import("../src/lib/tubeforge/captions.ts");
+   603→  const srt = formatSrtCues([
+   604→    { start: 0, end: 1.5, text: "a" },
+   605→    { start: 2.0, end: 3.5, text: "b" },
+   606→  ]);
+   607→  const cues = parseSrt(srt);
+   608→  approx(cues[0].end, 1.5, 1e-9, "non-overlapping end preserved");
+   609→  approx(cues[1].start, 2.0, 1e-9, "start preserved");
+   610→});
+   611→
+   612→// ---------- suite: QC fixtures (real ffmpeg) ----------
+   613→
+   614→suiteStart("qc — three-state contract on real fixtures");
+   615→
+   616→const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tf-qc-"));
+   617→try {
+   618→  const fadeMp4 = path.join(tmp, "fade.mp4");
+   619→  const abruptMp4 = path.join(tmp, "abrupt.mp4");
+   620→  const quietMp4 = path.join(tmp, "quiet.mp4");
+   621→  const deadAirMp4 = path.join(tmp, "deadair.mp4");
+   622→  const garbageMp4 = path.join(tmp, "garbage.mp4");
+   623→  const missingMp4 = path.join(tmp, "never-rendered.mp4");
+   624→
+   625→  console.log("  … rendering QC fixtures with ffmpeg");
+   626→  await genFixture(fadeMp4, fadeOutArgs());
+   627→  await genFixture(abruptMp4, abruptArgs());
+   628→  await genFixture(quietMp4, quietArgs());
+   629→  await genFixture(deadAirMp4, deadAirArgs());
+   630→  fs.writeFileSync(garbageMp4, Buffer.from(Array.from({ length: 8192 }, (_, i) => (i * 37) % 251)));
+   631→
+   632→  const qcOpts = (file: string) => ({
+   633→    mp4Path: file,
+   634→    videoDuration: 4,
+   635→    narrationSec: null as number | null,
+   636→    srtPath: null as string | null,
+   637→  });
+   638→
+   639→  await test("missing file: playable=fail, report fails, nothing pretends otherwise", async () => {
+   640→    const r = await runQcReport(qcOpts(missingMp4));
+   641→    eq(statusOf(r, "playable"), "fail");
+   642→    eq(r.checks.length, 1, "no analysis-derived checks without a file");
+   643→    ok(!r.passed, "missing render must never pass");
+   644→    assertReportInvariants(r);
+   645→  });
+   646→
+   647→  await test("garbage bytes: failed analysis → unmeasured, NEVER clean", async () => {
+   648→    const r = await runQcReport(qcOpts(garbageMp4));
+   649→    eq(statusOf(r, "playable"), "fail", "garbage is not a playable MP4");
+   650→    for (const id of MEASURED_ANALYSIS_IDS)
+   651→      eq(statusOf(r, id), "unmeasured", `${id} on undecodable input`);
+   652→    ok(!r.passed, "garbage must never pass QC");
+   653→    assertReportInvariants(r);
+   654→  });
+   655→
+   656→  await test("fade-out ending: tail-fade measures and PASSES", async () => {
+   657→    const r = await runQcReport(qcOpts(fadeMp4));
+   658→    eq(statusOf(r, "playable"), "pass");
+   659→    eq(statusOf(r, "tail-fade"), "pass");
+   660→    assertReportInvariants(r);
+   661→  });
+   662→
+   663→  await test("abrupt mid-tone ending: tail-fade measures and FAILS", async () => {
+   664→    const r = await runQcReport(qcOpts(abruptMp4));
+   665→    eq(statusOf(r, "tail-fade"), "fail");
+   666→    assertReportInvariants(r);
+   667→  });
+   668→
+   669→  await test("near-silent clip: loudness MEASURED and failing (not unmeasured)", async () => {
+   670→    const r = await runQcReport(qcOpts(quietMp4));
+   671→    eq(statusOf(r, "loudness"), "fail", "measurable-but-too-quiet must be a fail, not unmeasured");
+   672→    oneOf(statusOf(r, "true-peak"), ["pass", "fail"], "true-peak on decodable audio");
+   673→    assertReportInvariants(r);
+   674→  });
+   675→
+   676→  await test("tone-then-silence: dead-air detector catches the 4s gap", async () => {
+   677→    const r = await runQcReport({
+   678→      ...qcOpts(deadAirMp4),
+   679→      videoDuration: 6,
+   680→    });
+   681→    eq(statusOf(r, "dead-air"), "fail");
+   682→    assertReportInvariants(r);
+   683→  });
+   684→
+   685→  await test("healthy fixture: analysis-derived checks all reach a verdict", async () => {
+   686→    const r = await runQcReport(qcOpts(fadeMp4));
+   687→    for (const id of MEASURED_ANALYSIS_IDS)
+   688→      oneOf(statusOf(r, id), ["pass", "fail"], `${id} on decodable input`);
+   689→  });
+   690→} finally {
+   691→  fs.rmSync(tmp, { recursive: true, force: true });
+   692→}
+   693→
+   694→// ---------- suite: music mood logic (pure) ----------
+   695→
+   696→suiteStart("music — mood presets + niche mapping");
+   697→
+   698→await test("isMusicMoodId: auto + catalog ids valid, junk rejected", () => {
+   699→  ok(isMusicMoodId("auto"), "auto must be a mood id");
+   700→  for (const id of ["suspenseful", "cinematic", "emotional", "uplifting", "calm"])
+   701→    ok(isMusicMoodId(id), `${id} must be a mood id`);
+   702→  ok(!isMusicMoodId("nope"), "unknown id must reject");
+   703→  ok(!isMusicMoodId(null), "non-string must reject");
+   704→  ok(!isMusicMoodId(3), "non-string must reject");
+   705→});
+   706→
+   707→await test("moodTags: known ids map to library tags, auto/unknown → []", () => {
+   708→  eq(moodTags("suspenseful"), ["mysteries", "dark"]);
+   709→  eq(moodTags("calm"), ["soft", "airy", "minimal", "neutral"]);
+   710→  eq(moodTags("auto"), [], "auto falls back to the niche pick");
+   711→  eq(moodTags(null), []);
+   712→  eq(moodTags("nope"), []);
+   713→});
+   714→
+   715→await test("NICHE_MOODS: every niche maps to non-empty tag lists", () => {
+   716→  const niches = Object.keys(NICHE_MOODS);
+   717→  ok(niches.length >= 5, "core niches must stay mapped");
+   718→  for (const [niche, tags] of Object.entries(NICHE_MOODS)) {
+   719→    ok(Array.isArray(tags) && tags.length > 0, `${niche} must map to tags`);
+   720→    for (const t of tags) ok(typeof t === "string" && t.length > 0, `${niche}: bad tag ${JSON.stringify(t)}`);
+   721→  }
+   722→});
+   723→
+   724→// ---------- suite: voice cloning (pure units) ----------
+   725→
+   726→suiteStart("voice-clone — cloned-voice ids + name/URL hygiene");
+   727→
+   728→await test("isClonedVoiceId: only the platform prefix counts", () => {
+   729→  ok(isClonedVoiceId("voice_clone_20240315_143052_001"), "platform prefix must match");
+   730→  ok(!isClonedVoiceId("jam"), "stock studio voice is not a clone");
+   731→  ok(!isClonedVoiceId("Voice_Clone_x"), "prefix match is case-sensitive");
+   732→  ok(!isClonedVoiceId(""), "empty is not a clone");
+   733→  ok(!isClonedVoiceId("voice_cloney"), "near-miss prefix rejected");
+   734→});
+   735→
+   736→await test("sanitizeVoice: zhipu keeps cloned ids, other providers fall back", () => {
+   737→  const cloneId = "voice_clone_20240315_143052_001";
+   738→  eq(sanitizeVoice("zhipu", cloneId), cloneId, "zhipu must pass cloned ids through");
+   739→  eq(sanitizeVoice("zhipu", "jam"), "jam", "stock ids unchanged");
+   740→  eq(sanitizeVoice("zhipu", "nope"), "jam", "junk falls back to the first catalog voice");
+   741→  // A clone saved on a video must NOT leak into providers that can't speak it.
+   742→  eq(sanitizeVoice("openai", cloneId), "alloy", "openai falls back to alloy");
+   743→  // Self-hosted speaks its own clones the same way zhipu does.
+   744→  const shClone = "voice_clone_sh_abc123";
+   745→  eq(sanitizeVoice("selfhost", shClone), shClone, "selfhost passes cloned ids through");
+   746→  eq(sanitizeVoice("selfhost", "jam"), "jam", "selfhost stock ids unchanged");
+   747→  eq(sanitizeVoice("zai", shClone), "jam", "zai must not receive selfhost clone ids");
+   748→  eq(sanitizeVoice("zai", cloneId), "jam", "zai falls back to the first catalog voice");
+   749→});
+   750→
+   751→await test("voiceCatalog: zhipu exposes the 7 studio voices (clones appended by the API layer)", () => {
+   752→  const catalog = voiceCatalog("zhipu", "glm-tts");
+   753→  eq(catalog.length, 7, "exactly the 7 studio voices");
+   754→  ok(catalog.some((v) => v.id === "tongtong"), "default voice present");
+   755→  ok(!catalog.some((v) => isClonedVoiceId(v.id)), "no clone ids baked into the static catalog");
+   756→});
+   757→
+   758→await test("describeVoiceHealth: /health payloads render as one readable line", () => {
+   759→  eq(
+   760→    describeVoiceHealth({ model: "chatterbox", device: "cpu", warm: true, busy: false }),
+   761→    "Chatterbox (English) · cpu · model loaded",
+   762→    "warm English server reads at a glance",
+   763→  );
+   764→  eq(
+   765→    describeVoiceHealth({ model: "chatterbox-turbo", device: "cpu", warm: true, busy: false }),
+   766→    "Chatterbox Turbo (fast, low-RAM) · cpu · model loaded",
+   767→    "turbo model is labelled as the fast variant",
+   768→  );
+   769→  eq(
+   770→    describeVoiceHealth({ model: "chatterbox-multilingual", device: "cpu", warm: true, busy: true }),
+   771→    "Chatterbox Multilingual (23 languages) · cpu · model loaded · busy synthesizing",
+   772→    "multilingual + busy state included",
+   773→  );
+   774→  const cold = describeVoiceHealth({ model: "chatterbox", device: "cpu", warm: false });
+   775→  ok(cold.includes("model still loading"), `cold start is REPORTED, not failed (got: ${cold})`);
+   776→  eq(
+   777→    describeVoiceHealth({}),
+   778→    "Voice server · model still loading — retry in a few minutes",
+   779→    "an empty payload (older server) still degrades to a useful line",
+   780→  );
+   781→});
+   782→
+   783→await test("shared-voice: endpoint precedence — user server > shared env > nothing", () => {
+   784→  const URL_KEY = "TUBEFORGE_SHARED_VOICE_URL";
+   785→  const KEY_KEY = "TUBEFORGE_SHARED_VOICE_KEY";
+   786→  const savedUrl = process.env[URL_KEY];
+   787→  const savedKey = process.env[KEY_KEY];
+   788→  try {
+   789→    delete process.env[URL_KEY];
+   790→    delete process.env[KEY_KEY];
+   791→    eq(sharedVoiceServer(), null, "no env → no shared server");
+   792→    eq(selfhostEndpoint("", ""), null, "no user config, no env → null (caller decides)");
+   793→
+   794→    process.env[URL_KEY] = "http://127.0.0.1:8931";
+   795→    process.env[KEY_KEY] = "secret";
+   796→    const shared = selfhostEndpoint("", "");
+   797→    ok(shared && shared.shared === true, "shared server used when the user has none");
+   798→    eq(shared?.baseUrl, "http://127.0.0.1:8931", "shared baseUrl flows through");
+   799→    eq(shared?.apiKey, "secret", "shared key flows through");
+   800→
+   801→    const own = selfhostEndpoint("http://my-laptop:8931", "my-key");
+   802→    ok(own && own.shared === false, "the user's own server ALWAYS wins");
+   803→    eq(own?.baseUrl, "http://my-laptop:8931", "own baseUrl preserved");
+   804→    eq(own?.apiKey, "my-key", "own key preserved");
+   805→
+   806→    // A user key WITHOUT a baseUrl is not an endpoint by itself — but the
+   807→    // shared server still applies (the key belongs to their own server they
+   808→    // haven't fully configured yet; synthesis would 401 against it anyway).
+   809→    const keyOnly = selfhostEndpoint("", "my-key");
+   810→    ok(keyOnly && keyOnly.shared === true, "key-only user config falls back to shared");
+   811→  } finally {
+   812→    if (savedUrl === undefined) delete process.env[URL_KEY];
+   813→    else process.env[URL_KEY] = savedUrl;
+   814→    if (savedKey === undefined) delete process.env[KEY_KEY];
+   815→    else process.env[KEY_KEY] = savedKey;
+   816→  }
+   817→});
+   818→
+   819→await test("cleanCloneName: trims, strips control chars, falls back to the file name", () => {
+   820→  eq(cleanCloneName("  My   Voice ", "whatever.mp3"), "My Voice", "whitespace collapsed");
+   821→  eq(cleanCloneName("bad\nname\twith\u0007junk", "x.mp3"), "bad name with junk", "control chars removed");
+   822→  eq(cleanCloneName("", "my-cool_recording.mp3"), "my cool recording", "falls back to file name");
+   823→  eq(
+   824→    cleanCloneName("", "voice sample.mp3"),
+   825→    "voice sample",
+   826→    "decoded labels (downloadSample decodes URLs upstream)",
+   827→  );
+   828→  eq(cleanCloneName("", ""), expectNameFallback(), "no name + no label → dated fallback");
+   829→  eq(cleanCloneName("x".repeat(80), "x.mp3").length, 40, "capped at 40 chars");
+   830→});
+   831→
+   832→function expectNameFallback() {
+   833→  return `Voice ${new Date().toISOString().slice(0, 10)}`;
+   834→}
+   835→
+   836→await test("isValidSampleUrl: http(s) only, internal hosts blocked", () => {
+   837→  ok(isValidSampleUrl("https://cdn.example.com/voice.mp3"), "public https ok");
+   838→  ok(isValidSampleUrl("http://example.com/a.wav"), "public http ok");
+   839→  ok(!isValidSampleUrl("ftp://example.com/a.wav"), "only http(s)");
+   840→  ok(!isValidSampleUrl("file:///etc/passwd"), "file scheme rejected");
+   841→  ok(!isValidSampleUrl("https://localhost/a.mp3"), "localhost blocked");
+   842→  ok(!isValidSampleUrl("https://box.internal/a.mp3"), ".internal blocked");
+   843→  ok(!isValidSampleUrl("https://metadata.google.internal/x"), "cloud metadata blocked");
+   844→  ok(!isValidSampleUrl("not a url"), "garbage rejected");
+   845→});
+   846→
+   847→await test("sample limits: clone API window enforced (>= 2s, trimmed at 30s)", () => {
+   848→  ok(MIN_SAMPLE_SEC === 2, "minimum sample length");
+   849→  ok(MAX_SAMPLE_SEC === 30, "samples are trimmed to the documented 30s window");
+   850→});
+   851→
+   852→// ---------- stock queries + art dedupe (scene↔image matching) ----------
+   853→
+   854→suiteStart("stock queries — scene→search keywords");
+   855→
+   856→await test("sceneQueries: visual leads, narration keywords included", () => {
+   857→  const scene = {
+   858→    index: 3,
+   859→    title: "The Crash",
+   860→    narration: "On black tuesday the wall street market collapsed and savings evaporated overnight",
+   861→    visual: "A tired trader in a 1929 suit staring at a collapsing chalkboard, dramatic cinematic mood",
+   862→  } as unknown as Scene;
+   863→  const queries = sceneQueries(scene);
+   864→  ok(queries.length >= 2 && queries.length <= 4, `2-4 queries (got ${queries.length})`);
+   865→  ok(queries[0].includes("trader"), "visual subject words lead");
+   866→  ok(
+   867→    queries.some((q) => q.includes("savings") || q.includes("collapsed")),
+   868→    "narration content words queried"
+   869→  );
+   870→});
+   871→
+   872→await test("sceneQueries: digits and stop-words never become queries", () => {
+   873→  const scene = {
+   874→    index: 1,
+   875→    title: "The",
+   876→    narration: "In 1929 the market lost 3000000000 dollars",
+   877→    visual: "the of and a",
+   878→  } as unknown as Scene;
+   879→  const queries = sceneQueries(scene);
+   880→  for (const q of queries) {
+   881→    ok(!/\b(1929|3000000000)\b/.test(q), `no raw numbers in "${q}"`);
+   882→    ok(!/\b(the|and|of|a)\b/.test(q), `no stop words in "${q}"`);
+   883→  }
+   884→  ok(
+   885→    queries.some((q) => q.includes("market") || q.includes("dollars") || q.includes("lost")),
+   886→    "real content words survive"
+   887→  );
+   888→});
+   889→
+   890→await test("sceneQueries: no duplicates, hard cap of 4", () => {
+   891→  const scene = {
+   892→    index: 2,
+   893→    title: "Market Crash",
+   894→    narration: "the market crash wiped savings market crash",
+   895→    visual: "market crash wall street panic traders",
+   896→  } as unknown as Scene;
+   897→  const queries = sceneQueries(scene);
+   898→  ok(queries.length <= 4, "capped at 4");
+   899→  ok(new Set(queries).size === queries.length, "no duplicate queries");
+   900→});
+   901→
+   902→suiteStart("S89 stock index — adapter normalization + dedupe");
+   903→
+   904→await test("pexelsParse: landscape ≥1280 mp4 picked, license stamped, id carried", () => {
+   905→  const data = {
+   906→    videos: [
+   907→      {
+   908→        id: 101,
+   909→        duration: 12,
+   910→        width: 1920,
+   911→        height: 1080,
+   912→        url: "https://pexels.com/v/101",
+   913→        user: { name: "Ada" },
+   914→        video_files: [
+   915→          { link: "https://cdn/101-portrait.mp4", width: 720, height: 1280, file_type: "video/mp4" },
+   916→          { link: "https://cdn/101-small.mp4", width: 640, height: 360, file_type: "video/mp4" },
+   917→          { link: "https://cdn/101-1080.mp4", width: 1920, height: 1080, file_type: "video/mp4" },
+   918→          { link: "https://cdn/101-4k.mp4", width: 3840, height: 2160, file_type: "video/mp4" },
+   919→        ],
+   920→      },
+   921→      {
+   922→        id: 102,
+   923→        duration: 8,
+   924→        width: 720,
+   925→        height: 1280,
+   926→        video_files: [{ link: "x", width: 720, height: 1280, file_type: "video/mp4" }],
+   927→      },
+   928→    ],
+   929→  };
+   930→  const out = pexelsParse(data);
+   931→  eq(out.length, 1, "only the landscape candidate survives");
+   932→  eq(out[0].id, "101", "provider id carried (the dedupe key half)");
+   933→  eq(out[0].url, "https://cdn/101-4k.mp4", "largest landscape mp4 picked");
+   934→  eq(out[0].license, "Pexels License", "license stamped by the adapter");
+   935→  ok(out[0].tags === undefined, "pexels video search carries no tags (semantic factor neutral)");
+   936→});
+   937→
+   938→await test("pixabayParse: tags carried, license stamped, largest rendition picked", () => {
+   939→  const data = {
+   940→    hits: [
+   941→      {
+   942→        id: 55,
+   943→        pageURL: "https://pixabay.com/v/55",
+   944→        tags: "ocean, waves, aerial, coast",
+   945→        duration: 15,
+   946→        user: "Bo",
+   947→        videos: {
+   948→          large: { url: "https://cdn/55-large.mp4", width: 1920, height: 1080 },
+   949→          medium: { url: "https://cdn/55-med.mp4", width: 1280, height: 720 },
+   950→        },
+   951→      },
+   952→    ],
+   953→  };
+   954→  const out = pixabayParse(data);
+   955→  eq(out.length, 1, "one candidate");
+   956→  eq(out[0].id, "55", "id");
+   957→  eq(out[0].url, "https://cdn/55-large.mp4", "largest rendition picked");
+   958→  eq(out[0].license, "Pixabay Content License", "license");
+   959→  ok(out[0].tags != null && out[0].tags.includes("aerial"), "tags split + carried");
+   960→});
+   961→
+   962→await test("mergeIntoIndex: source:id dedupe, matchedQueries union, namespaces distinct", () => {
+   963→  const mk = (source: "pexels" | "pixabay", id: string): StockCandidate => ({
+   964→    source,
+   965→    id,
+   966→    url: `https://cdn/${source}-${id}.mp4`,
+   967→    width: 1920,
+   968→    height: 1080,
+   969→    durationSec: 10,
+   970→    author: "A",
+   971→    pageUrl: "p",
+   972→    license: "L",
+   973→  });
+   974→  const index = new Map<string, SceneIndexEntry>();
+   975→  mergeIntoIndex(index, "ocean waves", [mk("pexels", "12"), mk("pixabay", "12")]);
+   976→  mergeIntoIndex(index, "aerial coast", [mk("pexels", "12"), mk("pexels", "13")]);
+   977→  eq(index.size, 3, "pexels:12 + pixabay:12 + pexels:13 — namespaces distinct, no dupes");
+   978→  eq(
+   979→    index.get("pexels:12")?.matchedQueries.join("|") ?? "",
+   980→    "ocean waves|aerial coast",
+   981→    "matchedQueries union across queries"
+   982→  );
+   983→  const lawless = { ...mk("pexels", "99"), license: "" };
+   984→  mergeIntoIndex(index, "q", [lawless]);
+   985→  ok(!index.has("pexels:99"), "THE LICENSE LAW: a candidate without a license never enters the index");
+   986→  eq(clipKey(mk("pixabay", "12")), "pixabay:12", "clipKey is the namespaced dedupe key");
+   987→});
+   988→
+   989→await test("configuredSources: zero keys throws the pinned operator error", () => {
+   990→  let msg = "";
+   991→  try {
+   992→    configuredSources({ pexels: "", pixabay: "" });
+   993→  } catch (e) {
+   994→    msg = e instanceof Error ? e.message : "";
+   995→  }
+   996→  eq(
+   997→    msg,
+   998→    "No stock provider is configured — add a free Pexels or Pixabay key in Settings → Stock footage",
+   999→    "byte-identical to the pre-S89 message (the queue suite + POST gate assert it)"
+  1000→  );
+  1001→  const only = configuredSources({ pexels: "k", pixabay: "" });
+  1002→  eq(only.length, 1, "one key → one adapter");
+  1003→  eq(only[0].id, "pexels", "the configured one");
+  1004→});
+  1005→
+  1006→suiteStart("S89 stock ranker — floors + factors");
+  1007→
+  1008→await test("candidateFloors: the unusable shapes are named", () => {
+  1009→  const base: StockCandidate = {
+  1010→    source: "pexels",
+  1011→    id: "1",
+  1012→    url: "u",
+  1013→    width: 1920,
+  1014→    height: 1080,
+  1015→    durationSec: 10,
+  1016→    author: "a",
+  1017→    pageUrl: "p",
+  1018→    license: "Pexels License",
+  1019→  };
+  1020→  eq(candidateFloors(base), null, "usable");
+  1021→  eq(candidateFloors({ ...base, license: "" }), "no license label", "license floor (defense in depth)");
+  1022→  eq(candidateFloors({ ...base, width: 640, height: 360 }), "below 720p", "resolution floor");
+  1023→  eq(candidateFloors({ ...base, width: 1440, height: 2560 }), "portrait", "orientation floor");
+  1024→  eq(candidateFloors({ ...base, durationSec: 1 }), "under 2s", "duration floor");
+  1025→});
+  1026→
+  1027→await test("rankCandidates: duration coverage dominates the walk order", () => {
+  1028→  const entry = (id: string, durationSec: number): SceneIndexEntry => ({
+  1029→    candidate: {
+  1030→      source: "pexels",
+  1031→      id,
+  1032→      url: "u",
+  1033→      width: 1920,
+  1034→      height: 1080,
+  1035→      durationSec,
+  1036→      author: "a",
+  1037→      pageUrl: "p",
+  1038→      license: "Pexels License",
+  1039→    },
+  1040→    matchedQueries: ["q"],
+  1041→  });
+  1042→  const ranked = rankCandidates([entry("short", 4), entry("long", 30)], {
+  1043→    sceneDurationSec: 12,
+  1044→    usedClipKeys: new Set(),
+  1045→    sceneTerms: [],
+  1046→  });
+  1047→  eq(ranked[0].entry.candidate.id, "long", "the covering clip outranks the looping one");
+  1048→  eq(ranked[0].factors.durationFit, 1, "full-cover fit = 1");
+  1049→  approx(ranked[1].factors.durationFit, 4 / 12, 1e-9, "partial fit is the ratio");
+  1050→});
+  1051→
+  1052→await test("rankCandidates: aspect closeness to 16:9 breaks the tie", () => {
+  1053→  const entry = (id: string, w: number, h: number): SceneIndexEntry => ({
+  1054→    candidate: {
+  1055→      source: "pexels",
+  1056→      id,
+  1057→      url: "u",
+  1058→      width: w,
+  1059→      height: h,
+  1060→      durationSec: 12,
+  1061→      author: "a",
+  1062→      pageUrl: "p",
+  1063→      license: "Pexels License",
+  1064→    },
+  1065→    matchedQueries: ["q"],
+  1066→  });
+  1067→  const ranked = rankCandidates([entry("16x10", 1920, 1200), entry("16x9", 1920, 1080)], {
+  1068→    sceneDurationSec: 10,
+  1069→    usedClipKeys: new Set(),
+  1070→    sceneTerms: [],
+  1071→  });
+  1072→  eq(ranked[0].entry.candidate.id, "16x9", "the 16:9 clip wins the aspect factor");
+  1073→});
+  1074→
+  1075→await test("rankCandidates: tag semantics lift (neutral, never penalizing)", () => {
+  1076→  const mk = (id: string, tags?: string[]): SceneIndexEntry => ({
+  1077→    candidate: {
+  1078→      source: "pixabay",
+  1079→      id,
+  1080→      url: "u",
+  1081→      width: 1920,
+  1082→      height: 1080,
+  1083→      durationSec: 12,
+  1084→      author: "a",
+  1085→      pageUrl: "p",
+  1086→      license: "Pixabay Content License",
+  1087→      tags,
+  1088→    },
+  1089→    matchedQueries: ["q"],
+  1090→  });
+  1091→  const ranked = rankCandidates([mk("notags"), mk("tagged", ["ocean", "waves", "storm"])], {
+  1092→    sceneDurationSec: 10,
+  1093→    usedClipKeys: new Set(),
+  1094→    sceneTerms: ["ocean", "waves", "storm", "night"],
+  1095→  });
+  1096→  eq(ranked[0].entry.candidate.id, "tagged", "3 shared terms = full semantic marks");
+  1097→  eq(semanticFactor(mk("notags").candidate, ["ocean"]), 0, "no tags → factor 0 (neutral)");
+  1098→});
+  1099→
+  1100→await test("rankCandidates: duplicates rank last, visibly", () => {
+  1101→  const mk = (id: string): SceneIndexEntry => ({
+  1102→    candidate: {
+  1103→      source: "pexels",
+  1104→      id,
+  1105→      url: "u",
+  1106→      width: 1920,
+  1107→      height: 1080,
+  1108→      durationSec: 12,
+  1109→      author: "a",
+  1110→      pageUrl: "p",
+  1111→      license: "Pexels License",
+  1112→    },
+  1113→    matchedQueries: ["q"],
+  1114→  });
+  1115→  const ranked = rankCandidates([mk("used"), mk("fresh")], {
+  1116→    sceneDurationSec: 10,
+  1117→    usedClipKeys: new Set(["pexels:used"]),
+  1118→    sceneTerms: [],
+  1119→  });
+  1120→  eq(ranked[1].entry.candidate.id, "used", "the already-placed clip sorts behind every fresh candidate");
+  1121→  eq(ranked[1].factors.duplicatePenalty, DUPLICATE_PENALTY, "the penalty is visible in the factor breakdown");
+  1122→  ok(ranked[1].score < 0, "score goes negative — the last resort is unmistakable");
+  1123→});
+  1124→
+  1125→await test("rankCandidates: deterministic tiebreak (score desc, key asc)", () => {
+  1126→  const mk = (id: string): SceneIndexEntry => ({
+  1127→    candidate: {
+  1128→      source: "pexels",
+  1129→      id,
+  1130→      url: "u",
+  1131→      width: 1920,
+  1132→      height: 1080,
+  1133→      durationSec: 12,
+  1134→      author: "a",
+  1135→      pageUrl: "p",
+  1136→      license: "Pexels License",
+  1137→    },
+  1138→    matchedQueries: ["q"],
+  1139→  });
+  1140→  const ctx = { sceneDurationSec: 10, usedClipKeys: new Set<string>(), sceneTerms: [] };
+  1141→  const a = rankCandidates([mk("b"), mk("a")], ctx).map((r) => r.entry.candidate.id);
+  1142→  const b = rankCandidates([mk("a"), mk("b")], ctx).map((r) => r.entry.candidate.id);
+  1143→  eq(a.join(","), "a,b", "key-ascending on ties");
+  1144→  eq(b.join(","), "a,b", "input order cannot influence the walk order");
+  1145→});
+  1146→
+  1147→suiteStart("S89 verdict math — multi-frame relevance + motion");
+  1148→
+  1149→await test("combineFrameVerdicts: the evidence table", () => {
+  1150→  eq(combineFrameVerdicts([true, true], null).pass, true, "2 passes → accept");
+  1151→  eq(combineFrameVerdicts([true, false, true], null).pass, true, "2 of 3 passes → accept");
+  1152→  eq(combineFrameVerdicts([false, false], null).pass, false, "2 fails → reject");
+  1153→  eq(combineFrameVerdicts([false, false, true], null).pass, false, "2 of 3 fails → reject");
+  1154→  eq(combineFrameVerdicts([true, false], null).pass, null, "1-1 split → unverified (a single odd frame never rejects)");
+  1155→  eq(combineFrameVerdicts([null, null], null).pass, null, "VLM outage → fail-open");
+  1156→  eq(combineFrameVerdicts([true, null, false, null], null).pass, null, "sparse evidence → unverified");
+  1157→});
+  1158→
+  1159→await test("combineFrameVerdicts: static motion rejects even relevant clips", () => {
+  1160→  const v = combineFrameVerdicts([true, true], 0.2);
+  1161→  eq(v.pass, false, "a frozen frame in an mp4 is the art lane's job");
+  1162→  ok(/static/.test(v.reason), "the reason says so");
+  1163→  eq(combineFrameVerdicts([true, true], null).pass, true, "motion null (unmeasurable) never rejects");
+  1164→  eq(combineFrameVerdicts([true, true], 12.5).pass, true, "real motion passes through");
+  1165→});
+  1166→
+  1167→await test("stockFrameTimes: interior samples, degenerate clips", () => {
+  1168→  eq(JSON.stringify(stockFrameTimes(6)), JSON.stringify([1.5, 3, 4.5]), "interior thirds of a 6s clip");
+  1169→  eq(JSON.stringify(stockFrameTimes(1)), JSON.stringify([0.5]), "sub-1.5s clip → one mid-frame");
+  1170→  eq(JSON.stringify(stockFrameTimes(0)), "[]", "no duration → no samples");
+  1171→});
+  1172→
+  1173→await test("THE NEVER-SILENT PIN: verdict pass implies ≥2 passing frames", () => {
+  1174→  const combos: (boolean | null)[][] = [];
+  1175→  for (const a of [true, false, null])
+  1176→    for (const b of [true, false, null])
+  1177→      for (const c of [true, false, null]) combos.push([a, b, c]);
+  1178→  for (const verdicts of combos) {
+  1179→    const out = combineFrameVerdicts(verdicts, null);
+  1180→    const passes = verdicts.filter((v) => v === true).length;
+  1181→    const fails = verdicts.filter((v) => v === false).length;
+  1182→    if (out.pass === true) ok(passes >= 2, `[${verdicts}] pass requires ≥2 passing frames`);
+  1183→    if (out.pass === false) ok(fails >= 2, `[${verdicts}] reject requires ≥2 failing frames (no single-frame rejects)`);
+  1184→  }
+  1185→});
+  1186→
+  1187→suiteStart("S89 stock ref round-trip — verification survives the doc");
+  1188→
+  1189→await test("parseScenes: new ref fields survive (license, providerId, verification)", async () => {
+  1190→  const { parseScenes } = await import("../src/lib/tubeforge/story.ts");
+  1191→  const scene = {
+  1192→    index: 1,
+  1193→    title: "T",
+  1194→    narration: "n",
+  1195→    visual: "v",
+  1196→    stock: {
+  1197→      source: "pexels",
+  1198→      file: "stock-01.mp4",
+  1199→      query: "q",
+  1200→      credit: "c",
+  1201→      pageUrl: "u",
+  1202→      durationSec: 9,
+  1203→      license: "Pexels License",
+  1204→      providerId: "1234",
+  1205→      width: 1920,
+  1206→      height: 1080,
+  1207→      verification: {
+  1208→        framesSampled: 3,
+  1209→        framesPassed: 2,
+  1210→        motionDelta: 4.25,
+  1211→        verdict: "pass",
+  1212→        summary: "relevant content in multiple sampled frames",
+  1213→      },
+  1214→    },
+  1215→  };
+  1216→  const parsed = parseScenes(JSON.stringify([scene]));
+  1217→  const ref = parsed[0].stock;
+  1218→  ok(ref != null, "ref parses");
+  1219→  eq(ref?.license, "Pexels License", "license survives");
+  1220→  eq(ref?.providerId, "1234", "providerId survives (the dedupe key)");
+  1221→  eq(ref?.width, 1920, "width survives");
+  1222→  eq(ref?.verification?.verdict, "pass", "verification verdict survives");
+  1223→  eq(ref?.verification?.framesPassed, 2, "frame evidence survives");
+  1224→  approx(ref?.verification?.motionDelta ?? 0, 4.25, 1e-9, "motion delta survives");
+  1225→});
+  1226→
+  1227→await test("parseScenes: legacy ref still valid; bad verification drops the record only", async () => {
+  1228→  const { parseScenes } = await import("../src/lib/tubeforge/story.ts");
+  1229→  const legacy = {
+  1230→    index: 1,
+  1231→    title: "T",
+  1232→    narration: "n",
+  1233→    visual: "v",
+  1234→    stock: { source: "pixabay", file: "stock-01.mp4", query: "q", credit: "c", pageUrl: "u", durationSec: 9 },
+  1235→  };
+  1236→  const parsed = parseScenes(JSON.stringify([legacy]));
+  1237→  ok(parsed[0].stock != null, "the legacy ref parses");
+  1238→  ok(parsed[0].stock?.license === undefined && parsed[0].stock?.verification === undefined, "new fields absent, not faked");
+  1239→
+  1240→  const badVerdict = {
+  1241→    ...legacy,
+  1242→    stock: { ...legacy.stock, verification: { verdict: "definitely", framesSampled: -3 } },
+  1243→  };
+  1244→  const parsed2 = parseScenes(JSON.stringify([badVerdict]));
+  1245→  ok(parsed2[0].stock != null, "the REF survives a bad verification record");
+  1246→  ok(parsed2[0].stock?.verification === undefined, "the bad RECORD is dropped");
+  1247→});
+  1248→
+  1249→suiteStart("S90 provider selection — priors, weights, the unknown-pricing law");
+  1250→
+  1251→/** The suite's finder: a missing provider row is a test bug, fail loudly. */
+  1252→function must<T>(arr: T[], pred: (x: T) => boolean, id: string): T {
+  1253→  const hit = arr.find(pred);
+  1254→  if (!hit) throw new Error(`no scored row for "${id}"`);
+  1255→  return hit;
+  1256→}
+  1257→
+  1258→await test("priorsComplete: every registry provider has a priors row (the sync law)", () => {
+  1259→  ok(priorsComplete(), "PROVIDERS_BY_CAPABILITY and the priors table are in lockstep");
+  1260→  eq(priorsFor("chat", "zai").quality, 0.82, "a known row reads back");
+  1261→});
+  1262→
+  1263→await test("THE UNKNOWN-PRICING LAW: an unpriced paid model is NEVER free", () => {
+  1264→  const cheap = nominalChatCostMicroUsd("gpt-6-luna");
+  1265→  const unknown = nominalChatCostMicroUsd("mystery-model-xyz");
+  1266→  ok(cheap > 0, "a priced cheap model has a real cost");
+  1267→  ok(unknown > cheap, `the unknown model prices ABOVE the cheapest known (${unknown} > ${cheap})`);
+  1268→  const scored = scoreProviders("chat", {
+  1269→    models: { openai: "mystery-model-xyz" },
+  1270→    observations: {},
+  1271→    weights: { ...DEFAULT_WEIGHTS },
+  1272→  });
+  1273→  const openai = must(scored, (s) => s.provider === "openai", "openai");
+  1274→  eq(openai.costBasis, "priced", "chat cost basis is the priced registry");
+  1275→  ok(openai.estimatedCostMicroUsd != null && openai.estimatedCostMicroUsd > 0, "the estimate is non-zero");
+  1276→  ok(openai.factors.cost < 1, "the cost factor is below free");
+  1277→  ok(/NEVER free/.test(openai.reasons[0]), `the reason states the law (${openai.reasons[0]})`);
+  1278→});
+  1279→
+  1280→await test("free-by-design: the gateway, locals and keyless providers cost 1.0", () => {
+  1281→  const chat = scoreProviders("chat", { models: {}, observations: {}, weights: { ...DEFAULT_WEIGHTS } });
+  1282→  eq(must(chat, (s) => s.provider === "zai", "zai").costBasis, "free", "zai chat: the bundled gateway");
+  1283→  const image = scoreProviders("image", { models: {}, observations: {}, weights: { ...DEFAULT_WEIGHTS } });
+  1284→  eq(must(image, (s) => s.provider === "pollinations", "pollinations").costBasis, "free", "pollinations: no key, free tier");
+  1285→  const tts = scoreProviders("tts", { models: {}, observations: {}, weights: { ...DEFAULT_WEIGHTS } });
+  1286→  eq(must(tts, (s) => s.provider === "selfhost", "selfhost").costBasis, "free", "selfhost: your own machine");
+  1287→});
+  1288→
+  1289→await test("non-chat paid without observations: cost unknown, cautious, never free", () => {
+  1290→  const tts = scoreProviders("tts", { models: {}, observations: {}, weights: { ...DEFAULT_WEIGHTS } });
+  1291→  const el = must(tts, (s) => s.provider === "elevenlabs", "elevenlabs");
+  1292→  eq(el.costBasis, "unknown", "no pricing registry, no observed spend");
+  1293→  eq(el.factors.cost, UNKNOWN_COST_FACTOR, "the cautious factor (below the middle)");
+  1294→  ok(/never assumed free/.test(el.reasons[0]), "the reason says it");
+  1295→});
+  1296→
+  1297→await test("non-chat paid WITH observations: the org's own spend is the truth", () => {
+  1298→  const tts = scoreProviders("tts", {
+  1299→    models: {},
+  1300→    observations: { elevenlabs: { calls: 10, okCount: 10, meanLatencyMs: 4000, meanCostMicroUsd: 3000 } },
+  1301→    weights: { ...DEFAULT_WEIGHTS },
+  1302→  });
+  1303→  const el = must(tts, (s) => s.provider === "elevenlabs", "elevenlabs");
+  1304→  eq(el.costBasis, "observed", "observed beats unknown");
+  1305→  eq(el.estimatedCostMicroUsd, 3000, "the observed mean cost");
+  1306→  ok(Math.abs(el.factors.cost - costEfficiencyFromMicroUsd(3000)) < 1e-9, "the factor follows the curve");
+  1307→  ok(/10 calls · 100% ok/.test(el.reasons[1] ?? ""), `the evidence line renders (${el.reasons[1]})`);
+  1308→});
+  1309→
+  1310→await test("reliabilityBlend: prior when silent, data-dominated when loud", () => {
+  1311→  eq(reliabilityBlend(undefined), RELIABILITY_PRIOR, "no data → the neutral prior");
+  1312→  const half = reliabilityBlend({ calls: 100, okCount: 50, meanLatencyMs: null, meanCostMicroUsd: null });
+  1313→  ok(Math.abs(half - 0.519) < 0.01, `100 calls at 50% ok → ~0.52 (data dominates, got ${half.toFixed(3)})`);
+  1314→  const rough = reliabilityBlend({ calls: 5, okCount: 0, meanLatencyMs: null, meanCostMicroUsd: null });
+  1315→  ok(Math.abs(rough - 0.45) < 0.01, "5 failing calls cannot sink below the prior floor");
+  1316→});
+  1317→
+  1318→await test("latencyBlend: 2s ≈ perfect, 30s ≈ floor, no data → prior", () => {
+  1319→  const fast = latencyBlend({ calls: 20, okCount: 20, meanLatencyMs: 2000, meanCostMicroUsd: null }, 0.5);
+  1320→  ok(fast > 0.85, `2s mean → near-perfect (got ${fast.toFixed(2)})`);
+  1321→  const slow = latencyBlend({ calls: 20, okCount: 20, meanLatencyMs: 30000, meanCostMicroUsd: null }, 0.5);
+  1322→  ok(slow < 0.2, `30s mean → near-floor (got ${slow.toFixed(2)})`);
+  1323→  eq(latencyBlend(undefined, 0.7), 0.7, "no data → the prior latency");
+  1324→});
+  1325→
+  1326→await test("the weighted sum: exact arithmetic on the default weights (zai chat)", () => {
+  1327→  const scored = scoreProviders("chat", {
+  1328→    models: {},
+  1329→    observations: {},
+  1330→    weights: { ...DEFAULT_WEIGHTS },
+  1331→  });
+  1332→  const zai = must(scored, (s) => s.provider === "zai", "zai");
+  1333→  // 30×.82 + 25×.90 + 20×1 + 10×.80 + 15×.85 = 87.85 → 88
+  1334→  eq(zai.score, 88, "quality 30/100, reliability prior 25, free cost 20, latency prior 10, fit 15");
+  1335→});
+  1336→
+  1337→await test("configurable weights flip the recommendation", () => {
+  1338→  const costOnly = { quality: 0, reliability: 0, cost: 100, latency: 0, fit: 0 };
+  1339→  const byCost = scoreProviders("chat", { models: {}, observations: {}, weights: costOnly });
+  1340→  eq(byCost[0].score, 100, "cost-only: every free provider ties at 100");
+  1341→  eq(byCost[0].provider, "lmstudio", "the tie breaks by provider id asc (lmstudio < ollama < zai)");
+  1342→  ok(["lmstudio", "ollama", "zai"].includes(byCost[2].provider), "the three free-by-design providers lead");
+  1343→  const qualityOnly = { quality: 100, reliability: 0, cost: 0, latency: 0, fit: 0 };
+  1344→  const byQuality = scoreProviders("chat", { models: {}, observations: {}, weights: qualityOnly });
+  1345→  eq(byQuality[0].provider, "anthropic", "quality-only: the highest quality prior leads");
+  1346→  eq(byQuality[0].score, 92, "score mirrors the prior × 100");
+  1347→});
+  1348→
+  1349→await test("parseScoreWeights: tolerant, clamped, all-zero-safe", () => {
+  1350→  eq(parseScoreWeights(null), DEFAULT_WEIGHTS, "null → defaults");
+  1351→  eq(parseScoreWeights("junk"), DEFAULT_WEIGHTS, "junk → defaults");
+  1352→  eq(parseScoreWeights({ quality: 500 }), { ...DEFAULT_WEIGHTS, quality: 100 }, "clamped to 100");
+  1353→  eq(parseScoreWeights({ quality: 0, reliability: 0, cost: 0, latency: 0, fit: 0 }), DEFAULT_WEIGHTS, "all-zero (a comparison killer) → defaults");
+  1354→  eq(
+  1355→    parseScoreWeights({ quality: 60, bad: 5 }),
+  1356→    { ...DEFAULT_WEIGHTS, quality: 60 },
+  1357→    "valid keys merge over the defaults; junk keys ignored"
+  1358→  );
+  1359→});
+  1360→
+  1361→await test("deterministic order + the configured flag", () => {
+  1362→  const ctx = { models: { openai: "gpt-6-luna" }, observations: {}, weights: { ...DEFAULT_WEIGHTS } };
+  1363→  const a = scoreProviders("chat", ctx).map((s) => s.provider);
+  1364→  const b = scoreProviders("chat", ctx).map((s) => s.provider);
+  1365→  eq(a.join(","), b.join(","), "the same context always produces the same order");
+  1366→  const scored = scoreProviders("chat", ctx);
+  1367→  ok(must(scored, (s) => s.provider === "openai", "openai").configured, "the user's pick is marked configured");
+  1368→  ok(!must(scored, (s) => s.provider === "zai", "zai").configured, "others are not");
+  1369→});
+  1370→
+  1371→suiteStart("S91 production board — the honest derivation table");
+  1372→
+  1373→const noJobs = { script: false, storyboard: false, stock: false, voiceover: false, render: false, whiteboard: false, qc: false, upload: false };
+  1374→
+  1375→await test("deriveBoardStages: the five states, running outranks done", () => {
+  1376→  const board = deriveBoardStages({
+  1377→    sceneCount: 8, wordCount: 900, boardDone: 8, boardTotal: 8, stockMatched: 3,
+  1378→    hasVoiceover: true, voiceSource: "tts", hasVideo: true, hasPreview: false,
+  1379→    renderMode: "kenburns", hasShort: false, youtubeUrl: null,
+  1380→    running: { ...noJobs },
+  1381→  });
+  1382→  eq(board.script.state, "done", "scenes exist → script done");
+  1383→  eq(board.script.detail, "8 scenes", "the scene count is the detail");
+  1384→  eq(board.storyboard.state, "done", "8/8 art → done");
+  1385→  eq(board.storyboard.detail, "8/8 · 3 stock", "stock coverage rides the detail");
+  1386→  eq(board.voiceover.state, "done", "hasVoiceover → done");
+  1387→  eq(board.render.state, "done", "hasVideo → done");
+  1388→  eq(board.render.detail, "kenburns", "the mode is the detail");
+  1389→  eq(board.publish.state, "missing", "not published → missing");
+  1390→
+  1391→  const live = deriveBoardStages({
+  1392→    sceneCount: 8, wordCount: 900, boardDone: 8, boardTotal: 8, stockMatched: 3,
+  1393→    hasVoiceover: true, voiceSource: "tts", hasVideo: true, hasPreview: false,
+  1394→    renderMode: "kenburns", hasShort: false, youtubeUrl: "https://youtu.be/x",
+  1395→    running: { ...noJobs, render: true, upload: true },
+  1396→  });
+  1397→  eq(live.render.state, "running", "a render in flight outranks the finished artifact");
+  1398→  eq(live.publish.state, "running", "an upload in flight outranks the live URL");
+  1399→});
+  1400→
+  1401→await test("deriveBoardStages: partial is first-class, never rounded up", () => {
+  1402→  const board = deriveBoardStages({
+  1403→    sceneCount: 8, wordCount: 900, boardDone: 3, boardTotal: 8, stockMatched: 0,
+  1404→    hasVoiceover: false, voiceSource: "tts", hasVideo: false, hasPreview: true,
+  1405→    renderMode: "animate", hasShort: true, youtubeUrl: null,
+  1406→    running: { ...noJobs },
+  1407→  });
+  1408→  eq(board.storyboard.state, "partial", "3/8 art is partial");
+  1409→  eq(board.storyboard.detail, "3/8", "the honest fraction");
+  1410→  eq(board.voiceover.state, "missing", "no voiceover");
+  1411→  eq(board.render.state, "preview", "preview-only render is its own state");
+  1412→  eq(board.publish.state, "partial", "a short without a publish is partial work, not done");
+  1413→});
+  1414→
+  1415→await test("deriveBoardStages: classic script format + the empty video", () => {
+  1416→  const classic = deriveBoardStages({
+  1417→    sceneCount: 0, wordCount: 1200, boardDone: 0, boardTotal: 1, stockMatched: 0,
+  1418→    hasVoiceover: true, voiceSource: "custom", hasVideo: false, hasPreview: false,
+  1419→    renderMode: "kenburns", hasShort: false, youtubeUrl: null,
+  1420→    running: { ...noJobs },
+  1421→  });
+  1422→  eq(classic.script.state, "done", "words count for the classic format");
+  1423→  eq(classic.script.detail, "1200 words", "the word count is the detail");
+  1424→  eq(classic.voiceover.detail, "custom audio", "the custom source is visible");
+  1425→
+  1426→  const empty = deriveBoardStages({
+  1427→    sceneCount: 0, wordCount: 0, boardDone: 0, boardTotal: 1, stockMatched: 0,
+  1428→    hasVoiceover: false, voiceSource: "tts", hasVideo: false, hasPreview: false,
+  1429→    renderMode: "kenburns", hasShort: false, youtubeUrl: null,
+  1430→    running: { ...noJobs },
+  1431→  });
+  1432→  eq(empty.script.state, "missing", "nothing written → missing, never faked");
+  1433→  eq(empty.publish.state, "missing", "nothing published");
+  1434→});
+  1435→
+  1436→await test("deriveCheckpoints: each gate claims exactly its evidence", () => {
+  1437→  const cps = deriveCheckpoints({
+  1438→    directorState: "proposed", hasQcReport: true, qcOverrideAt: null,
+  1439→    hasVerifyReport: false, hasConsistencyReport: true, criticVerdict: "hold",
+  1440→  });
+  1441→  const by = (id: string) => {
+  1442→    const hit = cps.find((c) => c.id === id);
+  1443→    if (!hit) throw new Error(`no checkpoint ${id}`);
+  1444→    return hit;
+  1445→  };
+  1446→  eq(by("director").state, "attention", "a proposed plan needs the human");
+  1447→  eq(by("qc").state, "pending", "a report nobody reviewed is pending, not ok");
+  1448→  eq(by("verify").state, "na", "never run → n/a, not pending");
+  1449→  eq(by("consistency").state, "ok", "checked");
+  1450→  eq(by("critic").state, "attention", "a hold needs the human");
+  1451→
+  1452→  const approved = deriveCheckpoints({
+  1453→    directorState: "approved", hasQcReport: true, qcOverrideAt: "2026-11-11T00:00:00.000Z",
+  1454→    hasVerifyReport: true, hasConsistencyReport: true, criticVerdict: "ship",
+  1455→  });
+  1456→  for (const c of approved) eq(c.state, "ok", `${c.label} all green`);
+  1457→
+  1458→  const never = deriveCheckpoints({
+  1459→    directorState: null, hasQcReport: false, qcOverrideAt: null,
+  1460→    hasVerifyReport: false, hasConsistencyReport: false, criticVerdict: null,
+  1461→  });
+  1462→  eq(never.filter((c) => c.state === "na").length, 4, "absent evidence is n/a, never alarming");
+  1463→  eq(never.find((c) => c.id === "director")?.state, "pending", "the plan gate is the one 'not yet' that reads as pending");
+  1464→});
+  1465→
+  1466→suiteStart("S92 narration pacing — measured, not guessed");
+  1467→
+  1468→await test("countWords: English tokens; CJK counts per character", () => {
+  1469→  eq(countWords("The market crashed overnight."), 4, "whitespace tokens");
+  1470→  eq(countWords("市场 崩盘"), 4, "two CJK words = FOUR characters (each is a word-equivalent)");
+  1471→  eq(countWords("市场 crash"), 3, "two CJK chars + one English word");
+  1472→});
+  1473→
+  1474→await test("sceneWpm: the real arithmetic, honest nulls", () => {
+  1475→  eq(sceneWpm("word ".repeat(155), 60), 155, "155 words in 60s = 155 wpm");
+  1476→  eq(sceneWpm("hello world", 30), null, "too little speech → unmeasured, never a fake pace");
+  1477→  eq(sceneWpm("some narration here", null), null, "no WAV yet → unmeasured");
+  1478→  eq(sceneWpm("some narration here", 0.1), null, "a sub-0.2s blip is not a measurement");
+  1479→});
+  1480→
+  1481→await test("the bands + the roles", () => {
+  1482→  eq(bandOf(120), "dragging", "under 130 drags");
+  1483→  eq(bandOf(150), "measured", "the body sweet spot");
+  1484→  eq(bandOf(190), "brisk", "the hook zone");
+  1485→  eq(bandOf(230), "rushed", "over 205 falls apart");
+  1486→  eq(bandOf(null), "unmeasured", "no data is no verdict");
+  1487→  eq(sceneRole(1, 8, false), "hook", "scene 1 is the hook");
+  1488→  eq(sceneRole(5, 8, true), "hook", "a re-hook scene is a hook");
+  1489→  eq(sceneRole(8, 8, false), "close", "the last scene is the close");
+  1490→  eq(sceneRole(4, 8, false), "body", "the middle is body");
+  1491→  eq(sceneRole(1, 1, false), "hook", "a single scene reads as its hook");
+  1492→});
+  1493→
+  1494→await test("pacingProposal: speaks the plan's own vocabulary", () => {
+  1495→  const drag = pacingProposal(100, "body"); // target 155, factor 1.55
+  1496→  eq(drag.verdict, "dragging", "100 wpm body drags");
+  1497→  eq(drag.hint, "fast", "the proposal is the plan hint: fast");
+  1498→  eq(drag.projectedWpm, 112, "fast = ×1.12 → 112 wpm projected");
+  1499→
+  1500→  const rush = pacingProposal(250, "close"); // target 150, factor 0.6
+  1501→  eq(rush.hint, "slow", "a rushed close asks for slow");
+  1502→  eq(rush.projectedWpm, 220, "slow = ×0.88 → 220 projected");
+  1503→
+  1504→  const fine = pacingProposal(155, "body"); // target 155, factor 1.0
+  1505→  eq(fine.hint, "normal", "in-band → normal (never churn a good scene)");
+  1506→  eq(fine.projectedWpm, 155, "normal delivers the same pace");
+  1507→
+  1508→  const briskHook = pacingProposal(190, "hook"); // target 185, factor 0.97
+  1509→  eq(briskHook.hint, "normal", "a brisk hook FITS its role — no churn");
+  1510→  eq(pacingProposal(null, "body").hint, "normal", "unmeasured → the no-op hint");
+  1511→});
+  1512→
+  1513→await test("pacingReport: the summary a creator reads first", () => {
+  1514→  // words chosen so wpm is exact: words/duration×60
+  1515→  const scenes = [
+  1516→    { index: 1, narration: "word ".repeat(190), rehook: false }, // 190 wpm, hook → brisk fits
+  1517→    { index: 2, narration: "word ".repeat(120), rehook: false }, // 120 wpm, body → dragging
+  1518→    { index: 3, narration: "word ".repeat(160), rehook: false }, // 160 wpm, body → measured
+  1519→    { index: 4, narration: "word ".repeat(210), rehook: false }, // 210 wpm, close → rushed
+  1520→  ];
+  1521→  const { perScene, summary } = pacingReport(scenes, [60, 60, 60, 60]);
+  1522→  eq(summary.measured, 4, "all four measured");
+  1523→  eq(summary.unmeasured, 0, "no gaps");
+  1524→  eq(summary.medianWpm, 175, "(160+190)/2 = 175");
+  1525→  eq(summary.inBand, 2, "brisk-hook fits + measured-body fits; drag and rush do not");
+  1526→  eq(summary.toSpeedUp, 1, "one dragging scene");
+  1527→  eq(summary.toSlowDown, 1, "one rushed scene");
+  1528→  eq(perScene[0].role, "hook", "roles derived");
+  1529→  eq(perScene[3].role, "close", "the last scene is the close");
+  1530→
+  1531→  // A missing WAV lands as unmeasured, excluded from the stats honestly.
+  1532→  const gapped = pacingReport(scenes, [60, 60, null, 60]);
+  1533→  eq(gapped.summary.unmeasured, 1, "scene 3 has no WAV → unmeasured");
+  1534→  eq(gapped.summary.measured, 3, "only real WAVs measure");
+  1535→  eq(gapped.summary.medianWpm, 190, "median of [190,120,210]");
+  1536→  ok(Number.isFinite(WPM_BANDS.draggingUnder) && ROLE_TARGETS.hook > ROLE_TARGETS.body, "the documented bands are sane");
+  1537→});
+  1538→
+  1539→suiteStart("S93 character rig — a motion source, not a pipeline");
+  1540→
+  1541→await test("rigEligible: portrait-backed cast scenes only", () => {
+  1542→  const v = { characterId: "c1" };
+  1543→  const c = { hasPortrait: true };
+  1544→  ok(rigEligible(v, c, true), "cast + portrait + host scene → eligible");
+  1545→  ok(!rigEligible(v, c, false), "non-host scenes keep their own motion (the continuity law)");
+  1546→  ok(!rigEligible({ characterId: null }, c, true), "no cast → never");
+  1547→  ok(!rigEligible(v, { hasPortrait: false }, true), "no portrait → nothing to rig");
+  1548→});
+  1549→
+  1550→await test("rigPlan: the breath cycle — alternation, focal, amplitude", () => {
+  1551→  const p = rigPlan({ sceneIndex: 1, durationSec: 8, intensity: 12, motionMode: "smart" });
+  1552→  eq(p.sceneType, "emotional", "cast scenes classify emotional (the hostInScene law)");
+  1553→  eq(p.move, "Rig breath cycle", "the label says what moves");
+  1554→  ok(p.shots.length >= 2, `at least one in/out pair (${p.shots.length} beats for 8s)`);
+  1555→  for (let i = 0; i < p.shots.length; i++) {
+  1556→    eq(p.shots[i].kind, i % 2 === 0 ? "zoom-in" : "zoom-out", `beat ${i} alternates`);
+  1557→    eq(p.shots[i].focal.x, RIG_HEAD_FOCAL.x, "the face band focal (upper-center)");
+  1558→    eq(p.shots[i].focal.y, RIG_HEAD_FOCAL.y, "0.35 — where a portrait head sits");
+  1559→    eq(p.shots[i].travel, 0, "pure zoom breathing, no pan drift");
+  1560→  }
+  1561→  // intensity 12 → amp clamp(12*0.25=3, 1, 3) = 3 → z endpoints 1.03 / 1.0
+  1562→  eq(p.shots[0].zStart, 1, "breath starts at rest");
+  1563→  approx(p.shots[0].zEnd, 1.03, 1e-9, "12% intensity → the rig's 3% ceiling");
+  1564→  approx(p.shots[1].zStart, 1.03, 1e-9, "the out-beat reverses from the peak");
+  1565→  approx(p.shots[1].zEnd, 1, 1e-9, "and returns to rest");
+  1566→});
+  1567→
+  1568→await test("rigPlan: amplitude clamps + the stillness contract", () => {
+  1569→  const gentle = rigPlan({ sceneIndex: 1, durationSec: 6, intensity: 4, motionMode: "smart" });
+  1570→  approx(gentle.shots[0].zEnd, 1.01, 1e-9, "4% intensity → 1% breath (the floor)");
+  1571→  const maxed = rigPlan({ sceneIndex: 1, durationSec: 6, intensity: 30, motionMode: "smart" });
+  1572→  approx(maxed.shots[0].zEnd, 1.03, 1e-9, "30% intensity still caps at the rig's 3% — a whisper, never a punch");
+  1573→  const still = rigPlan({ sceneIndex: 1, durationSec: 6, intensity: 0, motionMode: "smart" });
+  1574→  eq(still.shots.length, 1, "the stillness contract: one hold");
+  1575→  eq(still.shots[0].kind, "hold", "the user's stillness outranks the rig");
+  1576→  eq(still.move, "Rig hold (stillness contract)", "the label says why");
+  1577→  const off = rigPlan({ sceneIndex: 1, durationSec: 6, intensity: 12, motionMode: "off" });
+  1578→  eq(off.shots[0].kind, "hold", "motion mode off → hold, whatever the intensity");
+  1579→});
+  1580→
+  1581→await test("rigPlan: the pacing hint modulates the breath rate", () => {
+  1582→  const normal = rigPlan({ sceneIndex: 1, durationSec: 10, intensity: 12, motionMode: "smart" });
+  1583→  const fast = rigPlan({ sceneIndex: 1, durationSec: 10, intensity: 12, motionMode: "smart", pacingHint: "fast" });
+  1584→  const slow = rigPlan({ sceneIndex: 1, durationSec: 10, intensity: 12, motionMode: "smart", pacingHint: "slow" });
+  1585→  approx(normal.shots[0].sec, 2.2, 1e-6, "the resting breath rate");
+  1586→  approx(fast.shots[0].sec, 2.2 / 1.12, 1e-6, "a fast hint breathes quicker (module E's factor)");
+  1587→  approx(slow.shots[0].sec, 2.2 / 0.88, 1e-6, "a slow hint breathes deeper");
+  1588→});
+  1589→
+  1590→suiteStart("S94 3D engine — the contract laws");
+  1591→
+  1592→await test("the doc laws: junk refused, version refused, byte-stable round-trip", () => {
+  1593→  eq(parseScene3D(null), null, "absent → absent");
+  1594→  eq(parseScene3D("{not json"), null, "junk → null (never throws)");
+  1595→  eq(
+  1596→    parseScene3D(JSON.stringify({ version: 99, objects: [{ id: "a", kind: "box", position: [0, 0, 0], material: {} }], camera: { keyframes: [{ t: 0, position: [0, 0, 6], lookAt: [0, 0, 0] }] } })),
+  1597→    null,
+  1598→    "an unknown version reads as absent and is never overwritten"
+  1599→  );
+  1600→  eq(parseScene3D(JSON.stringify({ version: 1, objects: [], camera: { keyframes: [] } })), null, "no objects or keyframes → null (an empty scene is not a scene)");
+  1601→
+  1602→  const doc = scaffoldScene3D("pin fixture", { fps: 24, durationSec: 3 });
+  1603→  const s1 = serializeScene3D(doc);
+  1604→  const back = parseScene3D(s1);
+  1605→  ok(back != null, "the scaffold parses");
+  1606→  eq(back && serializeScene3D(back), s1, "serialize → parse → serialize is byte-identical");
+  1607→  eq(serializeScene3D(scaffoldScene3D("pin fixture", { fps: 24, durationSec: 3 })), s1, "the scaffold is deterministic (same input → same bytes)");
+  1608→});
+  1609→
+  1610→await test("the scaffold derives geometry from the aspect; the object vocabulary clamps", () => {
+  1611→  const wide = scaffoldScene3D("w", { aspect: "16:9" });
+  1612→  const tall = scaffoldScene3D("w", { aspect: "9:16" });
+  1613→  eq(wide.width, 1280, "16:9 → 1280");
+  1614→  eq(tall.height, 1280, "9:16 → 1280 tall");
+  1615→  ok(wide.objects.length >= 4, "ground + centerpiece + satellites");
+  1616→  const doc = scaffoldScene3D("c");
+  1617→  const fovClamped = parseScene3D(
+  1618→    serializeScene3D({ ...doc, camera: { ...doc.camera, fov: 500 } })
+  1619→  );
+  1620→  eq(fovClamped?.camera.fov, 110, "fov clamps at 110");
+  1621→  const junkObj = parseScene3D(
+  1622→    serializeScene3D({
+  1623→      ...doc,
+  1624→      objects: [...doc.objects, { id: "bad", kind: "teapot", position: [0, 0, 0], material: { color: "not-a-color" } } as never],
+  1625→    })
+  1626→  );
+  1627→  ok(junkObj != null && !junkObj.objects.some((o) => o.id === "bad"), "an invalid object kind drops individually — the rest survive");
+  1628→  const noLights = parseScene3D(serializeScene3D({ ...doc, lights: [] }));
+  1629→  ok(noLights != null && noLights.lights.length === 1 && noLights.lights[0].kind === "ambient", "THE NEVER-SILENT LAW: no lights → the ambient default (never a black render)");
+  1630→});
+  1631→
+  1632→await test("cameraAt: exact interpolation, clamped ends", () => {
+  1633→  const keys = [
+  1634→    { t: 0, position: [0, 0, 6], lookAt: [0, 0, 0] },
+  1635→    { t: 1, position: [4, 2, 6], lookAt: [0, 1, 0] },
+  1636→  ];
+  1637→  approx(camera3dAt(keys, 0.5).position[0], 2, 1e-9, "the midpoint interpolates");
+  1638→  approx(camera3dAt(keys, 0.25).position[1], 0.5, 1e-9, "the quarter point");
+  1639→  approx(camera3dAt(keys, 0).position[0], 0, 1e-9, "t=0 → the first keyframe");
+  1640→  approx(camera3dAt(keys, 1).position[0], 4, 1e-9, "t=1 → the last keyframe");
+  1641→  approx(camera3dAt(keys, -5).position[0], 0, 1e-9, "outside → clamped, never extrapolated");
+  1642→  approx(camera3dAt(keys, 2).position[0], 4, 1e-9, "beyond → clamped");
+  1643→  approx(camera3dAt([{ t: 0, position: [1, 2, 3], lookAt: [0, 0, 0] }], 0.7).position[2], 3, 1e-9, "a single keyframe holds");
+  1644→});
+  1645→
+  1646→// ---------------------------------------------------------------------------
+  1647→// S134 (PAE-6) — the 3D object animation adapter: keyframes on the
+  1648→// NORMALIZED scene clock (the lane's own convention), evaluated through
+  1649→// the cameraAt shape per channel. Two adapters, one vocabulary. Pins: the
+  1650→// static passthrough (byte-identity), per-channel tracks with clamped
+  1651→// holds, the tolerant parse (junk keys drop, sort, cap), the strict
+  1652→// serialize round-trip, and the render-path equality for keyless scenes.
+  1653→// ---------------------------------------------------------------------------
+  1654→
+  1655→await test("S134 objectAt: keyless objects mirror their static fields exactly (the render-path byte-identity)", async () => {
+  1656→  const { objectAt, scaffoldScene3D } = await import("../src/lib/tubeforge/scene3d");
+  1657→  const doc = scaffoldScene3D("s134 pin");
+  1658→  for (const t of [0, 0.13, 0.5, 0.77, 1]) {
+  1659→    for (const o of doc.objects) {
+  1660→      const s = objectAt(o, t);
+  1661→      eq(s.id, o.id, "the id rides");
+  1662→      eq(s.position, o.position, `position passthrough at t=${t}`);
+  1663→      eq(s.rotation, o.rotation, `rotation passthrough at t=${t}`);
+  1664→      eq(s.scale, o.scale, `scale passthrough at t=${t}`);
+  1665→    }
+  1666→  }
+  1667→});
+  1668→
+  1669→await test("S134 objectAt: per-channel tracks, clamped holds, independent channels", async () => {
+  1670→  const { objectAt } = await import("../src/lib/tubeforge/scene3d");
+  1671→  const obj = {
+  1672→    id: "orb",
+  1673→    kind: "sphere" as const,
+  1674→    position: [0, 1, 0] as [number, number, number],
+  1675→    material: { color: "#888888" },
+  1676→    keyframes: [
+  1677→      { t: 0.25, position: [-2, 1, 0] as [number, number, number] },
+  1678→      { t: 0.75, position: [2, 1, 0] as [number, number, number] },
+  1679→      { t: 0.5, rotation: [0, Math.PI, 0] as [number, number, number] },
+  1680→    ],
+  1681→  };
+  1682→  const pre = objectAt(obj, 0.1);
+  1683→  eq(pre.position, [-2, 1, 0], "before the first position key → the first key's value holds");
+  1684→  eq(pre.rotation, [0, Math.PI, 0], "the rotation track holds its single key before it too (per-channel clamping)");
+  1685→  const mid = objectAt(obj, 0.5);
+  1686→  approx(mid.position[0], 0, 1e-9, "the position track lerps across its OWN keys only");
+  1687→  approx(mid.rotation[1], Math.PI, 1e-9, "the rotation track rides its single key");
+  1688→  const post = objectAt(obj, 0.9);
+  1689→  eq(post.position, [2, 1, 0], "after the last key → the last value holds");
+  1690→  approx(post.rotation[1], Math.PI, 1e-9, "the rotation holds past its last key too");
+  1691→  const scaled = objectAt({ ...obj, scale: [1, 1, 1] as [number, number, number], keyframes: [...obj.keyframes, { t: 0, scale: [2, 2, 2] as [number, number, number] }] }, 0.5);
+  1692→  approx(scaled.scale[0], 2, 1e-9, "a single scale key HOLDS everywhere — the static field is only the no-keys fallback");
+  1693→  const spanned = objectAt({ ...obj, scale: [1, 1, 1] as [number, number, number], keyframes: [...obj.keyframes, { t: 0, scale: [2, 2, 2] as [number, number, number] }, { t: 1, scale: [1, 1, 1] as [number, number, number] }] }, 0.5);
+  1694→  approx(spanned.scale[0], 1.5, 1e-9, "edge keys span the whole clock: 2→1 lerps to 1.5 at the midpoint");
+  1695→});
+  1696→
+  1697→await test("S134 the tolerant keyframes read + the strict write round-trip", async () => {
+  1698→  const { parseScene3D, serializeScene3D, scaffoldScene3D } = await import("../src/lib/tubeforge/scene3d");
+  1699→  const doc = scaffoldScene3D("s134 parse");
+  1700→  const keyed = {
+  1701→    ...doc,
+  1702→    objects: [
+  1703→      {
+  1704→        ...doc.objects[0],
+  1705→        keyframes: [
+  1706→          { t: 0.5, position: [1, 2, 3], junk: "field" },
+  1707→          { t: "junk" },
+  1708→          { t: 0.9 },
+  1709→          { t: 5, position: [0, 0, 0] },
+  1710→          { t: 0.1, position: [4, 5, 6] },
+  1711→        ],
+  1712→      },
+  1713→      ...doc.objects.slice(1),
+  1714→    ],
+  1715→  };
+  1716→  const parsed = parseScene3D(serializeScene3D(keyed));
+  1717→  ok(parsed != null, "the keyed scene parses");
+  1718→  const keys = parsed?.objects[0]?.keyframes;
+  1719→  eq(keys?.length, 3, "junk keys drop individually; the channel-less key drops");
+  1720→  eq(keys?.[0]?.t, 0.1, "the keys sort by t");
+  1721→  eq(keys?.[1]?.t, 0.5, "the mid key survives with its position");
+  1722→  eq(keys?.[2]?.t, 1, "the clamped t=5 → 1");
+  1723→  ok(keys?.[0] && !("junk" in keys[0]), "unknown key fields drop (strict write)");
+  1724→  const s1 = serializeScene3D(parsed);
+  1725→  eq(serializeScene3D(parseScene3D(s1)), s1, "serialize → parse → serialize is byte-identical with keyframes");
+  1726→  const plain = parseScene3D(serializeScene3D(doc));
+  1727→  ok(plain?.objects.every((o) => o.keyframes === undefined), "keyless objects never invent keyframes");
+  1728→  const written = JSON.parse(serializeScene3D(plain)) as { objects: Array<Record<string, unknown>> };
+  1729→  ok(written.objects.every((o) => !("keyframes" in o)), "a keyless scene writes no object-level keyframes (byte-identity; the camera's keyframes field is unrelated)");
+  1730→});
+  1731→
+  1732→suiteStart("art dedupe — dHash perceptual hashing");
+  1733→
+  1734→await test("dHash pure: flat frame → zero hash, self-distance 0", () => {
+  1735→  const flat = Buffer.alloc(72, 128);
+  1736→  const h = dHashFromGray9x8(flat);
+  1737→  eq(h, "0000000000000000", "no horizontal gradient → all bits 0");
+  1738→  ok(h != null, "flat frame hashes");
+  1739→  eq(hammingDistanceHex(h, h), 0, "distance to self = 0");
+  1740→});
+  1741→
+  1742→await test("dHash pure: ramps and noise behave like the duplicate detector needs", () => {
+  1743→  const ramp = Buffer.alloc(72);
+  1744→  for (let y = 0; y < 8; y++)
+  1745→    for (let x = 0; x < 9; x++) ramp[y * 9 + x] = Math.min(255, x * 30); // bright→right
+  1746→  const hRamp = dHashFromGray9x8(ramp);
+  1747→  eq(hRamp, "ffffffffffffffff", "strict horizontal ramp → all bits 1");
+  1748→
+  1749→  const vert = Buffer.alloc(72);
+  1750→  for (let y = 0; y < 8; y++)
+  1751→    for (let x = 0; x < 9; x++) vert[y * 9 + x] = Math.min(255, y * 40); // top→bottom ramp
+  1752→  const hVert = dHashFromGray9x8(vert);
+  1753→  eq(hVert, "0000000000000000", "vertical ramp has no horizontal gradient");
+  1754→  ok(hRamp != null && hVert != null, "ramp hashes exist");
+  1755→  eq(hammingDistanceHex(hRamp, hVert), 64, "opposite patterns → max distance");
+  1756→
+  1757→  const noisy = Buffer.from(ramp);
+  1758→  noisy[5] += 4;
+  1759→  noisy[40] += 3; // imperceptible noise
+  1760→  const hNoisy = dHashFromGray9x8(noisy);
+  1761→  ok(hNoisy != null, "noisy ramp hashes");
+  1762→  const d = hammingDistanceHex(hRamp, hNoisy);
+  1763→  ok(d != null && d <= 9, `tiny noise stays under the duplicate threshold (got ${d})`);
+  1764→});
+  1765→
+  1766→await test("hamming: symmetric, malformed input rejected, closest picks min", () => {
+  1767→  eq(hammingDistanceHex("0f0f0f0f0f0f0f0f", "f0f0f0f0f0f0f0f0"), 64, "complement → 64");
+  1768→  eq(
+  1769→    hammingDistanceHex("0f0f0f0f0f0f0f0f", "f0f0f0f0f0f0f0f0"),
+  1770→    hammingDistanceHex("f0f0f0f0f0f0f0f0", "0f0f0f0f0f0f0f0f"),
+  1771→    "symmetric"
+  1772→  );
+  1773→  eq(hammingDistanceHex("zzzz", "00"), null, "malformed → null");
+  1774→  eq(
+  1775→    closestPriorDistance("0000000000000000", new Map([[1, "0000000000000000"], [2, "ffffffffffffffff"]])),
+  1776→    0,
+  1777→    "closest prior is the minimum"
+  1778→  );
+  1779→  eq(closestPriorDistance("0000000000000000", new Map()), null, "no priors → null");
+  1780→});
+  1781→
+  1782→await test("imageHash: real ffmpeg roundtrip + directory scan", async () => {
+  1783→  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tf-hash-"));
+  1784→  const a = path.join(dir, "a.png");
+  1785→  const c = path.join(dir, "c.png");
+  1786→  try {
+  1787→    await execFileAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=s=640x360:d=1", "-frames:v", "1", a]);
+  1788→    await execFileAsync("ffmpeg", ["-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "smptebars=s=640x360:d=1", "-frames:v", "1", c]);
+  1789→    const [ha, hc] = await Promise.all([imageHash(a), imageHash(c)]);
+  1790→    ok(ha != null, "testsrc hash exists");
+  1791→    ok(hc != null, "smptebars hash exists");
+  1792→    ok(/^[0-9a-f]{16}$/.test(ha), "testsrc hashes to 16 hex chars");
+  1793→    const dist = hammingDistanceHex(ha, hc);
+  1794→    ok(dist != null && dist > 0, `different patterns differ (${dist} bits)`);
+  1795→
+  1796→    fs.copyFileSync(a, path.join(dir, "scene-01.png"));
+  1797→    fs.copyFileSync(c, path.join(dir, "scene-02.png"));
+  1798→    fs.writeFileSync(path.join(dir, "voiceover.wav"), Buffer.alloc(10)); // ignored
+  1799→    const hashes = await sceneImageHashes(dir);
+  1800→    eq(hashes.size, 2, "only scene-*.png files hashed");
+  1801→    ok(hashes.has(1) && hashes.has(2), "scene indices parsed from file names");
+  1802→    const excluded = await sceneImageHashes(dir, { exclude: 1 });
+  1803→    eq(excluded.size, 1, "exclude drops the requested scene");
+  1804→  } finally {
+  1805→    fs.rmSync(dir, { recursive: true, force: true });
+  1806→  }
+  1807→});
+  1808→
+  1809→// ---------- stage 2: at-rest encryption (crypto.ts) ----------
+  1810→
+  1811→process.env.TUBEFORGE_ENCRYPTION_KEY ||= "unit-test-key-0123456789abcdef";
+  1812→
+  1813→await test("crypto: AES-256-GCM roundtrip + distinct IVs", async () => {
+  1814→  const { encryptSecret, decryptSecret, isEncryptedSecret } = await import(
+  1815→    "../src/lib/tubeforge/crypto.ts"
+  1816→  );
+  1817→  const plain = "sk-live-abcdef-0123456789-SECRET";
+  1818→  const a = encryptSecret(plain);
+  1819→  const b = encryptSecret(plain);
+  1820→  ok(a.startsWith("v1."), "ciphertext carries the v1. prefix");
+  1821→  ok(a !== b, "identical plaintexts produce different ciphertexts (per-record IV)");
+  1822→  eq(decryptSecret(a), plain, "roundtrip returns the plaintext");
+  1823→  ok(isEncryptedSecret(a), "isEncryptedSecret recognizes the format");
+  1824→  ok(!isEncryptedSecret(plain), "plaintext is not misdetected as encrypted");
+  1825→});
+  1826→
+  1827→await test("crypto: tampering is detected (GCM tag)", async () => {
+  1828→  const { encryptSecret, decryptSecret } = await import("../src/lib/tubeforge/crypto.ts");
+  1829→  const stored = encryptSecret("another-secret");
+  1830→  const parts = stored.split(".");
+  1831→  const flipped = parts[2].startsWith("A") ? "B" + parts[2].slice(1) : "A" + parts[2].slice(1);
+  1832→  const tampered = [parts[0], parts[1], flipped, parts[3]].join(".");
+  1833→  let threw = false;
+  1834→  try {
+  1835→    decryptSecret(tampered);
+  1836→  } catch {
+  1837→    threw = true;
+  1838→  }
+  1839→  ok(threw, "a flipped ciphertext byte must fail the auth tag, not return garbage");
+  1840→});
+  1841→
+  1842→await test("crypto: sha256Hex is deterministic and format-stable", async () => {
+  1843→  const { sha256Hex } = await import("../src/lib/tubeforge/crypto.ts");
+  1844→  eq(
+  1845→    sha256Hex("token"),
+  1846→    sha256Hex("token"),
+  1847→    "same token hashes identically"
+  1848→  );
+  1849→  eq(sha256Hex("token").length, 64, "SHA-256 hex digest length");
+  1850→  ok(sha256Hex("a") !== sha256Hex("b"), "different tokens hash differently");
+  1851→});
+  1852→
+  1853→// ===========================================================================
+  1854→// Stage 3 — durable queue, timeout matrix, streaming ZIP, structured logging
+  1855→// ===========================================================================
+  1856→
+  1857→suiteStart("Stage 3 — provider timeout matrix (D-09)");
+  1858→
+  1859→await test("timeoutFor: defaults per capability; env overrides apply; invalid env ignored", async () => {
+  1860→  const http = await import("../src/lib/tubeforge/providers/http.ts");
+  1861→  http.resetTimeoutOverrides();
+  1862→  eq(http.timeoutFor("generic"), 300_000, "generic keeps the old universal 300s");
+  1863→  eq(http.timeoutFor("youtube-api"), 30_000, "YouTube metadata fails fast");
+  1864→  eq(http.timeoutFor("youtube-upload"), 3_600_000, "resumable upload gets an hour");
+  1865→  ok(http.timeoutFor("video-gen") > http.timeoutFor("llm"), "video-gen outlives llm");
+  1866→
+  1867→  process.env.TUBEFORGE_TIMEOUT_YOUTUBE_API = "12345";
+  1868→  http.resetTimeoutOverrides();
+  1869→  eq(http.timeoutFor("youtube-api"), 12_345, "env override wins after reset");
+  1870→
+  1871→  process.env.TUBEFORGE_TIMEOUT_YOUTUBE_API = "50"; // below the 1s floor
+  1872→  http.resetTimeoutOverrides();
+  1873→  eq(http.timeoutFor("youtube-api"), 30_000, "invalid env falls back to default");
+  1874→  delete process.env.TUBEFORGE_TIMEOUT_YOUTUBE_API;
+  1875→  http.resetTimeoutOverrides();
+  1876→  eq(http.timeoutFor("youtube-api"), 30_000, "clean env keeps the default");
+  1877→});
+  1878→
+  1879→await test("timeoutFor: no timeout regression — youtube.ts routes through the matrix", async () => {
+  1880→  // Static sanity (the audited D-09 fix): every outbound YouTube HTTP call
+  1881→  // goes through ytFetch — the only raw fetch( left is ytFetch's own body.
+  1882→  const src = fs.readFileSync(
+  1883→    new URL("../src/lib/tubeforge/youtube.ts", import.meta.url),
+  1884→    "utf8"
+  1885→  );
+  1886→  const rawFetch = src
+  1887→    .split("\n")
+  1888→    .filter((l) => /\bfetch\(/.test(l) && !/ytFetch\(/.test(l)).length;
+  1889→  eq(rawFetch, 1, "exactly one raw fetch remains — inside ytFetch itself");
+  1890→  const viaHelper = (src.match(/ytFetch\(/g) ?? []).length;
+  1891→  eq(viaHelper, 10, "9 call sites + the helper definition all route through ytFetch (S72's retention fetch joined the matrix)");
+  1892→});
+  1893→
+  1894→suiteStart("Stage 3 — queue claim liveness (multi-process safety)");
+  1895→
+  1896→await test("claimIsStale: null claim, own claim, dead pid, live foreign pid, prior incarnation", async () => {
+  1897→  // SAFETY: this test process must NEVER claim real jobs from the live DB.
+  1898→  // Belt AND suspenders: the env var covers the case where queue.ts has not
+  1899→  // been imported yet (module init reads it); setClaiming(false) covers the
+  1900→  // case where an EARLIER test (e.g. the captions suite, whose import chain
+  1901→  // captions → story → jobs → queue) already initialized the module.
+  1902→  process.env.TUBEFORGE_NO_CLAIM = "1";
+  1903→  const queue = await import("../src/lib/tubeforge/queue.ts");
+  1904→  queue.setClaiming(false);
+  1905→  queue.initQueue("web");
+  1906→  const myId = queue.queueWorkerId();
+  1907→  ok(queue.queueStats().noClaim, "test process runs in enqueue-only mode");
+  1908→
+  1909→  ok(queue.claimIsStale(null), "unclaimed running rows (Stage 1/2 legacy) are stale");
+  1910→  ok(!queue.claimIsStale(myId), "my own live claim is never stale");
+  1911→
+  1912→  // A provably dead pid (pid 2^22 is never allocated on Linux).
+  1913→  ok(queue.claimIsStale("worker:4194304:zzz"), "dead claimer pid is stale");
+  1914→
+  1915→  // A LIVE foreign process (pid 1 — init, always alive) is never stale.
+  1916→  ok(!queue.claimIsStale("worker:1:zzz"), "live foreign claimer is not stale");
+  1917→
+  1918→  // Previous incarnation of THIS process (same role + pid, older boot).
+  1919→  const [role, pid] = myId.split(":");
+  1920→  const priorIncarnation = `${role}:${pid}:olderboot`;
+  1921→  ok(queue.claimIsStale(priorIncarnation), "same pid + older boot = previous incarnation, stale");
+  1922→
+  1923→  delete process.env.TUBEFORGE_NO_CLAIM;
+  1924→});
+  1925→
+  1926→suiteStart("Stage 3 — streaming ZIP (D-24)");
+  1927→
+  1928→await test("streamZip: entries round-trip byte-exact (store + deflate + text/binary)", async () => {
+  1929→  const { streamZip } = await import("../src/lib/tubeforge/zip.ts");
+  1930→  const { Readable } = await import("node:stream");
+  1931→
+  1932→  const textData = Buffer.from("script.txt content\n".repeat(50), "utf8");
+  1933→  const binData = Buffer.from(Array.from({ length: 4096 }, (_, i) => (i * 7 + 13) & 0xff));
+  1934→  const emptyFile = Buffer.alloc(0);
+  1935→
+  1936→  const entries = [
+  1937→    { name: "pkg/script.txt", stream: () => Readable.from([textData]), method: 8 as const },
+  1938→    { name: "pkg/final.mp4", stream: () => Readable.from([binData]), method: 0 as const },
+  1939→    { name: "pkg/voiceover.wav", stream: () => Readable.from([binData, textData]), method: 8 as const },
+  1940→    { name: "pkg/empty.txt", stream: () => Readable.from([emptyFile]), method: 8 as const },
+  1941→  ];
+  1942→
+  1943→  const webStream = streamZip(entries);
+  1944→  const nodeStream = Readable.fromWeb(webStream as never);
+  1945→  const chunks: Buffer[] = [];
+  1946→  for await (const chunk of nodeStream) chunks.push(Buffer.from(chunk));
+  1947→  const zipped = Buffer.concat(chunks);
+  1948→
+  1949→  // Structural sanity: EOCD signature + entry count.
+  1950→  const eocd = zipped.subarray(zipped.length - 22);
+  1951→  eq(eocd.readUInt32LE(0), 0x06054b50, "EOCD signature present");
+  1952→  eq(eocd.readUInt16LE(8), 4, "central directory counts 4 entries");
+  1953→
+  1954→  // Data descriptor signatures present for every entry (streaming layout).
+  1955→  let descriptors = 0;
+  1956→  for (let i = 0; i + 4 <= zipped.length; i++) {
+  1957→    if (zipped.readUInt32LE(i) === 0x08074b50) descriptors++;
+  1958→  }
+  1959→  eq(descriptors, 4, "one data descriptor per streamed entry");
+  1960→});
+  1961→
+  1962→await test("streamZip: python zipfile validates the archive and extracts exact bytes", async () => {
+  1963→  const { streamZip, zipMethodFor } = await import("../src/lib/tubeforge/zip.ts");
+  1964→  const { Readable } = await import("node:stream");
+  1965→
+  1966→  eq(zipMethodFor("final.mp4"), 0, "mp4 is stored (already compressed)");
+  1967→  eq(zipMethodFor("subtitles.srt"), 8, "srt is deflated");
+  1968→
+  1969→  const payloadA = Buffer.from("line one\nline two\n".repeat(200), "utf8");
+  1970→  const payloadB = Buffer.from(Array.from({ length: 100_000 }, (_, i) => (i * 31) & 0xff));
+  1971→
+  1972→  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tf-zip-"));
+  1973→  const zipPath = path.join(dir, "pkg.zip");
+  1974→  const webStream = streamZip([
+  1975→    { name: "pkg/subtitles.srt", stream: () => Readable.from([payloadA]), method: 8 },
+  1976→    { name: "pkg/final.mp4", stream: () => Readable.from([payloadB]), method: 0 },
+  1977→  ]);
+  1978→  const out = fs.createWriteStream(zipPath);
+  1979→  await new Promise<void>((resolve, reject) => {
+  1980→    Readable.fromWeb(webStream as never).pipe(out).on("finish", resolve).on("error", reject);
+  1981→  });
+  1982→
+  1983→  // python3's zipfile is an independent implementation — the honest arbiter.
+  1984→  const script = `
+  1985→import zipfile, hashlib, sys
+  1986→z = zipfile.ZipFile("${zipPath}")
+  1987→bad = z.testzip()
+  1988→if bad is not None: sys.exit("crc failed: " + bad)
+  1989→a = z.read("pkg/subtitles.srt")
+  1990→b = z.read("pkg/final.mp4")
+  1991→print(hashlib.sha256(a).hexdigest(), hashlib.sha256(b).hexdigest())
+  1992→`;
+  1993→  const { stdout } = await execFileAsync("python3", ["-c", script]);
+  1994→  const [hashA, hashB] = stdout.trim().split(" ");
+  1995→  const sha = (buf: Buffer) => crypto.createHash("sha256").update(buf).digest("hex");
+  1996→  eq(hashA, sha(payloadA), "deflated entry extracts byte-exact (python-verified CRC)");
+  1997→  eq(hashB, sha(payloadB), "stored entry extracts byte-exact (python-verified CRC)");
+  1998→
+  1999→  fs.rmSync(dir, { recursive: true, force: true });
+  2000→});
+
+[showing lines 1-2000 of 19643; use offset=2001 with limit to continue reading]

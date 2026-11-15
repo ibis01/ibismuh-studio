@@ -1,0 +1,689 @@
+     1→// clip-ops.ts — server-side clip operations for the Timeline Studio (S1).
+     2→//
+     3→// The Timeline Studio edits a PROJECTION of the video row; split / duplicate
+     4→// / delete are the three operations that change the ROW itself, so they are
+     5→// server operations — the client cannot invent a scene. The contract:
+     6→//
+     7→//   SPLIT      the scene's narration is divided at the playhead (word-
+     8→//              proportional inside the narration span). Both halves are
+     9→//              RE-VOICED with the same voice + speed the video already uses
+    10→//              (a fresh read, like any studio pick-up), the storyboard art
+    11→//              file is copied to the new index, and the timeline doc gains
+    12→//              the second half with a "cut" at the razor point. The old
+    13→//              scene keeps the first half; a fresh index is minted for the
+    14→//              second (indices are identity, never reused or renumbered).
+    15→//
+    16→//   DUPLICATE  an exact copy of the scene — same narration, same caption,
+    17→//              art file and WAV file copied byte-for-byte (no re-read).
+    18→//              The new seam into the copy is a "cut".
+    19→//
+    20→//   DELETE     removes the scene from the row + the timeline doc. Asset
+    21→//              files are left on disk (keyed by index, never reused — an
+    22→//              orphaned scene-XX.wav/png is inert).
+    23→//
+    24→// All three rebuild the merged voiceover.wav from the CURRENT per-scene
+    25→// WAVs in row order and update the row's audioDuration, so exports and
+    26→// future assemblies stay honest. The render needs no changes: it already
+    27→// gates on per-scene art + WAV existence and maps timeline durations onto
+    28→// the row by POSITION (sceneOrder semantics unchanged).
+    29→//
+    30→// Guards kept honest (each mirrors a render gate or a pipeline invariant):
+    31→//   • timeline doc must exist (assemble first);
+    32→//   • renderMode "slides" is refused (the deck is designed from the script
+    33→//     as a whole — a row split there needs a deck regeneration, a different
+    34→//     pipeline);
+    35→//   • split requires the built-in per-scene voiceover (voiceSource "tts") —
+    36→//     a custom-audio video would get its halves re-read by the WRONG voice;
+    37→//     duplicate/delete only copy or drop existing cuts, so they stay legal;
+    38→//   • split/duplicate require the target scene's art + WAV on disk (the
+    39→//     same files the render gate demands);
+    40→//   • delete keeps at least one scene.
+    41→//
+    42→// Pure pieces (narration split, doc surgery) are exported for unit tests;
+    43→// the orchestrator is the only part that touches fs / TTS / storage.
+    44→
+    45→import fs from "fs";
+    46→import path from "path";
+    47→import type { Video } from "@prisma/client";
+    48→import { videoDir, splitForTts } from "./ai";
+    49→import { aiCall } from "./budget";
+    50→import { mergeWavs, wavDurationSec } from "./wav";
+    51→import { ttsSynthesize } from "./providers/tts";
+    52→import { sceneImageFile, sceneWavFile, parseScenes } from "./story";
+    53→import {
+    54→  parseTimeline,
+    55→  type AssembledTimeline,
+    56→  type TimelineScene,
+    57→} from "./timeline";
+    58→import { LEAD_SEC, TAIL_SEC, MIN_SEG_SEC } from "./render";
+    59→import * as storage from "./storage";
+    60→import type { Scene } from "./types";
+    61→
+    62→const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    63→
+    64→// ---------- pure: narration split ----------
+    65→
+    66→/** Split a narration so the word boundary lands nearest the playhead.
+    67→ *
+    68→ * The scene window is narration-locked: the WAV occupies [LEAD, LEAD+wav]
+    69→ * of the natural window (render.ts adds the lead/tail padding). atSec is
+    70→ * the playhead's LOCAL time in the scene window. We map it into the
+    71→ * narration's interior span and split the word list proportionally.
+    72→ * Returns null when the playhead sits outside the speakable span (too
+    73→ * close to the scene's head or tail) or the narration has < 2 words. */
+    74→export function splitNarrationAt(
+    75→  narration: string,
+    76→  wavDurSec: number,
+    77→  atSec: number
+    78→): { first: string; second: string } | null {
+    79→  const words = narration.trim().split(/\s+/).filter(Boolean);
+    80→  if (words.length < 2) return null;
+    81→  const wav = Number.isFinite(wavDurSec) && wavDurSec > 0 ? wavDurSec : 0;
+    82→  if (wav <= 0) return null;
+    83→  // Speakable interior: leave a 0.25s guard on each side of the read so a
+    84→  // split never lands on a leading breath or the last syllable's decay.
+    85→  const lo = LEAD_SEC + 0.25;
+    86→  const hi = Math.max(lo + 0.1, LEAD_SEC + wav - 0.25);
+    87→  const t = Number.isFinite(atSec) ? atSec : -1;
+    88→  if (t < lo || t > hi) return null;
+    89→  const f = (t - lo) / (hi - lo); // 0..1
+    90→  const k = Math.min(words.length - 1, Math.max(1, Math.round(f * words.length)));
+    91→  return { first: words.slice(0, k).join(" "), second: words.slice(k).join(" ") };
+    92→}
+    93→
+    94→// ---------- pure: timeline doc surgery ----------
+    95→
+    96→const cloneEntry = (s: TimelineScene): TimelineScene => JSON.parse(JSON.stringify(s));
+    97→
+    98→/** Walk the doc in order, recomputing start/end/total from durationSec —
+    99→ * the same shape the studio's recomputeTimes uses. 2-dp like timeline.ts. */
+   100→function recomputeDocTimes(doc: AssembledTimeline): AssembledTimeline {
+   101→  let cursor = 0;
+   102→  const scenes = doc.scenes.map((s) => {
+   103→    const dur = Math.max(0.5, s.durationSec);
+   104→    const startSec = Math.round(cursor * 100) / 100;
+   105→    const endSec = Math.round((cursor + dur) * 100) / 100;
+   106→    cursor += dur;
+   107→    return { ...s, startSec, endSec, durationSec: Math.round(dur * 100) / 100 };
+   108→  });
+   109→  return {
+   110→    ...doc,
+   111→    scenes,
+   112→    sceneCount: scenes.length,
+   113→    totalDurationSec: Math.round(cursor * 100) / 100,
+   114→    generatedAt: new Date().toISOString(),
+   115→  };
+   116→}
+   117→
+   118→function docPosition(doc: AssembledTimeline, sceneIndex: number): number {
+   119→  const p = doc.scenes.findIndex((s) => s.index === sceneIndex);
+   120→  if (p < 0) throw new Error(`The timeline doc has no scene ${sceneIndex}`);
+   121→  return p;
+   122→}
+   123→
+   124→/** Split entry `sceneIndex` into (sceneIndex → first half) + (nextIndex →
+   125→ * second half, "cut" at the razor point). Other entries keep their edits;
+   126→ * only their windows shift. */
+   127→export function applySplitToDoc(
+   128→  doc: AssembledTimeline,
+   129→  sceneIndex: number,
+   130→  nextIndex: number,
+   131→  durA: number,
+   132→  durB: number,
+   133→  secondNarration: string
+   134→): AssembledTimeline {
+   135→  const p = docPosition(doc, sceneIndex);
+   136→  const old = cloneEntry(doc.scenes[p]);
+   137→  const A = { ...old, durationSec: durA, transitionOut: "cut" };
+   138→  const B: TimelineScene = {
+   139→    ...old,
+   140→    index: nextIndex,
+   141→    narration: secondNarration,
+   142→    durationSec: durB,
+   143→    transitionIn: "cut",
+   144→    // A fresh scene has no director-plan entry; the camera preview is
+   145→    // index-based and the plan lookups simply miss. Copying `shot` would
+   146→    // claim a plan that does not reference this index.
+   147→    shot: null,
+   148→    caption: null,
+   149→  };
+   150→  const scenes = [...doc.scenes.slice(0, p), A, B, ...doc.scenes.slice(p + 1)];
+   151→  return recomputeDocTimes({ ...doc, scenes });
+   152→}
+   153→
+   154→/** Remove the entry; the remaining windows close the gap. */
+   155→export function applyDeleteToDoc(doc: AssembledTimeline, sceneIndex: number): AssembledTimeline {
+   156→  const p = docPosition(doc, sceneIndex);
+   157→  const scenes = [...doc.scenes.slice(0, p), ...doc.scenes.slice(p + 1)];
+   158→  return recomputeDocTimes({ ...doc, scenes });
+   159→}
+   160→
+   161→/** Duplicate the entry right after itself; the new seam is a "cut". */
+   162→export function applyDuplicateToDoc(
+   163→  doc: AssembledTimeline,
+   164→  sceneIndex: number,
+   165→  nextIndex: number,
+   166→  durC: number
+   167→): AssembledTimeline {
+   168→  const p = docPosition(doc, sceneIndex);
+   169→  const old = cloneEntry(doc.scenes[p]);
+   170→  const A = { ...old, transitionOut: "cut" };
+   171→  const C = { ...old, index: nextIndex, transitionIn: "cut", durationSec: durC };
+   172→  const scenes = [...doc.scenes.slice(0, p), A, C, ...doc.scenes.slice(p + 1)];
+   173→  return recomputeDocTimes({ ...doc, scenes });
+   174→}
+   175→
+   176→/** Re-voice one entry in place: new narration text + the fresh read's window.
+   177→ *  The edited caption (if any) stays — the studio keeps it in sync. */
+   178→export function applyRevoiceToDoc(
+   179→  doc: AssembledTimeline,
+   180→  sceneIndex: number,
+   181→  narration: string,
+   182→  durSec: number
+   183→): AssembledTimeline {
+   184→  const p = docPosition(doc, sceneIndex);
+   185→  const old = cloneEntry(doc.scenes[p]);
+   186→  const next = { ...old, narration, durationSec: durSec };
+   187→  const scenes = [...doc.scenes.slice(0, p), next, ...doc.scenes.slice(p + 1)];
+   188→  return recomputeDocTimes({ ...doc, scenes });
+   189→}
+   190→
+   191→// ---------- helpers ----------
+   192→
+   193→/** The render's segment formula for a scene WAV (render.ts wavDurations). */
+   194→export function sceneSegmentSec(wavDurSec: number): number {
+   195→  return Math.max(wavDurSec + LEAD_SEC + TAIL_SEC, MIN_SEG_SEC);
+   196→}
+   197→
+   198→function wavDurationOf(buf: Buffer): number {
+   199→  return mergeWavs([buf]).durationSec;
+   200→}
+   201→
+   202→/** Read a scene WAV's duration straight off disk (render gate equivalent). */
+   203→function readSceneWav(dir: string, index: number): { buf: Buffer; durSec: number } {
+   204→  const p = path.join(dir, sceneWavFile(index));
+   205→  const buf = fs.readFileSync(p);
+   206→  return { buf, durSec: wavDurationOf(buf) };
+   207→}
+   208→
+   209→/** Per-scene read durations for the timeline studio's razor guard — the
+   210→ *  client's speakableSpan becomes an EXACT mirror of splitNarrationAt when it
+   211→ *  knows the real WAV length (trims make doc-based estimates drift). Missing
+   212→ *  or unparseable WAVs are simply absent from the map; the client falls back
+   213→ *  to its estimate for those scenes. Reads local files only — a few ms. */
+   214→export function sceneWavDurations(dir: string, indices: number[]): Record<number, number> {
+   215→  const out: Record<number, number> = {};
+   216→  for (const index of indices) {
+   217→    try {
+   218→      const p = path.join(dir, sceneWavFile(index));
+   219→      const dur = wavDurationSec(fs.readFileSync(p));
+   220→      if (dur > 0) out[index] = Math.round(dur * 100) / 100;
+   221→    } catch {
+   222→      /* absent — not an error: scenes without a read yet are not razor targets */
+   223→    }
+   224→  }
+   225→  return out;
+   226→}
+   227→
+   228→/** One scene's narration → scene-XX.wav (mirror of generateSceneVoiceovers'
+   229→ * per-scene loop: same chunking, same pacing sleeps, same retry posture). */
+   230→async function synthSceneWav(
+   231→  dir: string,
+   232→  index: number,
+   233→  narration: string,
+   234→  voice: string,
+   235→  speed: number
+   236→): Promise<number> {
+   237→  const chunks = splitForTts(narration);
+   238→  if (chunks.length === 0) throw new Error(`Scene ${index} has nothing to speak`);
+   239→  const buffers: Buffer[] = [];
+   240→  for (const [j, chunk] of chunks.entries()) {
+   241→    if (j > 0) await sleep(2000); // pace chunks within a scene too
+   242→    const buffer = await aiCall(
+   243→      "tts",
+   244→      `scene ${index} tts (${chunk.length} chars)`,
+   245→      () => ttsSynthesize({ input: chunk, voice, speed }),
+   246→      { attempts: 6, baseDelayMs: 8000 } // outlast rate-limit storms
+   247→    );
+   248→    if (buffer.length < 44) throw new Error(`Scene ${index} TTS returned empty audio`);
+   249→    buffers.push(buffer);
+   250→  }
+   251→  const merged = mergeWavs(buffers);
+   252→  fs.writeFileSync(path.join(dir, sceneWavFile(index)), merged.buffer);
+   253→  return merged.durationSec;
+   254→}
+   255→
+   256→/** Rebuild + publish the merged voiceover.wav from the CURRENT per-scene
+   257→ * WAVs in row order (the artifact the export/download routes read). Returns
+   258→ * the new total duration, or null when any WAV is missing — in that case
+   259→ * nothing is touched: the previous merged artifact + audioDuration stay
+   260→ * (a partial merge would silently truncate the export). */
+   261→async function syncVoiceover(
+   262→  videoId: string,
+   263→  dir: string,
+   264→  rowScenes: Scene[]
+   265→): Promise<number | null> {
+   266→  const buffers: Buffer[] = [];
+   267→  for (const s of rowScenes) {
+   268→    const p = path.join(dir, sceneWavFile(s.index));
+   269→    if (!fs.existsSync(p)) return null;
+   270→    buffers.push(fs.readFileSync(p));
+   271→  }
+   272→  if (buffers.length === 0) return null;
+   273→  const merged = mergeWavs(buffers);
+   274→  await storage.put(`${videoId}/voiceover.wav`, merged.buffer);
+   275→  return merged.durationSec;
+   276→}
+   277→
+   278→// ---------- orchestrator ----------
+   279→
+   280→export type ClipOpAction = "split" | "duplicate" | "delete" | "revoice";
+   281→
+   282→export interface ClipOpBody {
+   283→  action: ClipOpAction;
+   284→  sceneIndex: number;
+   285→  /** Split only: the playhead's LOCAL time inside the scene window. */
+   286→  atSec?: number;
+   287→  /** Revoice only: the edited narration (the surgical new read). */
+   288→  narration?: string;
+   289→}
+   290→
+   291→export interface ClipOpResult {
+   292→  rowScenes: Scene[];
+   293→  timeline: AssembledTimeline;
+   294→  sceneOrder: number[];
+   295→  /** Updated row.audioDuration (null = keep the current value). */
+   296→  audioDuration: number | null;
+   297→  /** The scene index the client should select afterwards. */
+   298→  newIndex: number | null;
+   299→  /** One-line activity message for the toast. */
+   300→  activity: string;
+   301→}
+   302→
+   303→export async function performClipOp(video: Video, body: ClipOpBody): Promise<ClipOpResult> {
+   304→  if (video.format !== "story")
+   305→    throw new Error("Clip editing is for scene-format videos");
+   306→  if (video.renderMode === "slides")
+   307→    throw new Error("Clip editing is not available for slideshow videos (the deck is designed from the script as a whole)");
+   308→  const doc = parseTimeline(video.timeline);
+   309→  if (!doc) throw new Error("Assemble the timeline first");
+   310→
+   311→  const dir = videoDir(video.id);
+   312→  const rowScenes = parseScenes(video.scenes);
+   313→  if (rowScenes.length === 0) throw new Error("No scenes — generate the script first");
+   314→  const p = rowScenes.findIndex((s) => s.index === body.sceneIndex);
+   315→  if (p < 0) throw new Error(`No scene ${body.sceneIndex}`);
+   316→  const target = rowScenes[p];
+   317→  const nextIndex = rowScenes.reduce((m, s) => Math.max(m, s.index), 0) + 1;
+   318→
+   319→  const artPath = path.join(dir, sceneImageFile(target.index));
+   320→  const wavPath = path.join(dir, sceneWavFile(target.index));
+   321→
+   322→  if (body.action === "split") {
+   323→    if (video.voiceSource !== "tts")
+   324→      throw new Error("Splitting re-voices both halves with the studio voice — re-attach the per-scene voiceover first (this video uses custom audio)");
+   325→    if (typeof body.atSec !== "number" || !Number.isFinite(body.atSec))
+   326→      throw new Error("atSec is required for split");
+   327→    if (!fs.existsSync(artPath))
+   328→      throw new Error(`Scene ${target.index} has no storyboard image — generate the storyboard first`);
+   329→    if (!fs.existsSync(wavPath))
+   330→      throw new Error(`Scene ${target.index} has no voiceover — generate the voiceover first`);
+   331→
+   332→    const wavDur = readSceneWav(dir, target.index).durSec;
+   333→    const halves = splitNarrationAt(target.narration, wavDur, body.atSec);
+   334→    if (!halves)
+   335→      throw new Error("Move the playhead into the middle of the narration — the edges of a scene cannot be split");
+   336→
+   337→    // Row: first half keeps the index + everything else; second half mints
+   338→    // a fresh index right after it, same art prompt/camera/mood (the same
+   339→    // SHOT continues — that is what a razor cut means), caption goes to the
+   340→    // first half only (the copy would double-burn the same line).
+   341→    rowScenes[p] = { ...target, narration: halves.first };
+   342→    const second: Scene = { ...target, index: nextIndex, narration: halves.second, caption: "" };
+   343→    rowScenes.splice(p + 1, 0, second);
+   344→
+   345→    // Assets: same frame continues (byte copy); both halves re-read.
+   346→    fs.copyFileSync(artPath, path.join(dir, sceneImageFile(nextIndex)));
+   347→    const wavDurA = await synthSceneWav(dir, target.index, halves.first, video.voice, video.ttsSpeed);
+   348→    const wavDurB = await synthSceneWav(dir, nextIndex, halves.second, video.voice, video.ttsSpeed);
+   349→
+   350→    const nextDoc = applySplitToDoc(
+   351→      doc,
+   352→      target.index,
+   353→      nextIndex,
+   354→      sceneSegmentSec(wavDurA),
+   355→      sceneSegmentSec(wavDurB),
+   356→      halves.second
+   357→    );
+   358→
+   359→    const merged = await syncVoiceover(video.id, dir, rowScenes);
+   360→    return {
+   361→      rowScenes,
+   362→      timeline: nextDoc,
+   363→      sceneOrder: rowScenes.map((s) => s.index),
+   364→      audioDuration: merged,
+   365→      newIndex: nextIndex,
+   366→      activity: `Scene ${target.index} split at ${body.atSec.toFixed(1)}s — both halves re-voiced (${halves.first.split(/\s+/).length}/${halves.second.split(/\s+/).length} words)${merged === null ? "; voiceover.wav not rebuilt (a scene WAV is missing)" : ""}`,
+   367→    };
+   368→  }
+   369→
+   370→  if (body.action === "duplicate") {
+   371→    if (!fs.existsSync(artPath))
+   372→      throw new Error(`Scene ${target.index} has no storyboard image — generate the storyboard first`);
+   373→    if (!fs.existsSync(wavPath))
+   374→      throw new Error(`Scene ${target.index} has no voiceover — generate the voiceover first`);
+   375→
+   376→    // Row: an exact copy (same caption — the user edits the copy after).
+   377→    const copy: Scene = { ...target, index: nextIndex };
+   378→    rowScenes.splice(p + 1, 0, copy);
+   379→
+   380→    // Assets: byte copies — the duplicate says the same words, same read.
+   381→    fs.copyFileSync(artPath, path.join(dir, sceneImageFile(nextIndex)));
+   382→    fs.copyFileSync(wavPath, path.join(dir, sceneWavFile(nextIndex)));
+   383→    const wavDur = readSceneWav(dir, nextIndex).durSec;
+   384→
+   385→    const nextDoc = applyDuplicateToDoc(doc, target.index, nextIndex, sceneSegmentSec(wavDur));
+   386→
+   387→    const merged = await syncVoiceover(video.id, dir, rowScenes);
+   388→    return {
+   389→      rowScenes,
+   390→      timeline: nextDoc,
+   391→      sceneOrder: rowScenes.map((s) => s.index),
+   392→      audioDuration: merged,
+   393→      newIndex: nextIndex,
+   394→      activity: `Scene ${target.index} duplicated as scene ${nextIndex} (${sceneSegmentSec(wavDur).toFixed(1)}s, same read)${merged === null ? "; voiceover.wav not rebuilt (a scene WAV is missing)" : ""}`,
+   395→    };
+   396→  }
+   397→
+   398→  // S3 — transcript editing: a surgical re-voice. The row's narration, the
+   399→  // scene WAV, the doc's narration + window and the merged voiceover all
+   400→  // move in ONE server update — the same lockstep contract as split.
+   401→  if (body.action === "revoice") {
+   402→    if (video.voiceSource !== "tts")
+   403→      throw new Error("Re-voicing reads with the studio voice — re-attach the per-scene voiceover first (this video uses custom audio)");
+   404→    const narration = (body.narration ?? "").trim();
+   405→    if (!narration) throw new Error("The edited narration is empty");
+   406→    if (narration === target.narration.trim())
+   407→      throw new Error("The narration is unchanged — nothing to re-voice");
+   408→
+   409→    // Row first (the render maps by position onto it), then the fresh read.
+   410→    rowScenes[p] = { ...target, narration };
+   411→    const wavDur = await synthSceneWav(dir, target.index, narration, video.voice, video.ttsSpeed);
+   412→
+   413→    const nextDoc = applyRevoiceToDoc(doc, target.index, narration, sceneSegmentSec(wavDur));
+   414→
+   415→    const merged = await syncVoiceover(video.id, dir, rowScenes);
+   416→    const words = narration.split(/\s+/).filter(Boolean).length;
+   417→    return {
+   418→      rowScenes,
+   419→      timeline: nextDoc,
+   420→      sceneOrder: rowScenes.map((s) => s.index),
+   421→      audioDuration: merged,
+   422→      newIndex: target.index,
+   423→      activity: `Scene ${target.index} re-voiced — ${words} words, ${sceneSegmentSec(wavDur).toFixed(1)}s window${merged === null ? "; voiceover.wav not rebuilt (a scene WAV is missing)" : ""}`,
+   424→    };
+   425→  }
+   426→
+   427→  // delete
+   428→  if (rowScenes.length < 2) throw new Error("A video needs at least one scene — delete refused");
+   429→  rowScenes.splice(p, 1);
+   430→  const nextDoc = applyDeleteToDoc(doc, target.index);
+   431→  const merged = await syncVoiceover(video.id, dir, rowScenes);
+   432→  return {
+   433→    rowScenes,
+   434→    timeline: nextDoc,
+   435→    sceneOrder: rowScenes.map((s) => s.index),
+   436→    audioDuration: merged,
+   437→    newIndex: null,
+   438→    activity: `Scene ${target.index} removed — ${nextDoc.sceneCount} scenes, ${nextDoc.totalDurationSec.toFixed(1)}s${merged === null ? "; voiceover.wav not rebuilt (a scene WAV is missing)" : ""}`,
+   439→  };
+   440→}
+   441→
+   442→// ---------- S8: the voice — a whole-video narrator swap ----------
+   443→//
+   444→// The last creative decision still made OUTSIDE the studio: WHO narrates.
+   445→// video.voice is set at creation and, until S8, changing it meant leaving
+   446→// the studio for the settings PUT — which nukes EVERY voice-keyed artifact
+   447→// (scene WAVs + the merged voiceover included) and resets hasVoiceover, so
+   448→// the voiceover stage must re-run and a generic re-assembly rebuilds the
+   449→// doc from scratch. Every per-scene creative edit riding on top of the old
+   450→// reads — grades, titles, camera keys, chroma, PIP, scene audio, trims —
+   451→// was lost to the burn-down.
+   452→//
+   453→// performVoiceSwap is the surgical counterpart: it re-reads each scene with
+   454→// the NEW voice (same ttsSpeed — pacing is a separate knob), re-derives
+   455→// each doc window from its fresh read through the SAME applyRevoiceToDoc
+   456→// the transcript lane uses (so every creative field on the scene SURVIVES;
+   457→// only the window honestly resets — a trim tuned to the old read is stale
+   458→// the moment the words are re-read), rebuilds the merged voiceover.wav,
+   459→// and drops ONLY the artifacts that are genuinely stale: the rendered
+   460→// outputs. The per-scene WAVs and the merged voiceover are REBUILT, not
+   461→// deleted; hasVoiceover never flips.
+   462→
+   463→/** Rendered artifacts keyed to the OLD reads — these die on a voice swap.
+   464→ * The per-scene scene-XX.wav and the merged voiceover.wav are NOT stale:
+   465→ * the swap itself rebuilds them (the .wav/.mp4 split is the whole point —
+   466→ * scene-02.wav is the new read, scene-02.mp4 is a render of the old one).
+   467→ * voice-source.* and short-thumb.png ride the renders and die with them. */
+   468→const VOICE_SWAP_STALE =
+   469→  /\/(final\.mp4|preview\.mp4|subtitles\.srt|short\.mp4|short-thumb\.png|scene-\d{2}\.mp4)$/;
+   470→
+   471→/** Pure: does one storage key die when the narrator changes? (probe) */
+   472→export function isVoiceSwapStale(key: string): boolean {
+   473→  return VOICE_SWAP_STALE.test(key);
+   474→}
+   475→
+   476→export interface VoiceSwapResult {
+   477→  rowScenes: Scene[];
+   478→  timeline: AssembledTimeline;
+   479→  sceneOrder: number[];
+   480→  /** Updated row.audioDuration (null = keep the current value). */
+   481→  audioDuration: number | null;
+   482→  /** The narrator now baked into every scene WAV. */
+   483→  voice: string;
+   484→  /** How many stale rendered artifacts were dropped. */
+   485→  droppedArtifacts: number;
+   486→  /** One-line activity message for the toast. */
+   487→  activity: string;
+   488→}
+   489→
+   490→/** Swap the narrator for the WHOLE video in one server update — the studio's
+   491→ * voice pick. Row, per-scene WAVs, doc windows and the merged voiceover all
+   492→ * move together (the same lockstep contract as the clip ops).
+   493→ *
+   494→ * Guards (each surfaces as a readable 400 at the route):
+   495→ *   • story format — the narrator is a Timeline Studio concept;
+   496→ *   • tts voice source — custom audio cannot be re-read by a studio voice;
+   497→ *   • hasVoiceover — the studio re-voices EXISTING reads, it does not run
+   498→ *     the voiceover stage (that job owns hasVoiceover);
+   499→ *   • a timeline doc must exist (assemble first);
+   500→ *   • the new voice must differ from the row's.
+   501→ * renderMode "slides" is ALLOWED — unlike split/delete a swap restructures
+   502→ * nothing: the same scenes, the same deck, fresh reads under them.
+   503→ *
+   504→ * Cost: the same one-TTS-call-per-chunk posture as the voiceover stage
+   505→ * (aiCall-metered, 1 s pacing between scenes). */
+   506→export async function performVoiceSwap(
+   507→  video: Video,
+   508→  newVoice: string
+   509→): Promise<VoiceSwapResult> {
+   510→  if (video.format !== "story")
+   511→    throw new Error("The narrator is picked in the Timeline Studio — scene-format videos only");
+   512→  if (video.voiceSource !== "tts")
+   513→    throw new Error("Re-voicing reads with a studio voice — re-attach the per-scene voiceover first (this video uses custom audio)");
+   514→  if (!video.hasVoiceover)
+   515→    throw new Error("Generate the voiceover first — the studio re-voices existing reads");
+   516→  if (newVoice === video.voice)
+   517→    throw new Error("That's the current narrator — pick a different voice");
+   518→  const doc = parseTimeline(video.timeline);
+   519→  if (!doc) throw new Error("Assemble the timeline first");
+   520→  const rowScenes = parseScenes(video.scenes);
+   521→  if (rowScenes.length === 0) throw new Error("No scenes — generate the script first");
+   522→
+   523→  const dir = videoDir(video.id);
+   524→
+   525→  // 1. Drop the rendered artifacts keyed to the OLD reads (fail-soft: a
+   526→  //    missing prefix just means nothing to drop).
+   527→  let droppedArtifacts = 0;
+   528→  try {
+   529→    const keys = await storage.list(video.id);
+   530→    const stale = keys.filter(isVoiceSwapStale);
+   531→    await Promise.all(stale.map((k) => storage.remove(k).catch(() => {})));
+   532→    droppedArtifacts = stale.length;
+   533→  } catch {
+   534→    /* prefix may not exist yet — non-fatal */
+   535→  }
+   536→
+   537→  // 2. Re-read every scene with the new voice, folding the doc as we go:
+   538→  //    each window re-derives from its fresh read, every creative field on
+   539→  //    the scene survives (applyRevoiceToDoc spreads the old entry).
+   540→  let nextDoc = doc;
+   541→  for (const [i, scene] of rowScenes.entries()) {
+   542→    if (i > 0) await sleep(1000); // pace scenes like the voiceover stage
+   543→    const wavDur = await synthSceneWav(
+   544→      dir,
+   545→      scene.index,
+   546→      scene.narration,
+   547→      newVoice,
+   548→      video.ttsSpeed
+   549→    );
+   550→    nextDoc = applyRevoiceToDoc(
+   551→      nextDoc,
+   552→      scene.index,
+   553→      scene.narration,
+   554→      sceneSegmentSec(wavDur)
+   555→    );
+   556→  }
+   557→
+   558→  // 3. Rebuild the merged voiceover.wav from the fresh reads.
+   559→  const merged = await syncVoiceover(video.id, dir, rowScenes);
+   560→  const activity =
+   561→    `Narrator swapped to ${newVoice} — ${rowScenes.length} scenes re-read, ` +
+   562→    `${nextDoc.totalDurationSec.toFixed(1)}s total` +
+   563→    (merged === null ? "; voiceover.wav not rebuilt (a scene WAV is missing)" : "") +
+   564→    (droppedArtifacts > 0
+   565→      ? `; ${droppedArtifacts} stale render${droppedArtifacts === 1 ? "" : "s"} dropped`
+   566→      : "");
+   567→
+   568→  return {
+   569→    rowScenes,
+   570→    timeline: nextDoc,
+   571→    sceneOrder: rowScenes.map((s) => s.index),
+   572→    audioDuration: merged,
+   573→    voice: newVoice,
+   574→    droppedArtifacts,
+   575→    activity,
+   576→  };
+   577→}
+   578→
+   579→// ---------- S11: the pace — a whole-video tempo change ----------
+   580→//
+   581→// The voice's sibling axis: HOW FAST the narrator reads. ttsSpeed is set
+   582→// once at creation (the create form's slider) and until S11 the only way
+   583→// to change it was the settings-style PATCH — whose invalidation nukes
+   584→// every voice-keyed artifact and resets hasVoiceover, so the voiceover
+   585→// stage has to re-run and a fresh assembly rebuilds the doc from scratch.
+   586→// Every per-scene creative edit riding on top of the old reads was lost
+   587→// to the burn-down — the exact trap performVoiceSwap was built to escape.
+   588→//
+   589→// performPaceChange is the surgical counterpart, one axis over: it
+   590→// re-reads each scene with the SAME voice at the NEW speed, re-derives
+   591→// each doc window from its fresh read through the SAME applyRevoiceToDoc
+   592→// the transcript lane and the voice swap use (so every creative field on
+   593→// the scene SURVIVES; only the window honestly resets — a trim tuned to
+   594→// the old read is stale the moment the words are re-read), rebuilds the
+   595→// merged voiceover.wav, and drops ONLY the artifacts that are genuinely
+   596→// stale: the rendered outputs (the same VOICE_SWAP_STALE set — they are
+   597→// keyed to the OLD reads; per-scene WAVs and the merged voiceover are
+   598→// REBUILT, not deleted; hasVoiceover never flips).
+   599→
+   600→export interface PaceChangeResult {
+   601→  rowScenes: Scene[];
+   602→  timeline: AssembledTimeline;
+   603→  sceneOrder: number[];
+   604→  /** Updated row.audioDuration (null = keep the current value). */
+   605→  audioDuration: number | null;
+   606→  /** The pace now baked into every scene WAV. */
+   607→  ttsSpeed: number;
+   608→  /** How many stale rendered artifacts were dropped. */
+   609→  droppedArtifacts: number;
+   610→  /** One-line activity message for the toast. */
+   611→  activity: string;
+   612→}
+   613→
+   614→export async function performPaceChange(
+   615→  video: Video,
+   616→  newSpeed: number
+   617→): Promise<PaceChangeResult> {
+   618→  if (video.format !== "story")
+   619→    throw new Error("Pacing is picked in the Timeline Studio — scene-format videos only");
+   620→  if (video.voiceSource !== "tts")
+   621→    throw new Error("Re-pacing re-reads the studio narration — re-attach the per-scene voiceover first (this video uses custom audio)");
+   622→  if (!video.hasVoiceover)
+   623→    throw new Error("Generate the voiceover first — the studio re-paces existing reads");
+   624→  if (!Number.isFinite(newSpeed) || newSpeed < 0.5 || newSpeed > 2)
+   625→    throw new Error("Pick a pace between 0.5× and 2×");
+   626→  if (Math.abs(newSpeed - video.ttsSpeed) < 1e-9)
+   627→    throw new Error("That's the current pace — pick a different speed");
+   628→  const doc = parseTimeline(video.timeline);
+   629→  if (!doc) throw new Error("Assemble the timeline first");
+   630→  const rowScenes = parseScenes(video.scenes);
+   631→  if (rowScenes.length === 0) throw new Error("No scenes — generate the script first");
+   632→
+   633→  const dir = videoDir(video.id);
+   634→
+   635→  // 1. Drop the rendered artifacts keyed to the OLD reads (fail-soft: a
+   636→  //    missing prefix just means nothing to drop).
+   637→  let droppedArtifacts = 0;
+   638→  try {
+   639→    const keys = await storage.list(video.id);
+   640→    const stale = keys.filter(isVoiceSwapStale);
+   641→    await Promise.all(stale.map((k) => storage.remove(k).catch(() => {})));
+   642→    droppedArtifacts = stale.length;
+   643→  } catch {
+   644→    /* prefix may not exist yet — non-fatal */
+   645→  }
+   646→
+   647→  // 2. Re-read every scene with the same voice at the new speed, folding
+   648→  //    the doc as we go: each window re-derives from its fresh read,
+   649→  //    every creative field on the scene survives (applyRevoiceToDoc
+   650→  //    spreads the old entry).
+   651→  let nextDoc = doc;
+   652→  for (const [i, scene] of rowScenes.entries()) {
+   653→    if (i > 0) await sleep(1000); // pace scenes like the voiceover stage
+   654→    const wavDur = await synthSceneWav(
+   655→      dir,
+   656→      scene.index,
+   657→      scene.narration,
+   658→      video.voice,
+   659→      newSpeed
+   660→    );
+   661→    nextDoc = applyRevoiceToDoc(
+   662→      nextDoc,
+   663→      scene.index,
+   664→      scene.narration,
+   665→      sceneSegmentSec(wavDur)
+   666→    );
+   667→  }
+   668→
+   669→  // 3. Rebuild the merged voiceover.wav from the fresh reads.
+   670→  const merged = await syncVoiceover(video.id, dir, rowScenes);
+   671→  const activity =
+   672→    `Pacing set to ${newSpeed}× — ${rowScenes.length} scenes re-read, ` +
+   673→    `${nextDoc.totalDurationSec.toFixed(1)}s total` +
+   674→    (merged === null ? "; voiceover.wav not rebuilt (a scene WAV is missing)" : "") +
+   675→    (droppedArtifacts > 0
+   676→      ? `; ${droppedArtifacts} stale render${droppedArtifacts === 1 ? "" : "s"} dropped`
+   677→      : "");
+   678→
+   679→  return {
+   680→    rowScenes,
+   681→    timeline: nextDoc,
+   682→    sceneOrder: rowScenes.map((s) => s.index),
+   683→    audioDuration: merged,
+   684→    ttsSpeed: newSpeed,
+   685→    droppedArtifacts,
+   686→    activity,
+   687→  };
+   688→}
+   689→
