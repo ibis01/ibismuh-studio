@@ -1,0 +1,842 @@
+     1→// Durable job queue (Stage 3, T-3.5).
+     2→//
+     3→// Replaces the fire-and-forget `void fn()` execution model with a DB-backed
+     4→// queue: jobs are claimed atomically, retried with exponential backoff,
+     5→// cancellable across processes, capped per organization, and re-enqueued
+     6→// after a process death when their kind can be rebuilt from DB state.
+     7→//
+     8→// Why DB-backed instead of Redis/BullMQ (the roadmap's production choice):
+     9→// this deployment runs without Redis. The claim primitive is an atomic
+    10→// `UPDATE ... WHERE status = 'pending'` which is correct on SQLite AND
+    11→// Postgres, so the semantics below are real, not simulated:
+    12→//   * durability      — a claimed job's row survives any crash
+    13→//   * retries         — attempts + maxAttempts + nextRunAt backoff
+    14→//   * cancellation    — cancelRequested is a DB flag every process sees
+    15→//   * fairness        — one claim scan ordered by nextRunAt
+    16→//   * per-org caps    — heavy ffmpeg kinds capped per organization
+    17→//   * restart resume  — boot recovery re-enqueues handler-registered kinds
+    18→// The QueueDriver seam (claim/complete/fail) stays one interface wide so a
+    19→// BullMQ driver can replace the SQL when infrastructure is provisioned.
+    20→//
+    21→// S100 / P0.2 — the claim is now a RENEWABLE LEASE with a FENCING TOKEN
+    22→// (docs/production-readiness.md, gate P0.2): every claim stamps leaseToken
+    23→// (monotonic per job) + leaseExpiresAt; the executing process renews at
+    24→// TTL/3; any process may reap expired leases back to pending — bumping the
+    25→// token; and EVERY terminal write is conditional on the current token, so a
+    26→// worker that lost its lease physically cannot overwrite the newer claimant
+    27→// — its results are discarded. Cross-process recovery no longer depends on
+    28→// same-host pid checks (those remain only as the boot-recovery shortcut for
+    29→// pre-lease legacy rows).
+    30→
+    31→import { rawDatabase, db } from "./tenant-db";
+    32→import { withCtx, withCtxNull, type TenantCtx } from "./tenant";
+    33→import { errorText } from "@/lib/tubeforge/redact";
+    34→import { log } from "./log";
+    35→import { JobCancelledError, requestCancel, runWithCancelKey } from "./cancel";
+    36→import type { JobKind } from "./jobs";
+    37→import type { Prisma } from "@prisma/client";
+    38→
+    39→// ---------------------------------------------------------------------------
+    40→// Configuration
+    41→
+    42→/** Tick cadence — how often the claim scan runs. */
+    43→export const QUEUE_TICK_MS = 1_000;
+    44→/** Claims per tick (bounded so one hot loop can't starve the event loop). */
+    45→const CLAIM_BATCH = 4;
+    46→/**
+    47→ * Max concurrently EXECUTING jobs in this process. ffmpeg stages are also
+    48→ * gated per-org (below); this cap protects the process itself.
+    49→ */
+    50→const MAX_ACTIVE_PER_PROCESS = Number(process.env.TUBEFORGE_MAX_ACTIVE_JOBS ?? 8);
+    51→/** Heavy ffmpeg kinds subject to the per-organization cap. S67: whiteboard
+    52→ *  joins — chromium + ffmpeg is the same CPU/RAM class (design §3.2). */
+    53→const HEAVY_KINDS: readonly JobKind[] = ["render", "short", "convert", "whiteboard"];
+    54→/** Per-org concurrent heavy jobs (ffmpeg is CPU/RAM bound). */
+    55→const MAX_HEAVY_PER_ORG = Number(process.env.TUBEFORGE_MAX_RENDER_CONCURRENCY ?? 2);
+    56→/** Retry backoff: 30s, 60s, 120s … capped at 10 min, +0–2s jitter. */
+    57→const BACKOFF_BASE_MS = 30_000;
+    58→const BACKOFF_CAP_MS = 10 * 60_000;
+    59→/**
+    60→ * Claim attempts allowed before a job sticks as "failed". Note the AI call
+    61→ * layer already retries transient 500s internally (budget.ts withRetry ×3) —
+    62→ * queue attempts are for whole-job re-runs (e.g. process death mid-stage).
+    63→ * script = 1 because runScriptJob carries its own 6-round storm patience;
+    64→ * queue-level retries would multiply 2.5h into 7.5h. voiceover / variants /
+    65→ * poses = 1 for the same reason — they are multi-call AI stages whose calls
+    66→ * already retry internally, and a whole-job re-run re-pays every call.
+    67→ */
+    68→const MAX_ATTEMPTS_BY_KIND: Partial<Record<JobKind, number>> = {
+    69→  script: 1,
+    70→  research: 2,
+    71→  stock: 2,
+    72→  voiceover: 1,
+    73→  variants: 1,
+    74→  poses: 1,
+    75→  // Stage 5 — the director pass and continuity check are single LLM/VLM
+    76→  // stages whose calls already retry internally (budget.ts withRetry);
+    77→  // a whole-job re-run would re-pay every call.
+    78→  director: 1,
+    79→  continuity: 1,
+    80→};
+    81→const DEFAULT_MAX_ATTEMPTS = 2;
+    82→
+    83→/**
+    84→ * S100 / P0.2 — the lease. A claim is a LEASE, not ownership: the executor
+    85→ * must renew it (every LEASE_RENEW_MS = TTL/3) or any process may reap the
+    86→ * row once the deadline passes, bump the fencing token, and re-run the job.
+    87→ * A missed renewal must NOT lose the lease — renewal sits strictly inside
+    88→ * the TTL with three chances before expiry at the default cadence.
+    89→ */
+    90→export const LEASE_TTL_MS = Number(process.env.TUBEFORGE_LEASE_TTL_MS ?? 90_000);
+    91→export const LEASE_RENEW_MS = Math.max(5_000, Math.floor(LEASE_TTL_MS / 3));
+    92→
+    93→// ---------------------------------------------------------------------------
+    94→// State (globalThis so Next.js HMR reloads keep sharing it)
+    95→
+    96→interface QueuedClosure {
+    97→  fn: () => Promise<void>;
+    98→  /** Tenant ctx captured at enqueue time — ALS does NOT survive deferred
+    99→   *  invocation, so the queue re-enters it explicitly before running fn. */
+   100→  ctx: TenantCtx | null;
+   101→  registeredAt: number;
+   102→}
+   103→
+   104→interface QueueState {
+   105→  closures: Map<string, QueuedClosure>; // jobId -> closure (this process only)
+   106→  timer: NodeJS.Timeout | null;
+   107→  ticking: boolean;
+   108→  active: number; // executing in THIS process
+   109→  workerId: string; // "<role>:<pid>:<bootTs>"
+   110→  role: "web" | "worker";
+   111→  /** enqueueOnly mode — web dynamos in a dedicated-worker topology. */
+   112→  noClaim: boolean;
+   113→  cancelWatchers: Map<string, NodeJS.Timeout>; // jobId -> cancel poll interval
+   114→}
+   115→
+   116→const g = globalThis as typeof globalThis & { __tfQueue?: QueueState };
+   117→const state: QueueState = (g.__tfQueue ??= {
+   118→  closures: new Map(),
+   119→  timer: null,
+   120→  ticking: false,
+   121→  active: 0,
+   122→  workerId: "web:0:0",
+   123→  role: "web",
+   124→  noClaim: process.env.TUBEFORGE_NO_CLAIM === "1",
+   125→  cancelWatchers: new Map(),
+   126→});
+   127→
+   128→/** Bounded closure registry — stale entries (job finished elsewhere) evict. */
+   129→const MAX_CLOSURES = 300;
+   130→
+   131→export function initQueue(role: "web" | "worker" = "web"): void {
+   132→  state.role = role;
+   133→  state.workerId = `${role}:${process.pid}:${Date.now().toString(36)}`;
+   134→  startQueueLoop();
+   135→}
+   136→
+   137→/**
+   138→ * Pause/resume claiming in THIS process (in-flight jobs still finish).
+   139→ * Test harnesses use it to hand the queue over to a spawned worker; a real
+   140→ * deployment achieves the same with TUBEFORGE_NO_CLAIM=1 at boot.
+   141→ */
+   142→export function setClaiming(enabled: boolean): void {
+   143→  state.noClaim = !enabled;
+   144→}
+   145→
+   146→export function queueWorkerId(): string {
+   147→  return state.workerId;
+   148→}
+   149→
+   150→// ---------------------------------------------------------------------------
+   151→// Lifecycle listeners — jobs.ts subscribes to mirror the in-memory view the
+   152→// UI polls (isJobRunning / progress / lastError). Decouples queue execution
+   153→// from the registry without an import cycle.
+   154→
+   155→export type JobClaimedListener = (jobId: string, kind: JobKind, entityId: string) => void;
+   156→export type JobFinishedListener = (
+   157→  jobId: string,
+   158→  kind: JobKind,
+   159→  entityId: string,
+   160→  status: "done" | "cancelled" | "failed" | "interrupted",
+   161→  errorMessage: string | null
+   162→) => void;
+   163→
+   164→const listeners: { claimed: Set<JobClaimedListener>; finished: Set<JobFinishedListener> } = {
+   165→  claimed: new Set(),
+   166→  finished: new Set(),
+   167→};
+   168→
+   169→export function onJobClaimed(cb: JobClaimedListener): void {
+   170→  listeners.claimed.add(cb);
+   171→}
+   172→
+   173→export function onJobFinished(cb: JobFinishedListener): void {
+   174→  listeners.finished.add(cb);
+   175→}
+   176→
+   177→function emitClaimed(jobId: string, kind: JobKind, entityId: string): void {
+   178→  for (const cb of listeners.claimed) {
+   179→    try { cb(jobId, kind, entityId); } catch (err) { log.error("claimed listener crashed", { err }); }
+   180→  }
+   181→}
+   182→
+   183→function emitFinished(
+   184→  jobId: string,
+   185→  kind: JobKind,
+   186→  entityId: string,
+   187→  status: "done" | "cancelled" | "failed" | "interrupted",
+   188→  errorMessage: string | null
+   189→): void {
+   190→  for (const cb of listeners.finished) {
+   191→    try { cb(jobId, kind, entityId, status, errorMessage); } catch (err) { log.error("finished listener crashed", { err }); }
+   192→  }
+   193→}
+   194→
+   195→// ---------------------------------------------------------------------------
+   196→// Handler registry — kinds whose work can be rebuilt from DB state. These
+   197→// survive process death: boot recovery re-enqueues them and the standalone
+   198→// worker (scripts/worker.mts) can execute them without the original closure.
+   199→
+   200→export type JobHandler = (
+   201→  entityId: string,
+   202→  /** Parsed Job.payload — the enqueue-time request options (null when the
+   203→   *  enqueuing route had nothing request-scoped to preserve). */
+   204→  payload: unknown
+   205→) => Promise<void>;
+   206→
+   207→const handlers = new Map<JobKind, JobHandler>();
+   208→
+   209→export function registerJobHandler(kind: JobKind, handler: JobHandler): void {
+   210→  handlers.set(kind, handler);
+   211→}
+   212→
+   213→export function handlerKinds(): JobKind[] {
+   214→  return [...handlers.keys()];
+   215→}
+   216→
+   217→// ---------------------------------------------------------------------------
+   218→// Enqueue
+   219→
+   220→export interface EnqueueResult {
+   221→  jobId: string;
+   222→}
+   223→
+   224→/**
+   225→ * Create a pending Job row. The caller registers the closure right after
+   226→ * (registerClosure) and triggers a tick so latency stays ~0 in-process.
+   227→ */
+   228→export async function createPendingJob(input: {
+   229→  organizationId: string;
+   230→  userId: string | null;
+   231→  kind: JobKind;
+   232→  entityId: string;
+   233→  /** Request-scoped options for the crash-recovery handler (JSON-encoded). */
+   234→  payload?: unknown;
+   235→  /** S115 — the idempotency key: a retry of the same logical work resolves
+   236→   *  to the standing row WHATEVER its status (a done row is NOT re-enqueued
+   237→   *  — the retry-after-done double-bill path dies here). Null = legacy
+   238→   *  un-keyed enqueue (the pending/running dedup still guards those). */
+   239→  idempotencyKey?: string | null;
+   240→}): Promise<EnqueueResult & { duplicate: boolean }> {
+   241→  const maxAttempts = MAX_ATTEMPTS_BY_KIND[input.kind] ?? DEFAULT_MAX_ATTEMPTS;
+   242→  if (input.idempotencyKey) {
+   243→    // Insert-on-key: read first (the common case — a fresh key), let the
+   244→    // unique index catch the race, re-read on collision. Exactly one row
+   245→    // per key, ever. DONE (and pending/running) rows are duplicates — the
+   246→    // logical work already happened or is happening; the retry-after-done
+   247→    // double-bill path dies here. FAILED/cancelled/interrupted rows are
+   248→    // RE-QUEUED: an honest retry of failed work re-runs the same row
+   249→    // (attempts stay counted; maxAttempts still bounds the retries).
+   250→    const standing = await db.job.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+   251→    if (standing) {
+   252→      if (["pending", "running", "done"].includes(standing.status))
+   253→        return { jobId: standing.id, duplicate: true };
+   254→      // Re-queue the terminal row — CONDITIONALLY (the S100 fencing law: no
+   255→      // unconditional Job writes in this file). The status guard makes the
+   256→      // re-queue race-safe: only a row still in the failed family moves.
+   257→      await db.job.updateMany({
+   258→        where: {
+   259→          id: standing.id,
+   260→          status: { in: ["failed", "cancelled", "interrupted"] },
+   261→        },
+   262→        data: {
+   263→          status: "pending",
+   264→          nextRunAt: new Date(),
+   265→          error: null,
+   266→          cancelRequested: false,
+   267→          progress: 0,
+   268→          label: null,
+   269→        },
+   270→      });
+   271→      return { jobId: standing.id, duplicate: false };
+   272→    }
+   273→    try {
+   274→      const row = await db.job.create({
+   275→        data: {
+   276→          organizationId: input.organizationId,
+   277→          userId: input.userId,
+   278→          kind: input.kind,
+   279→          entityId: input.entityId,
+   280→          status: "pending",
+   281→          maxAttempts,
+   282→          nextRunAt: new Date(),
+   283→          startedAt: new Date(),
+   284→          idempotencyKey: input.idempotencyKey,
+   285→          ...(input.payload === undefined || input.payload === null
+   286→            ? {}
+   287→            : { payload: JSON.stringify(input.payload) }),
+   288→        },
+   289→      });
+   290→      return { jobId: row.id, duplicate: false };
+   291→    } catch (err) {
+   292→      if ((err as { code?: string }).code === "P2002") {
+   293→        const winner = await db.job.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+   294→        if (winner) return { jobId: winner.id, duplicate: true };
+   295→      }
+   296→      throw err;
+   297→    }
+   298→  }
+   299→  const row = await db.job.create({
+   300→    data: {
+   301→      organizationId: input.organizationId,
+   302→      userId: input.userId,
+   303→      kind: input.kind,
+   304→      entityId: input.entityId,
+   305→      status: "pending",
+   306→      maxAttempts,
+   307→      nextRunAt: new Date(),
+   308→      startedAt: new Date(),
+   309→      ...(input.payload === undefined || input.payload === null
+   310→        ? {}
+   311→        : { payload: JSON.stringify(input.payload) }),
+   312→    },
+   313→  });
+   314→  return { jobId: row.id, duplicate: false };
+   315→}
+   316→
+   317→/** Register the in-process closure for a job this process created. */
+   318→export function registerClosure(jobId: string, fn: () => Promise<void>, ctx: TenantCtx | null): void {
+   319→  if (state.closures.size >= MAX_CLOSURES) {
+   320→    // Evict the oldest entry — its job either finished or belongs to a dead
+   321→    // request; the handler registry is the durable path either way.
+   322→    const oldest = state.closures.keys().next().value;
+   323→    if (oldest) state.closures.delete(oldest);
+   324→  }
+   325→  state.closures.set(jobId, { fn, ctx, registeredAt: Date.now() });
+   326→}
+   327→
+   328→// ---------------------------------------------------------------------------
+   329→// Claim + execute
+   330→
+   331→function backoffMs(attempts: number): number {
+   332→  const exp = BACKOFF_BASE_MS * Math.pow(2, Math.max(0, attempts - 1));
+   333→  return Math.min(exp, BACKOFF_CAP_MS) + Math.floor(Math.random() * 2_000);
+   334→}
+   335→
+   336→// ---------------------------------------------------------------------------
+   337→// Claim + lease (S100 / P0.2)
+   338→
+   339→export interface ClaimResult {
+   340→  claimed: boolean;
+   341→  /** The fencing token stamped by THIS claim (0 when not claimed). */
+   342→  leaseToken: number;
+   343→}
+   344→
+   345→/**
+   346→ * The atomic claim primitive: flips a pending row to running and stamps a
+   347→ * fresh MONOTONIC fencing token + lease deadline. Exported for the lease
+   348→ * battery (test-queue phase C) — tickQueue is the only in-app caller.
+   349→ * Returns claimed=false when another worker holds the row (live lease).
+   350→ */
+   351→export async function claimJob(jobId: string, workerId: string): Promise<ClaimResult> {
+   352→  const claimed = await withCtxNull(() =>
+   353→    rawDatabase.job.updateMany({
+   354→      where: { id: jobId, status: "pending" },
+   355→      data: {
+   356→        status: "running",
+   357→        claimedBy: workerId,
+   358→        claimedAt: new Date(),
+   359→        startedAt: new Date(),
+   360→        attempts: { increment: 1 },
+   361→        leaseToken: { increment: 1 },
+   362→        leaseExpiresAt: new Date(Date.now() + LEASE_TTL_MS),
+   363→      },
+   364→    })
+   365→  );
+   366→  if (claimed.count !== 1) return { claimed: false, leaseToken: 0 };
+   367→  // Read back the token THIS claim stamped (updateMany doesn't return the
+   368→  // row). If another claimant snuck in between the two statements — only
+   369→  // possible after our lease was reaped — claimedBy won't be ours.
+   370→  const row = await withCtxNull(() =>
+   371→    rawDatabase.job.findUnique({ where: { id: jobId }, select: { leaseToken: true, claimedBy: true } })
+   372→  );
+   373→  if (!row || row.claimedBy !== workerId) return { claimed: false, leaseToken: 0 };
+   374→  return { claimed: true, leaseToken: row.leaseToken };
+   375→}
+   376→
+   377→/**
+   378→ * Extend the lease for the CURRENT token. False = lost: another claimant or
+   379→ * reap holds a newer token and this worker must stop writing. Throws on
+   380→ * transient DB errors — a failed renewal must not be confused with a lost
+   381→ * lease (the caller retries next interval; the lease still stands).
+   382→ */
+   383→export async function renewLease(jobId: string, leaseToken: number): Promise<boolean> {
+   384→  const renewed = await withCtxNull(() =>
+   385→    rawDatabase.job.updateMany({
+   386→      where: { id: jobId, leaseToken, status: "running" },
+   387→      data: { leaseExpiresAt: new Date(Date.now() + LEASE_TTL_MS) },
+   388→    })
+   389→  );
+   390→  return renewed.count === 1;
+   391→}
+   392→
+   393→/**
+   394→ * Expired-lease recovery (S100 / P0.2) — the cross-process story the old
+   395→ * module header documented as its known limitation: any "running" row whose
+   396→ * lease expired AND whose kind this process can re-execute (a registered
+   397→ * handler — the durable resume path) is flipped back to pending and its
+   398→ * fencing token BUMPED, which instantly blinds the previous claimant's
+   399→ * writes. NULL-lease legacy rows never match (SQL NULL is not lt now) —
+   400→ * they keep the boot-recovery contract. Safe to run from every process;
+   401→ * scoped to handler kinds so non-resumable rows keep their honest
+   402→ * "interrupted" degradation instead of becoming unrunnable pending rows.
+   403→ */
+   404→export async function reapExpiredLeases(): Promise<number> {
+   405→  const kinds = handlerKinds();
+   406→  if (!kinds.length) return 0;
+   407→  const reaped = await withCtxNull(() =>
+   408→    rawDatabase.job.updateMany({
+   409→      where: {
+   410→        status: "running",
+   411→        leaseExpiresAt: { lt: new Date() },
+   412→        kind: { in: kinds },
+   413→      },
+   414→      data: {
+   415→        status: "pending",
+   416→        claimedBy: null,
+   417→        claimedAt: null,
+   418→        leaseExpiresAt: null,
+   419→        leaseToken: { increment: 1 },
+   420→        nextRunAt: new Date(),
+   421→        error: "Lease expired — reclaimed for another attempt.",
+   422→      },
+   423→    })
+   424→  );
+   425→  if (reaped.count > 0) log.warn("reaped expired job leases", { count: reaped.count });
+   426→  return reaped.count;
+   427→}
+   428→
+   429→/**
+   430→ * The fencing write (S100 / P0.2): terminal job state lands ONLY when the
+   431→ * caller still holds the CURRENT lease token. Returns false when fenced —
+   432→ * a stale worker must treat its results as discarded and surface nothing
+   433→ * (the newer claimant owns the row and will report its own outcome).
+   434→ */
+   435→export async function writeOutcomeIfLeased(
+   436→  jobId: string,
+   437→  leaseToken: number,
+   438→  data: Prisma.JobUpdateManyMutationInput
+   439→): Promise<boolean> {
+   440→  const written = await withCtxNull(() =>
+   441→    rawDatabase.job.updateMany({ where: { id: jobId, leaseToken }, data })
+   442→  );
+   443→  return written.count === 1;
+   444→}
+   445→
+   446→/** S101 — tick counter gating the lazy expired-storage-hold sweep (~1/min). */
+   447→let storageSweepTick = 0;
+   448→
+   449→/**
+   450→ * One claim pass. Claimable set depends on role:
+   451→ *   web    — jobs this process created (closure present) + handler kinds
+   452→ *   worker — handler kinds only (it cannot run foreign closures)
+   453→ */
+   454→export async function tickQueue(): Promise<void> {
+   455→  if (state.ticking || state.noClaim) return;
+   456→  state.ticking = true;
+   457→  try {
+   458→    // S100 — expired-lease recovery first: stale running rows return to
+   459→    // pending so the claim scan below can hand them to a live process.
+   460→    await reapExpiredLeases().catch(() => {});
+   461→
+   462→    // S101 — expired storage holds release quota lazily: an indexed scan
+   463→    // that is a no-op the overwhelming majority of ticks. One minute per
+   464→    // process keeps the amortized cost at zero; the dynamic import avoids
+   465→    // a load-time cycle (storage.ts sits below the queue in the graph).
+   466→    // S102 — the shared rate limiter's stale windows are swept in the same
+   467→    // lazy slot (kept 5 windows for forensics, deleted after).
+   468→    if (++storageSweepTick % 60 === 0) {
+   469→      void import("./storage")
+   470→        .then((m) => m.sweepExpiredStorageReservations())
+   471→        .catch(() => {});
+   472→      void import("./shared-rate-limit")
+   473→        .then((m) => m.sweepRateLimitCounters())
+   474→        .catch(() => {});
+   475→    }
+   476→
+   477→    const now = new Date();
+   478→    const closureIds = [...state.closures.keys()];
+   479→    const kinds = handlerKinds();
+   480→
+   481→    // Build the claimable filter. A web process with no closures and no
+   482→    // registered handlers has nothing to claim.
+   483→    const claimable: { id?: { in: string[] }; kind?: { in: string[] } }[] = [];
+   484→    if (closureIds.length) claimable.push({ id: { in: closureIds } });
+   485→    if (kinds.length) claimable.push({ kind: { in: kinds } });
+   486→    if (!claimable.length) return;
+   487→
+   488→    const candidates = await withCtxNull(() =>
+   489→      rawDatabase.job.findMany({
+   490→        where: {
+   491→          status: "pending",
+   492→          nextRunAt: { lte: now },
+   493→          OR: claimable,
+   494→        },
+   495→        orderBy: { nextRunAt: "asc" },
+   496→        take: CLAIM_BATCH * 3, // over-fetch: some fail caps/cancel checks
+   497→      })
+   498→    );
+   499→
+   500→    for (const candidate of candidates) {
+   501→      if (state.active >= MAX_ACTIVE_PER_PROCESS) break;
+   502→
+   503→      const kind = candidate.kind as JobKind;
+   504→      const hasClosure = state.closures.has(candidate.id);
+   505→      const hasHandler = handlers.has(kind);
+   506→      if (!hasClosure && !hasHandler) continue; // another process's closure job
+   507→
+   508→      // Cancelled while queued — never start it. Status-guarded (no lease
+   509→      // exists on a pending row).
+   510→      if (candidate.cancelRequested) {
+   511→        await withCtxNull(() =>
+   512→          rawDatabase.job.updateMany({
+   513→            where: { id: candidate.id, status: "pending" },
+   514→            data: { status: "cancelled", endedAt: new Date(), error: "Cancelled before starting" },
+   515→          })
+   516→        ).catch(() => {});
+   517→        continue;
+   518→      }
+   519→
+   520→      // Per-org heavy cap — count RUNNING heavy rows for this org.
+   521→      if ((HEAVY_KINDS as readonly string[]).includes(kind)) {
+   522→        const running = await withCtxNull(() =>
+   523→          rawDatabase.job.count({
+   524→            where: { organizationId: candidate.organizationId, status: "running", kind: { in: [...HEAVY_KINDS] } },
+   525→          })
+   526→        );
+   527→        if (running >= MAX_HEAVY_PER_ORG) continue; // stays pending — retried next tick
+   528→      }
+   529→
+   530→      // Atomic claim (S100: a lease, not ownership) — the claim primitive
+   531→      // only hits when STILL pending and stamps a fresh monotonic fencing
+   532→      // token + lease deadline.
+   533→      const claim = await claimJob(candidate.id, state.workerId).catch(() => ({ claimed: false, leaseToken: 0 }));
+   534→      if (!claim.claimed) continue;
+   535→
+   536→      // Detached execution — the tick keeps claiming; jobs run concurrently
+   537→      // (bounded by MAX_ACTIVE_PER_PROCESS, incremented below before detach
+   538→      // so the loop can't oversubscribe in the await window).
+   539→      state.active += 1;
+   540→      void executeClaimed(candidate.id, kind, candidate.entityId, candidate.organizationId, candidate.userId, candidate.payload ?? null, claim.leaseToken)
+   541→        .finally(() => {
+   542→          state.active -= 1;
+   543→        });
+   544→    }
+   545→  } catch (err) {
+   546→    log.error("queue tick failed", { err });
+   547→  } finally {
+   548→    state.ticking = false;
+   549→  }
+   550→}
+   551→
+   552→/**
+   553→ * Execute one claimed job row: closure (if this process has it) or handler,
+   554→ * under the captured/restored tenant ctx and cancel key. Sets final status
+   555→ * with retry backoff on failure.
+   556→ */
+   557→async function executeClaimed(
+   558→  jobId: string,
+   559→  kind: JobKind,
+   560→  entityId: string,
+   561→  organizationId: string,
+   562→  userId: string | null,
+   563→  payloadRaw: string | null,
+   564→  /** The fencing token stamped by the claim that started this run (S100). */
+   565→  leaseToken: number
+   566→): Promise<void> {
+   567→  emitClaimed(jobId, kind, entityId);
+   568→
+   569→  const closure = state.closures.get(jobId) ?? null;
+   570→  const handler = handlers.get(kind) ?? null;
+   571→  if (!closure && !handler) {
+   572→    // Claimed but unrunnable (closure evaporated, no handler) — interrupt
+   573→    // honestly instead of leaving a forever-running row. FENCED write
+   574→    // (S100): only if this run still holds the current lease token.
+   575→    const fenced = await withCtxNull(() =>
+   576→      rawDatabase.job.updateMany({
+   577→        where: { id: jobId, leaseToken },
+   578→        data: {
+   579→          status: "interrupted",
+   580→          endedAt: new Date(),
+   581→          error: "Server restarted while this job was queued — run the stage again.",
+   582→        },
+   583→      })
+   584→    ).catch(() => ({ count: 0 }));
+   585→    if (fenced.count !== 1) {
+   586→      log.warn("stale executor fenced — interrupted outcome discarded", { jobId, kind, leaseToken });
+   587→      return;
+   588→    }
+   589→    emitFinished(jobId, kind, entityId, "interrupted", "Server restarted while this job was queued — run the stage again.");
+   590→    return;
+   591→  }
+   592→
+   593→  const jobKey = `${entityId}:${kind}`;
+   594→
+   595→  // Cross-process cancellation: poll the row's cancelRequested and mirror it
+   596→  // into the in-memory cancel set, where cancellableSleep/throwIfCancelled
+   597→  // already look. Also cleared on finish.
+   598→  const watcher = setInterval(() => {
+   599→    void withCtxNull(() => rawDatabase.job.findUnique({ where: { id: jobId }, select: { cancelRequested: true } }))
+   600→      .then((row) => {
+   601→        if (row?.cancelRequested) requestCancel(jobKey);
+   602→      })
+   603→      .catch(() => {});
+   604→  }, 2_000);
+   605→  state.cancelWatchers.set(jobId, watcher);
+   606→
+   607→  // S100 — the lease renewer, every LEASE_RENEW_MS (TTL/3). A FAILED
+   608→  // renewal is authoritative (count 0 after a successful query): someone
+   609→  // else owns the row now — cancel the body at its next cancel point and
+   610→  // let the fenced terminal write discard this run. A THROWN (transient
+   611→  // DB) error keeps the lease — the next interval retries; a single missed
+   612→  // renew must not lose the lease (three chances before expiry).
+   613→  const renewer = setInterval(() => {
+   614→    void renewLease(jobId, leaseToken)
+   615→      .then((alive) => {
+   616→        if (!alive) {
+   617→          log.warn("job lease lost — a newer claimant owns this row; discarding results", {
+   618→            jobId,
+   619→            kind,
+   620→            leaseToken,
+   621→          });
+   622→          requestCancel(jobKey);
+   623→        }
+   624→      })
+   625→      .catch(() => {});
+   626→  }, LEASE_RENEW_MS);
+   627→
+   628→  let outcome: "done" | "cancelled" | "retry" | "failed" = "done";
+   629→  let errorMessage: string | null = null;
+   630→
+   631→  try {
+   632→    if (closure) {
+   633→      // Re-enter the enqueue-time tenant ctx — the deferred call would
+   634→      // otherwise run outside any scope (ALS follows the CALLER's context).
+   635→      const body = () => runWithCancelKey(jobKey, closure.fn);
+   636→      if (closure.ctx) await withCtx(closure.ctx, body);
+   637→      else await withCtxNull(body);
+   638→    } else if (handler) {
+   639→      const ctx = await ctxFromRow(organizationId, userId);
+   640→      if (!ctx) throw new Error("Job row has no user to run as — cannot restore tenant context");
+   641→      // Parse the durable payload ONCE here — handlers receive plain data and
+   642→      // stay free of storage/serialization concerns. A corrupt payload (hand-
+   643→      // edited row, older writer) degrades to null instead of killing the job.
+   644→      let payload: unknown = null;
+   645→      if (payloadRaw) {
+   646→        try {
+   647→          payload = JSON.parse(payloadRaw);
+   648→        } catch {
+   649→          log.warn("job payload failed to parse — running with defaults", { jobId, kind });
+   650→        }
+   651→      }
+   652→      await withCtx(ctx, () => runWithCancelKey(jobKey, () => handler(entityId, payload)));
+   653→    }
+   654→  } catch (err) {
+   655→    if (err instanceof JobCancelledError) {
+   656→      outcome = "cancelled";
+   657→      errorMessage = errorText(err, "Cancelled by the user");
+   658→    } else {
+   659→      errorMessage = errorText(err, `${kind} job failed`);
+   660→      outcome = "failed";
+   661→    }
+   662→  } finally {
+   663→    clearInterval(watcher);
+   664→    clearInterval(renewer);
+   665→    state.cancelWatchers.delete(jobId);
+   666→  }
+   667→
+   668→  // Read attempts BEFORE deciding retries (claim already incremented).
+   669→  const row = await withCtxNull(() => rawDatabase.job.findUnique({ where: { id: jobId }, select: { attempts: true, maxAttempts: true } })).catch(() => null);
+   670→  const attempts = row?.attempts ?? 1;
+   671→  const maxAttempts = row?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+   672→  if (outcome === "failed" && attempts < maxAttempts) outcome = "retry";
+   673→
+   674→  // The closure survives a RETRY so the creating process re-runs it with the
+   675→  // original request-scoped data; terminal outcomes release it.
+   676→  if (outcome !== "retry") state.closures.delete(jobId);
+   677→
+   678→  const now = new Date();
+   679→  try {
+   680→    // S100 — the FENCED terminal write: the outcome lands ONLY if this run
+   681→    // still holds the current lease token. A stale worker (lease reaped or
+   682→    // re-claimed mid-run) affects ZERO rows — its results are discarded
+   683→    // and nothing is emitted, because the newer claimant owns the row and
+   684→    // will report its own outcome.
+   685→    const fenced = await writeOutcomeIfLeased(
+   686→      jobId,
+   687→      leaseToken,
+   688→      outcome === "done"
+   689→        ? { status: "done", endedAt: now, progress: 1, error: null }
+   690→        : outcome === "cancelled"
+   691→          ? { status: "cancelled", endedAt: now, error: errorMessage }
+   692→          : outcome === "retry"
+   693→            ? { status: "pending", endedAt: null, claimedBy: null, claimedAt: null, leaseExpiresAt: null, nextRunAt: new Date(Date.now() + backoffMs(attempts)), error: errorMessage }
+   694→            : { status: "failed", endedAt: now, error: errorMessage },
+   695→    );
+   696→    if (!fenced) {
+   697→      log.warn("stale executor fenced — outcome discarded", { jobId, kind, leaseToken, outcome });
+   698→      return;
+   699→    }
+   700→  } catch (err) {
+   701→    log.error("queue failed to persist job outcome", { jobId, kind, err });
+   702→  }
+   703→
+   704→  if (outcome === "retry") {
+   705→    log.warn("job failed — requeued with backoff", { jobId, kind, entityId, attempts, nextInMs: backoffMs(attempts), error: errorMessage });
+   706→  } else {
+   707→    if (outcome === "failed") {
+   708→      log.error("job failed permanently", { jobId, kind, entityId, attempts, error: errorMessage });
+   709→    }
+   710→    emitFinished(
+   711→      jobId,
+   712→      kind,
+   713→      entityId,
+   714→      outcome === "done" ? "done" : outcome,
+   715→      errorMessage
+   716→    );
+   717→  }
+   718→}
+   719→
+   720→/** Restore a TenantCtx from a Job row (membership lookup gives the role). */
+   721→async function ctxFromRow(organizationId: string, userId: string | null): Promise<TenantCtx | null> {
+   722→  if (!userId) return null;
+   723→  const membership = await withCtxNull(() =>
+   724→    rawDatabase.membership.findFirst({ where: { userId, organizationId } })
+   725→  );
+   726→  if (!membership) return null;
+   727→  return { userId, organizationId, role: membership.role };
+   728→}
+   729→
+   730→// ---------------------------------------------------------------------------
+   731→// Loop
+   732→
+   733→export function startQueueLoop(): void {
+   734→  if (state.timer) return;
+   735→  state.timer = setInterval(() => {
+   736→    void tickQueue();
+   737→  }, QUEUE_TICK_MS);
+   738→  // Never hold the event loop open just for the queue (worker calls explicitly).
+   739→  state.timer.unref?.();
+   740→}
+   741→
+   742→/** Enqueue + immediate tick — keeps request→execution latency near zero. */
+   743→export function kickQueue(): void {
+   744→  void tickQueue();
+   745→}
+   746→
+   747→// ---------------------------------------------------------------------------
+   748→// Boot recovery integration
+   749→
+   750→/**
+   751→ * A stale "running" row (from a dead process) becomes claimable again when
+   752→ * its kind has a handler — the durable resume path. Kinds without handlers
+   753→ * keep the interrupted + user-visible-error behavior.
+   754→ */
+   755→export async function reenqueueIfHandlerKind(jobId: string, kind: string): Promise<boolean> {
+   756→  if (!handlers.has(kind as JobKind)) return false;
+   757→  const updated = await withCtxNull(() =>
+   758→    rawDatabase.job.updateMany({
+   759→      where: { id: jobId, status: "running" },
+   760→      data: {
+   761→        status: "pending",
+   762→        claimedBy: null,
+   763→        claimedAt: null,
+   764→        leaseExpiresAt: null,
+   765→        leaseToken: { increment: 1 }, // S100 — blind the dead claimant's writes
+   766→        nextRunAt: new Date(),
+   767→      },
+   768→    })
+   769→  ).catch(() => ({ count: 0 }));
+   770→  return updated.count === 1;
+   771→}
+   772→
+   773→/** Queue diagnostics for GET /api/status. */
+   774→export function queueStats() {
+   775→  return {
+   776→    workerId: state.workerId,
+   777→    role: state.role,
+   778→    active: state.active,
+   779→    closures: state.closures.size,
+   780→    handlerKinds: handlerKinds(),
+   781→    noClaim: state.noClaim,
+   782→    caps: { perProcess: MAX_ACTIVE_PER_PROCESS, heavyPerOrg: MAX_HEAVY_PER_ORG },
+   783→    lease: { ttlMs: LEASE_TTL_MS, renewMs: LEASE_RENEW_MS }, // S100
+   784→  };
+   785→}
+   786→
+   787→// ---------------------------------------------------------------------------
+   788→// Cross-process claim liveness
+   789→//
+   790→// claimedBy encodes "<role>:<pid>:<bootTs>". On a single host (the supported
+   791→// topology: one app process + optional worker, docker-compose shares the pid
+   792→// namespace only with --pid=host — separate containers do NOT share) a dead
+   793→// claimer's pid answers ESRCH. Multi-host HA needs the BullMQ driver —
+   794→// documented limitation, see the module header.
+   795→
+   796→/** True when this row was claimed by THIS process. */
+   797→export function isOwnClaim(claimedBy: string | null): boolean {
+   798→  return claimedBy === state.workerId;
+   799→}
+   800→
+   801→/**
+   802→ * True when the claimer's process is provably dead on this host. Unknown /
+   803→ * foreign-host claimers read as ALIVE (fail-safe: never kill a live job).
+   804→ * Same-host pid reuse can mask a dead claimer — accepted, rare, and the row
+   805→ * is still recovered on the next process boot.
+   806→ */
+   807→export function claimerPidIsDead(claimedBy: string | null): boolean {
+   808→  if (!claimedBy) return false;
+   809→  const parts = claimedBy.split(":");
+   810→  const pid = Number(parts[1]);
+   811→  if (!Number.isInteger(pid) || pid <= 0) return false;
+   812→  try {
+   813→    process.kill(pid, 0);
+   814→    return false; // alive (or a reused pid)
+   815→  } catch (err) {
+   816→    return (err as NodeJS.ErrnoException).code === "ESRCH";
+   817→  }
+   818→}
+   819→
+   820→/**
+   821→ * The full staleness predicate for boot recovery: may this process treat a
+   822→ * "running" row as abandoned? Called AFTER the startedAt < bootTs pre-check.
+   823→ *
+   824→ *   null claimedBy                      -> stale (Stage 1/2 legacy row — a
+   825→ *                                          Stage-3 claim always stamps it)
+   826→ *   my own workerId                     -> live (I am executing it)
+   827→ *   my role + my pid + earlier bootTs   -> stale (previous incarnation of
+   828→ *                                          THIS process reused the pid)
+   829→ *   anything else                       -> stale only when the pid is dead
+   830→ * Fail-safe by construction: an unknown/live claimer is never interrupted.
+   831→ */
+   832→export function claimIsStale(claimedBy: string | null): boolean {
+   833→  if (!claimedBy) return true;
+   834→  if (claimedBy === state.workerId) return false;
+   835→  const [role, pidStr, bootStr] = claimedBy.split(":");
+   836→  const myBoot = state.workerId.split(":")[2];
+   837→  if (role === state.role && Number(pidStr) === process.pid && bootStr !== myBoot) {
+   838→    return true; // previous incarnation of this very process
+   839→  }
+   840→  return claimerPidIsDead(claimedBy);
+   841→}
+   842→

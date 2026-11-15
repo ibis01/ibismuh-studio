@@ -1,0 +1,662 @@
+   511→   *  viewBox-space; the row is the manifest, the object is the fragment. */
+   512→  viewBoxW       Int
+   513→  viewBoxH       Int
+   514→  bytes          Int      @default(0)
+   515→  uploadedBy     String
+   516→  createdAt      DateTime @default(now())
+   517→
+   518→  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+   519→
+   520→  @@unique([videoId, assetId])
+   521→  @@index([organizationId])
+   522→}
+   523→
+   524→// S126 — the external import lane's manifest (docs/design/s126-import-lane.md
+   525→// §2 gate 7): one row per import, one or more storage objects under
+   526→// {videoId}/graphics/imports/{importId}/. The row carries the MEASURED
+   527→// facts (the gates derived them — the client declares nothing the gates did
+   528→// not verify) plus the user-declared provenance (source/license — the
+   529→// reception record's binding rule: imported assets are provenance-tagged
+   530→// per asset). layout "sheet" stores one object (sheet.png); layout
+   531→// "sequence" stores f0000.png..fNNNN.png (a WebM source is DECODED to
+   532→// alpha PNG frames at admission — the runtime never sees a video clock).
+   533→model GraphicsImport {
+   534→  id             String   @id @default(cuid())
+   535→  organizationId String
+   536→  videoId        String
+   537→  importId       String
+   538→  layout         String
+   539→  mime           String
+   540→  frames         Int
+   541→  fps            Int
+   542→  frameW         Int
+   543→  frameH         Int
+   544→  bytes          Int      @default(0)
+   545→  source         String?
+   546→  license        String?
+   547→  uploadedBy     String
+   548→  createdAt      DateTime @default(now())
+   549→
+   550→  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+   551→
+   552→  @@unique([videoId, importId])
+   553→  @@index([organizationId])
+   554→}
+   555→
+   556→// S112 — Scene-Level Editing & Repair, Stage 1: the revision foundation
+   557→// (docs/design/scene-level-editing-reconciliation.md §9). One IMMUTABLE row
+   558→// per (video, scene, version): every scene-content change lands as a NEW
+   559→// revision — never an in-place edit — so history can never be overwritten,
+   560→// concurrent edits are detectable, and any prior state can be restored
+   561→// (rollback = a new revision carrying old content; the append-only law).
+   562→//
+   563→// sceneId is the STABLE id carried on Scene.id inside the Video.scenes JSON
+   564→// (minted at first touch; see scene-revisions.ts). Indices are positional
+   565→// and shift across structural ops and epoch regens; ids do not — a sceneId's
+   566→// revision line is exactly one content lineage.
+   567→//
+   568→// content snapshots the scene's UNION slice — { scene, docScene }: the row
+   569→// Scene AND its timeline-doc TimelineScene — because a scene's editable
+   570→// content lives in both documents (rollback of half a scene would be a lie).
+   571→// Kept TEXT (not a Json column) per the house law so SQLite and Postgres
+   572→// behave identically.
+   573→//
+   574→// status ladder: draft (landed, not yet checked) | previewing (S114) |
+   575→// needs_repair (S115) | approved (S116 — render's source of truth) |
+   576→// superseded (a newer revision exists). An APPROVED head is never flipped
+   577→// to superseded by a newer draft — the latest approved revision stays
+   578→// addressable for render and rollback.
+   579→//
+   580→// recheck (S116) — the scene-scoped QC VERDICT, JSON SceneRecheckReport
+   581→// (scene-qc.ts), stored as an ANNOTATION on the revision it judged: the
+   582→// content column is never rewritten (law 1), but a revision may carry the
+   583→// recheck's measured verdict. The verdict records the revisionVersion it
+   584→// judged — a newer head makes it stale by comparison, never by mutation.
+   585→// Kept TEXT per the house law (SQLite + Postgres behave identically).
+   586→model SceneRevision {
+   587→  id             String   @id @default(cuid())
+   588→  organizationId String
+   589→  videoId        String
+   590→  sceneId        String // stable Scene.id — NOT the positional index
+   591→  version        Int // 1-based, monotonic per (videoId, sceneId)
+   592→  parentVersion  Int? // the head this revision was made against (null = genesis)
+   593→  status         String   @default("draft")
+   594→  changeKind     String   @default("edit") // edit | structural | epoch | rollback | backfill
+   595→  origin         String // the mutator that wrote it ("scenes-patch", "clip-split", "script-regen", …)
+   596→  content        String // JSON SceneRevisionContent — { scene, docScene } union slice
+   597→  recheck        String? // S116 — JSON SceneRecheckReport (the verdict THIS revision was judged by)
+   598→  note           String?
+   599→  createdBy      String? // acting user; null = job body / legacy
+   600→  createdAt      DateTime @default(now())
+   601→
+   602→  video        Video        @relation(fields: [videoId], references: [id], onDelete: Cascade)
+   603→  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   604→
+   605→  @@unique([videoId, sceneId, version])
+   606→  @@index([videoId, sceneId, status])
+   607→  @@index([organizationId])
+   608→  @@index([videoId, changeKind]) // the epoch scan (fresh-id minting reads history)
+   609→}
+   610→
+   611→// S113 — Scene-Level Editing & Repair, Stage 2: artifact provenance + the
+   612→// declarative dependency map (docs/design/scene-level-editing-reconciliation.md
+   613→// §9, Stage 2). One row per GENERATED scene artifact: the full composed
+   614→// prompt (discarded at generation time before this table existed), the
+   615→// input hash, provider/model, the revision the artifact was built from, and
+   616→// — through the UsageRecord bridge — the accumulated cost of producing it
+   617→// (re-rolls included). `status`: pending (registered before the paid call,
+   618→// so attribution can link) | ready (landed) | failed | stale (swept by a
+   619→// dependency-invalidating edit — the file is gone or superseded).
+   620→// Kinds are the proposal's own vocabulary: image | video | audio | preview
+   621→// (per-scene clip / whiteboard scene encode = video; Stage 3's scene preview
+   622→// = preview). Unique on (videoId, storageKey, inputHash): same inputs at the
+   623→// same key are the same artifact; a new input at the same key supersedes the
+   624→// prior rows (status stale — history stays, the current one is addressable).
+   625→model SceneArtifact {
+   626→  id              String   @id @default(cuid())
+   627→  organizationId  String
+   628→  videoId         String
+   629→  sceneId         String? // stable Scene.id when the video carries ids (legacy: null)
+   630→  sceneIndex      Int // positional — the URL grammar
+   631→  revisionVersion Int? // the head revision this was generated from (Stage 3's stale check)
+   632→  type            String // image | video | audio | preview
+   633→  storageKey      String // full key, "<videoId>/scene-02.png"
+   634→  inputHash       String // sha256 of the generation inputs (prompt+seed / text+voice+speed / image+motion)
+   635→  provider        String?
+   636→  model           String?
+   637→  prompt          String? // the FULL composed prompt at generation time
+   638→  costMicroUsd    Int      @default(0) // accumulated by the UsageRecord bridge (attribution.artifactId)
+   639→  status          String   @default("pending")
+   640→  bytes           Int?
+   641→  createdAt       DateTime @default(now())
+   642→
+   643→  video        Video        @relation(fields: [videoId], references: [id], onDelete: Cascade)
+   644→  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   645→
+   646→  @@unique([videoId, storageKey, inputHash])
+   647→  @@index([videoId, sceneIndex, type])
+   648→  @@index([organizationId])
+   649→}
+   650→
+   651→// S115 — Scene-Level Editing & Repair, Stage 4: the durable repair record
+   652→// (docs/design/scene-level-editing-reconciliation.md §5.5). The S84 critic
+   653→// and the S77 Visual Consistency Engine already emit per-scene repair
+   654→// PROPOSALS with ready instruction strings — as ephemeral report JSON. This
+   655→// table is those proposals, PERSISTED, with the estimate + affected-asset
+   656→// list + approval + job linkage the proposals lack: the propose→approve→run
+   657→// ladder the operator's requirement D demands (no silent paid calls — a
+   658→// repair NEVER generates before an explicit approval stamps approvedBy).
+   659→// status ladder: proposed (estimate attached, awaiting a human) |
+   660→// awaiting_approval (superseded alias, reserved) | running (job enqueued) |
+   661→// completed (targetVersion = the revision the repair produced) | failed |
+   662→// rejected (the human said no — the estimate stays as a record).
+   663→model SceneRepair {
+   664→  id             String   @id @default(cuid())
+   665→  organizationId String
+   666→  videoId        String
+   667→  sceneId        String? // stable Scene.id when the video carries ids
+   668→  sceneIndex     Int
+   669→  sourceVersion  Int // the head revision the repair targets
+   670→  targetVersion  Int? // the revision the completed repair produced
+   671→  instruction    String // the repair instruction (critic/VCE proposal or freeform)
+   672→  origin         String // "critic" | "vce" | "manual"
+   673→  estimateMicroUsd Int @default(0) // requirement D: the estimate BEFORE approval
+   674→  affectedAssets String // JSON: what regenerates (the Stage 2 plan's list)
+   675→  status         String   @default("proposed")
+   676→  approvedBy     String?
+   677→  approvedAt     DateTime?
+   678→  jobId          String? // the enqueued scene job (the idempotent retry link)
+   679→  idempotencyKey String? // the job's key — approving twice cannot double-bill
+   680→  note           String?
+   681→  createdAt      DateTime @default(now())
+   682→  updatedAt      DateTime @updatedAt
+   683→
+   684→  video        Video        @relation(fields: [videoId], references: [id], onDelete: Cascade)
+   685→  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   686→
+   687→  @@index([videoId, sceneIndex])
+   688→  @@index([organizationId])
+   689→}
+   690→
+   691→model Activity {
+   692→  id             String       @id @default(cuid())
+   693→  organizationId String
+   694→  userId         String? // null = legacy row created before Stage 2
+   695→  videoId        String?
+   696→  video          Video?       @relation(fields: [videoId], references: [id], onDelete: Cascade)
+   697→  stage          String
+   698→  message        String
+   699→  level          String       @default("info")
+   700→  createdAt      DateTime     @default(now())
+   701→  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   702→  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+   703→
+   704→  @@index([organizationId])
+   705→  @@index([createdAt])
+   706→}
+   707→
+   708→model ResearchSession {
+   709→  id             String       @id @default(cuid())
+   710→  organizationId String
+   711→  niche          String
+   712→  query          String
+   713→  ideas          String // JSON-serialized array of ResearchIdeaDTO
+   714→  createdAt      DateTime     @default(now())
+   715→  updatedAt      DateTime     @updatedAt
+   716→  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   717→
+   718→  @@index([organizationId])
+   719→  @@index([createdAt])
+   720→}
+   721→
+   722→model ScheduleSlot {
+   723→  id             String       @id @default(cuid())
+   724→  organizationId String
+   725→  videoId        String?
+   726→  video          Video?       @relation(fields: [videoId], references: [id], onDelete: Cascade)
+   727→  channelId      String?
+   728→  title          String
+   729→  slotDate       DateTime // publish day (midnight, local calendar day)
+   730→  timeOfDay      String       @default("18:00")
+   731→  note           String?
+   732→  done           Boolean      @default(false)
+   733→  createdAt      DateTime     @default(now())
+   734→  updatedAt      DateTime     @updatedAt
+   735→  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   736→
+   737→  @@index([organizationId])
+   738→  @@index([slotDate])
+   739→}
+   740→
+   741→// Phase 5 — performance snapshots pulled from the YouTube Data API for
+   742→// published videos. One row per (video, sync) so the analytics view can chart
+   743→// growth deltas between syncs and the Topic Radar can learn from winners.
+   744→model VideoStat {
+   745→  id             String       @id @default(cuid())
+   746→  organizationId String
+   747→  videoId        String
+   748→  video          Video        @relation(fields: [videoId], references: [id], onDelete: Cascade)
+   749→  views          Int          @default(0)
+   750→  likes          Int          @default(0)
+   751→  comments       Int          @default(0)
+   752→  favorites      Int          @default(0)
+   753→  snapshotAt     DateTime     @default(now())
+   754→  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   755→
+   756→  @@index([organizationId])
+   757→  @@index([videoId, snapshotAt])
+   758→}
+   759→
+   760→// Voice cloning — a speaker's voice recreated from a short (3-30s) sample.
+   761→// provider "zhipu": recreated via the Zhipu GLM-TTS-Clone API —
+   762→// providerVoiceId (voice_clone_…) is what the TTS call sends in its `voice`
+   763→// field; it only speaks on the SAME platform account that created it.
+   764→// provider "selfhost": the normalized sample itself is stored (sampleWav,
+   765→// base64) and re-sent to the user's voice_server.py (Chatterbox) on every
+   766→// synthesis — the "clone" lives on the user's own machine.
+   767→// auditionWav caches the clone-time preview audio (base64) so the UI can
+   768→// replay "how the clone sounds" without a fresh TTS call.
+   769→model VoiceProfile {
+   770→  id              String       @id @default(cuid())
+   771→  organizationId  String
+   772→  name            String
+   773→  provider        String       @default("zhipu") // platform that holds the cloned voice
+   774→  providerVoiceId String // voice_clone_20240315_143052_001
+   775→  sourceLabel     String? // original sample file name / URL label
+   776→  durationSec     Float? // length of the source sample
+   777→  auditionWav     String? // base64 WAV returned by the clone call (short preview)
+   778→  sampleWav       String? // base64 normalized sample — self-hosted clones re-send it per synthesis
+   779→  isActive        Boolean      @default(true)
+   780→  createdAt       DateTime     @default(now())
+   781→  updatedAt       DateTime     @updatedAt
+   782→  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   783→
+   784→  @@index([organizationId])
+   785→  @@index([isActive])
+   786→  @@index([provider])
+   787→}
+   788→
+   789→// Background-music library — every track carries its license record so a
+   790→// published video can always answer "is this safe to monetize?". The
+   791→// TubeForge-original beds are synthesized in-app (zero third-party samples);
+   792→// users can upload their OWN licensed tracks with full attribution metadata.
+   793→model MusicTrack {
+   794→  id             String  @id @default(cuid())
+   795→  organizationId String
+   796→  name           String
+   797→  // Comma-separated mood/niche tags used by the auto-selection engine, e.g.
+   798→  // "motivation,uplifting" — niches map onto these tags (see music.ts).
+   799→  moods          String  @default("")
+   800→  genre          String?
+   801→  durationSec    Float   @default(0)
+   802→  filePath       String // relative path under uploads/, e.g. "_music/uplifting-aurora.wav"
+   803→  fileSizeBytes  Int     @default(0)
+   804→  isOriginal     Boolean @default(false) // synthesized by TubeForge — no third-party audio
+   805→
+   806→  // --- Copyright / license record (kept for every track, shown in UI) ---
+   807→  licenseType         String   @default("TubeForge Original") // e.g. "YouTube Audio Library", "CC BY 4.0", "Commercial license"
+   808→  sourceUrl           String?
+   809→  commercialUse       Boolean  @default(true)
+   810→  attributionRequired Boolean  @default(false)
+   811→  attributionText     String? // exact credit line to paste into the description
+   812→  licenseEvidence     String? // URL or note proving the license (screenshot, license page)
+   813→  downloadedAt        DateTime @default(now())
+   814→  contentIdNotes      String? // known Content ID claims / restrictions, if any
+   815→
+   816→  isActive     Boolean      @default(true)
+   817→  createdAt    DateTime     @default(now())
+   818→  updatedAt    DateTime     @updatedAt
+   819→  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   820→
+   821→  @@index([organizationId])
+   822→  @@index([isActive])
+   823→}
+   824→
+   825→// Stage 5 (AI Director) — per-scene clothing / accessory / mood tracking for
+   826→// the recurring cast, written by the director pass and read back by image
+   827→// generation ("same outfit as scene 3") and the VLM continuity check.
+   828→// Unique on (videoId, sceneIndex, characterId): one look per character per scene.
+   829→model CharacterAppearance {
+   830→  id             String       @id @default(cuid())
+   831→  organizationId String
+   832→  characterId    String
+   833→  character      Character    @relation(fields: [characterId], references: [id], onDelete: Cascade)
+   834→  videoId        String
+   835→  video          Video        @relation(fields: [videoId], references: [id], onDelete: Cascade)
+   836→  sceneIndex     Int
+   837→  outfit         String?
+   838→  accessory      String?
+   839→  mood           String?
+   840→  createdAt      DateTime     @default(now())
+   841→  updatedAt      DateTime     @updatedAt
+   842→  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   843→
+   844→  @@unique([videoId, sceneIndex, characterId])
+   845→  @@index([organizationId])
+   846→  @@index([characterId])
+   847→}
+   848→
+   849→// Stage 5 (module C) — the World library: recurring LOCATIONS and PROPS.
+   850→// Same continuity job the cast library does: the AI Director references
+   851→// these by name in its per-scene plan, and the approved descriptions weave
+   852→// into scene image prompts so recurring places and objects stay visually
+   853→// consistent across scenes. referenceImages mirrors Character.referenceImages
+   854→// (JSON array of storage keys, oldest first).
+   855→model Location {
+   856→  id              String       @id @default(cuid())
+   857→  organizationId  String
+   858→  name            String
+   859→  description     String?
+   860→  referenceImages String?
+   861→  isActive        Boolean      @default(true)
+   862→  createdAt       DateTime     @default(now())
+   863→  updatedAt       DateTime     @updatedAt
+   864→  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   865→
+   866→  @@index([organizationId])
+   867→}
+   868→
+   869→model Prop {
+   870→  id              String       @id @default(cuid())
+   871→  organizationId  String
+   872→  name            String
+   873→  description     String?
+   874→  referenceImages String?
+   875→  isActive        Boolean      @default(true)
+   876→  createdAt       DateTime     @default(now())
+   877→  updatedAt       DateTime     @updatedAt
+   878→  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   879→
+   880→  @@index([organizationId])
+   881→}
+   882→
+   883→// Phase 3 — persistent job registry: survives server restarts so interrupted
+   884→// stages can be detected ("running" rows from a dead process) and surfaced
+   885→// to users instead of silently vanishing like the old in-memory maps.
+   886→model Job {
+   887→  id              String       @id @default(cuid())
+   888→  organizationId  String
+   889→  userId          String? // who kicked the job (null = legacy row)
+   890→  kind            String // voiceover | thumbnail | variants | portrait | poses | storyboard | render | scene | verify | …
+   891→  entityId        String // video id, character id, or "<videoId>#scene<N>"
+   892→  status          String       @default("pending") // pending | running | done | failed | interrupted | cancelled
+   893→  progress        Float? // 0..1
+   894→  label           String? // human progress label ("Rendering scene 3 of 6")
+   895→  error           String?
+   896→  attempts        Int          @default(0) // claim cycles started (Stage 3 queue)
+   897→  maxAttempts     Int          @default(2) // claim cycles allowed before "failed" sticks
+   898→  nextRunAt       DateTime     @default(now()) // earliest claim time (retry backoff)
+   899→  claimedBy       String? // "<role>:<pid>:<bootTs>" of the executing process
+   900→  claimedAt       DateTime?
+   901→  // S100 / P0.2 — renewable lease + fencing token. leaseToken is MONOTONIC
+   902→  // per job (bumped on every claim and every expired-lease reap); only the
+   903→  // holder of the CURRENT token may write the row's terminal state, so a
+   904→  // stale worker's completion affects 0 rows (the fencing law).
+   905→  // leaseExpiresAt is the lease deadline; the executor renews it at TTL/3
+   906→  // and any process may reap expired leases back to pending.
+   907→  leaseToken      Int          @default(0)
+   908→  leaseExpiresAt  DateTime?
+   909→  // Stage 3 close-out — JSON-encoded request options (render mode, scene
+   910→  // instruction, voiceover source pointer, …). Write-once at enqueue, parsed
+   911→  // by the kind's crash-recovery handler so a restarted process can re-run
+   912→  // the job with the SAME choices instead of factory defaults. Kept as TEXT
+   913→  // (not a Json column) so the SQLite mirror and Postgres behave identically.
+   914→  payload         String?
+   915→  // S115 — Scene-Level Editing, Stage 4: the idempotency key (caller-minted,
+   916→  // deterministic per logical work: "<kind>:<entity>:<content-hash>[:<opts-hash>]"). A
+   917→  // retry of the SAME request (network retry, double-click, job replay)
+   918→  // resolves to the standing row — done rows are NOT re-enqueued, killing the
+   919→  // retry-after-done double-bill path. Null = legacy un-keyed enqueue.
+   920→  idempotencyKey  String?  @unique
+   921→  cancelRequested Boolean      @default(false) // cooperative cancel — visible cross-process
+   922→  startedAt       DateTime     @default(now()) // set at claim (execution start)
+   923→  endedAt         DateTime?
+   924→  createdAt       DateTime     @default(now())
+   925→  updatedAt       DateTime     @updatedAt
+   926→  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   927→  user            User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+   928→
+   929→  @@index([organizationId])
+   930→  @@index([entityId, kind])
+   931→  @@index([status])
+   932→  @@index([startedAt])
+   933→  @@index([status, nextRunAt]) // Stage 3 queue claim scan
+   934→  @@index([status, leaseExpiresAt]) // S100 expired-lease reap scan
+   935→}
+   936→
+   937→// Stage 3 (T-3.7) — per-organization storage byte counter backing storage.ts
+   938→// quotas. A counter, not a listing: O(1) quota checks on every put. Rebuild
+   939→// from the driver with `npm run storage:recompute` if it ever drifts.
+   940→model StorageUsage {
+   941→  organizationId String       @id
+   942→  bytes          BigInt       @default(0)
+   943→  updatedAt      DateTime     @updatedAt
+   944→  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   945→}
+   946→
+   947→// S101 / P0.3 — durable in-flight storage holds. The quota decision and the
+   948→// counter now happen in ONE serializable admission transaction; the hold row
+   949→// is what makes an admission survive a crash: a process that dies between
+   950→// admission and settle leaves the hold behind, and the expiry sweep drops
+   951→// it (a hold never moved the committed counter, so dropping one always
+   952→// frees exactly the bytes it reserved — never lies about stored state).
+   953→// Settle (the object landed) deletes the hold and moves the real delta
+   954→// (actual - replaces) into StorageUsage.
+   955→model StorageReservation {
+   956→  id             String       @id @default(cuid())
+   957→  organizationId String
+   958→  key            String // object key the hold protects (audit trail)
+   959→  bytes          BigInt // reserved size estimate
+   960→  createdAt      DateTime     @default(now())
+   961→  expiresAt      DateTime // sweep deadline (TUBEFORGE_STORAGE_RESERVATION_TTL_MS)
+   962→  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   963→
+   964→  @@index([organizationId]) // the admission's in-flight SUM scan
+   965→  @@index([expiresAt]) // the expiry sweep scan
+   966→}
+   967→
+   968→// Stage 3 (T-3.8) — per-user, per-capability AI cost tracking. Written by the
+   969→// provider layer on every metered call; surfaced via GET /api/account/usage.
+   970→// costMicroUsd keeps exact integers (no float drift); tokens follow provider
+   971→// reports where available, else 0.
+   972→model UsageRecord {
+   973→  id             String   @id @default(cuid())
+   974→  organizationId String
+   975→  userId         String
+   976→  capability     String // chat | tts | image | video | asr | youtube | generic
+   977→  provider       String // zai | openai | elevenlabs | ... ("internal" = local work)
+   978→  model          String?
+   979→  inputTokens    Int      @default(0)
+   980→  outputTokens   Int      @default(0)
+   981→  costMicroUsd   Int      @default(0) // micro-dollars (1e-6 USD)
+   982→  latencyMs      Int?
+   983→  ok             Boolean  @default(true)
+   984→  createdAt      DateTime @default(now())
+   985→  // S113 — the provenance bridge (Scene-Level Editing, Stage 2): what this
+   986→  // call PRODUCED, when it was a scene-scoped generation. Plain columns,
+   987→  // deliberately NO foreign keys: usage rows are BILLING EVIDENCE and must
+   988→  // survive video deletion (a deleted project's spend history stays
+   989→  // answerable). artifactId points at a SceneArtifact row (which does
+   990→  // cascade — the linkage goes silent, the evidence stays).
+   991→  videoId    String?
+   992→  sceneIndex Int?
+   993→  artifactId String?
+   994→
+   995→  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+   996→  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+   997→
+   998→  @@index([organizationId, createdAt])
+   999→  @@index([userId, createdAt])
+  1000→  @@index([organizationId, capability, createdAt])
+  1001→}
+  1002→
+  1003→// S32 — the $5 door's durable ledger. S27 kept outstanding reservations in
+  1004→// process memory and bootstrapped the recorded total from a SUM of
+  1005→// UsageRecord rows. Two gaps the external audit (Nov 2026) called out:
+  1006→//   * a crash mid-call lost the hold — the next boot under-counted;
+  1007→//   * connection-test dispatches (settings/ai route, outside aiCall) settled
+  1008→//     the in-memory recorded total but never wrote a UsageRecord row, so a
+  1009→//     restart lost their spend too.
+  1010→// This table is the gate's single source of truth: admitDispatch writes a
+  1011→// `pending` row; settle updates it to `settled` with the actual cost;
+  1012→// bootRecorded rebuilds `holds` from pending rows and `recordedMicro` from
+  1013→// settled rows, failing CLOSED on any DB error (a broken meter must not
+  1014→// re-open a spent budget). UsageRecord rows remain for the user-facing
+  1015→// usage dashboard (attribution); the GATE reads SpendReservation only.
+  1016→model SpendReservation {
+  1017→  id                String    @id // the holdId ("spend-N"), assigned by spend.ts
+  1018→  organizationId    String
+  1019→  userId            String
+  1020→  provider          String // must be in PAID_PROVIDERS (gate scope)
+  1021→  model             String
+  1022→  estimatedMicroUsd Int // reserved worst-case estimate
+  1023→  actualCostMicroUsd Int? // null while pending, set on settle
+  1024→  status            String    @default("pending") // pending | settled
+  1025→  usageRecordId     String? // link to UsageRecord when aiCall wrote one (attribution)
+  1026→  admittedAt        DateTime  @default(now())
+  1027→  settledAt         DateTime?
+  1028→
+  1029→  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  1030→  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  1031→
+  1032→  @@index([provider, status])
+  1033→  @@index([status])
+  1034→  @@index([userId, status])
+  1035→}
+  1036→
+  1037→// ---------------------------------------------------------------------------
+  1038→// Stage 7 (T-7.5) — Billing
+  1039→// ---------------------------------------------------------------------------
+  1040→
+  1041→// Three plans per MASTER_PLAN §5: starter (free), creator (paid), studio (paid).
+  1042→// The Plan rows are seeded once at deploy time and never written by the app.
+  1043→model Plan {
+  1044→  id                String  @id @default(cuid())
+  1045→  name              String // "Starter" | "Creator" | "Studio"
+  1046→  tier              String // starter | creator | studio
+  1047→  monthlyCredits    Int     @default(0) // credits granted per period
+  1048→  maxResolution     String  @default("1080p") // 1080p | 1440p | 2160p
+  1049→  priorityRendering Boolean @default(false)
+  1050→  teamMembers       Int     @default(1)
+  1051→  isActive          Boolean @default(true)
+  1052→  subscriptions     Subscription[]
+  1053→  createdAt         DateTime @default(now())
+  1054→  updatedAt         DateTime @updatedAt
+  1055→
+  1056→  @@unique([tier])
+  1057→}
+  1058→
+  1059→// One subscription per user. The Subscription is the source of truth for
+  1060→// "what can this user do right now"; the Stripe webhook updates it on
+  1061→// `invoice.paid` / `customer.subscription.updated`. A user with no
+  1062→// Subscription row gets the default Starter plan (resolved in code, never
+  1063→// written) — fresh installs don't need to seed rows for existing users.
+  1064→model Subscription {
+  1065→  id                     String  @id @default(cuid())
+  1066→  userId                 String  @unique
+  1067→  planId                 String
+  1068→  plan                   Plan    @relation(fields: [planId], references: [id], onDelete: Restrict)
+  1069→  stripeCustomerId       String?
+  1070→  stripeSubscriptionId   String?
+  1071→  status                 String  @default("active") // active | past_due | canceled | trialing
+  1072→  currentPeriodEnd       DateTime?
+  1073→  user                   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  1074→  grants                 CreditGrant[]
+  1075→  ledger                 CreditLedger[]
+  1076→  createdAt              DateTime @default(now())
+  1077→  updatedAt              DateTime @updatedAt
+  1078→
+  1079→  @@index([stripeCustomerId])
+  1080→  @@index([stripeSubscriptionId])
+  1081→}
+  1082→
+  1083→// Monthly credit allotment per subscription. The remaining balance is the
+  1084→// sum of grants minus the ledger's spent rows for the user (resolved in
+  1085→// code; never denormalized into the Subscription).
+  1086→//
+  1087→// Stage 7.1: ALL credit math is in MICROCREDITS (1 UI credit = 1,000
+  1088→// microCredits, see billing.ts MICROS_PER_CREDIT) — the ledger's unit. The
+  1089→// column was renamed from grantedCredits so the unit can never be mixed
+  1090→// again at a sum site. `stripeInvoiceId` is the idempotency key: Stripe
+  1091→// retries webhook delivery, and the unique index makes a duplicate
+  1092→// invoice.paid grant physically impossible (billing.ts invoice.paid
+  1093→// upserts on it).
+  1094→model CreditGrant {
+  1095→  id                String   @id @default(cuid())
+  1096→  userId            String
+  1097→  subscriptionId    String
+  1098→  grantedMicroCredits Int // microCredits granted this period (1 credit = 1,000 micro)
+  1099→  stripeInvoiceId   String?  @unique // Stripe invoice id (in_…) — idempotency key for grants
+  1100→  periodStart       DateTime
+  1101→  periodEnd         DateTime
+  1102→  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  1103→  subscription    Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  1104→  createdAt       DateTime     @default(now())
+  1105→
+  1106→  @@index([userId, periodEnd])
+  1107→}
+  1108→
+  1109→// Append-only ledger of every credit spend (and refund). Every row links to
+  1110→// a UsageRecord when the spend was an AI call (the reconciliation test joins
+  1111→// the two and verifies the sum matches). Negative `microCredits` = refund.
+  1112→model CreditLedger {
+  1113→  id              String   @id @default(cuid())
+  1114→  userId          String
+  1115→  subscriptionId  String?
+  1116→  kind            String // ai_call | render_minute | publish | storage | topup | refund | hold | adjustment | hold_release
+  1117→  microCredits    Int // signed; positive = spent, negative = refunded
+  1118→  usageRecordId   String? // link to UsageRecord for reconciliation
+  1119→  reconcilesId    String? @unique // Stage 7.2: the reservation (hold) row this row settles — DB-enforced single settlement per hold
+  1120→  note            String?
+  1121→  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  1122→  subscription    Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  1123→  createdAt       DateTime     @default(now())
+  1124→
+  1125→  @@index([userId, createdAt])
+  1126→}
+  1127→
+  1128→// Stage 7.1 — every processed Stripe event id, recorded BEFORE the handler
+  1129→// runs (create-then-handle). Stripe retries delivery until it gets a 2xx;
+  1130→// a duplicate delivery hits the primary-key and is acked as a duplicate
+  1131→// without re-running the handler, so no handler can double-apply an event.
+  1132→model ProcessedWebhookEvent {
+  1133→  id         String   @id // Stripe event id (evt_…)
+  1134→  type       String
+  1135→  receivedAt DateTime @default(now())
+  1136→}
+  1137→
+  1138→// S46 — durable auth throttling (roadmap P1-6). One row per FAILED
+  1139→// credential proof (login wrong-password + change-password wrong-current),
+  1140→// the sliding window counted in SQL. Replaces the process-local Map that
+  1141→// wiped on every deploy and disagreed across instances: state in the DB
+  1142→// survives restarts and is shared by every web/worker process. Inserts are
+  1143→// independent rows, so concurrent failures cannot lose counts (the old
+  1144→// counter could race); the (key, at) index serves the window count. Rows
+  1145→// are pruned opportunistically once older than the 10-minute window —
+  1146→// see src/lib/tubeforge/auth-throttle.ts for the law.
+  1147→model AuthAttempt {
+  1148→  id  Int      @id @default(autoincrement())
+  1149→  key String // throttle key: the caller's IP (login + change-password share it — a wrong current password IS a login attempt)
+  1150→  at  DateTime // the failure instant (explicit, never defaulted — the window math depends on it)
+  1151→
+  1152→  @@index([key, at])
+  1153→}
+  1154→
+  1155→
+  1156→// S102 / P0.4 — the SHARED per-IP rate limiter's fixed-window counters.
+  1157→// The middleware's in-memory buckets stay (edge runtime is architecture-
+  1158→// banned from the DB — they are coarse per-instance shedding); THIS table is
+  1159→// the authoritative multi-instance law, enforced at requireUser: one row per
+  1160→// (tiered key, 60s window), atomically incremented via a raw upsert
+  1161→// RETURNING count. Survives deploys, shared by every instance, immune to the
+  1162→// X-Forwarded-For first-value spoof (trusted-proxy law in shared-rate-limit.ts).
+  1163→model RateLimitCounter {
+  1164→  key         String   // "<tier>:<client ip>" — tier is r (read) or w (write)
+  1165→  windowStart BigInt   // epoch SECONDS of the fixed 60s window (BigInt: int32 epoch dies in 2038)
+  1166→  count       Int      @default(0)
+  1167→  updatedAt   DateTime @updatedAt
+  1168→
+  1169→  @@id([key, windowStart])
+  1170→  @@index([updatedAt]) // the sweep scan
+  1171→}
+  1172→
