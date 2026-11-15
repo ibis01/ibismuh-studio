@@ -68,6 +68,10 @@ export interface GraphicsCanvasProps {
   /** Throttled (~10 Hz) time reporter for the studio's slider. */
   onTime: (tMs: number) => void;
   onEnded: () => void;
+  /** S126 — the resolved import bytes (assetKey → per-frame data URIs);
+   *  the same resolution the render job runs (the one-seam law). Absent =
+   *  spriteless preview (byte-identical to the pre-S126 compose). */
+  spriteAssets?: Map<string, string[]>;
   /** S124 — arm the element editor (the studio's Layout mode). Playback
    *  is suspended while armed; the placed state + the overlay take over. */
   editable?: boolean;
@@ -124,6 +128,7 @@ export default function GraphicsCanvas({
   seek,
   onTime,
   onEnded,
+  spriteAssets,
   editable = false,
   selectedId = null,
   onSelect,
@@ -200,10 +205,10 @@ export default function GraphicsCanvas({
     if (!iframe) return;
     const scene = doc.scenes[activeScene];
     if (!scene) return;
-    const composed = composeGraphicsScene(scene, doc);
+    const composed = composeGraphicsScene(scene, doc, spriteAssets ? { spriteAssets } : undefined);
     iframe.srcdoc = composed.html;
     loadedSceneRef.current = activeScene;
-  }, [doc, activeScene]);
+  }, [doc, activeScene, spriteAssets]);
 
   // The iframe fires onLoad for every srcdoc swap.
   useEffect(() => {

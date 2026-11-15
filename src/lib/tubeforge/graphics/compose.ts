@@ -452,7 +452,7 @@ function wipeClip(el: GraphicsElement): string {
   );
 }
 
-function elementInner(el: GraphicsElement, doc: GraphicsDoc): string {
+function elementInner(el: GraphicsElement, doc: GraphicsDoc, ctx?: ComposeCtx): string {
   switch (el.kind) {
     case "headline":
     case "subhead":
@@ -471,18 +471,71 @@ function elementInner(el: GraphicsElement, doc: GraphicsDoc): string {
       return shapeInner(el);
     case "group":
       return ""; // unreachable — elementNode short-circuits groups; children ride the assembly pass
+    case "sprite":
+      return spriteInner(el, ctx);
   }
+}
+
+// ---------------------------------------------------------------------------
+// S126 — the sprite element (the import lane's runtime seat)
+// ---------------------------------------------------------------------------
+
+/** The compose pass's sprite context: the RESOLVED asset bytes (data URIs —
+ *  one entry per frame: sheet = [strip], sequence = [f0..fN], built by the
+ *  caller through the import store — the whiteboard loadVideoLibrary
+ *  one-seam law) + the missing keys recorded during the pass (the renderer
+ *  refuses fail-closed on a non-empty set). */
+export interface ComposeCtx {
+  spriteAssets?: Map<string, string[]>;
+  missingAssets?: Set<string>;
+}
+
+/** The sprite's inner markup — layout "sheet": one nested <svg viewBox>
+ *  window over the strip (the applier moves the window); layout
+ *  "sequence": stacked <image> nodes, frame 0 visible (the applier
+ *  display-toggles — the mouth-swap discipline). Missing/short frame lists
+ *  emit NOTHING and record the key (the renderer refuses; the editor
+ *  surfaces). */
+function spriteInner(el: GraphicsElement, ctx?: ComposeCtx): string {
+  const p = el.sprite;
+  if (p === undefined) return "";
+  const uris = ctx?.spriteAssets?.get(p.assetKey);
+  const needed = p.layout === "sheet" ? 1 : p.frames;
+  if (!uris || uris.length < needed) {
+    ctx?.missingAssets?.add(p.assetKey);
+    return "";
+  }
+  const halfW = p.frameW / 2;
+  const halfH = p.frameH / 2;
+  if (p.layout === "sheet") {
+    // The horizontal-strip law (v1 — grids are a design-doc slice): the
+    // sheet's natural width is frames × frameW; the nested svg's viewBox
+    // is the WINDOW the applier slides.
+    return (
+      `<svg x="${fmt(-halfW)}" y="${fmt(-halfH)}" width="${fmt(p.frameW)}" height="${fmt(p.frameH)}"` +
+      ` viewBox="0 0 ${fmt(p.frameW)} ${fmt(p.frameH)}" data-sprite="sheet" data-fw="${fmt(p.frameW)}" data-fh="${fmt(p.frameH)}"` +
+      ` preserveAspectRatio="xMinYMin slice"><image href="${uris[0]}" width="${fmt(p.frameW * p.frames)}" height="${fmt(p.frameH)}"/></svg>`
+    );
+  }
+  const images: string[] = [];
+  for (let i = 0; i < p.frames; i++) {
+    images.push(
+      `<image data-frame="${i}" href="${uris[i]}" x="${fmt(-halfW)}" y="${fmt(-halfH)}" width="${fmt(p.frameW)}" height="${fmt(p.frameH)}"` +
+        (i === 0 ? "" : ` display="none"`) + `/>`
+    );
+  }
+  return images.join("\n");
 }
 
 /** The element wrapper: the frame engine (applier) owns transform +
  *  opacity; the poster carries the placed state. Groups receive their
  *  children's nodes as the body (the assembly pass below builds them). */
-function elementNode(el: GraphicsElement, doc: GraphicsDoc, childrenBody = ""): string {
+function elementNode(el: GraphicsElement, doc: GraphicsDoc, childrenBody = "", ctx?: ComposeCtx): string {
   const transform =
     `translate(${fmt(el.at.x)} ${fmt(el.at.y)}) rotate(${fmt(el.at.rotateDeg)}) scale(${fmt(el.at.scale)})`;
   const opacity = fmt(el.opacity ?? 1);
   const clip = el.kind === "shape" && revealMechanism(el) === "wipe" ? wipeClip(el) : "";
-  const inner = el.kind === "group" ? childrenBody : elementInner(el, doc);
+  const inner = el.kind === "group" ? childrenBody : elementInner(el, doc, ctx);
   const body = clip !== "" ? `${clip}\n${inner}` : inner;
   return `<g id="ge-${el.id}" transform="${transform}" opacity="${opacity}">${body}</g>`;
 }
@@ -536,13 +589,27 @@ export function placedGraphicsFrame(scene: GraphicsScene): GraphicsFrameState {
 
 export interface ComposedGraphicsScene {
   html: string;
+  /** S126 — the sprite asset keys the compose could NOT resolve (absent
+   *  map entry or a short frame list). Absent = an empty array on callers
+   *  that pass no context (byte-shape stability for existing consumers). */
+  missingAssets: string[];
 }
 
 /** The static skeleton for one scene — the poster frame. PURE: same
- *  (scene, doc) → byte-identical html (pinned). The renderer feeds it to
- *  page.setContent; the editor to an iframe srcdoc — one compose, two
- *  callers (the wb-page.ts seam law). */
-export function composeGraphicsScene(scene: GraphicsScene, doc: GraphicsDoc): ComposedGraphicsScene {
+ *  (scene, doc, ctx) → byte-identical html (pinned). The renderer feeds it
+ *  to page.setContent; the editor to an iframe srcdoc — one compose, two
+ *  callers (the wb-page.ts seam law). Sprite bytes ride the ctx (the
+ *  import store resolves them — the ONE seam); a compose with no ctx is
+ *  byte-identical to the pre-S126 shape for spriteless docs. */
+export function composeGraphicsScene(
+  scene: GraphicsScene,
+  doc: GraphicsDoc,
+  opts?: { spriteAssets?: Map<string, string[]> }
+): ComposedGraphicsScene {
+  const ctx: ComposeCtx = {
+    spriteAssets: opts?.spriteAssets,
+    missingAssets: new Set<string>(),
+  };
   // Group nesting — children ride the group's children-array order inside
   // the group's <g>; an element claimed by two groups lives in the LAST
   // claim (recorded v1 semantics). The claim map is the exported ONE truth
@@ -556,12 +623,12 @@ export function composeGraphicsScene(scene: GraphicsScene, doc: GraphicsDoc): Co
         .map((cid) => scene.elements.find((c) => c.id === cid))
         .filter((c): c is GraphicsElement => c !== undefined && !emitted.has(c.id));
       for (const c of inner) emitted.add(c.id);
-      const body = inner.map((c) => elementNode(c, doc)).join("\n");
-      parts.push(elementNode(el, doc, body));
+      const body = inner.map((c) => elementNode(c, doc, "", ctx)).join("\n");
+      parts.push(elementNode(el, doc, body, ctx));
       continue;
     }
     if (claims.has(el.id) || emitted.has(el.id)) continue; // lives inside its group
-    parts.push(elementNode(el, doc));
+    parts.push(elementNode(el, doc, "", ctx));
   }
   const html =
     `<!doctype html><html><head><meta charset="utf-8"><style>
@@ -573,7 +640,7 @@ text{font-family:Arial,Helvetica,sans-serif}
 <rect x="0" y="0" width="${doc.width}" height="${doc.height}" fill="${scene.background}"/>
 ${parts.join("\n")}
 </svg></body></html>`;
-  return { html };
+  return { html, missingAssets: [...(ctx.missingAssets ?? new Set<string>())].sort() };
 }
 
 // ---------------------------------------------------------------------------
@@ -595,6 +662,7 @@ export function graphicsFramePayload(frame: GraphicsFrameState): string {
       rotateDeg: e.rotateDeg,
       progress: e.progress,
       ...(e.counterValue !== undefined ? { counterValue: e.counterValue } : {}),
+      ...(e.frameIndex !== undefined ? { frameIndex: e.frameIndex } : {}),
     })),
   });
 }
@@ -665,6 +733,20 @@ export const APPLY_GRAPHICS_FRAME_FN = `(payloadJson) => {
     // Wipe — the baked clip rect's width rides progress.
     const clipRect = g.querySelector(":scope > clipPath rect[data-w]");
     if (clipRect) clipRect.setAttribute("width", String(Number(clipRect.dataset.w) * prog));
+    // S126 — the sprite's frame channel: the sheet's viewBox window slides
+    // (x = index × frameW); the sequence's stacked images display-toggle
+    // (the mouth-swap discipline). Both are absolute sets — idempotent.
+    if (el.frameIndex !== undefined) {
+      const sheet = g.querySelector(":scope > svg[data-sprite='sheet']");
+      if (sheet) {
+        const fw = Number(sheet.getAttribute("data-fw"));
+        const fh = Number(sheet.getAttribute("data-fh"));
+        sheet.setAttribute("viewBox", String(el.frameIndex * fw) + " 0 " + fw + " " + fh);
+      }
+      for (const img of g.querySelectorAll(":scope > image[data-frame]")) {
+        img.setAttribute("display", Number(img.getAttribute("data-frame")) === el.frameIndex ? "" : "none");
+      }
+    }
   }
   return true;
 }`;

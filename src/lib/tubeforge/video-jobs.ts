@@ -90,6 +90,7 @@ import {
 // imported at the SAME seam the whiteboard engine rides.
 import { renderGraphics } from "./graphics/render";
 import { graphicsDraftDoc, graphicsDraftKey, isGraphicsDraftScale } from "./graphics/draft";
+import { resolveSpriteAssets } from "./graphics/import-store";
 import { graphicsExpectedCuts, graphicsHoldWindows } from "./graphics/qc";
 import { parseGraphicsDoc, validGraphicsId } from "./graphics/types";
 import { loadVideoLibrary } from "./whiteboard/asset-store";
@@ -2168,6 +2169,21 @@ export async function runGraphicsJob(
   const outDir = path.join(videoDir(videoId), "graphics");
   fs.mkdirSync(outDir, { recursive: true });
 
+  // S126 — the import lane's one-seam resolution: the doc's referenced
+  // sprite keys resolve through the import store (data URIs for the compose
+  // ctx). Missing keys surface from the resolver and the render REFUSES
+  // fail-closed (the G1-IMP lens's enforcement half — a silently missing
+  // sprite would ship a lie).
+  const referencedKeys = doc.scenes.flatMap((s) =>
+    s.elements.filter((el) => el.kind === "sprite" && el.sprite !== undefined).map((el) => el.sprite?.assetKey ?? "")
+  ).filter(Boolean);
+  const { assets: spriteAssets, missing: missingImports } = await resolveSpriteAssets(videoId, referencedKeys);
+  if (missingImports.length > 0) {
+    throw new Error(
+      `unresolved sprite imports (${missingImports.join(", ")}) — re-upload or remove the sprites before rendering`
+    );
+  }
+
   try {
     if (isDraft) {
       // ---- the labelled draft: a LOOK at the working doc, never a
@@ -2187,6 +2203,7 @@ export async function runGraphicsJob(
       const result = await renderGraphics(scoped, {
         outDir: path.join(outDir, `draft-${scale}`),
         voFiles,
+        spriteAssets,
         // The look-rate: every OTHER frame at its exact doc time (the
         // draft lever that closes acceptance criterion 7 with the 0.5×
         // surface — see RenderGraphicsOptions.frameStep).
@@ -2225,6 +2242,7 @@ export async function runGraphicsJob(
       outDir,
       voFiles,
       musicPath: musicPath ?? undefined,
+      spriteAssets,
       onProgress: engineProgressGuard(entityId, "graphics"),
     });
 

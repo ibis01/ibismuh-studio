@@ -484,6 +484,8 @@ model Video {
   // <videoId>/whiteboard/assets/<assetId>.svg; bytes + the per-org count
   // feed the quota walls (gate 6).
   whiteboardAssetUploads WhiteboardAssetUpload[]
+  // S126 — the external import lane's manifest (GraphicsImport model).
+  graphicsImports        GraphicsImport[]
   // S112 — Scene-Level Editing & Repair (Stage 1): the immutable per-scene
   // revision history. Cascades with the video (history dies with its
   // project); rows are append-only by construction (see SceneRevision).
@@ -521,6 +523,38 @@ model WhiteboardAssetUpload {
   video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@unique([videoId, assetId])
+  @@index([organizationId])
+}
+
+// S126 — the external import lane's manifest (docs/design/s126-import-lane.md
+// §2 gate 7): one row per import, one or more storage objects under
+// {videoId}/graphics/imports/{importId}/. The row carries the MEASURED
+// facts (the gates derived them — the client declares nothing the gates did
+// not verify) plus the user-declared provenance (source/license — the
+// reception record's binding rule: imported assets are provenance-tagged
+// per asset). layout "sheet" stores one object (sheet.png); layout
+// "sequence" stores f0000.png..fNNNN.png (a WebM source is DECODED to
+// alpha PNG frames at admission — the runtime never sees a video clock).
+model GraphicsImport {
+  id             String   @id @default(cuid())
+  organizationId String
+  videoId        String
+  importId       String
+  layout         String
+  mime           String
+  frames         Int
+  fps            Int
+  frameW         Int
+  frameH         Int
+  bytes          Int      @default(0)
+  source         String?
+  license        String?
+  uploadedBy     String
+  createdAt      DateTime @default(now())
+
+  video Video @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([videoId, importId])
   @@index([organizationId])
 }
 

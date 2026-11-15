@@ -478,6 +478,12 @@ function policePayload(
       // only through that path.
       return null;
     }
+    // S126 — the LLM planner never proposes a sprite (imports arrive
+    // through the lane); a proposed sprite kind dies here with the reason.
+    case "sprite": {
+      dropped.push({ scene: sceneNo, subject, reason: "sprites come from the import lane, not the planner" });
+      return null;
+    }
   }
 }
 

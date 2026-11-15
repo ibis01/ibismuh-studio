@@ -91,7 +91,7 @@ export interface ElementMotion {
 
 export const GRAPHICS_ELEMENT_KINDS = [
   "headline", "subhead", "bullet", "counter", "bar", "barChart",
-  "icon", "callout", "shape", "group",
+  "icon", "callout", "shape", "group", "sprite",
 ] as const;
 export type GraphicsElementKind = (typeof GRAPHICS_ELEMENT_KINDS)[number];
 
@@ -113,6 +113,10 @@ export const MOTION_KINDS_BY_ELEMENT: Readonly<
   callout:  ["fade", "rise", "slide", "pop"],
   shape:    ["fade", "slide", "wipe", "grow", "draw"],
   group:    ["fade", "rise", "slide", "pop"],
+  // S126 — the import lane's element: visual moves only (no draw/grow/count
+  // semantics exist for raster frames — the compatibility table stays
+  // closed; a new motion on a sprite is a design-doc slice).
+  sprite:   ["fade", "slide", "pop"],
 };
 
 /** Runtime lookup with the closed-table guarantee restated (the Record is
@@ -195,6 +199,27 @@ export interface GroupPayload {
   children: string[];
 }
 
+// S126 — the external import lane's payload (docs/design/s126-import-lane.md
+// §1 — the ONE syntax minor extension). The asset is referenced by its
+// import-row key (resolved through the import store at render/compose —
+// never free text); fps rides the shared 24|30 timebase; the frame index is
+// derived from the SCENE clock in frameAt (no second clock).
+export interface SpritePayload {
+  /** The import row's assetKey (GraphicsImport.importId). */
+  assetKey: string;
+  /** "sheet" = one image, the window moves; "sequence" = stacked frames,
+   *  display-toggled. Matches the import row. */
+  layout: "sheet" | "sequence";
+  /** 1..GRAPHICS_BUDGETS.spriteFramesMax. */
+  frames: number;
+  /** The shared timebase (24 | 30 — the D3 law). */
+  fps: 24 | 30;
+  /** The frame's pixel size (1..4096 each) — the sheet window / the
+   *  sequence's uniform frame size. */
+  frameW: number;
+  frameH: number;
+}
+
 export interface GraphicsElement {
   id: string;
   kind: GraphicsElementKind;
@@ -212,6 +237,7 @@ export interface GraphicsElement {
   callout?: CalloutPayload;
   shape?: ShapePayload;
   group?: GroupPayload;
+  sprite?: SpritePayload;
   /** Choreography: enter is REQUIRED (an element that cannot enter has
    *  no reason to exist in this grammar); exit/emphasis optional. The
    *  frame engine composes with fixed precedence emphasis > exit > enter
@@ -315,6 +341,9 @@ export const GRAPHICS_BUDGETS = {
    *  flattener and the rasterizer pay). The WB_PATH_COMMAND_BUDGET
    *  number. */
   iconPathCommandBudget: 512,
+  /** S126 — max frames per sprite import (a sheet's grid cells or a
+   *  sequence's file count). A longer animation is a design-doc slice. */
+  spriteFramesMax: 48,
 } as const;
 
 /** Borrowed readable-ink wall (the whiteboard's WB_STROKE_WIDTH_MAX
@@ -359,7 +388,7 @@ const HEX_RE = /^#[0-9a-fA-F]{6}$/;
  *  unknown field (warning + dropped). */
 const ELEMENT_KEYS = new Set([
   "id", "kind", "at", "text", "counter", "bar", "icon", "callout",
-  "shape", "group", "enter", "exit", "emphasis", "opacity",
+  "shape", "group", "sprite", "enter", "exit", "emphasis", "opacity",
 ]);
 
 const DOC_KEYS = new Set(["version", "title", "width", "height", "fps", "scenes"]);
@@ -374,6 +403,7 @@ const ICON_PAYLOAD_KEYS = new Set(["paths", "color", "strokeWidth"]);
 const CALLOUT_PAYLOAD_KEYS = new Set(["text", "pointsAt"]);
 const SHAPE_PAYLOAD_KEYS = new Set(["kind", "w", "h", "r", "stroke", "fill", "strokeWidth"]);
 const GROUP_PAYLOAD_KEYS = new Set(["children"]);
+const SPRITE_PAYLOAD_KEYS = new Set(["assetKey", "layout", "frames", "fps", "frameW", "frameH"]);
 
 /** The output-surface law: exactly the three house aspects' native sizes.
  *  EXPORTED (the G1.4 planner snaps caller geometry onto this ONE table —
@@ -681,14 +711,59 @@ function parseGroupPayload(raw: unknown, where: string, warnings: string[], erro
   return { children };
 }
 
+/** S126 — the sprite payload: the import-row reference + the shared
+ *  timebase facts. Strict (shape violations are errors — the payload
+ *  drives the renderer's frame arithmetic). */
+function parseSpritePayload(
+  raw: unknown,
+  where: string,
+  warnings: string[],
+  errors: string[],
+): SpritePayload | null {
+  if (raw === undefined) return null;
+  if (!isObj(raw)) {
+    errors.push(`${where}: sprite payload unreadable — not an object`);
+    return null;
+  }
+  warnUnknownKeys(raw, SPRITE_PAYLOAD_KEYS, `${where} sprite payload`, warnings);
+  const assetKey = str(raw.assetKey);
+  if (assetKey === null || !validGraphicsId(assetKey)) {
+    errors.push(`${where}: sprite assetKey violates the id law (${String(raw.assetKey)})`);
+    return null;
+  }
+  const layout = str(raw.layout);
+  if (layout !== "sheet" && layout !== "sequence") {
+    errors.push(`${where}: sprite layout must be "sheet" or "sequence" — got ${String(raw.layout)}`);
+    return null;
+  }
+  const frames = num(raw.frames);
+  if (frames === null || frames < 1 || frames > GRAPHICS_BUDGETS.spriteFramesMax) {
+    errors.push(`${where}: sprite frames must be 1..${GRAPHICS_BUDGETS.spriteFramesMax} — got ${String(raw.frames)}`);
+    return null;
+  }
+  if (raw.fps !== 24 && raw.fps !== 30) {
+    errors.push(`${where}: sprite fps must be 24 or 30 (the shared timebase) — got ${String(raw.fps)}`);
+    return null;
+  }
+  const frameW = num(raw.frameW);
+  const frameH = num(raw.frameH);
+  const DIM_MAX = 4096;
+  if (frameW === null || frameH === null || frameW < 1 || frameH < 1 || frameW > DIM_MAX || frameH > DIM_MAX) {
+    errors.push(`${where}: sprite frameW/frameH must be finite 1..${DIM_MAX}`);
+    return null;
+  }
+  return { assetKey, layout, frames, fps: raw.fps as 24 | 30, frameW, frameH };
+}
+
 /** The payload slot per kind — the closed mapping (compile-total). */
 const PAYLOAD_SLOT: Readonly<Record<GraphicsElementKind, string>> = {
   headline: "text", subhead: "text", bullet: "text",
   counter: "counter", bar: "bar", barChart: "bar",
   icon: "icon", callout: "callout", shape: "shape", group: "group",
+  sprite: "sprite",
 };
 
-const PAYLOAD_SLOTS = new Set(["text", "counter", "bar", "icon", "callout", "shape", "group"]);
+const PAYLOAD_SLOTS = new Set(["text", "counter", "bar", "icon", "callout", "shape", "group", "sprite"]);
 
 function parseElement(
   raw: unknown,
@@ -809,6 +884,12 @@ function parseElement(
       const p = parseGroupPayload(ownRaw, where, warnings, errors);
       if (errors.length > 0) return null;
       if (p !== null) { el.group = p; ownParsed = true; }
+      break;
+    }
+    case "sprite": {
+      const p = parseSpritePayload(ownRaw, where, warnings, errors);
+      if (errors.length > 0) return null;
+      if (p !== null) { el.sprite = p; ownParsed = true; }
       break;
     }
   }
@@ -1177,6 +1258,17 @@ function serializePayload(kind: GraphicsElementKind, el: GraphicsElement): Rec |
     case "group": {
       if (el.group === undefined) return null;
       return { children: [...el.group.children] };
+    }
+    case "sprite": {
+      if (el.sprite === undefined) return null;
+      return {
+        assetKey: el.sprite.assetKey,
+        layout: el.sprite.layout,
+        frames: el.sprite.frames,
+        fps: el.sprite.fps,
+        frameW: el.sprite.frameW,
+        frameH: el.sprite.frameH,
+      };
     }
   }
 }

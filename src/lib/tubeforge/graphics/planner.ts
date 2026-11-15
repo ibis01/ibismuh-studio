@@ -138,6 +138,10 @@ const DEFAULT_PLACEMENT_169: Readonly<Record<GraphicsElementKind, Placement>> = 
   callout: { x: 960, y: 300, scale: 1, rotateDeg: 0 },
   shape: { x: 960, y: 540, scale: 1, rotateDeg: 0 },
   group: { x: 0, y: 0, scale: 1, rotateDeg: 0 },
+  // S126 — the import lane's element: the scaffold never proposes one
+  // (imports arrive through the lane, not the planner); the default only
+  // satisfies the closed table.
+  sprite: { x: 960, y: 540, scale: 1, rotateDeg: 0 },
 };
 
 /** Default text sizes per kind (within the validator's 12..288 band). */
@@ -184,6 +188,10 @@ export function nativeEnterFor(kind: GraphicsElementKind, order: number): Elemen
     case "shape":
       return { kind: "grow", durationMs: 500, delayMs: 350, ease: "ease-out" };
     case "group":
+      return { kind: "fade", durationMs: 400, delayMs: 0, ease: "ease-out" };
+    // S126 — the scaffold never proposes a sprite (imports arrive through
+    // the lane); the default only satisfies the closed table.
+    case "sprite":
       return { kind: "fade", durationMs: 400, delayMs: 0, ease: "ease-out" };
   }
 }

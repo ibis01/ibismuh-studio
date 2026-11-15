@@ -77,6 +77,12 @@ export interface RenderGraphicsOptions {
    *  fixed costs dominate a short program — and the look-rate closes the
    *  ≥ 2× criterion honestly. FINAL renders never step (1, by absence). */
   frameStep?: 1 | 2;
+  /** S126 — the RESOLVED import assets (the import store's one seam):
+   *  assetKey → data URIs (sheet = [strip], sequence = [f0..fN]). A doc
+   *  that references an import the caller did not resolve REFUSES
+   *  fail-closed (the G1-IMP lens's enforcement half — a silently missing
+   *  sprite is the exact lie the lane exists to catch). */
+  spriteAssets?: Map<string, string[]>;
 }
 
 export interface GraphicsSceneRenderResult {
@@ -261,7 +267,15 @@ export async function renderGraphics(
           `scene ${si + 1}/${doc.scenes.length} ("${scene.id}"): composing`,
           si / doc.scenes.length
         );
-        const composed = composeGraphicsScene(scene, doc);
+        const composed = composeGraphicsScene(scene, doc, { spriteAssets: opts.spriteAssets });
+        // S126 — fail-closed on unresolved imports: the compose records the
+        // missing keys; the render refuses BEFORE any chromium work on
+        // them (a silently missing sprite would ship a lie).
+        if (composed.missingAssets.length > 0) {
+          throw new Error(
+            `unresolved sprite imports (${composed.missingAssets.join(", ")}) — resolve them through the import store before rendering`
+          );
+        }
         await page.setContent(composed.html, { waitUntil: "load" });
 
         const framesDir = path.join(opts.outDir, `scene-${si + 1}-frames`);

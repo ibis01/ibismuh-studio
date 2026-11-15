@@ -21,7 +21,8 @@ import type { TransitionSettings } from "../transitions";
 import { graphicsSceneDurationsMs } from "./frame";
 import { graphicsBudgetReport } from "./preflight";
 import { graphicsTracks } from "./tracks";
-import { GRAPHICS_BUDGETS, type GraphicsDoc } from "./types";
+import { GRAPHICS_BUDGETS, type GraphicsDoc, type GraphicsElement } from "./types";
+import { IMPORT_WALLS } from "./import-validate";
 
 // ---------------------------------------------------------------------------
 // The pre-render subcheck matrix
@@ -203,6 +204,43 @@ export function graphicsQcMatrix(doc: GraphicsDoc, voSceneCount: number): Graphi
   } catch (err) {
     rows.push(row("G1-PROJ-4", "Frame arithmetic recorded", "unmeasured",
       "not measured", `the arithmetic probe failed: ${err instanceof Error ? err.message.slice(0, 160) : String(err)}`));
+  }
+
+  // S126 — G1-IMP-1 (the ONE import lens): every sprite payload is
+  // self-consistent — fps on the shared timebase, frames under the wall,
+  // sheet windows inside a horizontal strip (frames × frameW ≤ the 4096
+  // sheet-width wall), sequence sizes uniform. Vacuous pass on a doc with
+  // no sprites (the rollback law); the MANIFEST resolution is the render
+  // job's fail-closed refusal (the lens's enforcement half).
+  const sprites = doc.scenes.flatMap((s) => s.elements.filter((el) => el.kind === "sprite" && el.sprite !== undefined));
+  if (sprites.length === 0) {
+    rows.push(row(
+      "G1-IMP-1",
+      "Sprite imports self-consistent (S126)",
+      "pass",
+      "0 sprites",
+      "no imports referenced — the lens passes vacuously (the rollback law)"
+    ));
+  } else {
+    const problems: string[] = [];
+    for (const el of sprites) {
+      const p = el.sprite as NonNullable<GraphicsElement["sprite"]>;
+      const where = `scene "${doc.scenes.find((s) => s.elements.includes(el))?.id ?? "?"}"/${el.id}`;
+      if (p.fps !== 24 && p.fps !== 30) problems.push(`${where}: fps ${p.fps} off the shared timebase`);
+      if (p.frames < 1 || p.frames > GRAPHICS_BUDGETS.spriteFramesMax) problems.push(`${where}: frames ${p.frames} outside the wall`);
+      if (p.layout === "sheet" && p.frameW * p.frames > IMPORT_WALLS.sheetWidthMax) {
+        problems.push(`${where}: the sheet strip is ${p.frameW * p.frames}px wide — past the ${IMPORT_WALLS.sheetWidthMax} decode wall`);
+      }
+    }
+    rows.push(row(
+      "G1-IMP-1",
+      "Sprite imports self-consistent (S126)",
+      problems.length === 0 ? "pass" : "fail",
+      `${sprites.length} sprites`,
+      problems.length === 0
+        ? "fps on the shared 24/30 timebase; frames under the wall; sheet strips inside the decode wall"
+        : problems.slice(0, 3).join("; ")
+    ));
   }
 
   return {

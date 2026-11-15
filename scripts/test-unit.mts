@@ -15256,7 +15256,7 @@ suiteStart("graphics — S123 G1.1 the doc contract + validator");
 const G_SLOT: Record<string, string> = {
   headline: "text", subhead: "text", bullet: "text", counter: "counter",
   bar: "bar", barChart: "bar", icon: "icon", callout: "callout",
-  shape: "shape", group: "group",
+  shape: "shape", group: "group", sprite: "sprite",
 };
 
 function gPayload(kind: string): Record<string, unknown> {
@@ -15270,6 +15270,7 @@ function gPayload(kind: string): Record<string, unknown> {
     case "icon": return { paths: ["M 0 0 L 8 8 L 16 0"] };
     case "callout": return { text: "note", pointsAt: { x: 10, y: 20 } };
     case "shape": return { kind: "rect", w: 120, h: 60 };
+    case "sprite": return { assetKey: "imp-abc123", layout: "sheet", frames: 4, fps: 24, frameW: 128, frameH: 128 };
     default: return { children: [] };
   }
 }
@@ -15610,7 +15611,7 @@ await test("G1.1 one wall, two engines — GRAPHICS_FRAME_BUDGET is ANIM_FRAME_B
 });
 
 await test("G1.1 the compatibility table is compile-total and closed", () => {
-  eq(Object.keys(MOTION_KINDS_BY_ELEMENT).length, 10, "every element kind has a row");
+  eq(Object.keys(MOTION_KINDS_BY_ELEMENT).length, 11, "every element kind has a row");
   for (const m of Object.values(MOTION_KINDS_BY_ELEMENT).flat()) {
     ok(["fade", "rise", "slide", "pop", "wipe", "count", "grow", "draw"].includes(m), `motion "${m}" is in the closed set`);
   }
@@ -18027,6 +18028,219 @@ await test("S125 the admission routes — the validator is the gate, the pass de
   ok(charsSrc.includes("pose proposal was refused"), "a refused pose proposal degrades to the empty sheet");
   ok(typesSrc.includes("hasRig: boolean;"), "the DTO carries the rig seat (the studio reads it)");
   ok(charsSrc.includes("hasRig: Boolean(c.rigDoc)"), "the serializer reports the seat");
+});
+
+// ---------------------------------------------------------------------------
+// S126 — the external import lane: the sprite grammar (the ONE syntax
+// extension), the frame index channel, the compose/applier seats, the
+// G1-IMP lens, the pure gates, and the source pins (design record
+// docs/design/s126-import-lane.md).
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S126 the external import lane");
+
+import {
+  parsePngHeader,
+  parseWebpHeader,
+  sanitizeProvenance,
+  snapFps,
+  sniffImportKind,
+  validateSequenceFrame,
+  validateSheetImport,
+} from "../src/lib/tubeforge/graphics/import-validate";
+
+/** A minimal alpha PNG (IHDR color type 6) — the parser reads fixed
+ *  offsets, so the fixture is synthetic bytes, not an encoded file. */
+function alphaPng(width: number, height: number, colorType = 6): Buffer {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(21); // len(4) + "IHDR"(4) + data(13)
+  ihdr.writeUInt32BE(13, 0);
+  ihdr.write("IHDR", 4, "latin1");
+  ihdr.writeUInt32BE(width, 8);
+  ihdr.writeUInt32BE(height, 12);
+  ihdr[16] = 8; // bit depth
+  ihdr[17] = colorType;
+  ihdr[18] = 0; // compression
+  ihdr[19] = 0; // filter
+  ihdr[20] = 0; // interlace
+  const idat = Buffer.alloc(12);
+  idat.writeUInt32BE(0, 0);
+  idat.write("IDAT", 4, "latin1");
+  return Buffer.concat([sig, ihdr, idat]);
+}
+
+await test("S126 the sprite grammar — the closed-kind extension validates and round-trips byte-stable", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("a", "sprite")])]), "sprite doc");
+  const el = doc.scenes[0]?.elements[0];
+  ok(el && el.kind === "sprite", "the sprite element rides");
+  eq(el?.sprite?.assetKey, "imp-abc123", "the assetKey rides");
+  eq(el?.sprite?.layout, "sheet", "the layout rides");
+  eq(el?.sprite?.frames, 4, "the frames ride");
+  eq(el?.sprite?.fps, 24, "the fps rides");
+  eq(el?.sprite?.frameW, 128, "frameW rides");
+  eq(el?.sprite?.frameH, 128, "frameH rides");
+  const bytes = writeGraphicsDoc(doc);
+  eq(writeGraphicsDoc(mustParse(bytes, "sprite round-trip")), bytes, "byte-stable round-trip with a sprite");
+});
+
+await test("S126 the sprite compatibility table — fade/slide/pop only; draw/grow/count refuse", () => {
+  const legal = mustValidate(gDoc([gScene("s1", [gEl("a", "sprite", { enter: { kind: "pop", durationMs: 400, delayMs: 0, ease: "pop" } })])]), "pop sprite");
+  eq(legal.scenes[0]?.elements[0]?.enter.kind, "pop", "a pop enter is legal");
+  for (const motion of ["draw", "grow", "count", "rise", "wipe"]) {
+    const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("a", "sprite", { enter: { kind: motion, durationMs: 400, delayMs: 0, ease: "ease-out" } })])]));
+    ok(r.doc === null, `the ${motion} motion refuses on a sprite`);
+    ok(r.errors[0].includes("compatibility table"), `the ${motion} refusal names the table`);
+  }
+});
+
+await test("S126 the sprite payload walls — junk key, layout, frames, fps, dims all refuse", () => {
+  const cases: [Record<string, unknown>, string][] = [
+    [{ assetKey: "bad key!" }, "assetKey id law"],
+    [{ layout: "grid" }, "layout closed set"],
+    [{ frames: 0 }, "frames floor"],
+    [{ frames: GRAPHICS_BUDGETS.spriteFramesMax + 1 }, "frames wall"],
+    [{ fps: 60 }, "the shared timebase"],
+    [{ frameW: 0 }, "dim floor"],
+    [{ frameH: 5000 }, "dim wall"],
+  ];
+  for (const [override, label] of cases) {
+    const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("a", "sprite", { sprite: { assetKey: "imp-ok", layout: "sequence", frames: 3, fps: 24, frameW: 100, frameH: 100, ...override } })])]));
+    ok(r.doc === null, `${label} refuses`);
+  }
+});
+
+await test("S126 the frame index channel — bounded, scene-local, deterministic (no second clock)", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("a", "sprite", { sprite: { assetKey: "imp-fx", layout: "sequence", frames: 48, fps: 24, frameW: 64, frameH: 64 } })], { durationMs: 2000 })]), "index fixture");
+  const at0 = frameAt(doc, 0);
+  const at500 = frameAt(doc, 500);
+  const at9999 = frameAt(doc, 9999);
+  eq(at0.elements[0]?.frameIndex, 0, "t=0 → frame 0");
+  eq(at500.elements[0]?.frameIndex, 12, "t=500 @24fps → frame 12 (floor(0.5*24))");
+  eq(at9999.elements[0]?.frameIndex, 47, "past the clock the index clamps to frames-1");
+  ok(at9999.sceneTMs <= 2000, "the doc clock clamps to the scene");
+  eq(at500.elements[0]?.frameIndex, frameAt(doc, 500).elements[0]?.frameIndex, "deterministic re-evaluation");
+  // A 24fps 4-frame sprite at t=1000: idx = floor(1.0*24)=24 → clamps to 3.
+  const four = mustValidate(gDoc([gScene("s1", [gEl("a", "sprite", { sprite: { assetKey: "imp-f4", layout: "sheet", frames: 4, fps: 24, frameW: 64, frameH: 64 } })], { durationMs: 2000 })]), "four-frame fixture");
+  eq(frameAt(four, 1000).elements[0]?.frameIndex, 3, "the index bounds to frames-1 (the clip ends on its last frame)");
+});
+
+await test("S126 the compose seats — sheet window, sequence toggle, missing assets recorded", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("a", "sprite", { sprite: { assetKey: "imp-sh", layout: "sheet", frames: 4, fps: 24, frameW: 128, frameH: 64 } }), gEl("b", "sprite", { sprite: { assetKey: "imp-sq", layout: "sequence", frames: 3, fps: 24, frameW: 64, frameH: 64 } })])]), "compose fixture");
+  const uris = new Map<string, string[]>([
+    ["imp-sh", ["data:image/png;base64,AAAA"]],
+    ["imp-sq", ["data:image/png;base64,BBBB", "data:image/png;base64,CCCC", "data:image/png;base64,DDDD"]],
+  ]);
+  const { html, missingAssets } = composeGraphicsScene(doc.scenes[0], doc, { spriteAssets: uris });
+  eq(missingAssets.length, 0, "nothing missing when the map resolves");
+  ok(html.includes('data-sprite="sheet"') && html.includes('data-fw="128"'), "the sheet node carries the window facts");
+  ok(html.includes('viewBox="0 0 128 64"'), "the sheet window starts at frame 0");
+  ok(html.includes('data-frame="2"') && html.includes('display="none"'), "the sequence stacks + hides non-zero frames");
+  // A SHORT frame list records the key and emits nothing for it.
+  const short = composeGraphicsScene(doc.scenes[0], doc, { spriteAssets: new Map([["imp-sh", ["data:image/png;base64,AAAA"]]]) });
+  eq(short.missingAssets, ["imp-sq"], "the short sequence is recorded as missing");
+  ok(!short.html.includes("BBBB"), "the short element emits nothing (fail-closed, not a placeholder lie)");
+  // No context → both sprites are missing (the rollback shape is honest).
+  const bare = composeGraphicsScene(doc.scenes[0], doc);
+  eq(bare.missingAssets.sort(), ["imp-sh", "imp-sq"], "the bare compose records every sprite key");
+});
+
+await test("S126 the payload + applier — the frameIndex channel rides, the sprite writes are absolute sets (source pins)", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("a", "sprite", { sprite: { assetKey: "imp-fx", layout: "sequence", frames: 48, fps: 24, frameW: 64, frameH: 64 } })], { durationMs: 2000 })]), "payload fixture");
+  const payload = graphicsFramePayload(frameAt(doc, 500));
+  ok(payload.includes('"frameIndex":12'), "the frameIndex rides the payload");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('viewBox", String(el.frameIndex * fw)'), "the sheet window slides (absolute set)");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('img.setAttribute("display", Number(img.getAttribute("data-frame")) === el.frameIndex'), "the sequence toggles (absolute set)");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes("image[data-frame]"), "the :scope selector is the mouth-swap discipline");
+});
+
+await test("S126 the G1-IMP lens — spriteless docs pass vacuously; broken payloads fail the row", () => {
+  const clean = graphicsQcMatrix(mustValidate(gDoc([gScene("s1", [gEl("h", "headline")])])), 0);
+  const cleanRow = clean.rows.find((r) => r.id === "G1-IMP-1");
+  ok(cleanRow !== undefined && cleanRow.status === "pass", "the lens exists and passes vacuously");
+  const lensDoc = mustValidate(
+    gDoc([gScene("s1", [gEl("a", "sprite", { sprite: { assetKey: "imp-x", layout: "sheet", frames: 20, fps: 24, frameW: 850, frameH: 60 } })])]),
+    "lens fixture"
+  );
+  const report = graphicsQcMatrix(lensDoc, 0);
+  const row = report.rows.find((r) => r.id === "G1-IMP-1");
+  ok(row !== undefined && row.status === "fail", "a 17000px strip fails the decode-wall row");
+  ok((row?.detail ?? "").includes("17000"), "the lens cites the strip width it measured");
+});
+
+await test("S126 the pure gates — sniff, PNG/WebP headers, sheet law, sequence law, fps snap, provenance", () => {
+  const png = alphaPng(512, 128);
+  eq(sniffImportKind(png), "png", "the PNG magic rides");
+  eq(sniffImportKind(Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0])), "webm", "the WebM EBML magic rides");
+  eq(sniffImportKind(Buffer.from("plain text")), null, "text refuses");
+  const header = parsePngHeader(png);
+  ok(header !== null && header.width === 512 && header.height === 128, "the IHDR dims parse");
+  eq(header?.hasAlpha, true, "color type 6 carries alpha");
+  const opaque = parsePngHeader(alphaPng(64, 64, 2));
+  eq(opaque?.hasAlpha, false, "color type 2 (rgb) has no alpha");
+  const trns = alphaPng(64, 64, 3);
+  trns.writeUInt32BE(0, 8 + 25); // the tRNS chunk's length (0)
+  trns.write("tRNS", 8 + 25 + 4, "latin1"); // the type, after the length
+  eq(parsePngHeader(trns)?.hasAlpha, true, "a tRNS chunk carries palette alpha");
+  // WebP VP8X with the alpha flag.
+  const webp = Buffer.alloc(40);
+  webp.write("RIFF", 0, "latin1");
+  webp.write("WEBP", 8, "latin1");
+  webp.write("VP8X", 12, "latin1");
+  webp[20] = 0x10; // the ALPHA flag
+  webp.writeUIntLE(639, 24, 3); // canvas minus one → 640
+  webp.writeUIntLE(255, 27, 3); // 256
+  const wh = parseWebpHeader(webp);
+  ok(wh !== null && wh.hasAlpha && wh.width === 640 && wh.height === 256, "the VP8X alpha flag + canvas parse");
+  // The sheet law: alpha present, even division, walls.
+  const good = validateSheetImport(alphaPng(512, 128), 4);
+  ok(good.ok && good.frameW === 128 && good.frameH === 128, "a 512x128 strip declares 4 frames of 128");
+  const uneven = validateSheetImport(alphaPng(513, 128), 4);
+  ok(!uneven.ok && uneven.errors[0].includes("divide evenly"), "the uneven strip refuses");
+  const noAlpha = validateSheetImport(alphaPng(512, 128, 2), 4);
+  ok(!noAlpha.ok && noAlpha.errors[0].includes("no alpha"), "the opaque sheet refuses (the lane composites transparency)");
+  const tooWide = validateSheetImport(alphaPng(20000, 100), 10);
+  ok(!tooWide.ok, "the strip decode wall holds");
+  // The sequence law.
+  const frame = validateSequenceFrame(alphaPng(200, 200));
+  ok(frame.ok && frame.width === 200, "a uniform alpha frame passes");
+  const bigFrame = validateSequenceFrame(alphaPng(5000, 200));
+  ok(!bigFrame.ok, "the dim wall holds on frames");
+  // The fps snap (the D3 normalization law).
+  eq(snapFps(24), 24, "24 stays 24");
+  eq(snapFps(29.97), 30, "29.97 snaps to 30");
+  eq(snapFps(25), 24, "25 snaps to 24 (the nearer rail, ties down)");
+  eq(snapFps(28), 30, "28 snaps to 30");
+  eq(snapFps(0), 24, "junk snaps to the film tempo");
+  // Provenance.
+  const prov = sanitizeProvenance({ source: "  opentoonz export  ", license: "CC-BY" });
+  eq(prov.source, "opentoonz export", "the source trims");
+  eq(prov.license, "CC-BY", "the license rides");
+  const clamped = sanitizeProvenance({ source: "x".repeat(400) });
+  eq(clamped.source?.length, 300, "the source clamps to 300");
+  eq(sanitizeProvenance({}).source, null, "absent provenance is legal (the tag rides when declared)");
+});
+
+await test("S126 the lane wiring — the seven gates, the one-seam resolution, the fail-closed render (source pins)", async () => {
+  const route = await fsp.readFile("src/app/api/videos/[id]/graphics/import/route.ts", "utf8");
+  const store = await fsp.readFile("src/lib/tubeforge/graphics/import-store.ts", "utf8");
+  const jobs = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const gRender = await fsp.readFile("src/lib/tubeforge/graphics/render.ts", "utf8");
+  const schema = await fsp.readFile("prisma/schema.prisma", "utf8");
+  const importValidate = await fsp.readFile("src/lib/tubeforge/graphics/import-validate.ts", "utf8");
+  ok(importValidate.includes("Magic-byte sniff"), "gate 2 — the sniff is header law, never extension trust");
+  ok(route.includes("alphaextract"), "gate 3 — the WebM alpha probe rides ffmpeg");
+  ok(route.includes("snapFps"), "gate 5 — the fps snaps to the shared timebase");
+  ok(route.includes("importCountWalls"), "gate 6 — the count walls run");
+  ok(route.includes("resolveSpriteAssets"), "the editor's resolve seam rides the SAME store");
+  ok(route.includes("el.sprite?.assetKey === importId"), "the delete reference-guards the doc");
+  ok(store.includes("resolveSpriteAssets"), "the store carries the ONE resolution seam");
+  ok(store.includes("data:${row.mime};base64,"), "the bytes ride as data URIs (the network-aborted page law)");
+  ok(jobs.includes("resolveSpriteAssets(videoId, referencedKeys)"), "the render job resolves through the store seam");
+  ok(jobs.includes("missingImports.length > 0"), "the job refuses fail-closed on missing imports");
+  ok(gRender.includes("composed.missingAssets.length > 0"), "the renderer refuses fail-closed on unresolved sprites");
+  ok(schema.includes("model GraphicsImport"), "the manifest model rides");
+  ok(schema.includes("source         String?") && schema.includes("license        String?"), "provenance rides the manifest (the reception rule)");
+  ok(schema.includes("graphicsImports        GraphicsImport[]"), "the Video relation rides");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

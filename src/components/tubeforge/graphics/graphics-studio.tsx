@@ -160,6 +160,11 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
   // hits and committed gestures; the PUT is the wall).
   const [layoutMode, setLayoutMode] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // S126 — the import lane's preview seam: the doc's sprite bytes resolve
+  // through the SAME store seam the render job runs (one resolution, both
+  // callers); a missing key surfaces as the honest warning strip.
+  const [spriteAssets, setSpriteAssets] = useState<Map<string, string[]> | null>(null);
+  const [missingImports, setMissingImports] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -182,6 +187,24 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
           const s = SURFACES.find((x) => x.w === body.doc?.width && x.h === body.doc?.height);
           if (s) setSurface(s.id);
           setFps(body.doc.fps);
+        }
+        // S126 — resolve the imports when the doc references sprites (the
+        // one-seam law; spriteless docs pay nothing).
+        const hasSprites = body.doc?.scenes.some((s) => s.elements.some((el) => el.kind === "sprite")) ?? false;
+        if (hasSprites) {
+          try {
+            const rres = await fetch(`/api/videos/${videoId}/graphics/import?resolve=1`, { cache: "no-store" });
+            if (rres.ok) {
+              const rbody = (await rres.json()) as { assets?: Record<string, string[]>; missing?: string[] };
+              setSpriteAssets(new Map(Object.entries(rbody.assets ?? {})));
+              setMissingImports(rbody.missing ?? []);
+            }
+          } catch {
+            setMissingImports(["the import manifest failed to load"]);
+          }
+        } else {
+          setSpriteAssets(null);
+          setMissingImports([]);
         }
       }
     } catch {
@@ -480,7 +503,13 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
         selectedId={selectedId}
         onSelect={setSelectedId}
         onPlacement={commitPlacement}
+        spriteAssets={spriteAssets ?? undefined}
       />
+      {missingImports.length > 0 && (
+        <p className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-400/25 rounded-lg px-3 py-2">
+          Unresolved sprite imports: {missingImports.join(", ")} — upload them through the import lane or remove the sprites (the render refuses on them).
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <button className={btnGhost} onClick={() => { seekTo(0); setPlaying(false); }}>
           ⏮

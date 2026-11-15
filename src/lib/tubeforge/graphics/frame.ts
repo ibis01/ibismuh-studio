@@ -105,6 +105,10 @@ export interface GraphicsElementFrame {
   progress: number;
   /** counter kind only — the tweened value (absent otherwise). */
   counterValue?: number;
+  /** S126 — sprite kind only: the bounded frame index from the scene-local
+   *  clock at the payload's fps (absent otherwise). The applier consumes it
+   *  (sheet viewBox window / sequence display toggle). */
+  frameIndex?: number;
 }
 
 export interface GraphicsFrameState {
@@ -239,6 +243,14 @@ function elementFrame(el: GraphicsElement, tMs: number): GraphicsElementFrame {
     progress: clamp01(out.progress),
   };
   if (el.counter !== undefined) frame.counterValue = out.counterFromEnter;
+  // S126 — the sprite's frame index: derived from the SCENE-LOCAL clock at
+  // the payload's fps (the shared timebase — no second clock), BOUNDED to
+  // [0, frames-1] (the clip ends on its last frame; a loop is a future
+  // flag, not a drive-by). Deterministic; validated payload in.
+  if (el.sprite !== undefined) {
+    const idx = Math.floor((tMs / 1000) * el.sprite.fps);
+    frame.frameIndex = Math.max(0, Math.min(el.sprite.frames - 1, idx));
+  }
   return frame;
 }
 
