@@ -158,7 +158,7 @@ If the ≥4/5 gate fails, the failing dimensions route back into the W-track bef
 
 ---
 
-## 5. Stage spec — G1: the motion-graphics engine — PENDING (G1.0 landed via Stage S; G1.1 is the first remaining code commit)
+## 5. Stage spec — G1: the motion-graphics engine — LANDED as S123 (P0–P5) + S124 (the element editor) — see docs/audits/s123-motion-graphics.md
 
 **Objective:** animated typography, icons, charts, counters, callouts and transitions as a deterministic native engine — the biggest genuine gap (today `slides.ts` animates nothing; it renders static designed PNGs and pushes the camera).
 **Pattern:** the whiteboard engine's proven shape, applied to a new grammar — NOT a competing renderer. G1 renders through chromium frame screenshots → ffmpeg, emits S87 tracks of the reserved kind `"graphics"`, rides the shared QC battery.
@@ -195,7 +195,7 @@ Rollback: mode id removal reverts to lane refusal; the JSON column is nullable a
 
 ---
 
-## 6. Stage spec — K1: 2D character animation (real rigs, honest motion) — PENDING (starts once G1.0–G1.4 land)
+## 6. Stage spec — K1: 2D character animation (real rigs, honest motion) — LANDED as S125 (+ K1-ext: the FreeMoCap sidecar, clean-room) — see docs/audits/s125-character-rig.md; the blind re-score stays the human gate
 
 **Objective:** characters that actually move — poses, gestures, mouth shapes on narration, simple walk/turn cycles — deterministically and natively, consistent with the S93 honesty law ("the rig will not fake it" — K1 replaces stills with real art, so it CAN honestly animate them).
 
@@ -227,7 +227,7 @@ Rollback: `rigDoc` absent → S93 still-portrait path byte-identical (additive p
 
 ---
 
-## 7. Stage spec — C2: cinematic-2D extension (extension, not plumbing) — PENDING
+## 7. Stage spec — C2: cinematic-2D extension (extension, not plumbing) — LANDED (the three verbs + the tables; transitions stay ffmpeg-xfade-native)
 
 **Objective:** richer cinematic vocabulary in the existing, deepest subsystem. No new files except tests/docs unless noted.
 
@@ -257,7 +257,7 @@ Pins: easing curves pure and table-complete; quantization matches `framePlanCloc
 
 ---
 
-## 9. Stage R — AI Director style router + Stage X — cross-engine composition — PENDING
+## 9. Stage R — AI Director style router + Stage X — cross-engine composition — R LANDED (the advisory pick, the D2 firewall); X's ADDITIVE CORE LANDED (schema 3 verified engine tracks + the builder registry) — the per-scene segment builders remain X's gated half
 
 ### R — per-scene style selection (the audit's "AI Director chooses the animation style")
 Modified files:
