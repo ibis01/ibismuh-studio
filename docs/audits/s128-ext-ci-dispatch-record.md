@@ -51,6 +51,27 @@ renderer (the PAE range touches only its declared 12-file plan) · no Director
 routing. The battery reads 805 (765 at the S128 tip + 40 PAE pins), lint and
 typecheck clean, both scan modes leak-free.
 
+## Finding 3 — the eslint parser-stack cliff on node 22 (glyphs.ts)
+
+Run 2 (`43696075518`): gitleaks and money-path GREEN, unit suite GREEN with the
+IEEE-exact goldens — and `eslint .` died parsing `whiteboard/glyphs.ts`
+("Maximum call stack size exceeded", 0:0). Facts, checked one by one: the file
+is byte-identical to main (diff 0, gate-proven); the lockfile, eslint 10.14.0,
+@typescript-eslint/parser 8.72.1, espree 11.2.0 all unchanged in range; the
+eslint config untouched; the green run of 2026-11-14 (132556761745) and the red
+runs of 2026-11-15 used the SAME node 22.23.4. The file sits exactly on node
+22's parser-recursion edge: 5/5 red locally on node 22.23.5, green once on the
+runner, red twice on the runner — borderline outcomes flipping with per-machine
+memory layout.
+
+The whiteboard tree is frozen (the §6 law), so the file is not the lever. The
+runtime is: every job now rides node 24 (8 pins, ci.yml + nightly.yml) — the
+environment where every golden pin, lint gate and battery receipt was recorded,
+the active LTS, and a runtime where the file parses with margin (the sandbox's
+`eslint .` has passed on node 24 throughout). The easing fix (Finding 1) already
+made the goldens version-independent; this change is general alignment, with
+the same receipt class as the S33 ubuntu-24.04 pin.
+
 ## Standing reminder
 
 Four GitHub PATs have now been pasted into chat. They are compromised the
