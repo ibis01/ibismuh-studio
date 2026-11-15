@@ -11,7 +11,8 @@ import {
   type WhiteboardLlmPlannerReport,
 } from "@/lib/tubeforge/whiteboard/llm-planner";
 import { invalidateRenderedArtifacts } from "@/lib/tubeforge/render";
-import { loadVideoLibrary } from "@/lib/tubeforge/whiteboard/asset-store";
+import { loadVideoLibrary, replaceVideoUpload } from "@/lib/tubeforge/whiteboard/asset-store";
+import { buildGeneratedCards } from "@/lib/tubeforge/whiteboard/whiteboard-planner";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -68,6 +69,22 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       { status: 409 }
     );
 
+  // S137 — synthesize THIS video's title/close cards from its own topic and
+  // store them as per-video upload assets BEFORE the library merge (the
+  // S69 one-merge law: the validator, the renderers and the palette agree
+  // on the asset universe by construction). The built-in structural cards
+  // carry BENCHMARK text — without this, every non-heart video scaffolded
+  // with another video's words on its board (the rendered receipt).
+  // Idempotent per scaffold (force regenerates rewrite the same ids).
+  const generatedCards = buildGeneratedCards({
+    videoId: id,
+    topic: video.topic ?? "",
+    lastNarration: scenes[scenes.length - 1]?.narration ?? "",
+  });
+  for (const card of generatedCards) {
+    await replaceVideoUpload({ id: video.id, organizationId: video.organizationId }, card, auth.ctx.userId);
+  }
+
   // The merged library loads ONCE, before either planner runs: the LLM
   // planner reads its catalog from the same merge the validator will
   // judge the output against (the S69 one-merge law — model, validator
@@ -88,21 +105,23 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (planner === "llm") {
     const llm = await scaffoldWhiteboardProjectLlm({
       scenes: sceneInputs,
-      topic: video.topic,
+      topic: video.topic ?? "",
       width: typeof b.width === "number" ? b.width : undefined,
       height: typeof b.height === "number" ? b.height : undefined,
       fps: typeof b.fps === "number" ? b.fps : undefined,
       catalog: buildPlannerCatalog(lib.assets.values()),
+      generatedAssets: generatedCards,
     });
     project = llm.project;
     plannerReport = llm.report;
   } else {
     project = scaffoldWhiteboardProject({
       scenes: sceneInputs,
-      topic: video.topic,
+      topic: video.topic ?? "",
       width: typeof b.width === "number" ? b.width : undefined,
       height: typeof b.height === "number" ? b.height : undefined,
       fps: typeof b.fps === "number" ? b.fps : undefined,
+      generatedAssets: generatedCards,
     });
   }
 

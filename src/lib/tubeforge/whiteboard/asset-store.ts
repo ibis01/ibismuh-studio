@@ -96,6 +96,23 @@ export async function deleteVideoUpload(videoId: string, assetId: string): Promi
   return true;
 }
 
+/** S137 — idempotent upsert for the scaffold's GENERATED cards: the same
+ *  per-video assetId is rewritten on every scaffold (fresh topic, force
+ *  regenerate) instead of colliding with the unique (videoId × assetId)
+ *  manifest key. The bytes are engine-built (escaped, fixed markup) — the
+ *  sanitizer gates the UPLOAD route, not this seam. */
+export async function replaceVideoUpload(
+  video: { id: string; organizationId: string },
+  asset: WhiteboardAsset,
+  uploadedBy: string
+): Promise<WhiteboardUploadRow> {
+  await db.whiteboardAssetUpload.deleteMany({
+    where: { videoId: video.id, assetId: asset.id },
+  });
+  await remove(whiteboardAssetKey(video.id, asset.id)).catch(() => {});
+  return saveVideoUpload(video, asset, uploadedBy);
+}
+
 export interface VideoLibrary {
   /** The merged library — built-ins + this video's uploads. */
   lib: ReturnType<typeof loadLibrary>;

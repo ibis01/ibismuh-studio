@@ -24,6 +24,8 @@ import { llmChat } from "../llm";
 import type { AiService } from "../budget";
 import {
   scaffoldWhiteboardProject,
+  WB_GENERATED_CLOSE_PREFIX,
+  WB_GENERATED_TITLE_PREFIX,
   type ScaffoldSceneInput,
 } from "./whiteboard-planner";
 // W2 — the beat layer: the model MAY propose beats in the same schema the
@@ -47,6 +49,19 @@ export const WB_PLANNER_RESERVED_IDS = new Set([
   "title-hero",
   "close-card",
 ]);
+
+/** S137 — the reserved-id law, prefix-aware: the per-video GENERATED cards
+ *  (`wb-title-<videoId>` / `wb-close-<videoId>`) are structural grammar
+ *  exactly like their built-in siblings — the composer keeps them, the
+ *  catalog never offers them, and the model's picks can neither replace
+ *  nor duplicate them. */
+export function isPlannerReservedAssetId(id: string): boolean {
+  return (
+    WB_PLANNER_RESERVED_IDS.has(id) ||
+    id.startsWith(WB_GENERATED_TITLE_PREFIX) ||
+    id.startsWith(WB_GENERATED_CLOSE_PREFIX)
+  );
+}
 
 /** Concepts per scene cap. Well under the 64/scene validator budget on
  * purpose: a scaffold teaches with a few readable pieces, not a wall of
@@ -79,7 +94,7 @@ export function buildPlannerCatalog(
 ): PlannerCatalogEntry[] {
   const out: PlannerCatalogEntry[] = [];
   for (const a of assets) {
-    if (WB_PLANNER_RESERVED_IDS.has(a.id)) continue;
+    if (isPlannerReservedAssetId(a.id)) continue;
     out.push({
       id: a.id,
       tags: a.tags.slice(0, 6),
@@ -232,7 +247,7 @@ export function normalizeLlmScenePlans(
         dropped.push({ scene: sceneNo, assetId: "(blank)", reason: "no asset id" });
         continue;
       }
-      if (WB_PLANNER_RESERVED_IDS.has(assetId)) {
+      if (isPlannerReservedAssetId(assetId)) {
         dropped.push({
           scene: sceneNo,
           assetId,
@@ -274,7 +289,7 @@ export function normalizeLlmScenePlans(
     // stopped early — account the rest honestly).
     for (let i = maxPicks; i < rawPicks.length; i++) {
       const assetId = String(rawPicks[i]?.assetId ?? "").trim() || "(blank)";
-      if (seen.has(assetId) || !ctx.catalogIds.has(assetId) || WB_PLANNER_RESERVED_IDS.has(assetId)) continue;
+      if (seen.has(assetId) || !ctx.catalogIds.has(assetId) || isPlannerReservedAssetId(assetId)) continue;
       dropped.push({
         scene: sceneNo,
         assetId,
@@ -368,7 +383,7 @@ export function composeLlmScaffold(
     const plan = served.get(scenes[i]?.index);
     if (!plan) return scene; // untouched — the native fallback scene
     const structural = scene.placements.filter((p) =>
-      WB_PLANNER_RESERVED_IDS.has(p.assetId)
+      isPlannerReservedAssetId(p.assetId)
     );
     // W2 — mention order: picks the model beat-ordered ride their beat's
     // sentence (the narrator introduces them in that order); unmentioned
@@ -537,6 +552,9 @@ export async function scaffoldWhiteboardProjectLlm(
     height?: number;
     fps?: number;
     catalog: PlannerCatalogEntry[];
+    /** S137 — the per-video generated cards; they ride the native base so
+     *  the composed scaffold keeps the topic's own title/close cards. */
+    generatedAssets?: import("./assets").WhiteboardAsset[];
   },
   opts: { ask?: () => Promise<string>; call?: PlannerCall } = {}
 ): Promise<{ project: WhiteboardProject; report: WhiteboardLlmPlannerReport }> {

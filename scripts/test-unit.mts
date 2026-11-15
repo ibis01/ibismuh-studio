@@ -8455,6 +8455,124 @@ await test("S67 scaffold: the scene-count wall refuses beyond the project budget
   ok(threw instanceof Error && /at least one/.test(threw.message), `expected the empty-story error, got: ${String(threw)}`);
 });
 
+// ---------- suite: S137 — the generated per-video cards + the rich scaffold ----------
+
+suiteStart("S137 whiteboard — generated cards + the rich scaffold");
+
+const S137_VIDEO = "cmwi2xgbm0007qaga69fp6zzh"; // a cuid-shaped id (the charset law's real shape)
+const S137_TOPIC = "Why tiny daily habits beat big resolutions";
+
+await test("S137 cards: deterministic, topic-bearing, charset-legal, no benchmark text", async () => {
+  const { buildGeneratedCards, WB_GENERATED_TITLE_PREFIX, WB_GENERATED_CLOSE_PREFIX } =
+    await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
+  const { validWhiteboardId } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const a = buildGeneratedCards({ videoId: S137_VIDEO, topic: S137_TOPIC, lastNarration: "Your tiny habit starts today. Not Monday. Today." });
+  const b = buildGeneratedCards({ videoId: S137_VIDEO, topic: S137_TOPIC, lastNarration: "Your tiny habit starts today. Not Monday. Today." });
+  eq(JSON.stringify(a), JSON.stringify(b), "determinism: same inputs → byte-identical cards");
+  eq(a.length, 2, "a topic builds exactly the title + close cards");
+  const title = a[0];
+  const close = a[1];
+  ok(title.id.startsWith(WB_GENERATED_TITLE_PREFIX) && title.id === `${WB_GENERATED_TITLE_PREFIX}${S137_VIDEO}`,
+    "title card id = prefix + videoId");
+  ok(close.id === `${WB_GENERATED_CLOSE_PREFIX}${S137_VIDEO}`, "close card id = prefix + videoId");
+  ok(validWhiteboardId(title.id) && validWhiteboardId(close.id), "card ids pass the WB charset law");
+  ok(title.svg.includes("tiny daily habits") || title.svg.includes("Tiny Daily"), "the title card carries THIS topic's words");
+  ok(!title.svg.includes("How Your Heart"), "no benchmark text leaks onto the board");
+  ok(title.svg.includes('id="tb-line1"'), "title text rows ride the tb-line ids");
+  ok(title.svg.includes('id="tb-underline"'), "the underline stroke survives");
+  ok(close.svg.includes('id="cl-big"') && close.svg.includes('id="cl-small"'), "close card rides cl-big/cl-small");
+  ok(!close.svg.includes("60-100") && !close.svg.includes("beats every minute"), "no benchmark stat on the close card");
+  // XML escaping: hostile topic must never inject markup.
+  const hostile = buildGeneratedCards({ videoId: S137_VIDEO, topic: `Evil <script>alert(1)</script> & "quotes"`, lastNarration: "" });
+  ok(hostile.length === 2, "a hostile topic still builds (escaped, not rejected)");
+  ok(!hostile[0].svg.includes("<script>"), "script tags are escaped, never live");
+  ok(hostile[0].svg.includes("&lt;script&gt;"), "the escape is visible in the markup");
+  // Blank topic → no cards (the graceful degrade to the built-ins).
+  eq(buildGeneratedCards({ videoId: S137_VIDEO, topic: "   ", lastNarration: "" }), [], "blank topic → no cards");
+  // The wrap tiers: short topic = one line; the long one stays within 3.
+  const one = buildGeneratedCards({ videoId: S137_VIDEO, topic: "Small Idea", lastNarration: "" });
+  ok(one[0].svg.includes('font-size="84"'), "a ≤15-char title rides the one-line/84px tier");
+});
+
+await test("S137 rich scaffold: the topic's cards, large primary + support, alternating paper", async () => {
+  const { scaffoldWhiteboardProject, buildGeneratedCards } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
+  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const cards = buildGeneratedCards({ videoId: S137_VIDEO, topic: "Money grows when the data measures the trend", lastNarration: "Start with one check." });
+  const scenes = Array.from({ length: 5 }, (_, i) => ({
+    index: i + 1,
+    title: `Beat ${i + 1}`,
+    narration: [
+      "Money moves faster than ever in global markets.",
+      "One idea can change how an industry measures success.",
+      "And growth compounds when the data backs the decision.",
+      "The launch begins with a single check on the clock.",
+      "The world of revenue rewards the trend you verify.",
+    ][i],
+  }));
+  const p = scaffoldWhiteboardProject({ scenes, topic: "Money grows", generatedAssets: cards });
+  const again = scaffoldWhiteboardProject({ scenes, topic: "Money grows", generatedAssets: cards });
+  eq(JSON.stringify(p), JSON.stringify(again), "rich scaffold is deterministic");
+  const titleId = `${"wb-title-"}${S137_VIDEO}`;
+  const closeId = `wb-close-${S137_VIDEO}`;
+  eq(p.scenes[0].placements[0].assetId, titleId, "opener carries the GENERATED title card");
+  ok(p.scenes[0].placements.length >= 3, "the opener is rich: card + primary + support");
+  for (const s of p.scenes) {
+    ok(s.placements.length >= 2, `scene ${s.id}: at least primary + support`);
+  }
+  eq(p.scenes[4].placements[0].assetId, closeId, "closer carries the GENERATED close card");
+  // Anti-repeat: no primary pick repeats back-to-back.
+  const primaries = p.scenes.map(
+    (s) => s.placements.find((pl) => pl.assetId !== titleId && pl.assetId !== closeId)?.assetId ?? ""
+  );
+  for (let i = 1; i < primaries.length; i++) {
+    ok(primaries[i] !== primaries[i - 1], `scene ${i + 1}: primary differs from the previous scene's (${primaries[i - 1]} → ${primaries[i]})`);
+  }
+  // Paper tone alternates.
+  eq(p.scenes[1].background, "#f8f5ee", "odd scene rides the cream paper");
+  eq(p.scenes[2].background, "#ffffff", "even scene rides the white paper");
+  // The rich doc validates clean against the MERGED library (built-ins + cards).
+  const lib = loadLibrary(cards);
+  ok(lib.warnings.length === 0, `cards pass the W3 validator: ${lib.warnings.map((w) => w.reasons.join(",")).join(" · ")}`);
+  const validated = validateWhiteboardProject(p, lib.libraryIndex);
+  ok(validated.project !== null, `rich scaffold validates clean: ${validated.errors.join(" · ")}`);
+});
+
+await test("S137 additive law: without generated assets the planner is byte-identical to the legacy contract", async () => {
+  const { scaffoldWhiteboardProject, buildGeneratedCards } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
+  const scenes = [
+    { index: 1, title: "t", narration: "How the idea took hold." },
+    { index: 2, title: "t", narration: "The revenue doubled." },
+    { index: 3, title: "t", narration: "Across the world it grew." },
+  ];
+  const legacy = scaffoldWhiteboardProject({ scenes, topic: "t" });
+  eq(legacy.scenes[0].placements[0].assetId, "title-hero", "legacy opener keeps the built-in title card");
+  eq(legacy.scenes[0].placements[1].assetId, "lightbulb", "legacy pick order intact");
+  eq(legacy.scenes[1].placements.length, 1, "legacy middle scenes keep exactly one concept");
+  eq(legacy.scenes[1].background, "#ffffff", "legacy paper stays white");
+  eq(legacy.scenes[2].placements[0].assetId, "close-card", "legacy closer keeps the built-in stat card");
+  // Passing EMPTY generated assets changes nothing either.
+  const emptyGen = scaffoldWhiteboardProject({ scenes, topic: "t", generatedAssets: [] });
+  eq(JSON.stringify(emptyGen), JSON.stringify(legacy), "empty generatedAssets → byte-identical legacy output");
+  // And the generated path never fires when the cards are absent.
+  eq(scaffoldWhiteboardProject({ scenes, topic: "t", generatedAssets: buildGeneratedCards({ videoId: "vid9", topic: "" }) }).scenes[1].placements.length, 1,
+    "blank-topic cards → legacy layout");
+});
+
+await test("S137 reserved law: the LLM planner keeps the generated cards structural and out of the catalog", async () => {
+  const { isPlannerReservedAssetId, buildPlannerCatalog } = await import("../src/lib/tubeforge/whiteboard/llm-planner");
+  ok(isPlannerReservedAssetId(`wb-title-${S137_VIDEO}`), "generated title id is reserved");
+  ok(isPlannerReservedAssetId(`wb-close-${S137_VIDEO}`), "generated close id is reserved");
+  ok(isPlannerReservedAssetId("title-hero") && isPlannerReservedAssetId("hand-marker"), "built-in reserved ids unchanged");
+  ok(!isPlannerReservedAssetId("coin") && !isPlannerReservedAssetId("up-something"), "concepts and uploads stay pickable");
+  const catalog = buildPlannerCatalog([
+    { id: "coin", tags: ["money"], viewBox: { w: 200, h: 200 } },
+    { id: `wb-title-${S137_VIDEO}`, tags: ["generic", "title"], viewBox: { w: 840, h: 300 } },
+    { id: `wb-close-${S137_VIDEO}`, tags: ["generic", "close"], viewBox: { w: 840, h: 260 } },
+  ]);
+  eq(catalog.map((c) => c.id), ["coin"], "the catalog never offers the generated cards");
+});
+
 // ---------- suite: S67 — the doc column + job plumbing ----------
 
 suiteStart("S67 whiteboard — doc parse/serialize + job entity ids");
@@ -13626,6 +13744,67 @@ await test("W2 planBeats: the cards own the opening and closing sentences", asyn
   eq(sentenceOf.get("title-hero"), 0, "title-hero → sentence 0");
   eq(sentenceOf.get("coin"), 1, "coin → the money sentence");
   eq(sentenceOf.get("close-card"), 2, "close-card → the last sentence");
+});
+
+await test("R1 planBeats: the opening-stroke guarantee — in the anchors world a late-opening beat pulls its first placement to sentence 0", async () => {
+  const { planBeats, OPENING_STROKE_MAX_MS } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
+  const { buildGeometry, LEAD_IN_MS } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const lib = loadLibrary();
+  const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
+  // The dead-air shape the 265s receipt froze on: a long opening sentence
+  // that mentions NO asset, so every placement binds to the SPOKEN window
+  // of a later sentence and the board sits empty past the frozen-frames
+  // lens's run class.
+  const scene = {
+    id: "scene-1",
+    narration:
+      "In the beginning of this whole entire grand story about everything at stake here. Money grows and the data confirms it.",
+    background: "#ffffff" as const,
+    placements: [
+      { assetId: "coin", placement: { x: 700, y: 500, scale: 1.4, rotateDeg: 0 }, order: 0 },
+      { assetId: "bar-chart", placement: { x: 1100, y: 500, scale: 1.4, rotateDeg: 0 }, order: 1 },
+    ],
+    animations: [],
+    camera: [{ cx: 960, cy: 540, scale: 1, startMs: 0, durationMs: 0 }],
+  };
+  // Aligned anchors: the opening sentence is SPOKEN from 400ms to 11000ms
+  // (a long setup), the money sentence from 11300ms to 13000ms — every
+  // mention-driven beat would open far past the lens-safe window.
+  const s0 = "In the beginning of this whole entire grand story about everything at stake here.".split(" ");
+  const s1 = "Money grows and the data confirms it.".split(" ");
+  let idx = 0;
+  const byWord = [
+    ...s0.map((_, i) => ({ index: idx++, startMs: 400 + i * 580, endMs: 400 + (i + 1) * 580 })),
+    ...s1.map((_, i) => ({ index: idx++, startMs: 11300 + i * 250, endMs: 11300 + (i + 1) * 250 })),
+  ];
+  const beats = planBeats(scene, { durationMs: 14000, geometry: geo, anchors: { byWord } });
+  ok(beats.length >= 2, "both sentences keep their beats (the second bucket retains bar-chart)");
+  const first = beats[0];
+  eq(first.sentence, 0, "the opening sentence carries the first placement");
+  eq(first.assetIds, ["coin"], "the moved placement is the first in draw order");
+  ok(
+    first.startMs <= OPENING_STROKE_MAX_MS,
+    `the board stops being empty inside the lens-safe window (first stroke at ${first.startMs}ms)`
+  );
+  ok(first.startMs >= LEAD_IN_MS, "the moved stroke still opens at/after the lead-in");
+  const second = beats[1];
+  eq(second.assetIds, ["bar-chart"], "the later mention binding survives the pull-forward");
+  // Determinism holds through the rewrite.
+  const again = planBeats(scene, { durationMs: 14000, geometry: geo, anchors: { byWord } });
+  eq(JSON.stringify(beats), JSON.stringify(again), "the guarantee is deterministic");
+  // The ESTIMATOR world carries its own (lenient) threshold: the same
+  // pull-forward fires on waits that are unambiguously dead air (the
+  // re-render's 174.4s freeze — an ASR mismatch degraded the scene to the
+  // estimator and pushed its first asset ~8.9s deep), while the W2 pins'
+  // shorter estimator openings stay untouched.
+  const { OPENING_STROKE_ESTIMATOR_MAX_MS } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
+  const estimator = planBeats(scene, { durationMs: 14000, geometry: geo });
+  ok(
+    estimator[0].startMs <= OPENING_STROKE_ESTIMATOR_MAX_MS,
+    `the estimator world stops being empty inside its threshold (first stroke at ${estimator[0].startMs}ms)`
+  );
+  eq(estimator[0].sentence, 0, "the estimator guarantee pulls the first placement to sentence 0");
 });
 
 await test("W2 compileBeats: explicit events stay senior; no double claims; nothing outlasts the clock", async () => {
