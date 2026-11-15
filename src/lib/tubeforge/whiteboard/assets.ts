@@ -12,6 +12,7 @@
 import { countPathCommands, sanitizeSvg } from "./svg";
 import { TEXT_CHARS_BY_ID, TEXT_IDS_BY_ASSET, TEXT_ANCHORS } from "./timing";
 import { applyGlyphTextMode } from "./text-draw";
+import { withSketchPasses } from "./sketch";
 import { validWhiteboardId } from "./storyboard";
 import { validateAsset } from "./asset-validate";
 
@@ -514,6 +515,15 @@ export function loadLibrary(uploaded: WhiteboardAsset[] = []): {
       for (const t of glyph.replacedAnchors) {
         TEXT_ANCHORS.set(`${a.id}::${t.id}`, { x: t.x, y: t.y, size: t.size });
       }
+    }
+    // S139 — the sketch pass: every stroke gains a seeded retrace, every
+    // filled shape a clipped hatch, BEFORE extraction — the derived paths
+    // ride the ordinary schedule/pen/page/camera machinery like authored
+    // strokes. Hands are excluded (a hand is not drawn; it draws) — the
+    // renderer embeds them verbatim and a dithered hand would look broken.
+    if (!(a.id.startsWith("hand-") || a.tags.includes("hand"))) {
+      const sk = withSketchPasses(effective.svg, a.id);
+      effective = { ...effective, svg: sk.svg };
     }
     const ex = extractAsset(effective);
     // The PAGE seam rides the effective svg too: composeScene (the render

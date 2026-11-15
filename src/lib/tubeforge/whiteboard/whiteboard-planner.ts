@@ -14,6 +14,7 @@ import type { WhiteboardAsset } from "./assets";
 import type { WhiteboardAssetPlacement, WhiteboardProject, WhiteboardScene } from "./storyboard";
 import { WB_BUDGETS } from "./storyboard";
 import type { Placement } from "./svg";
+import { measureGlyphWidth, wrapGlyphLines } from "./text-draw";
 
 /** The minimal story-scene shape the planner consumes (parseScenes' Scene). */
 export interface ScaffoldSceneInput {
@@ -183,6 +184,41 @@ export function buildGeneratedCards(input: {
 }
 
 function buildTitleCard(videoId: string, topic: string): WhiteboardAsset | null {
+  // S139 — the card law: text WRAPS ON MEASURED Caveat advances (the glyph
+  // table is the one metric), the size walks down until the whole topic
+  // fits three lines, and the card opts into glyph mode so the pen DRAWS
+  // every letterform. Uncovered characters or an unmeasurable topic fall
+  // back to the S137 naive wrap + marker wipe (the honest-degrade law).
+  const BOX_W = 760; // the 840-wide card minus its 40-unit margins
+  const sizes = [84, 72, 64, 56, 50];
+  for (const font of sizes) {
+    const wrap = wrapGlyphLines(topic, BOX_W, font);
+    if (!wrap.covered || wrap.lines.length === 0 || wrap.lines.length > 3) continue;
+    if (wrap.lines.some((l) => !Number.isFinite(measureGlyphWidth(l, font)))) continue;
+    const ys = wrap.lines.length === 1 ? [150] : wrap.lines.length === 2 ? [122, 216] : [96, 176, 256];
+    const texts = wrap.lines
+      .map(
+        (line, i) =>
+          `<text id="tb-line${i + 1}" x="40" y="${ys[i]}" font-size="${font}" fill="#1d3557" font-weight="bold">${escapeXml(line)}</text>`
+      )
+      .join("");
+    const lastW = measureGlyphWidth(wrap.lines[wrap.lines.length - 1], font);
+    const w = Math.round(Number.isFinite(lastW) ? lastW : 0);
+    const uy = ys[ys.length - 1] + 24;
+    const underline =
+      wrap.lines.length < 3 && w > 40
+        ? `<path id="tb-underline" d="M 40 ${uy} C ${40 + Math.round(w * 0.3)} ${uy - 8}, ${40 + Math.round(w * 0.7)} ${uy + 8}, ${40 + Math.min(760, w)} ${uy - 4}" fill="none" stroke="#e63946" stroke-width="6" stroke-linecap="round"/>`
+        : "";
+    return {
+      id: `${WB_GENERATED_TITLE_PREFIX}${videoId}`,
+      viewBox: { w: 840, h: 300 },
+      tags: ["generic", "title"],
+      svg: texts + underline,
+      textMode: "glyph",
+    };
+  }
+  // The measured route failed (uncovered chars, or nothing fits 3 lines) —
+  // the S137 fallback stays byte-for-byte (naive wrap + marker wipe).
   const lines = wrapTitleLines(topic);
   if (lines.length === 0) return null;
   const font = lines.length === 1 ? 84 : lines.length === 2 ? 64 : 50;
@@ -214,14 +250,20 @@ function buildCloseCard(videoId: string, topic: string, lastNarration: string): 
   const small = closeNoteLine(lastNarration);
   const bigFont = big.length <= 12 ? 88 : 68;
   const smallFont = small.length <= 26 ? 36 : 30;
+  // S139 — glyph mode when the committed table covers BOTH strings and
+  // they measure inside the box (the honest fallback keeps the wipe).
+  const bigFits = Number.isFinite(measureGlyphWidth(big, bigFont)) && (measureGlyphWidth(big, bigFont) ?? 0) < 700;
+  const smallFits = Number.isFinite(measureGlyphWidth(small, smallFont)) && (measureGlyphWidth(small, smallFont) ?? 0) < 700;
+  const glyphMode = bigFits && smallFits;
   return {
     id: `${WB_GENERATED_CLOSE_PREFIX}${videoId}`,
     viewBox: { w: 840, h: 260 },
     tags: ["generic", "close"],
+    ...(glyphMode ? { textMode: "glyph" as const } : {}),
     svg:
       `<path id="cl-box" d="M 28 28 L 28 216 L 740 216 L 740 28 Z" fill="none" stroke="#e63946" stroke-width="5" stroke-linecap="round"/>` +
-      `<text id="cl-big" x="52" y="116" font-family="DejaVu Sans, sans-serif" font-size="${bigFont}" fill="#1d3557" font-weight="bold">${escapeXml(big)}</text>` +
-      `<text id="cl-small" x="52" y="182" font-family="DejaVu Sans, sans-serif" font-size="${smallFont}" fill="#457b9d">${escapeXml(small)}</text>`,
+      `<text id="cl-big" x="52" y="116" font-size="${bigFont}" fill="#1d3557" font-weight="bold">${escapeXml(big)}</text>` +
+      `<text id="cl-small" x="52" y="182" font-size="${smallFont}" fill="#457b9d">${escapeXml(small)}</text>`,
   };
 }
 

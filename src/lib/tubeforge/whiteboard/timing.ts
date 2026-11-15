@@ -41,6 +41,47 @@ export const MIN_PATH_MS = 260; // even a dot takes a moment
 export const MAX_PATH_MS = 2600; // even a long contour stays snappy
 export const MS_PER_CHAR = 55; // text writing speed
 
+// S139 — the naturalist pen laws.
+
+/** The eased within-stroke progress (sine-in-out): the pen accelerates
+ *  out of each stroke's start and settles into its end — constant-speed
+ *  dash fronts read robotic; every reference engine eases per stroke.
+ *  Endpoints exact (p=0→0, p=1→1): schedules, carried ink and the QC
+ *  envelopes are untouched. THE one progress both the ink front and the
+ *  hand ride (the lockstep law — the hand may never lead or trail the
+ *  ink it is laying down). */
+export function penProgress(p: number): number {
+  const c = Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0;
+  // 4dp quantization: sub-pixel on any board (1000-unit stroke → 0.1-unit
+  // steps), byte-stable across machines, and the mid-stroke half point
+  // stays EXACTLY 0.5 (the wire-format pins ride through unchanged).
+  return Math.round((0.5 - 0.5 * Math.cos(Math.PI * c)) * 10000) / 10000;
+}
+
+/** The hand's micro-tremble: two sines perpendicular to the stroke
+ *  tangent (the 7.3:3 ratio pair the reference study credits), wrapped
+ *  in sin(π·u) so the amplitude is ZERO at stroke ends, phase advanced
+ *  by the golden angle per stroke ordinal — deterministic, never loops
+ *  visibly. Scene units on the 1920-wide board. */
+export const HAND_TREMBLE_SCALE = 1.15;
+export function handTrembleOffset(u: number, ordinal: number): number {
+  const p = Number.isFinite(u) ? Math.max(0, Math.min(1, u)) : 0;
+  if (p <= 0 || p >= 1) return 0; // exact endpoints — floating π residue never leaks
+  const wrap = Math.sin(Math.PI * p);
+  if (wrap <= 0) return 0;
+  const ph = 2.399963 * ordinal;
+  const o1 = Math.sin(2 * Math.PI * 7.3 * p + ph) * 1.8;
+  const o2 = Math.sin(2 * Math.PI * 3.0 * p + ph * 1.7) * 0.7;
+  return (o1 + o2) * wrap * HAND_TREMBLE_SCALE;
+}
+
+/** The pen-width breathing mirror constant — the applier multiplies the
+ *  authored stroke-width by (0.78 + 0.22·sin(π·progress)) so the ink
+ *  swells mid-stroke like real marker pressure. The SAME arithmetic is
+ *  embedded in wb-page.ts's applier string (one formula, two riders —
+ *  pinned together). */
+export const PEN_WIDTH_BREATHE = { base: 0.78, amp: 0.22 } as const;
+
 export interface AssetGeometry {
   /** Flattened segments per drawable path id. */
   paths: Map<string, PathSegment[]>;
@@ -138,6 +179,13 @@ export function scheduleScene(
     id: string;
     weight: number; // relative cost
   }
+  // S139 — the sketch pass's derived strokes ride the same window with
+  // their own cost laws: a retrace (-od) moves faster than its main
+  // stroke (the pen re-traces with confidence, not care), and a hatch
+  // (-h) scribbles quicker still. Weights keep the window arithmetic
+  // one-law: only the cost model changes.
+  const derivedFactor = (id: string): number =>
+    id.endsWith("-od") ? 0.45 : id.endsWith("-h") ? 0.55 : 1;
   const work: Work[] = [];
   const ordered = [...scene.placements].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   for (const pl of ordered) {
@@ -146,7 +194,7 @@ export function scheduleScene(
     for (const [pathId, segs] of geo.paths) {
       if (claimed.has(`${pl.assetId}::${pathId}`)) continue;
       const len = totalLength(segs) * pl.placement.scale;
-      work.push({ kind: "path", assetId: pl.assetId, id: pathId, weight: Math.max(120, len) });
+      work.push({ kind: "path", assetId: pl.assetId, id: pathId, weight: Math.max(120, len) * derivedFactor(pathId) });
     }
     const texts = TEXT_IDS_BY_ASSET.get(pl.assetId) ?? [];
     for (const textId of texts) {
@@ -165,7 +213,11 @@ export function scheduleScene(
   const spoken = anchorEnvelope(anchors, durationMs);
   const winStart = spoken ? spoken.startMs : LEAD_IN_MS;
   const winEnd = spoken ? spoken.endMs : durationMs - HOLD_END_MS;
-  const gaps = PATH_GAP_MS * Math.max(0, work.length - 1);
+  // S139 — sparse boards breathe: a scene with ≤3 strokes is a big-draw
+  // scene, and its pen lifts carry a beat longer (the robotic-constant-
+  // gap receipt). Dense boards keep the tight 130ms cadence.
+  const gapMs = work.length > 0 && work.length <= 3 ? PATH_GAP_MS + 90 : PATH_GAP_MS;
+  const gaps = gapMs * Math.max(0, work.length - 1);
   const avail = Math.max(1200, winEnd - winStart - gaps);
   const totalWeight = work.reduce((a, w) => a + w.weight, 0);
   // Raw durations: weight-shared ideals, snappiness-clamped; texts ride
@@ -193,7 +245,7 @@ export function scheduleScene(
     } else {
       events.push({ type: "write_text", assetId: w.assetId, textId: w.id, startMs: Math.round(t), durationMs });
     }
-    t += durationMs + PATH_GAP_MS;
+    t += durationMs + gapMs;
   });
   return events.sort((a, b) => a.startMs - b.startMs);
 }
@@ -491,6 +543,9 @@ export function handAt(
   if (pen.length === 0) return hidden;
   // Chronological order for the gap scan (stable: startMs, then duration).
   const ordered = [...pen].sort((a, b) => a.startMs - b.startMs || a.durationMs - b.durationMs);
+  // S139 — the tremble's per-stroke phase: the golden-angle ordinal of the
+  // chronological order (stable across calls; the same events → the same
+  // phase book, so the tremble never re-rolls between frames).
 
   const poseOf = (e: PenEvent): HandPose => {
     if (e.type === "write_text") return "write";
@@ -500,6 +555,9 @@ export function handAt(
     if (role === "emphasis") return "circle";
     return "draw"; // outline, fill, and role-less assets
   };
+
+  const ordinalOf = new Map<PenEvent, number>();
+  ordered.forEach((e, i) => ordinalOf.set(e, i));
 
   // The pen-tip state on ONE stroke at progress p — the SAME evaluation the
   // active branch and the travel endpoints ride (one follow math).
@@ -520,10 +578,16 @@ export function handAt(
     if (!segs) return null;
     const s = sampleAtLength(segs, p * totalLength(segs));
     const pt = transformPoint(s.point, base);
+    // S139 — the micro-tremble rides the stroke's LOCAL normal (the hand
+    // quivers across the line it is laying, amplitude zero at both ends,
+    // phase owned by the stroke's ordinal). Applied after the placement
+    // transform, using the SAME angle the hand pose consumes — one frame
+    // of reference, no divergence.
+    const off = handTrembleOffset(p, ordinalOf.get(e) ?? 0);
     return {
       visible: true,
-      x: pt.x,
-      y: pt.y,
+      x: pt.x - Math.sin(s.angle) * off,
+      y: pt.y + Math.cos(s.angle) * off,
       angle: s.angle + (base.rotateDeg * Math.PI) / 180,
       pose: poseOf(e),
       scale: 1,
@@ -541,7 +605,10 @@ export function handAt(
   const last = pen.reduce((a, b) => (a.startMs + a.durationMs >= b.startMs + b.durationMs ? a : b));
 
   if (active) {
-    const s = strokePoint(active, (tMs - active.startMs) / active.durationMs);
+    // S139 — the hand rides the EASED progress (the same penProgress the
+    // ink front consumes): the lockstep law survives the naturalist speed
+    // law — the tip can never lead or trail the ink it lays down.
+    const s = strokePoint(active, penProgress((tMs - active.startMs) / active.durationMs));
     return s ?? hidden;
   }
 
@@ -626,9 +693,13 @@ export function frameAt(
   const colors = new Map<string, number>();
   for (const e of events) {
     const p = Math.max(0, Math.min(1, (tMs - e.startMs) / e.durationMs));
-    if (e.type === "draw_path") draws.set(`${e.assetId}::${e.pathId}`, p);
-    else if (e.type === "write_text") texts.set(`${e.assetId}::text:${e.textId}`, p);
-    else if (e.type === "reveal_color") colors.set(`${e.assetId}${e.pathId ? "::" + e.pathId : ""}`, p);
+    // S139 — every reveal rides the eased pen progress (one speed law for
+    // ink, text wipes and the hand); carried ink pins p=1 which penProgress
+    // preserves exactly.
+    const pe = penProgress(p);
+    if (e.type === "draw_path") draws.set(`${e.assetId}::${e.pathId}`, pe);
+    else if (e.type === "write_text") texts.set(`${e.assetId}::text:${e.textId}`, pe);
+    else if (e.type === "reveal_color") colors.set(`${e.assetId}${e.pathId ? "::" + e.pathId : ""}`, pe);
   }
   const placements = new Map<string, Placement>();
   for (const pl of scene.placements) {

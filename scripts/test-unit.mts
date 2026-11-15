@@ -7802,9 +7802,10 @@ await test("S64 timing: scheduleScene fills the narration window — weighted, f
   ok(ev.every((e) => e.type === "draw_path"), "draw events");
   eq(ev[0].startMs, LEAD_IN_MS, "first stroke starts at the lead-in");
   // Two equal-weight strokes weight-share the whole window exactly (no cap
-  // is hit): each gets half of (duration − lead-in − hold − gap).
-  eq(ev[0].durationMs, 4285, "weight-shared fill duration");
-  eq(ev[1].startMs, LEAD_IN_MS + 4285 + 130, "pen-lift gap between strokes");
+  // is hit): raw ideals halve the window (minus the S139 sparse gap of
+  // 220), clamp to 2600, and the fill factor re-scales to the window edge.
+  eq(ev[0].durationMs, 4240, "weight-shared fill duration");
+  eq(ev[1].startMs, LEAD_IN_MS + 4240 + 220, "pen-lift gap between strokes (the sparse-board breathe)");
   const last = ev[ev.length - 1];
   eq(last.startMs + last.durationMs, 10000 - HOLD_END_MS, "the fill law: draws end exactly at the hold boundary");
   eq(JSON.stringify(scheduleScene(WB_PLAIN, 10000, geo)), JSON.stringify(ev), "deterministic");
@@ -7846,7 +7847,9 @@ await test("S64 timing: frameAt — progress ramp, camera drift, pen follows/res
   eq(mid.draws.get("a1::p1"), 0.5, "mid progress");
   ok(mid.hand.visible, "pen visible during the stroke");
   approx(mid.hand.x, 50, 1e-6, "pen tip at the arc-length midpoint");
-  approx(mid.hand.y, 0, 1e-6);
+  // S139 — the micro-tremble rides the normal: the tip stays ON the stroke
+  // along it (x exact) and inside the tremble band across it (±3.5 units).
+  ok(Math.abs(mid.hand.y) <= 3.5, `the pen quivers across the line, within the band (got ${mid.hand.y})`);
   approx(mid.hand.angle, 0, 1e-9, "tangent along +x");
   approx(mid.camera.cx, 960 + cameraDrift(1500).dx, 1e-9, "default camera + drift");
   const done = frameAt(project, WB_PLAIN, events, geo, 3000);
@@ -8015,7 +8018,9 @@ await test("S64 assets: loadLibrary builds the index + registers the scheduler's
   const lib = loadLibrary();
   ok(lib.assets.has("hand-marker"), "the drawing hand is in the library");
   eq(HAND_TIP, { x: 70, y: 150 }, "the marker tip anchor");
-  eq(lib.libraryIndex.pathIdsByAsset.get("heart-main")?.size, 6, "heart-main exposes 6 drawable paths");
+  ok(lib.libraryIndex.pathIdsByAsset.get("heart-main")?.size === 13, "heart-main exposes 13 drawable paths (6 authored + 6 S139 retraces + 1 hatch on the filled outline)");
+  ok([...(lib.libraryIndex.pathIdsByAsset.get("heart-main") ?? [])].filter((id) => id.endsWith("-od")).length === 6, "every stroke carries exactly one retrace");
+  ok([...(lib.libraryIndex.pathIdsByAsset.get("heart-main") ?? [])].filter((id) => id.endsWith("-h")).length === 1, "the filled outline carries exactly one hatch");
   eq(lib.libraryIndex.textIdsByAsset.get("heart-labels")?.size, 5, "heart-labels exposes 5 texts");
   eq(TEXT_CHARS_BY_ID.get("heart-labels::hl-ra"), 2, "text lengths registered");
   eq(TEXT_ANCHORS.get("heart-labels::hl-ra"), { x: 34, y: 120, size: 22 }, "text anchors registered");
@@ -8052,7 +8057,12 @@ await test("S64 render: framePayload serializes the full frame state (the applie
   eq(p.draws, [["a1::p1", 0.5]]);
   // W7 — the hand gained pose + scale (additive wire format): the pose
   // drives the page's grip groups, the scale is the pen-lift breathe.
-  eq(p.hand, { visible: true, x: 50, y: 0, angle: 0, pose: "draw", scale: 1 });
+  // S139 — the tip quivers across the line (inside the tremble band) but
+  // stays ON the stroke along it.
+  eq(p.hand.x, 50, "the tip rides the stroke's arc exactly");
+  ok(Math.abs((p.hand as { y: number }).y) <= 3.5, `the tremble stays inside the band (got ${(p.hand as { y: number }).y})`);
+  eq(p.hand.angle, 0, "tangent along +x");
+  eq(p.hand.pose, "draw", "the pose rides");
 });
 
 await test("S64 render: the applier resolves frame-plan keys through the registered id maps (the namespace seam)", async () => {
@@ -8723,9 +8733,11 @@ await test("S68 scheduler: explicit events are SENIOR — verbatim times, the fi
   ok(pinned, "the explicit event survives");
   eq(pinned?.startMs, 1234, "explicit startMs verbatim (senior — not re-scheduled)");
   eq(pinned?.durationMs, 567, "explicit durationMs verbatim");
-  // The OTHER five paths still draw (the fill law schedules the unclaimed).
+  // The OTHER five paths still draw (the fill law schedules the unclaimed)
+  // TOGETHER WITH their S139 retraces (short strokes too small to bear one
+  // are honestly absent — the derivation's own length floor).
   const scheduled = events.filter((e) => e.type === "draw_path" && e.pathId !== "sp-core");
-  eq(scheduled.length, 5, "unclaimed paths ride the fill law");
+  eq(scheduled.length, 9, "unclaimed paths + their retraces ride the fill law");
   for (const e of scheduled) {
     ok(e.startMs >= 400, `scheduled stroke ${e.pathId} starts after the lead-in`);
   }
@@ -8860,7 +8872,7 @@ await test("S69 loadLibrary(uploads): the merge registers uploads beside the bui
   };
   const lib = loadLibrary([upload]);
   ok(lib.assets.has("up-probe"), "upload registered in the merged library");
-  eq(lib.extracted.get("up-probe")?.paths.length, 1, "upload paths extracted");
+  eq(lib.extracted.get("up-probe")?.paths.length, 2, "upload paths extracted (authored + its S139 retrace)");
   ok(lib.libraryIndex.assetIds.has("up-probe"), "validator index sees the upload");
   // A project placing the upload validates clean against the MERGED lib only.
   const project = {
@@ -14316,8 +14328,9 @@ await test("W4 scheduleScene: with anchors the draw fills the SPOKEN window", as
   const hold = 10000 - (900 + 5 * 300 + 220);
   ok(hold > 4000, `the unspoken tail becomes hold (${hold}ms) — the final idea breathes`);
   eq(JSON.stringify(scheduleScene(WB_PLAIN, 10000, geo, anchors)), JSON.stringify(ev), "deterministic with anchors");
-  // The gap arithmetic is untouched (ONE scheduler's numbers).
-  eq(ev[1].startMs - (ev[0].startMs + ev[0].durationMs), 130, "the pen-lift gap is the fill law's own");
+  // The gap arithmetic is the fill law's own — and S139's sparse-board law
+  // breathes it: a 2-stroke scene lifts the pen 130+90=220ms between strokes.
+  eq(ev[1].startMs - (ev[0].startMs + ev[0].durationMs), 220, "the sparse-board pen lift breathes (130 + 90)");
 });
 
 await test("W4 planBeats: aligned anchors make each sentence's window its spoken span; a mismatch degrades byte-for-byte", async () => {
@@ -20661,6 +20674,105 @@ await test("S138 the music bed resolution never hands ffmpeg a dead file — the
     src.includes("const healedFallback ="),
     "an unhealable pick falls through to the auto pick ONCE (the documented drone fallback stays the last resort)"
   );
+});
+
+await test("S139 the naturalist pen laws — eased lockstep, tremble, breathing, and the sketch pass (the animator worth the name)", async () => {
+  const timing = await import("../src/lib/tubeforge/whiteboard/timing");
+  const sketch = await import("../src/lib/tubeforge/whiteboard/sketch");
+  const textDraw = await import("../src/lib/tubeforge/whiteboard/text-draw");
+  const assetsMod = await import("../src/lib/tubeforge/whiteboard/assets");
+  const planner = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
+  const wbPage = await import("../src/lib/tubeforge/whiteboard/wb-page");
+
+  // 1. Eased pen progress: exact endpoints, monotone, clock-free.
+  eq(timing.penProgress(0), 0, "penProgress(0) is exact");
+  eq(timing.penProgress(1), 1, "penProgress(1) is exact");
+  ok(timing.penProgress(0.25) < timing.penProgress(0.5) && timing.penProgress(0.5) < timing.penProgress(0.75), "penProgress is strictly monotone");
+  eq(timing.penProgress(NaN), 0, "NaN clamps to 0 (never poisons a frame)");
+
+  // 2. Tremble: zero at both ends, bounded, deterministic phase.
+  eq(timing.handTrembleOffset(0, 3), 0, "tremble is zero at a stroke's start");
+  eq(timing.handTrembleOffset(1, 3), 0, "tremble is zero at a stroke's end (pen lifts clean)");
+  const t1 = timing.handTrembleOffset(0.5, 1);
+  const t2 = timing.handTrembleOffset(0.5, 1);
+  eq(t1, t2, "the tremble is deterministic (same inputs, same offset)");
+  ok(Math.abs(timing.handTrembleOffset(0.5, 999)) < 3.5, "the tremble stays inside its scene-unit budget");
+
+  // 3. The sketch pass: deterministic derivation, exact joints, idempotence.
+  const stroke = "M 20 100 C 60 60, 140 140, 180 100";
+  const d1 = sketch.strokeDither(stroke, 12345, 1.2);
+  const d2 = sketch.strokeDither(stroke, 12345, 1.2);
+  eq(d1, d2, "strokeDither is byte-identical for the same seed");
+  ok(d1.startsWith("M "), "the dithered retrace starts with its own M");
+  const od = sketch.overdrawStroke("asset-a", "p1", stroke, { stroke: "#1d3557", strokeWidth: 4, linecap: "round" });
+  ok(od !== null && od.id === "p1-od", "the retrace derives id `<pathId>-od`");
+  const odAgain = sketch.overdrawStroke("asset-a", "p1", stroke, { stroke: "#1d3557", strokeWidth: 4, linecap: "round" });
+  ok(od !== null && odAgain !== null && odAgain.svg === od.svg, "the retrace svg is byte-identical across calls");
+  const hatch = sketch.hatchForFill("asset-a", "p2", "M 20 20 L 180 20 L 180 180 L 20 180 Z", "#e63946");
+  ok(hatch !== null && hatch.id === "p2-h", "the hatch derives id `<pathId>-h` with a clip to the fill shape");
+  ok(hatch !== null && hatch.svg.includes("clipPath") && hatch.svg.includes("clip-path="), "the hatch is CLIPPED to the fill shape (ink stays inside the outline)");
+  eq(sketch.hatchForFill("asset-a", "p3", stroke, "none"), null, "an unfilled stroke never grows a hatch");
+  eq(sketch.overdrawStroke("asset-a", "p4", "M 0 0 L 3 3", { stroke: "#000" }), null, "a stroke too short to bear a retrace gets none");
+
+  // 4. withSketchPasses: derivation + idempotence (no re-derivation of -od/-h).
+  const doc = `<path id="a" d="${stroke}" fill="none" stroke="#1d3557" stroke-width="4" stroke-linecap="round"/><path id="b" d="M 20 20 L 180 20 L 180 180 L 20 180 Z" fill="#e63946" fill-opacity="0" stroke="#1d3557" stroke-width="4"/>`;
+  const pass1 = sketch.withSketchPasses(doc, "asset-k");
+  ok(pass1.svg.includes('id="a-od"') && pass1.svg.includes('id="b-od"'), "every stroke gains its retrace in document order");
+  ok(pass1.svg.includes('id="b-h"'), "the filled shape gains its hatch");
+  ok(!pass1.svg.includes('id="a-h"'), "the unfilled stroke never grows a hatch");
+  const pass2 = sketch.withSketchPasses(pass1.svg, "asset-k");
+  ok(!pass2.svg.includes('id="a-od-od"'), "the pass is idempotent — derived ids never re-derive");
+  ok(pass2.svg === pass1.svg, "re-running the pass on its own output is byte-identical");
+
+  // 5. The library integration: board assets derive, hands never do.
+  const lib = assetsMod.loadLibrary([]);
+  const heart = lib.extracted.get("heart-main");
+  ok(heart !== undefined && heart.paths.some((p) => p.id.endsWith("-od")), "heart-main's strokes carry retraces in the extracted geometry");
+  const hand = lib.extracted.get("hand-marker");
+  ok(hand !== undefined && !hand.paths.some((p) => p.id.endsWith("-od") || p.id.endsWith("-h")), "the hand is excluded — a hand is not drawn, it draws");
+
+  // 6. The schedule's derived cost law: a retrace retraces FASTER than its main stroke.
+  const scene = {
+    id: "s1",
+    narration: "one two three",
+    background: "#ffffff",
+    durationMs: 12000,
+    placements: [{ assetId: "asset-a", placement: { x: 100, y: 100, scale: 1, rotateDeg: 0 }, order: 0 }],
+    animations: [],
+    boardPolicy: undefined,
+  } as never;
+  void 0;
+  const geo = new Map();
+  const segsA = (await import("../src/lib/tubeforge/whiteboard/svg")).pathSegments(stroke);
+  geo.set("asset-a", { paths: new Map([["p1", segsA], ["p1-od", segsA]]), totalLen: 2 * (await import("../src/lib/tubeforge/whiteboard/svg")).totalLength(segsA) });
+  // A 4s window keeps both raw ideals inside the clamps so the 0.45 cost
+  // law is visible (a generous window saturates BOTH at MAX_PATH_MS and
+  // the fill factor equalizes them — the window law outranks the cost law).
+  const evts = timing.scheduleScene(scene, 4000, geo as never).filter((e) => e.type === "draw_path");
+  const main = evts.find((e) => e.pathId === "p1");
+  const odEvt = evts.find((e) => e.pathId === "p1-od");
+  ok(main && odEvt && odEvt.durationMs < main.durationMs, "the retrace's window is SHORTER than its main stroke (0.45 cost law)");
+  ok(main && odEvt && odEvt.startMs >= main.startMs + main.durationMs, "the retrace rides AFTER its main stroke (the paired-stroke rhythm)");
+
+  // 7. Text: measured wrap, coverage gate, planner cards go glyph.
+  const wrap = textDraw.wrapGlyphLines("The one habit that changes everything you know about focus", 700, 64);
+  ok(wrap.covered && wrap.lines.length >= 1 && wrap.lines.length <= 3, "a normal title wraps to 1-3 covered lines");
+  const wrap2 = textDraw.wrapGlyphLines("The one habit that changes everything you know about focus", 700, 64);
+  eq(JSON.stringify(wrap2.lines), JSON.stringify(wrap.lines), "the wrap is deterministic");
+  const uncovered = textDraw.wrapGlyphLines("caf\u00e9 r\u00e9sum\u00e9 plan", 700, 64);
+  eq(uncovered.covered, false, "an uncovered character degrades the WHOLE wrap honestly");
+  const cards = planner.buildGeneratedCards({ videoId: "v-s139", topic: "How Your Heart Works", lastNarration: "" });
+  ok(cards.length === 2, "the scaffold still builds both cards");
+  ok(cards.every((c) => (c as { textMode?: string }).textMode === "glyph"), "both generated cards opt into glyph mode (the pen draws the letterforms)");
+  ok(cards.every((c) => !c.svg.includes("DejaVu")), "glyph-mode cards carry no system-font fallback markup");
+  const titleCard = cards.find((c) => c.id === "wb-title-v-s139");
+  ok(titleCard !== undefined && titleCard.svg.includes("<path"), "the title card's texts swapped for committed outline paths");
+  const w = textDraw.measureGlyphWidth("How Your Heart Works", 64);
+  ok(Number.isFinite(w) && w > 0, "measured width is finite and positive (the one-metric law)");
+
+  // 8. The applier contract: breathing + derived opacity laws ride BOTH surfaces.
+  ok(wbPage.APPLY_FRAME_FN.includes("0.78 + 0.22 * Math.sin(Math.PI * prog)"), "the applier carries the pen-width breathing formula (the timing.ts mirror)");
+  ok(wbPage.APPLY_FRAME_FN.includes('"0.5"') && wbPage.APPLY_FRAME_FN.includes('"0.75"'), "the applier caps overdraw (0.5) and hatch (0.75) opacity");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

@@ -144,7 +144,25 @@ export const APPLY_FRAME_FN = `(payloadJson) => {
     if (!el) continue;
     const L = Number(el.dataset.len || 0);
     el.setAttribute("stroke-dashoffset", String(Math.max(0, L * (1 - prog))));
-    el.style.opacity = prog <= 0 ? "0" : "1";
+    // S139 — the derived-path law: an overdraw (-od) SHADOWS its main
+    // stroke (half opacity — a second pass of the same pen, not a second
+    // ink), a hatch (-h) reads as crayon body (three-quarter). Derived ids
+    // end in the suffix; cache the classification on first touch.
+    if (el.dataset.od === undefined) {
+      el.dataset.od = /-(od|h)$/.test(el.id || "") ? (/-h$/.test(el.id) ? "h" : "od") : "";
+    }
+    el.style.opacity = prog <= 0 ? "0" : el.dataset.od === "h" ? "0.75" : el.dataset.od === "od" ? "0.5" : "1";
+    // S139 — pen-width breathing: the ink swells mid-stroke like marker
+    // pressure (0.78 + 0.22·sin(π·prog) — the mirror of timing.ts's
+    // PEN_WIDTH_BREATHE, one formula two riders, pinned together). The
+    // authored width is cached on first touch; scaling never compounds.
+    if (el.dataset.swb === undefined) {
+      const sw = el.getAttribute("stroke-width");
+      el.dataset.swb = sw && Number(sw) > 0 ? sw : "";
+    }
+    if (el.dataset.swb) {
+      el.setAttribute("stroke-width", String(Math.round(Number(el.dataset.swb) * (0.78 + 0.22 * Math.sin(Math.PI * prog)) * 100) / 100));
+    }
   }
   for (const [key, prog] of p.texts) {
     const el = textEl(key);

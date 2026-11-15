@@ -167,6 +167,86 @@ function transformOutline(d: string, x0: number, y0: number, s: number): string 
   return out;
 }
 
+/** Unescape the XML entities escapeXml may have produced — glyph layout
+ *  needs the REAL characters (&amp; → &); the output is path DATA, not
+ *  markup, so re-introduction risk is nil. */
+function unescapeEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+/** Measured run width in asset-space units — the GLYPH TABLE's own
+ *  advances (one tokenizer, one metric — never an estimate). */
+export function measureGlyphWidth(text: string, size: number, letterSpacing = 0): number {
+  const s = size / GLYPH_TABLE.upem;
+  let w = 0;
+  for (const ch of text) {
+    const row = GLYPH_TABLE.glyphs.get(ch);
+    if (!row) return NaN; // uncovered — the caller's honest fallback signal
+    w += row.advance * s + letterSpacing;
+  }
+  return text.length > 0 ? w - letterSpacing : 0;
+}
+
+export interface GlyphWrapResult {
+  lines: string[];
+  /** True when EVERY character is covered by the committed table. */
+  covered: boolean;
+}
+
+/** wrapGlyphLines — greedy word-wrap on MEASURED advances (the planner's
+ *  card law: a line never exceeds maxWidth, and the wrap point falls on
+ *  the last fitting space). Word-splitting uses the beat-plan tokenizer's
+ *  whitespace+split semantics on the DISPLAY string. Deterministic:
+ *  same text/width/size → byte-identical lines. An uncovered character
+ *  fails the WHOLE wrap (covered=false) — the caller keeps its naive
+ *  fallback and the marker wipe, never a half-measured board. */
+export function wrapGlyphLines(text: string, maxWidth: number, size: number, letterSpacing = 0): GlyphWrapResult {
+  const raw = unescapeEntities(text);
+  const words = raw.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return { lines: [], covered: true };
+  // Coverage gate first — one unknown char degrades the whole wrap.
+  for (const ch of raw.replace(/\s/g, "")) {
+    if (!GLYPH_TABLE.glyphs.get(ch)) return { lines: [raw], covered: false };
+  }
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? current + " " + word : word;
+    const w = measureGlyphWidth(candidate, size, letterSpacing);
+    if (Number.isFinite(w) && w <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    if (current) {
+      lines.push(current);
+      current = word;
+    } else {
+      // A single word longer than the box: hard-break it (the title law —
+      // a word that cannot fit is sliced, never silently shrunk past
+      // readability).
+      let piece = "";
+      for (const ch of word) {
+        const trial = piece + ch;
+        const tw = measureGlyphWidth(trial, size, letterSpacing);
+        if (Number.isFinite(tw) && tw > maxWidth && piece) {
+          lines.push(piece);
+          piece = ch;
+        } else {
+          piece = trial;
+        }
+      }
+      current = piece;
+    }
+  }
+  if (current) lines.push(current);
+  return { lines, covered: true };
+}
+
 /** textToGlyphPaths — lay out one line of text as glyph-outline paths.
  *  Deterministic: fixed 2dp output, no clock, no randomness; the same call
  *  twice is byte-identical. Unknown characters are REPORTED in `skipped`
@@ -238,7 +318,7 @@ function isPaint(fill: string | undefined): fill is string {
 export function applyGlyphTextMode(svg: string): GlyphModeResult {
   const replacedAnchors: GlyphModeResult["replacedAnchors"] = [];
   const out = svg.replace(/<text\b([^>]*)>([^<]*)<\/text>/g, (full, attrs: string, contentRaw: string) => {
-    const content = contentRaw.trim();
+    const content = unescapeEntities(contentRaw.trim());
     const id = /\sid="([^"]+)"/.exec(attrs)?.[1];
     const x = Number(/\sx="([-\d.]+)"/.exec(attrs)?.[1] ?? NaN);
     const y = Number(/\sy="([-\d.]+)"/.exec(attrs)?.[1] ?? NaN);
