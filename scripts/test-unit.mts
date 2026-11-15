@@ -1643,6 +1643,92 @@ await test("cameraAt: exact interpolation, clamped ends", () => {
   approx(camera3dAt([{ t: 0, position: [1, 2, 3], lookAt: [0, 0, 0] }], 0.7).position[2], 3, 1e-9, "a single keyframe holds");
 });
 
+// ---------------------------------------------------------------------------
+// S134 (PAE-6) — the 3D object animation adapter: keyframes on the
+// NORMALIZED scene clock (the lane's own convention), evaluated through
+// the cameraAt shape per channel. Two adapters, one vocabulary. Pins: the
+// static passthrough (byte-identity), per-channel tracks with clamped
+// holds, the tolerant parse (junk keys drop, sort, cap), the strict
+// serialize round-trip, and the render-path equality for keyless scenes.
+// ---------------------------------------------------------------------------
+
+await test("S134 objectAt: keyless objects mirror their static fields exactly (the render-path byte-identity)", async () => {
+  const { objectAt, scaffoldScene3D } = await import("../src/lib/tubeforge/scene3d");
+  const doc = scaffoldScene3D("s134 pin");
+  for (const t of [0, 0.13, 0.5, 0.77, 1]) {
+    for (const o of doc.objects) {
+      const s = objectAt(o, t);
+      eq(s.id, o.id, "the id rides");
+      eq(s.position, o.position, `position passthrough at t=${t}`);
+      eq(s.rotation, o.rotation, `rotation passthrough at t=${t}`);
+      eq(s.scale, o.scale, `scale passthrough at t=${t}`);
+    }
+  }
+});
+
+await test("S134 objectAt: per-channel tracks, clamped holds, independent channels", async () => {
+  const { objectAt } = await import("../src/lib/tubeforge/scene3d");
+  const obj = {
+    id: "orb",
+    kind: "sphere" as const,
+    position: [0, 1, 0] as [number, number, number],
+    material: { color: "#888888" },
+    keyframes: [
+      { t: 0.25, position: [-2, 1, 0] as [number, number, number] },
+      { t: 0.75, position: [2, 1, 0] as [number, number, number] },
+      { t: 0.5, rotation: [0, Math.PI, 0] as [number, number, number] },
+    ],
+  };
+  const pre = objectAt(obj, 0.1);
+  eq(pre.position, [-2, 1, 0], "before the first position key → the first key's value holds");
+  eq(pre.rotation, [0, Math.PI, 0], "the rotation track holds its single key before it too (per-channel clamping)");
+  const mid = objectAt(obj, 0.5);
+  approx(mid.position[0], 0, 1e-9, "the position track lerps across its OWN keys only");
+  approx(mid.rotation[1], Math.PI, 1e-9, "the rotation track rides its single key");
+  const post = objectAt(obj, 0.9);
+  eq(post.position, [2, 1, 0], "after the last key → the last value holds");
+  approx(post.rotation[1], Math.PI, 1e-9, "the rotation holds past its last key too");
+  const scaled = objectAt({ ...obj, scale: [1, 1, 1] as [number, number, number], keyframes: [...obj.keyframes, { t: 0, scale: [2, 2, 2] as [number, number, number] }] }, 0.5);
+  approx(scaled.scale[0], 2, 1e-9, "a single scale key HOLDS everywhere — the static field is only the no-keys fallback");
+  const spanned = objectAt({ ...obj, scale: [1, 1, 1] as [number, number, number], keyframes: [...obj.keyframes, { t: 0, scale: [2, 2, 2] as [number, number, number] }, { t: 1, scale: [1, 1, 1] as [number, number, number] }] }, 0.5);
+  approx(spanned.scale[0], 1.5, 1e-9, "edge keys span the whole clock: 2→1 lerps to 1.5 at the midpoint");
+});
+
+await test("S134 the tolerant keyframes read + the strict write round-trip", async () => {
+  const { parseScene3D, serializeScene3D, scaffoldScene3D } = await import("../src/lib/tubeforge/scene3d");
+  const doc = scaffoldScene3D("s134 parse");
+  const keyed = {
+    ...doc,
+    objects: [
+      {
+        ...doc.objects[0],
+        keyframes: [
+          { t: 0.5, position: [1, 2, 3], junk: "field" },
+          { t: "junk" },
+          { t: 0.9 },
+          { t: 5, position: [0, 0, 0] },
+          { t: 0.1, position: [4, 5, 6] },
+        ],
+      },
+      ...doc.objects.slice(1),
+    ],
+  };
+  const parsed = parseScene3D(serializeScene3D(keyed));
+  ok(parsed != null, "the keyed scene parses");
+  const keys = parsed?.objects[0]?.keyframes;
+  eq(keys?.length, 3, "junk keys drop individually; the channel-less key drops");
+  eq(keys?.[0]?.t, 0.1, "the keys sort by t");
+  eq(keys?.[1]?.t, 0.5, "the mid key survives with its position");
+  eq(keys?.[2]?.t, 1, "the clamped t=5 → 1");
+  ok(keys?.[0] && !("junk" in keys[0]), "unknown key fields drop (strict write)");
+  const s1 = serializeScene3D(parsed);
+  eq(serializeScene3D(parseScene3D(s1)), s1, "serialize → parse → serialize is byte-identical with keyframes");
+  const plain = parseScene3D(serializeScene3D(doc));
+  ok(plain?.objects.every((o) => o.keyframes === undefined), "keyless objects never invent keyframes");
+  const written = JSON.parse(serializeScene3D(plain)) as { objects: Array<Record<string, unknown>> };
+  ok(written.objects.every((o) => !("keyframes" in o)), "a keyless scene writes no object-level keyframes (byte-identity; the camera's keyframes field is unrelated)");
+});
+
 suiteStart("art dedupe — dHash perceptual hashing");
 
 await test("dHash pure: flat frame → zero hash, self-distance 0", () => {
