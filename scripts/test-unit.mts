@@ -17255,6 +17255,203 @@ await test("S124 the editor limits keep the validator silent at both band edges"
   eq(hi.scenes[0]?.elements[0]?.at.scale, ELEMENT_EDITOR_LIMITS.scaleMax, "the ceiling survives validation with no rewrite");
 });
 
+// ---------------------------------------------------------------------------
+// S125 (K1) — the 2D character rig: the CharacterRigDoc grammar, the parts
+// library, the standard slot vocabulary (design record docs/design/s125-character-rig.md §3).
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S125 the rig grammar (rig2d)");
+
+import {
+  RIG_BUDGETS,
+  RIG_MOUTH_SLOTS,
+  RIG_VERSION,
+  parseRigDoc,
+  parseRigParts,
+  readEase,
+  scaffoldRigDoc,
+  standardPoseIds,
+  validateRigDoc,
+  validateRigParts,
+  writeRigDoc,
+  writeRigParts,
+  type RigPartArt,
+} from "../src/lib/tubeforge/characters/rig2d";
+
+const RIG_STAGE = 1080;
+
+function rigArt(overrides: Partial<RigPartArt> & { id: string; slot: RigPartArt["slot"] }): RigPartArt {
+  return { svg: `<circle cx="540" cy="400" r="60" fill="#e8b98a"/>`, ...overrides };
+}
+
+const ART: RigPartArt[] = [
+  rigArt({ id: "torso-art", slot: "torso", svg: `<rect x="420" y="520" width="240" height="320" rx="40" fill="#4a3a6a"/>` }),
+  rigArt({ id: "head-art", slot: "head" }),
+  rigArt({ id: "brow-art", slot: "brow", svg: `<rect x="470" y="330" width="140" height="12" rx="6" fill="#2a1f3a"/>` }),
+  rigArt({ id: "arm-l-art", slot: "arm-l", svg: `<rect x="360" y="540" width="60" height="220" rx="30" fill="#4a3a6a"/>` }),
+  rigArt({ id: "arm-r-art", slot: "arm-r", svg: `<rect x="660" y="540" width="60" height="220" rx="30" fill="#4a3a6a"/>` }),
+  ...RIG_MOUTH_SLOTS.map((v) => rigArt({ id: `mouth-${v}-art`, slot: "mouth", variant: v, svg: `<ellipse cx="540" cy="470" rx="30" ry="14" fill="#7a2e3a"/>` })),
+];
+
+function rigDocInput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    version: RIG_VERSION,
+    width: RIG_STAGE,
+    height: RIG_STAGE,
+    fps: 30,
+    background: "#1c1424",
+    parts: [
+      { id: "torso", slot: "torso", svgRef: "torso-art", z: 10, pivot: { x: 540, y: 680 }, rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      { id: "head", slot: "head", svgRef: "head-art", z: 20, pivot: { x: 540, y: 520 }, parent: "torso", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      { id: "brow", slot: "brow", svgRef: "brow-art", z: 22, pivot: { x: 540, y: 336 }, parent: "head", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      { id: "arm-l", slot: "arm-l", svgRef: "arm-l-art", z: 9, pivot: { x: 420, y: 560 }, parent: "torso", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      { id: "arm-r", slot: "arm-r", svgRef: "arm-r-art", z: 11, pivot: { x: 660, y: 560 }, parent: "torso", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      ...RIG_MOUTH_SLOTS.map((v, i) => ({
+        id: `mouth-${v}`,
+        slot: "mouth",
+        variant: v,
+        svgRef: `mouth-${v}-art`,
+        z: 24 + i,
+        pivot: { x: 540, y: 470 },
+        parent: "head",
+        rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 },
+      })),
+    ],
+    poses: [
+      { id: "arm-l-raise", name: "Raise left arm", joints: { "arm-l": { rotateDeg: -140 } } },
+      { id: "arm-r-point", name: "Point right", joints: { "arm-r": { rotateDeg: 120 }, "head": { rotateDeg: 6 } } },
+      { id: "brow-raise", name: "Raise brow", joints: { "brow": { rotateDeg: 0, y: -14 } } },
+    ],
+    ...overrides,
+  };
+}
+
+function mustValidateDoc(raw: unknown, parts: RigPartArt[] | null, label: string) {
+  const r = validateRigDoc(raw, parts);
+  ok(r.doc !== null, `${label}: expected a doc, got errors ${JSON.stringify(r.errors)}`);
+  return r.doc as NonNullable<typeof r.doc>;
+}
+
+await test("S125 the rig doc round-trips byte-stable (write ∘ validate ∘ parse ∘ write)", () => {
+  const doc = mustValidateDoc(rigDocInput(), ART, "round-trip");
+  const bytes = writeRigDoc(doc);
+  const reparsed = parseRigDoc(bytes, writeRigParts(ART));
+  ok(reparsed !== null, "the strict write reparses");
+  eq(writeRigDoc(reparsed as NonNullable<typeof reparsed>), bytes, "byte-stable round-trip");
+});
+
+await test("S125 the standard slot vocabulary maps from the parts (the §6 slot law)", () => {
+  const doc = mustValidateDoc(rigDocInput(), ART, "slots");
+  eq(
+    standardPoseIds(doc).sort(),
+    ["arm-l-point", "arm-l-raise", "arm-l-rest", "arm-r-point", "arm-r-raise", "arm-r-rest", "brow-raise", "brow-rest"],
+    "two 3-way arms + the brow pair, derived from the parts"
+  );
+  const mouthless = mustValidateDoc(rigDocInput({ parts: rigDocInput().parts.filter?.((p: Record<string, unknown>) => p.slot !== "mouth") ?? [] }), ART.filter((a) => a.slot !== "mouth"), "mouthless");
+  ok(mouthless.parts.every((p) => p.slot !== "mouth"), "the mouthless rig carries no mouth parts");
+});
+
+await test("S125 a partial mouth set is an ERROR — the speaking beats would visibly break", () => {
+  const partsInput = rigDocInput();
+  const cut = (partsInput.parts as Record<string, unknown>[]).filter(
+    (p) => !(p.slot === "mouth" && p.variant === "oh")
+  );
+  const r = validateRigDoc(rigDocInput({ parts: cut }), ART.filter((a) => !(a.slot === "mouth" && a.variant === "oh")));
+  ok(r.doc === null, "the partial mouth set refuses");
+  ok(r.errors.some((e) => e.includes("mouth set incomplete") && e.includes("oh")), `the error names the missing shape: ${r.errors[0]}`);
+});
+
+await test("S125 a mouthless rig validates with the honesty warning (the rig will not fake speech)", () => {
+  const partsOnly = ART.filter((a) => a.slot !== "mouth");
+  const partsInput = rigDocInput();
+  const cut = (partsInput.parts as Record<string, unknown>[]).filter((p) => p.slot !== "mouth");
+  const r = validateRigDoc(rigDocInput({ parts: cut }), partsOnly);
+  ok(r.doc !== null, "the mouthless rig is legal");
+  ok(r.warnings.some((w) => w.includes("no mouth parts") && w.includes("will not fake speech")), `the warning says the honest thing: ${r.warnings[0]}`);
+});
+
+await test("S125 referential integrity — unresolved svgRef, unknown pose joint, cyclic parent, junk pivot all refuse", () => {
+  const badRef = rigDocInput();
+  (badRef.parts as Record<string, unknown>[])[0].svgRef = "no-such-art";
+  ok(validateRigDoc(badRef, ART).doc === null, "unresolved svgRef refuses");
+  ok(validateRigDoc(badRef, ART).errors[0].includes("referential integrity"), "the error names the law");
+
+  const badJoint = rigDocInput({ poses: [{ id: "x", name: "X", joints: { "ghost-part": { rotateDeg: 10 } } }] });
+  ok(validateRigDoc(badJoint, ART).doc === null, "an unknown pose joint key refuses");
+
+  const cyclic = rigDocInput();
+  const parts = cyclic.parts as Record<string, unknown>[];
+  const torso = parts.find((p) => p.id === "torso");
+  ok(torso !== undefined, "the fixture's torso part exists");
+  torso.parent = "head";
+  const r = validateRigDoc(cyclic, ART);
+  ok(r.doc === null, "a parent cycle refuses");
+  ok(r.errors.some((e) => e.includes("cyclic")), "the cycle is named");
+
+  const junkPivot = rigDocInput();
+  (junkPivot.parts as Record<string, unknown>[])[0].pivot = { x: Number.NaN, y: 0 };
+  ok(validateRigDoc(junkPivot, ART).doc === null, "a NaN pivot refuses (pivot sanity)");
+});
+
+await test("S125 the walls — joint bands, pose budget, stage bounds, junk background, fps pin", () => {
+  const overRot = rigDocInput({ poses: [{ id: "x", name: "X", joints: { "arm-l": { rotateDeg: 361 } } }] });
+  ok(validateRigDoc(overRot, ART).doc === null, "rotateDeg beyond ±360 refuses");
+  const overScale = rigDocInput({ poses: [{ id: "x", name: "X", joints: { "arm-l": { rotateDeg: 0, scale: 3.01 } } }] });
+  ok(validateRigDoc(overScale, ART).doc === null, "scale beyond the band refuses");
+  const junkBg = rigDocInput({ background: "purple" });
+  ok(validateRigDoc(junkBg, ART).doc === null, "a junk background is refused, never substituted");
+  const junkFps = rigDocInput({ fps: 60 });
+  ok(validateRigDoc(junkFps, ART).doc === null, "fps must be 24 or 30 (the shared timebase)");
+  const tinyStage = rigDocInput({ width: 100 });
+  ok(validateRigDoc(tinyStage, ART).doc === null, "the stage walls hold");
+  const manyPoses = rigDocInput({
+    poses: Array.from({ length: RIG_BUDGETS.poses + 1 }, (_, i) => ({ id: `p${i}`, name: "P", joints: {} })),
+  });
+  ok(validateRigDoc(manyPoses, ART).doc === null, "the pose-sheet wall holds");
+});
+
+await test("S125 the missing standard poses WARN and the planner degrades (quality loss, never breakage)", () => {
+  const r = validateRigDoc(rigDocInput({ poses: [] }), ART);
+  ok(r.doc !== null, "an empty sheet is valid");
+  ok(r.warnings.some((w) => w.includes('standard pose "arm-l-raise" missing')), "the arm warnings name the degrade");
+  ok(r.warnings.some((w) => w.includes('standard pose "brow-raise" missing')), "the brow warning names the degrade");
+});
+
+await test("S125 the parts library — duplicate mouth variants refuse, junk slot refuses, the budget wall holds", () => {
+  const dup = [...ART, rigArt({ id: "mouth-open-dupe", slot: "mouth", variant: "open" })];
+  const r = validateRigParts(dup);
+  ok(r.parts === null, "duplicate mouth variants refuse at the library");
+  ok(r.errors[0].includes("duplicate mouth variants"), "the error names the set law");
+  const junkSlot = validateRigParts([rigArt({ id: "x", slot: "antenna" as never })]);
+  ok(junkSlot.parts === null, "a slot outside the closed vocabulary refuses");
+  const tooMany = validateRigParts(
+    Array.from({ length: RIG_BUDGETS.parts + 1 }, (_, i) => rigArt({ id: `p${i}`, slot: "prop" }))
+  );
+  ok(tooMany.parts === null, "the parts wall holds");
+  ok(parseRigParts("junk{") === null, "tolerant parse returns null on junk JSON");
+});
+
+await test("S125 the scaffold builds a valid doc from seeds + art (the auto planner's native half)", () => {
+  const seeds = (rigDocInput().parts as Record<string, unknown>[]).map((p) => ({
+    id: String(p.id),
+    slot: p.slot as RigPartArt["slot"],
+    variant: p.variant as RigPartArt["variant"],
+    svgRef: String(p.svgRef),
+    z: Number(p.z),
+    pivot: p.pivot as { x: number; y: number },
+    parent: p.parent as string | undefined,
+  }));
+  const r = scaffoldRigDoc({ parts: seeds, art: ART });
+  ok(r.doc !== null, `the scaffold validates: ${JSON.stringify(r.errors)}`);
+  eq(r.doc?.parts.every((p) => p.rest.scale === 1 && p.rest.rotateDeg === 0), true, "rest = identity (the art IS the rest)");
+  ok(r.doc?.poses.length === 0, "the sheet starts empty — the standard poses arrive from the parts pass");
+});
+
+await test("S125 the ease reader — the shared check for the doc and the timeline grammars", () => {
+  eq(readEase("pop"), "pop", "a legal curve rides");
+  eq(readEase("spin"), "linear", "junk falls back to linear (motion is honest before it is pretty)");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
