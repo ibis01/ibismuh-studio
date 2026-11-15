@@ -18467,6 +18467,74 @@ await test("C2-ext the shot joins stay kind-agnostic — a shake shot books its 
   eq(joins.length, 2, "two joins across three C2 shots (the cut boundaries the QC lens reads)");
 });
 
+// ---------------------------------------------------------------------------
+// Stage R — the AI director's ADVISORY engine pick (§9): AI suggests, human
+// approves; the D2 firewall (no routing logic reads it) until Stage X.
+// ---------------------------------------------------------------------------
+
+suiteStart("director — Stage R the advisory engine pick");
+
+await test("Stage R the advisory field parses tolerantly — legal ids ride, junk drops, v2 plans read fine", async () => {
+  const { parsePlan, DIRECTOR_ENGINE_OPTIONS } = await import("../src/lib/tubeforge/director-plan");
+  const planJson = (engines: unknown[]) =>
+    JSON.stringify({
+      version: 2,
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      concept: "c",
+      scenes: engines.map((engine, i) => ({
+        sceneIndex: i + 1,
+        mood: "m",
+        transitionIn: i === 0 ? "" : "fade",
+        motion: "smart",
+        needsI2V: false,
+        useStock: false,
+        pacing: "normal",
+        ambience: "none",
+        sfx: "none",
+        engine,
+        shots: [{ shotIndex: 0, framing: "wide", camera: "zoom-in", lens: "24mm wide", composition: "leading lines", duration: 2.8, imagePrompt: "p", subject: "s", subjectAction: "a", cameraHeight: "eye-level", angle: "front", depthOfField: "deep", lighting: "l", colorGrade: "g", focal: "center", moveSpeed: "normal", transitionOut: "cut", purpose: "establish", notes: "" }],
+      })),
+    });
+  const legal = parsePlan(planJson(["graphics", "graphics"]));
+  ok(legal !== null, "the plan parses");
+  eq(legal?.scenes[0]?.engine, "graphics", "the advisory pick rides");
+  eq(legal?.scenes[1]?.engine, "graphics", "both scenes carry it");
+  const junk = parsePlan(planJson([" warp-speed ", 42, "AUTO"]));
+  ok(junk !== null, "junk never refuses the plan (metadata, not a grammar gate)");
+  eq(junk?.scenes[0]?.engine, undefined, "a junk id drops");
+  eq(junk?.scenes[1]?.engine, undefined, "a non-string drops");
+  eq(junk?.scenes[2]?.engine, "auto", "the case-insensitive id rides");
+  eq(DIRECTOR_ENGINE_OPTIONS.length, 6, "the §9 vocabulary is closed (auto + the five lanes)");
+});
+
+await test("Stage R the conflict report — unanimous vs mixed, the honest surface (no silent mode-flip)", async () => {
+  const { engineProposalReport } = await import("../src/lib/tubeforge/director-plan");
+  const unanimous = engineProposalReport([{ engine: "graphics" }, { engine: "graphics" }]);
+  eq(unanimous.unanimous, "graphics", "one lane across every scene");
+  eq(unanimous.mixed, false, "no conflict");
+  const withAuto = engineProposalReport([{ engine: "graphics" }, { engine: "auto" }]);
+  eq(withAuto.unanimous, null, "an auto pick breaks unanimity (the lane is not PROVEN)");
+  eq(withAuto.mixed, false, "auto is not a conflicting pick — it defers");
+  const mixed = engineProposalReport([{ engine: "graphics" }, { engine: "whiteboard" }]);
+  eq(mixed.mixed, true, "the mixed conflict NAMES itself");
+  eq(mixed.unanimous, null, "no unanimous lane");
+  const absent = engineProposalReport([{}, {}]);
+  eq(absent.unanimous, null, "absence is honest silence");
+  eq(absent.mixed, false, "no proposals, no conflict");
+});
+
+await test("Stage R the D2 firewall — no routing logic reads the advisory field (the source pins)", async () => {
+  const renderSrc = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  const planSrc = await fsp.readFile("src/lib/tubeforge/composition-plan.ts", "utf8");
+  const livelinessSrc = await fsp.readFile("src/lib/tubeforge/liveliness.ts", "utf8");
+  const directorSrc = await fsp.readFile("src/lib/tubeforge/director.ts", "utf8");
+  ok(!renderSrc.includes(".engine"), "render.ts never branches on the advisory pick");
+  ok(!planSrc.includes(".engine"), "composition-plan.ts never branches on the advisory pick");
+  ok(!livelinessSrc.includes(".engine"), "the liveliness selector never branches on the advisory pick");
+  ok(directorSrc.includes("NEVER routed automatically"), "the prompt says the honest thing (AI suggests, human approves)");
+  ok(directorSrc.includes("engine"), "the LLM proposes the pick into the plan (the proposed state, like shots)");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

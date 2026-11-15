@@ -231,6 +231,50 @@ export interface DirectorScene {
   outfit?: string; // cast look for the scene (persisted to CharacterAppearance)
   accessory?: string;
   shots: DirectorShot[];
+  /** Stage R (§9) — the ADVISORY engine pick: which lane should draw this
+   *  scene. AI SUGGESTS, HUMAN APPROVES: the field rides the plan exactly
+   *  like shots do; parse is TOLERANT (junk drops, v2 plans read fine).
+   *  THE FIREWALL (the D2 law, the five prohibitions): no routing LOGIC
+   *  reads this — the lane lockstep law holds per whole-video mode until
+   *  Stage X; the only consumers are this module's conflict report and the
+   *  honest UI. Absence changes nothing. */
+  engine?: DirectorEngineOption;
+}
+
+/** The advisory engine vocabulary (§9 verbatim — the grammar Stage X
+ *  speaks when mixed composition lands). */
+export const DIRECTOR_ENGINE_OPTIONS = [
+  "auto",
+  "kenburns",
+  "slides",
+  "whiteboard",
+  "graphics",
+  "character",
+] as const;
+export type DirectorEngineOption = (typeof DIRECTOR_ENGINE_OPTIONS)[number];
+
+export interface EngineProposalReport {
+  /** The per-scene advisory picks (null = no proposal / auto). */
+  engines: (DirectorEngineOption | null)[];
+  /** The unanimous non-auto pick when every scene proposes the SAME lane;
+   *  null when any scene differs, proposes auto, or proposes nothing. */
+  unanimous: DirectorEngineOption | null;
+  /** TRUE when the scenes propose DIFFERENT non-auto lanes — the honest
+   *  conflict the assembly surfaces until Stage X (no silent mode-flip). */
+  mixed: boolean;
+}
+
+/** The conflict report — the ONE consumer of the advisory field (plus the
+ *  UI). Pure. §9: "Until X, the router's approved output is honored only
+ *  when all scenes map to ONE lane; otherwise assemble surfaces the
+ *  conflict." The report NAMES the conflict; honoring stays X's gate. */
+export function engineProposalReport(scenes: Pick<DirectorScene, "engine">[]): EngineProposalReport {
+  const engines: (DirectorEngineOption | null)[] = scenes.map((s) =>
+    s.engine && s.engine !== "auto" ? (s.engine as Exclude<DirectorEngineOption, "auto">) : null
+  );
+  const distinct = [...new Set(engines.filter((e): e is Exclude<DirectorEngineOption, "auto"> => e !== null))];
+  const unanimous = distinct.length === 1 && engines.every((e) => e !== null) ? distinct[0] : null;
+  return { engines, unanimous, mixed: distinct.length > 1 };
 }
 
 /** The full plan — versioned so old persisted plans stay parseable.
@@ -353,6 +397,13 @@ export function parsePlan(json: string | null | undefined): DirectorPlan | null 
       props: asNameList(so.props, 3),
       outfit: asString(so.outfit).slice(0, 160) || undefined,
       accessory: asString(so.accessory).slice(0, 160) || undefined,
+      // Stage R — the advisory engine pick (tolerant: a junk id drops — the
+      // field is metadata, never a refusal; v2 plans without it read fine).
+      engine: (DIRECTOR_ENGINE_OPTIONS as readonly string[]).includes(
+        asString(so.engine).toLowerCase()
+      )
+        ? (asString(so.engine).toLowerCase() as DirectorEngineOption)
+        : undefined,
       shots: shots.sort((a, b) => a.shotIndex - b.shotIndex),
     });
   }
