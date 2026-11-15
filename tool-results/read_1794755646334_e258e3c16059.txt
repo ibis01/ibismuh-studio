@@ -1,0 +1,545 @@
+     1→     1→# TubeForge CI (T-1.5, restored; e2e-on-main + gitleaks since S33)
+     2→     2→#
+     3→     3→# Contract:
+     4→     4→#   secrets — gitleaks scans every push/PR for leaked credentials (roadmap §4.1)
+     5→     5→#   check   — typecheck + lint + unit suite, on every push/PR
+     6→     6→#   build   — `npm run build` (production build + standalone assembly), on
+     7→     7→#             every push/PR (S56/T-56.1, closing the S33+ backlog's P1-3:
+     8→     8→#             build-only failures surface here before the platform)
+     9→     9→#   e2e     — Playwright suite, on PRs AND on pushes to main (S33: the repo
+    10→    10→#             landed 240+ commits by direct push with zero PRs, so the PR-only
+    11→    11→#             gate meant the 5 suites — including cross-tenant isolation —
+    12→    12→#             never ran in CI; they now run on every push to main)
+    13→    13→#
+    14→    14→# NOTE (S56/T-56.2): `npm run test:billing` JOINED the check job — the suite
+    15→    15→# self-seeds (unique MARK fixtures + full cleanup) against the same
+    16→    16→# postinstall-bootstrapped SQLite DB; 40/40 locally on a fresh DB first.
+    17→    17→# The unit suite renders its QC fixtures with ffmpeg, so the runner needs it.
+    18→    18→#
+    19→    19→# NOTE (external-audit response, 2026-11-05): `npm run test:queue` JOINED the
+    20→    20→# check job below — the Stage-3 resume contract is now CI-proven on every
+    21→    21→# push, not just commit-reported. It runs after the unit suite on the same
+    22→    22→# postinstall-bootstrapped SQLite database.
+    23→    23→#
+    24→    24→# NOTE (S33 follow-up): every job pins ubuntu-24.04. The FIRST e2e-on-main run
+    25→    25→# (41979158390, 2026-11-05) failed at `playwright install --with-deps` because
+    26→    26→# ubuntu-latest had moved to 26.04, which Playwright 1.57 has no OS dependency
+    27→    27→# map for ("ERROR: Playwright does not support chromium on ubuntu26.04-x64") —
+    28→    28→# the suite itself was skipped, not failed. Pin the image; bump Playwright
+    29→    29→# only when it actually supports 26.04.
+    30→    30→#
+    31→    31→# NOTE (S128-ext, 2026-11-15): every job rides node 24, not 22. Receipt: the
+    32→    32→# first dispatched runs (43694769530, 43696075518) failed `eslint .` with
+    33→    33→# "Parsing error: Maximum call stack size exceeded" on whiteboard/glyphs.ts —
+    34→    34→# a file byte-identical to main (diff 0, gate-proven), on the same node
+    35→    35→# 22.23.4 + eslint 10.14.0 + lockfile that had linted it GREEN the day before
+    36→    36→# (run 132556761745). The file sits exactly on node 22's parser-recursion
+    37→    37→# edge: outcomes flip with per-machine memory layout (5/5 red locally on
+    38→    38→# 22.23.5, green on the runner, red on the runner). The whiteboard tree is
+    39→    39→# frozen (the §6 law), so the fix is the RUNTIME: node 24 is where every
+    40→    40→# golden pin and lint gate was recorded (the sandbox), node 24 is the active
+    41→    41→# LTS, Playwright 1.65 declares node >=20, and the easing goldens are now
+    42→    42→# IEEE-exact (version-independent by construction). Same class of receipt as
+    43→    43→# the ubuntu-24.04 pin above: pin the runtime when platform drift breaks the
+    44→    44→# gate. Record: docs/audits/s128-ext-ci-dispatch-record.md §Finding 3.
+    45→    45→#
+    46→    46→# Pushing this file requires a PAT with `workflow` scope (GitHub rejects
+    47→    47→# workflow files otherwise). See worklog T-1.5 / T-5.2 / S33.
+    48→    48→
+    49→    49→name: CI
+    50→    50→
+    51→    51→on:
+    52→    52→  push:
+    53→    53→    branches: [main]
+    54→    54→  pull_request:
+    55→    55→  # S128 (the PR #24 integration review, 2026-11-15): the Docker production
+    56→    56→  # smoke had skipped on BOTH open integration PRs (#23, #24) because its
+    57→    57→  # `if` fired only on pushes to main — and main had not moved. Two opt-in
+    58→    58→  # triggers close the gap without paying the ~10-minute build on every PR:
+    59→    59→  #   workflow_dispatch — "Run workflow" in the Actions UI boots the FULL
+    60→    60→  #     gate (Docker smoke included) on ANY branch, on demand;
+    61→    61→  #   the `docker-smoke` label on a PR opts that PR's run in.
+    62→    62→  workflow_dispatch:
+    63→    63→
+    64→    64→concurrency:
+    65→    65→  group: ${{ github.workflow }}-${{ github.ref }}
+    66→    66→  # S47/T-47.10 — run #81 (S46) post-mortem: its check job died inside the
+    67→    67→  # "Install ffmpeg" apt step, which stalled for the FULL 20 minutes
+    68→    68→  # (20:18:49Z → 20:38:52Z) and was killed by the job's own timeout-minutes,
+    69→    69→  # which GitHub records as conclusion "cancelled" (E2E then skipped via
+    70→    70→  # `needs: check`). The S47 push arrived 20:56:44Z — 18 minutes AFTER the
+    71→    71→  # cancellation — so this concurrency group was NOT the killer. But the group
+    72→    72→  # WOULD have eaten main-push evidence on a faster follow-up push, and this
+    73→    73→  # repo's law is that every main commit earns complete CI evidence: only
+    74→    74→  # PR runs cancel in progress now.
+    75→    75→  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    76→    76→
+    77→    77→jobs:
+    78→    78→  secrets:
+    79→    79→    name: Secret scan (gitleaks)
+    80→    80→    runs-on: ubuntu-24.04
+    81→    81→    timeout-minutes: 10
+    82→    82→    steps:
+    83→    83→      - uses: actions/checkout@v7
+    84→    84→        with:
+    85→    85→          fetch-depth: 0 # full history — gitleaks scans all commits
+    86→    86→      - name: gitleaks
+    87→    87→        uses: gitleaks/gitleaks-action@v3
+    88→    88→        env:
+    89→    89→          # Free for personal (user-owned) repositories; if this repo ever
+    90→    90→          # moves to an org, GITLEAKS_LICENSE becomes required.
+    91→    91→          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    92→    92→
+    93→    93→  check:
+    94→    94→    name: Typecheck · Lint · Unit
+    95→    95→    runs-on: ubuntu-24.04
+    96→    96→    timeout-minutes: 20
+    97→    97→    steps:
+    98→    98→      - uses: actions/checkout@v7
+    99→    99→
+   100→   100→      - uses: actions/setup-node@v7
+   101→   101→        with:
+   102→   102→          node-version: 24
+   103→   103→          cache: npm
+   104→   104→
+   105→   105→      - name: Install ffmpeg (QC fixtures + render pipeline)
+   106→   106→        # S47/T-47.10: step-level timeout — run #81's apt step stalled for the
+   107→   107→        # whole job budget and surfaced as a confusing "cancelled" job.
+   108→   108→        # 2026-11-10 (5 stalls across 4 runs — 42697192000, 42811386568,
+   109→   109→        # 42816234222, 42828406739, 42829548961 — all the same shape: apt
+   110→   110→        # produces ZERO output and hangs past its own per-request timeouts;
+   111→   111→        # two jobs' fresh runners stalled SIMULTANEOUSLY in 42829548961,
+   112→   112→        # which is the boot-time unattended-upgrades dpkg-lock race):
+   113→   113→        # wait the lock out explicitly (GitHub's documented pattern — an
+   114→   114→        # apt lock wait has no timeout of its own), then try apt twice with
+   115→   115→        # per-request timeouts. Distro ffmpeg stays the source of truth.
+   116→   116→        # 2026-11-11: 8 → 10 minutes — the probe (≤65s on a dead mirror) plus
+   117→   117→        # the bounded apt-daily wait deserve room inside the step budget.
+   118→   118→        timeout-minutes: 10
+   119→   119→        run: |
+   120→   120→          set -euo pipefail
+   121→   121→          # 2026-11-11 (43051204925 attempts 1-3, 43060056294 attempt 4):
+   122→   122→          # azure.archive.ubuntu.com flapped for 60+ minutes — DNS failures,
+   123→   123→          # then per-index 000/404 flaps (noble answered 200 while
+   124→   124→          # noble-updates and noble-security failed in the same minute).
+   125→   125→          # The first fix — appending canonical as a second mirror — did
+   126→   126→          # NOT rescue attempt 4: apt's mirror method kept reporting azure
+   127→   127→          # for every index and burned 6 of the 8 step minutes on DNS
+   128→   128→          # timeouts, killing attempt 2 mid-flight. The failover is now
+   129→   129→          # PROBE-AND-SWAP: health-probe the four indexes apt update needs;
+   130→   130→          # ANY failure swaps the runner's mirror list wholesale to the
+   131→   131→          # canonical archive BEFORE apt runs — same Ubuntu packages, a
+   132→   132→          # different host, no dependence on apt's rotation semantics.
+   133→   133→          # Healthy days keep the fast azure mirror untouched. Distro
+   134→   134→          # ffmpeg stays the source of truth.
+   135→   135→          AZURE_OK=true
+   136→   136→          for DIST in noble noble-updates noble-backports noble-security; do
+   137→   137→            curl -fsS --retry 1 --max-time 8 -o /dev/null \
+   138→   138→              "http://azure.archive.ubuntu.com/ubuntu/dists/$DIST/InRelease" || AZURE_OK=false
+   139→   139→          done
+   140→   140→          if [ "$AZURE_OK" = false ]; then
+   141→   141→            echo "azure apt mirror unhealthy — swapping the runner to the canonical archive"
+   142→   142→            echo "http://archive.ubuntu.com/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+   143→   143→          fi
+   144→   144→          # 2026-11-11 (attempt 5, e2e job): the UNBOUNDED apt-daily wait hung
+   145→   145→          # for the whole step — azure recovered for curl mid-flap, but
+   146→   146→          # unattended-upgrades (started at VM boot during the outage) stayed
+   147→   147→          # stuck, and "an apt lock wait has no timeout of its own" applied to
+   148→   148→          # systemd-run --wait too. Bounded at 60s; apt itself gets
+   149→   149→          # DPkg::Lock::Timeout=120 so a still-held lock fails apt FAST
+   150→   150→          # instead of silently eating the step budget.
+   151→   151→          timeout 60 sudo systemd-run --property="After=apt-daily.service apt-daily-upgrade.service" --wait /bin/true 2>/dev/null || true
+   152→   152→          for ATTEMPT in 1 2; do
+   153→   153→            if sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 update -qq && \
+   154→   154→               sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 install -y -qq ffmpeg; then
+   155→   155→              ffmpeg -version | head -1
+   156→   156→              exit 0
+   157→   157→            fi
+   158→   158→            if [ "$ATTEMPT" -eq 1 ]; then
+   159→   159→              echo "apt attempt 1 failed — swapping to the canonical archive for attempt 2"
+   160→   160→              sudo sed -i "s|azure.archive.ubuntu.com|archive.ubuntu.com|g" /etc/apt/apt-mirrors.txt
+   161→   161→              sleep 45
+   162→   162→            fi
+   163→   163→          done
+   164→   164→          echo "apt failed twice"
+   165→   165→          exit 1
+   166→   166→
+   167→   167→      - name: Install dependencies (postinstall bootstraps SQLite + Prisma)
+   168→   168→        run: npm ci
+   169→   169→
+   170→   170→      - name: Typecheck
+   171→   171→        run: npm run typecheck
+   172→   172→
+   173→   173→      - name: Lint
+   174→   174→        run: npm run lint
+   175→   175→
+   176→   176→      - name: Unit + regression suite
+   177→   177→        run: npm run test
+   178→   178→
+   179→   179→      - name: Queue integration suite (resume contract, real worker restart)
+   180→   180→        run: npm run test:queue
+   181→   181→
+   182→   182→      - name: Billing integrity suite (self-seeding, money path)
+   183→   183→        run: npm run test:billing
+   184→   184→
+   185→   185→      # S101 — the P0.3 storage reservation battery (concurrent uploads
+   186→   186→      # cannot exceed quota): the admission transaction, hold accounting,
+   187→   187→      # commit/release/expiry laws, against the same bootstrapped DB.
+   188→   188→      - name: Storage reservation battery (P0.3)
+   189→   189→        run: npm run test:storage
+   190→   190→
+   191→   191→      # S102 — the P0.4 rate limiter battery (multi-instance limits + the
+   192→   192→      # trusted-proxy spoofing law): XFF right-to-left walk, the shared
+   193→   193→      # fixed-window counter (atomic upsert RETURNING), the sweep.
+   194→   194→      - name: Shared rate limiter battery (P0.4)
+   195→   195→        run: npm run test:rate
+   196→   196→
+   197→   197→      # S136 — the Stabilisation Gate (2026-11-15 audit, blocker B4): the
+   198→   198→      # scene-revision battery is the DECISIVE scene-editing proof (28 DB-
+   199→   199→      # backed tests: append-only immutability, surgical one-revision
+   200→   200→      # history, conflict law, rollback, drafts-never-leak, manifest
+   201→   201→      # staleness) — but it only ran inside local `npm run check`, never in
+   202→   202→      # CI, so the gate could not see it. It joins the check job here, same
+   203→   203→      # self-seeding/cleanup pattern as the billing battery above.
+   204→   204→      - name: Scene revision battery (surgical per-scene editing)
+   205→   205→        run: npm run test:scene-revisions
+   206→   206→
+   207→   207→      # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
+   208→   208→      # destroy a scratch casualty → restore → verify counts/integrity/probes
+   209→   209→      # → print the measured RTO. "A backup that has never been restored is
+   210→   210→      # a hypothesis, not a control" (the runbook's law), now CI-proven.
+   211→   211→      - name: Restore drill with measured RTO (P1.1)
+   212→   212→        run: npm run test:drill
+   213→   213→
+   214→   214→      # S103 — the alert probe (the always-on health check cron/monitors run
+   215→   215→      # against production): must report HEALTH 0 failed on a healthy lane.
+   216→   216→      - name: Alert probe (P1.1 — actionable alerts)
+   217→   217→        run: npm run alert:probe
+   218→   218→
+   219→   219→  build:
+   220→   220→    name: Production build
+   221→   221→    runs-on: ubuntu-24.04
+   222→   222→    timeout-minutes: 15
+   223→   223→    steps:
+   224→   224→      - uses: actions/checkout@v7
+   225→   225→
+   226→   226→      - uses: actions/setup-node@v7
+   227→   227→        with:
+   228→   228→          node-version: 24
+   229→   229→          cache: npm
+   230→   230→
+   231→   231→      - name: Install dependencies (postinstall bootstraps SQLite + Prisma)
+   232→   232→        run: npm ci
+   233→   233→
+   234→   234→      - name: Build (next build + standalone assembly)
+   235→   235→        # S56/T-56.1: closes P1-3. The build is env-free (verified: exit 0
+   236→   236→        # with NO .env present — pages that need secrets render dynamic).
+   237→   237→        # Turbopack prints 4 known WARNINGS (edge-runtime process.pid in
+   238→   238→        # instrumentation.ts — guarded by the NEXT_RUNTIME check at runtime;
+   239→   239→        # dynamic-fs tracing in the stock/export routes) — warnings only,
+   240→   240→        # exit stays 0; do not "fix" by breaking the runtime guard.
+   241→   241→        run: npm run build
+   242→   242→
+   243→   243→  coverage:
+   244→   244→    name: Money-path coverage
+   245→   245→    runs-on: ubuntu-24.04
+   246→   246→    timeout-minutes: 20
+   247→   247→    # S56/T-56.4 (P1-5): the REAL unit + billing + queue suites under V8
+   248→   248→    # coverage (c8, accumulated), --include scoped to the money paths.
+   249→   249→    # Fails below the 50% aggregate lines floor (first full measurement
+   250→   250→    # 2026-11-08: 56.30% — docs/baselines/s56-coverage-baseline-2026-11-08.txt).
+   251→   251→    # Parallel with check: the suites run a second time here under coverage,
+   252→   252→    # which the isolation buys cheaply; the critical path does not grow.
+   253→   253→    steps:
+   254→   254→      - uses: actions/checkout@v7
+   255→   255→
+   256→   256→      - uses: actions/setup-node@v7
+   257→   257→        with:
+   258→   258→          node-version: 24
+   259→   259→          cache: npm
+   260→   260→
+   261→   261→      - name: Install ffmpeg (QC fixtures + render pipeline)
+   262→   262→        # 2026-11-10: dpkg-lock wait + retry (see the main job's step for the
+   263→   263→        # full receipt) — the boot-time unattended-upgrades race was stalling
+   264→   264→        # fresh runners past every in-apt timeout.
+   265→   265→        # 2026-11-11: 8 → 10 minutes — the probe (≤65s on a dead mirror) plus
+   266→   266→        # the bounded apt-daily wait deserve room inside the step budget.
+   267→   267→        timeout-minutes: 10
+   268→   268→        run: |
+   269→   269→          set -euo pipefail
+   270→   270→          # 2026-11-11 (43051204925 attempts 1-3, 43060056294 attempt 4):
+   271→   271→          # azure.archive.ubuntu.com flapped for 60+ minutes — DNS failures,
+   272→   272→          # then per-index 000/404 flaps (noble answered 200 while
+   273→   273→          # noble-updates and noble-security failed in the same minute).
+   274→   274→          # The first fix — appending canonical as a second mirror — did
+   275→   275→          # NOT rescue attempt 4: apt's mirror method kept reporting azure
+   276→   276→          # for every index and burned 6 of the 8 step minutes on DNS
+   277→   277→          # timeouts, killing attempt 2 mid-flight. The failover is now
+   278→   278→          # PROBE-AND-SWAP: health-probe the four indexes apt update needs;
+   279→   279→          # ANY failure swaps the runner's mirror list wholesale to the
+   280→   280→          # canonical archive BEFORE apt runs — same Ubuntu packages, a
+   281→   281→          # different host, no dependence on apt's rotation semantics.
+   282→   282→          # Healthy days keep the fast azure mirror untouched. Distro
+   283→   283→          # ffmpeg stays the source of truth.
+   284→   284→          AZURE_OK=true
+   285→   285→          for DIST in noble noble-updates noble-backports noble-security; do
+   286→   286→            curl -fsS --retry 1 --max-time 8 -o /dev/null \
+   287→   287→              "http://azure.archive.ubuntu.com/ubuntu/dists/$DIST/InRelease" || AZURE_OK=false
+   288→   288→          done
+   289→   289→          if [ "$AZURE_OK" = false ]; then
+   290→   290→            echo "azure apt mirror unhealthy — swapping the runner to the canonical archive"
+   291→   291→            echo "http://archive.ubuntu.com/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+   292→   292→          fi
+   293→   293→          # 2026-11-11 (attempt 5, e2e job): the UNBOUNDED apt-daily wait hung
+   294→   294→          # for the whole step — azure recovered for curl mid-flap, but
+   295→   295→          # unattended-upgrades (started at VM boot during the outage) stayed
+   296→   296→          # stuck, and "an apt lock wait has no timeout of its own" applied to
+   297→   297→          # systemd-run --wait too. Bounded at 60s; apt itself gets
+   298→   298→          # DPkg::Lock::Timeout=120 so a still-held lock fails apt FAST
+   299→   299→          # instead of silently eating the step budget.
+   300→   300→          timeout 60 sudo systemd-run --property="After=apt-daily.service apt-daily-upgrade.service" --wait /bin/true 2>/dev/null || true
+   301→   301→          for ATTEMPT in 1 2; do
+   302→   302→            if sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 update -qq && \
+   303→   303→               sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 install -y -qq ffmpeg; then
+   304→   304→              ffmpeg -version | head -1
+   305→   305→              exit 0
+   306→   306→            fi
+   307→   307→            if [ "$ATTEMPT" -eq 1 ]; then
+   308→   308→              echo "apt attempt 1 failed — swapping to the canonical archive for attempt 2"
+   309→   309→              sudo sed -i "s|azure.archive.ubuntu.com|archive.ubuntu.com|g" /etc/apt/apt-mirrors.txt
+   310→   310→              sleep 45
+   311→   311→            fi
+   312→   312→          done
+   313→   313→          echo "apt failed twice"
+   314→   314→          exit 1
+   315→   315→
+   316→   316→      - name: Install dependencies (postinstall bootstraps SQLite + Prisma)
+   317→   317→        run: npm ci
+   318→   318→
+   319→   319→      - name: "Coverage (floor: 50% aggregate lines on the money paths)"
+   320→   320→        run: npm run test:coverage
+   321→   321→
+   322→   322→  # S61 — the PostgreSQL integration lane. The S60 production incident's
+   323→   323→  # lesson: every CI surface ran SQLite, so a Postgres-only migration wedge
+   324→   324→  # (42P07 at auth_setting) and two Postgres-only SQL bugs (42703 unquoted
+   325→   325→  # camelCase, 42883 boolean `ok = 0`) shipped with zero automated coverage.
+   326→   326→  # This job replays the incident end-to-end on a real Postgres 17:
+   327→   327→  #   pass 1 (npm ci's postinstall + the explicit step below): a CLEAN
+   328→   328→  #     database walks the chain and is EXPECTED to wedge at auth_setting —
+   329→   329→  #     postinstall is non-fatal for Postgres by design, so this prints the
+   330→   330→  #     warning and continues (the exact production story).
+   331→   331→  #   pass 2: the self-heal (pgRepairSettingPkeySurvivor → stuck-row resolve
+   332→   332→  #     → migrate deploy) completes the chain.
+   333→   333→  #   pg-ci-verify.mts then asserts the healed state + probes the usage
+   334→   334→  #     sparkline SQL (the real shared function) and the full-select Video
+   335→   335→  #     query — the two shapes that 500'd production.
+   336→   336→  postgres:
+   337→   337→    name: PostgreSQL integration (migrations + wedge recovery)
+   338→   338→    runs-on: ubuntu-24.04
+   339→   339→    timeout-minutes: 15
+   340→   340→    services:
+   341→   341→      postgres:
+   342→   342→        image: postgres:17
+   343→   343→        env:
+   344→   344→          POSTGRES_USER: tf
+   345→   345→          POSTGRES_PASSWORD: tf
+   346→   346→          POSTGRES_DB: tubeforge
+   347→   347→        ports:
+   348→   348→          - 5432:5432
+   349→   349→        options: >-
+   350→   350→          --health-cmd "pg_isready -U tf -d tubeforge"
+   351→   351→          --health-interval 5s
+   352→   352→          --health-timeout 5s
+   353→   353→          --health-retries 10
+   354→   354→    env:
+   355→   355→      # Set BEFORE npm ci so postinstall picks prisma/schema.prisma and
+   356→   356→      # generates the Postgres client (the check/build jobs stay SQLite).
+   357→   357→      DATABASE_URL: postgres://tf:tf@localhost:5432/tubeforge
+   358→   358→    steps:
+   359→   359→      - uses: actions/checkout@v7
+   360→   360→
+   361→   361→      - uses: actions/setup-node@v7
+   362→   362→        with:
+   363→   363→          node-version: 24
+   364→   364→          cache: npm
+   365→   365→
+   366→   366→      # Pass 1 — the clean chain is expected to wedge (42P07 at auth_setting,
+   367→   367→      # non-fatally swallowed by postinstall's Postgres branch).
+   368→   368→      - name: "Install dependencies (postinstall: generate PG client + deploy attempt 1)"
+   369→   369→        run: npm ci
+   370→   370→
+   371→   371→      # Pass 2 — the self-heal fires (the wedge fingerprint is present):
+   372→   372→      # repair → resolve → deploy → the chain completes.
+   373→   373→      - name: Deploy attempt 2 — the S60 self-heal (repair → resolve → deploy)
+   374→   374→        run: node scripts/postinstall.mjs
+   375→   375→
+   376→   376→      # The gate — fails the job on any regression.
+   377→   377→      - name: Verify healed chain + provider portability (S60 regression battery)
+   378→   378→        run: node --import tsx scripts/pg-ci-verify.mts
+   379→   379→
+   380→   380→  # S99 — the P0.1 clean-clone gate (docs/production-readiness.md). The
+   381→   381→  # check/build/coverage jobs prove the CI CHECKOUT installs; THIS job proves
+   382→   382→  # a FRESH CLONE of the pushed commit boots with zero hidden local state:
+   383→   383→  #   forbidden state absent (node_modules/.env/db/.next/... not tracked),
+   384→   384→  #   postinstall bootstraps SQLite end-to-end (.env + secrets +
+   385→   385→  #   next-env.d.ts + generate + db push + stage-2),
+   386→   386→  #   the generated client queries the pushed schema (the boot probe),
+   387→   387→  #   and BOTH dialect clients regenerate byte-identically (the
+   388→   388→  #   deterministic-Prisma-generation law — a drifted sqlite mirror or a
+   389→   389→  #   postgres-only generate failure fails HERE, not in production).
+   390→   390→  clean-clone:
+   391→   391→    name: Clean-clone bootstrap (P0.1)
+   392→   392→    runs-on: ubuntu-24.04
+   393→   393→    timeout-minutes: 20
+   394→   394→    steps:
+   395→   395→      - uses: actions/checkout@v7
+   396→   396→
+   397→   397→      - uses: actions/setup-node@v7
+   398→   398→        with:
+   399→   399→          node-version: 24
+   400→   400→          cache: npm
+   401→   401→
+   402→   402→      - name: Install dependencies (provides tsx; warms the npm cache for the clone)
+   403→   403→        run: npm ci
+   404→   404→
+   405→   405→      - name: Clean-clone verifier (fresh clone → npm ci → boot probe → determinism)
+   406→   406→        run: node --import tsx scripts/test-clean-clone.mts
+   407→   407→
+   408→   408→  # S104 — the P0.6 Docker production smoke. The roadmap's exit condition:
+   409→   409→  # "the full production topology renders successfully end-to-end". The
+   410→   410→  # docker-smoke walk builds the production image, boots postgres + MinIO +
+   411→   411→  # web + worker, and walks register → login → create project → ffmpeg
+   412→   412→  # render → MinIO artifact round-trip (the S101 lifecycle) → cross-process
+   413→   413→  # job execution → worker-restart recovery (the S100 reap, token bumped).
+   414→   414→  # Runs on pushes to main (as before) AND, since S128, on demand:
+   415→   415→  #   workflow_dispatch — run the whole gate on any branch from the UI;
+   416→   416→  #   a PR carrying the `docker-smoke` label opts its own run in.
+   417→   417→  # The 2026-11-15 external audit flagged the smoke as "skipped, not passed"
+   418→   418→  # on both open integration PRs — this is the root cause and the fix.
+   419→   419→  docker-smoke:
+   420→   420→    name: Docker production smoke (P0.6)
+   421→   421→    runs-on: ubuntu-24.04
+   422→   422→    if: >-
+   423→   423→      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+   424→   424→      || github.event_name == 'workflow_dispatch'
+   425→   425→      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'docker-smoke'))
+   426→   426→    timeout-minutes: 30
+   427→   427→    steps:
+   428→   428→      - uses: actions/checkout@v7
+   429→   429→
+   430→   430→      - name: Build + boot the topology and walk it (scripts/docker-smoke.sh)
+   431→   431→        run: bash scripts/docker-smoke.sh
+   432→   432→
+   433→   433→  e2e:
+   434→   434→    name: E2E (Playwright)
+   435→   435→    runs-on: ubuntu-24.04
+   436→   436→    needs: check
+   437→   437→    # S33: run on PRs AND on pushes to main (was PR-only — never fired,
+   438→   438→    # because this repository has no pull-request history).
+   439→   439→    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+   440→   440→    timeout-minutes: 25
+   441→   441→    steps:
+   442→   442→      - uses: actions/checkout@v7
+   443→   443→
+   444→   444→      - uses: actions/setup-node@v7
+   445→   445→        with:
+   446→   446→          node-version: 24
+   447→   447→          cache: npm
+   448→   448→
+   449→   449→      - name: Install ffmpeg (render pipeline)
+   450→   450→        # 2026-11-10: dpkg-lock wait + retry (see the main job's step for the
+   451→   451→        # full receipt).
+   452→   452→        # 2026-11-11: 8 → 10 minutes — the probe (≤65s on a dead mirror) plus
+   453→   453→        # the bounded apt-daily wait deserve room inside the step budget.
+   454→   454→        timeout-minutes: 10
+   455→   455→        run: |
+   456→   456→          set -euo pipefail
+   457→   457→          # 2026-11-11 (43051204925 attempts 1-3, 43060056294 attempt 4):
+   458→   458→          # azure.archive.ubuntu.com flapped for 60+ minutes — DNS failures,
+   459→   459→          # then per-index 000/404 flaps (noble answered 200 while
+   460→   460→          # noble-updates and noble-security failed in the same minute).
+   461→   461→          # The first fix — appending canonical as a second mirror — did
+   462→   462→          # NOT rescue attempt 4: apt's mirror method kept reporting azure
+   463→   463→          # for every index and burned 6 of the 8 step minutes on DNS
+   464→   464→          # timeouts, killing attempt 2 mid-flight. The failover is now
+   465→   465→          # PROBE-AND-SWAP: health-probe the four indexes apt update needs;
+   466→   466→          # ANY failure swaps the runner's mirror list wholesale to the
+   467→   467→          # canonical archive BEFORE apt runs — same Ubuntu packages, a
+   468→   468→          # different host, no dependence on apt's rotation semantics.
+   469→   469→          # Healthy days keep the fast azure mirror untouched. Distro
+   470→   470→          # ffmpeg stays the source of truth.
+   471→   471→          AZURE_OK=true
+   472→   472→          for DIST in noble noble-updates noble-backports noble-security; do
+   473→   473→            curl -fsS --retry 1 --max-time 8 -o /dev/null \
+   474→   474→              "http://azure.archive.ubuntu.com/ubuntu/dists/$DIST/InRelease" || AZURE_OK=false
+   475→   475→          done
+   476→   476→          if [ "$AZURE_OK" = false ]; then
+   477→   477→            echo "azure apt mirror unhealthy — swapping the runner to the canonical archive"
+   478→   478→            echo "http://archive.ubuntu.com/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+   479→   479→          fi
+   480→   480→          # 2026-11-11 (attempt 5, e2e job): the UNBOUNDED apt-daily wait hung
+   481→   481→          # for the whole step — azure recovered for curl mid-flap, but
+   482→   482→          # unattended-upgrades (started at VM boot during the outage) stayed
+   483→   483→          # stuck, and "an apt lock wait has no timeout of its own" applied to
+   484→   484→          # systemd-run --wait too. Bounded at 60s; apt itself gets
+   485→   485→          # DPkg::Lock::Timeout=120 so a still-held lock fails apt FAST
+   486→   486→          # instead of silently eating the step budget.
+   487→   487→          timeout 60 sudo systemd-run --property="After=apt-daily.service apt-daily-upgrade.service" --wait /bin/true 2>/dev/null || true
+   488→   488→          for ATTEMPT in 1 2; do
+   489→   489→            if sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 update -qq && \
+   490→   490→               sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 install -y -qq ffmpeg; then
+   491→   491→              ffmpeg -version | head -1
+   492→   492→              exit 0
+   493→   493→            fi
+   494→   494→            if [ "$ATTEMPT" -eq 1 ]; then
+   495→   495→              echo "apt attempt 1 failed — swapping to the canonical archive for attempt 2"
+   496→   496→              sudo sed -i "s|azure.archive.ubuntu.com|archive.ubuntu.com|g" /etc/apt/apt-mirrors.txt
+   497→   497→              sleep 45
+   498→   498→            fi
+   499→   499→          done
+   500→   500→          echo "apt failed twice"
+   501→   501→          exit 1
+   502→   502→
+   503→   503→      - name: Install dependencies
+   504→   504→        run: npm ci
+   505→   505→
+   506→   506→      - name: Install Playwright Chromium
+   507→   507→        run: npx playwright install --with-deps chromium
+   508→   508→
+   509→   509→      - name: E2E suite (boots its own dev server on :3000)
+   510→   510→        run: npm run test:e2e
+   511→   511→        env:
+   512→   512→          CI: true
+   513→   513→
+   514→   514→      # S87 slice 5 — the §4.C acceptance battery (the Universal Timeline
+   515→   515→      # close): real renders through BOTH engine lanes (the Whiteboard
+   516→   516→      # engine's chromium rasterizer + the compositor's kenburns path, zero
+   517→   517→      # AI spend) held to the timeline contract — windows, cuts, sync,
+   518→   518→      # round-trip identity. ~20s on tiny fixtures; the artifacts stay in
+   519→   519→      # /tmp (human review copies live in the audit record).
+   520→   520→      - name: S87 acceptance battery (the Universal Timeline §4.C close)
+   521→   521→        run: node --import tsx scripts/s87-acceptance-battery.mts --out /tmp/s87-battery
+   522→   522→
+   523→   523→      # S136 — the Stabilisation Gate (blocker B3): the K1 rig smoke joins CI.
+   524→   524→      # It renders a REAL character scene with chromium+ffmpeg and proves the
+   525→   525→      # acceptance evidence on pixels: a second fixture whose part ids differ
+   526→   526→      # from its slots receives a slot-keyed authored capture (the mocap
+   527→   527→      # converter's exact output) and the rendered frames must MOVE during
+   528→   528→      # the gesture window and HOLD byte-identical afterward — the B1 statue
+   529→   529→      # class can never ship green again. The structural/beats/determinism/
+   530→   530→      # cache receipts ride along unchanged.
+   531→   531→      - name: K1 rig smoke (rendered body-part movement, ids ≠ slots)
+   532→   532→        run: node --import tsx scripts/k1-rig-smoke.mts --out /tmp/k1-smoke
+   533→   533→
+   534→   534→      # S136 — the Stabilisation Gate (blocker B7): the E12 LIVE queue drill
+   535→   535→      # joins CI. Its Act C is the cancellation acceptance: a running
+   536→   536→      # whiteboard render passes a progress checkpoint, requestJobCancel
+   537→   537→      # fires (the Stop button's exact call), and the Job row must land
+   538→   538→      # "cancelled" — never "failed", never a retry — with video.error null
+   539→   539→      # and the promise recorded. No incorrectly reported successful job.
+   540→   540→      # Act A re-proves the registry-truth equality that caught a REAL
+   541→   541→      # production defect (the 400'd Stop button); Act B re-proves the
+   542→   542→      # dead-mid-run recovery render. ~25s.
+   543→   543→      - name: E12 queue drill (cancellation + live recovery)
+   544→   544→        run: npm run test:queue-drill
+   545→   545→
