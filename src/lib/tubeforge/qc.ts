@@ -159,6 +159,66 @@ async function analyzePass(file: string): Promise<{ stderr: string; ok: boolean 
   }
 }
 
+// ---------------------------------------------------------------------------
+// S123 (G1) P3 — the graphics lane's designed-freeze judging (PURE). A
+// motion-graphics scene LEGALLY holds its placed state after the last
+// motion window ends — the kinetic-typography hold is the format's
+// grammar, not a defect. The graphics job passes the doc's hold windows
+// (graphics/qc.ts graphicsHoldWindows); the battery then judges a freeze
+// or a sampled static run against them: STARTING inside a window is the
+// design; starting elsewhere is a dead compositor. Absent windows = every
+// other lane's byte-identical behavior.
+// ---------------------------------------------------------------------------
+
+/** Pure: split freezedetect starts into designed (inside a hold window) and
+ *  unexpected (elsewhere — the defect). */
+export function judgeFreezes(
+  freezeStarts: number[],
+  designed: [number, number][]
+): { unexpected: number[]; designedCount: number } {
+  const isDesigned = (t: number): boolean =>
+    designed.some(([lo, hi]) => t >= lo - 0.1 && t <= hi + 0.1);
+  const unexpected = freezeStarts.filter((t) => !isDesigned(t));
+  return { unexpected, designedCount: freezeStarts.length - unexpected.length };
+}
+
+/** Pure: drop static runs that overlap a designed hold window (maximal
+ *  static periods begin AT the hold — motion ends where the window starts). */
+export function judgeStaticRuns(
+  runs: { startSec: number; endSec: number }[],
+  designed: [number, number][]
+): { unexpected: { startSec: number; endSec: number }[]; designedCount: number } {
+  const overlaps = (r: { startSec: number; endSec: number }): boolean =>
+    designed.some(([lo, hi]) => r.startSec <= hi + 0.1 && r.endSec >= lo - 0.1);
+  const unexpected = runs.filter((r) => !overlaps(r));
+  return { unexpected, designedCount: runs.length - unexpected.length };
+}
+
+/** The graphics lane's frozen-frames threshold — a freeze covering this
+ *  share of the PROGRAM is a dead compositor, never a designed beat. */
+export const GRAPHICS_FREEZE_COVERAGE = 0.9;
+
+/** Pure (the graphics lane): the freezedetect noise floor cannot see small
+ *  kinetic motion — a counting counter or a slow fade moves fewer than 0.4%
+ *  of the frame's pixels per frame, so the lens reads the FORMAT's grammar
+ *  as frozen. The graphics lane's honest frozen-frames semantics are
+ *  therefore DEAD-COMPOSITOR coverage: a freeze spanning ≥ 90% of the
+ *  program means the applier never ran. The in-scene motion truth rides
+ *  the sampled static-shots lens (its threshold sees the small motion).
+ *  The P5 proof recorded the empirical pair on the proof doc: freezedetect
+ *  flagged two sub-noise events while the frame extraction showed every
+ *  sampled frame differing and static-shots passing. */
+export function judgeGraphicsFreezes(
+  freezeEvents: { startSec: number; endSec: number }[],
+  programSec: number,
+  coverageThreshold: number = GRAPHICS_FREEZE_COVERAGE
+): { unexpected: number[]; designedCount: number } {
+  const unexpected = freezeEvents
+    .filter((e) => programSec > 0 && (e.endSec - e.startSec) / programSec >= coverageThreshold)
+    .map((e) => e.startSec);
+  return { unexpected, designedCount: freezeEvents.length - unexpected.length };
+}
+
 /** Mean volume (dBFS) of the file's final 0.4 s — abrupt-ending detector. */
 async function tailVolume(file: string, durationSec: number): Promise<number | null> {
   if (!Number.isFinite(durationSec) || durationSec < 3) return null;
@@ -271,6 +331,25 @@ export async function runQcReport(opts: {
    *  Deliberate burned captions are excluded by the judge's contract.
    *  Absent = the check is not emitted (e.g. a pre-S53 caller). */
   textScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string };
+  /** S123 (G1) P3 — the graphics lane's DESIGNED hold windows (graphics/
+   *  qc.ts graphicsHoldWindows — the doc's legal post-motion holds, in
+   *  absolute seconds). A sampled static run STARTING inside a window is
+   *  the kinetic-typography design, not a defect; starting elsewhere is a
+   *  dead compositor. Absent (every other lane) = the byte-identical
+   *  pre-S123 judgment. */
+  designedFreezes?: [number, number][];
+  /** S123 (G1) P5 — the graphics lane's frozen-frames semantics switch:
+   *  freezedetect's per-frame noise floor cannot see small kinetic motion
+   *  (the P5 proof's recorded finding), so the lane judges DEAD-COMPOSITOR
+   *  coverage instead (judgeGraphicsFreezes) and the sampled static-shots
+   *  lens carries the in-scene truth. Absent = the pre-S123 judgment. */
+  graphicsLane?: boolean;
+  /** S123 (G1) P5 — the graphics lane's scene-cut threshold calibration:
+   *  the format's hard cuts can be a subtle background-tone swap (~0.03
+   *  scene score), far below the story lanes' 0.40. The calibrated floor
+   *  (0.025) still sits ABOVE the format's in-scene per-frame motion
+   *  (≤ ~0.015 — the P5 proof's recorded finding). Absent = 0.40. */
+  sceneCutThreshold?: number;
 }): Promise<QcReport> {
   const aspect: QcAspect =
     opts.expectedAspect === "9:16" ? "9:16" : opts.expectedAspect === "1:1" ? "1:1" : "16:9";
@@ -365,8 +444,19 @@ export async function runQcReport(opts: {
       );
     }
 
-    const freezes = [...stderr.matchAll(/\[freezedetect[^\]]*\]\s*(?:lavfi\.freezedetect\.)?freeze_start:\s*(\d+(?:\.\d+)?)/g)]
-      .map((m) => Number(m[1]));
+    // freezedetect emits the start + the duration of every freeze run —
+    // the graphics lane's coverage judgment needs the EVENTS, not just the
+    // starts.
+    const freezeEvents = [...stderr.matchAll(
+      /\[freezedetect[^\]]*\]\s*(?:lavfi\.freezedetect\.)?freeze_start:\s*(\d+(?:\.\d+)?)[\s\S]*?\[freezedetect[^\]]*\]\s*(?:lavfi\.freezedetect\.)?freeze_duration:\s*(\d+(?:\.\d+)?)/g
+    )].map((m) => ({ startSec: Number(m[1]), endSec: Number(m[1]) + Number(m[2]) }));
+    const freezes = freezeEvents.map((e) => e.startSec);
+    // S123 — the lane split: the graphics lane judges DEAD-COMPOSITOR
+    // coverage (its noise-floor finding is recorded in judgeGraphicsFreezes);
+    // every other lane keeps the designed-window judgment verbatim.
+    const freezeSplit = opts.graphicsLane
+      ? judgeGraphicsFreezes(freezeEvents, duration)
+      : judgeFreezes(freezes, opts.designedFreezes ?? []);
     if (!analysisRan) {
       checks.push(
         check("frozen-frames", "No frozen imagery (motion everywhere)", "unmeasured", "analysis failed",
@@ -377,9 +467,19 @@ export async function runQcReport(opts: {
         check(
           "frozen-frames",
           "No frozen imagery (motion everywhere)",
-          freezes.length === 0 ? "pass" : "fail",
-          freezes.length === 0 ? "none detected" : `${freezes.length} frozen run${freezes.length > 1 ? "s" : ""}`,
-          freezes.slice(0, 4).map((s) => `at ${s}s`).join(", ")
+          freezeSplit.unexpected.length === 0 ? "pass" : "fail",
+          freezeSplit.unexpected.length === 0
+            ? freezes.length === 0
+              ? "none detected"
+              : `${freezeSplit.designedCount} designed freeze${freezeSplit.designedCount === 1 ? "" : "s"} only`
+            : `${freezeSplit.unexpected.length} frozen run${freezeSplit.unexpected.length > 1 ? "s" : ""}`,
+          freezeSplit.unexpected.length === 0
+            ? freezes.length > 0
+              ? opts.graphicsLane
+                ? "sub-noise events below the dead-compositor coverage — the sampled static lens carries the in-scene truth (graphics lane)"
+                : "all inside the doc's designed hold windows (graphics lane)"
+              : ""
+            : freezeSplit.unexpected.slice(0, 4).map((s) => `at ${s}s`).join(", ")
         )
       );
     }
@@ -474,6 +574,9 @@ export async function runQcReport(opts: {
     });
     const worstRun = planRuns.find((r) => r.length >= 3) ?? null;
     const staticPass = await detectStaticRuns(opts.mp4Path);
+    // S123 — the designed-hold split rides the sampled scan too (the
+    // graphics lane's legal holds; absent = the pre-S123 judgment).
+    const staticSplit = judgeStaticRuns(staticPass.runs, opts.designedFreezes ?? []);
     const planFlat = worstRun !== null;
     checks.push(
       check(
@@ -483,7 +586,7 @@ export async function runQcReport(opts: {
           ? "fail"
           : !staticPass.measured
             ? "unmeasured"
-            : staticPass.runs.length === 0
+            : staticSplit.unexpected.length === 0
               ? "pass"
               : "fail",
         planFlat
@@ -494,12 +597,20 @@ export async function runQcReport(opts: {
             })`
           : !staticPass.measured
             ? "not measured"
-            : staticPass.runs.length === 0
-              ? "visual change throughout"
-              : `${staticPass.runs.length} static run${staticPass.runs.length > 1 ? "s" : ""}`,
+            : staticSplit.unexpected.length === 0
+              ? staticPass.runs.length === 0
+                ? "visual change throughout"
+                : `${staticSplit.designedCount} designed hold${staticSplit.designedCount === 1 ? "" : "s"} only`
+              : `${staticSplit.unexpected.length} static run${staticSplit.unexpected.length > 1 ? "s" : ""}`,
         planFlat
           ? "approved direction holds these shots still with no motion, i2v or stock motivation — re-run the director with movement or set motion/animation on those scenes"
-          : staticRunsDetail(staticPass.runs)
+          : !staticPass.measured
+            ? "the sampled scan could not run"
+            : staticSplit.unexpected.length === 0
+              ? staticPass.runs.length > 0
+                ? "all inside the doc's designed hold windows (graphics lane)"
+                : ""
+              : staticRunsDetail(staticSplit.unexpected)
       )
     );
 
@@ -560,7 +671,7 @@ export async function runQcReport(opts: {
     );
 
     if (opts.expectedCuts) {
-      const sc = await detectSceneCuts(opts.mp4Path);
+      const sc = await detectSceneCuts(opts.mp4Path, opts.sceneCutThreshold);
       const aligned = sc.measured
         ? alignCuts(sc.cuts, opts.expectedCuts, CUT_TOL_SEC)
         : { unexpected: [], missing: [] };
@@ -713,7 +824,10 @@ export async function qcForVideo(
   frameRate?: number,
   restrictedScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string },
   subjectScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string },
-  textScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string }
+  textScan?: { status: "pass" | "fail" | "unmeasured"; value: string; detail?: string },
+  designedFreezes?: [number, number][],
+  graphicsLane?: boolean,
+  sceneCutThreshold?: number
 ): Promise<QcReport> {
   // Storage seam (T-3.7): ffprobe/readFile need real paths — materialize
   // returns the uploads path locally, a cached download under s3.
@@ -733,6 +847,9 @@ export async function qcForVideo(
     restrictedScan,
     subjectScan,
     textScan,
+    designedFreezes,
+    graphicsLane,
+    sceneCutThreshold,
   });
 }
 

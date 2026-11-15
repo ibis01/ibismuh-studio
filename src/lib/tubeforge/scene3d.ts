@@ -42,7 +42,31 @@ export interface Scene3DObject {
     roughness?: number; // 0..1
     opacity?: number; // 0..1
   };
+  /** S134 (PAE-6) — the object's keyframes on the NORMALIZED scene clock
+   *  (t ∈ [0,1] — the lane's own convention, cameraAt-consistent; the
+   *  scene's fps × durationSec maps t to delivered frames). Each key may
+   *  carry ANY subset of the three channels; a channel is driven ONLY by
+   *  the keys that carry it (clamped holds outside — the motion clamp
+   *  law, object form), and the static field above is the fallback when
+   *  NO key carries the channel. An object with no keyframes renders
+   *  byte-identically to the pre-S134 lane (the additive-seam law). */
+  keyframes?: Scene3DObjectKeyframe[];
 }
+
+/** One object keyframe: normalized time + any subset of the channels it
+ *  drives at that moment (absent channels hold — strict optionality, the
+ *  byte-stable round-trip law). */
+export interface Scene3DObjectKeyframe {
+  t: number;
+  position?: [number, number, number];
+  rotation?: [number, number, number];
+  scale?: [number, number, number];
+}
+
+/** The keyframe cap per object — mirrors the graphics lane's
+ *  cameraKeysMax; beyond it the tolerant read keeps the first sixteen
+ *  (decoration-class overflow, the tolerance law). */
+export const SCENE3D_OBJECT_KEYFRAMES_MAX = 16;
 
 export interface Scene3DLight {
   kind: Scene3DLightKind;
@@ -97,6 +121,28 @@ function parseObject(raw: unknown): Scene3DObject | null {
   const id = typeof o.id === "string" && o.id.trim() ? o.id.trim().slice(0, 64) : null;
   if (!id) return null;
   const mat = (o.material ?? {}) as Record<string, unknown>;
+  // S134 — the tolerant keyframes read: junk keys drop individually, a key
+  // that drives NO channel is junk (it animates nothing), t clamps to the
+  // normalized clock, and the overflow past the cap warn-slices (the
+  // tolerant lane never refuses — the S88 law).
+  const rawKeys = Array.isArray(o.keyframes) ? o.keyframes : [];
+  const keyframes = rawKeys
+    .map((k) => {
+      const kk = (k ?? {}) as Record<string, unknown>;
+      const t = Number(kk.t);
+      if (!Number.isFinite(t)) return null;
+      const key: Scene3DObjectKeyframe = { t: clamp(t, 0, 1) };
+      // Strict optionality per channel: only a field that SHIPPED a vec3
+      // keeps one (the byte-stable round-trip law).
+      if (Array.isArray(kk.position)) key.position = vec3(kk.position, [0, 0, 0]);
+      if (Array.isArray(kk.rotation)) key.rotation = vec3(kk.rotation, [0, 0, 0]);
+      if (Array.isArray(kk.scale)) key.scale = vec3(kk.scale, [1, 1, 1]);
+      if (key.position === undefined && key.rotation === undefined && key.scale === undefined) return null;
+      return key;
+    })
+    .filter((k): k is Scene3DObjectKeyframe => k != null)
+    .sort((a, b) => a.t - b.t)
+    .slice(0, SCENE3D_OBJECT_KEYFRAMES_MAX);
   return {
     id,
     kind: o.kind as Scene3DObjectKind,
@@ -111,6 +157,7 @@ function parseObject(raw: unknown): Scene3DObject | null {
       roughness: Number.isFinite(Number(mat.roughness)) ? clamp(Number(mat.roughness), 0, 1) : 0.6,
       opacity: Number.isFinite(Number(mat.opacity)) ? clamp(Number(mat.opacity), 0.05, 1) : 1,
     },
+    ...(keyframes.length > 0 ? { keyframes } : {}),
   };
 }
 
@@ -201,6 +248,17 @@ function serializeObject(o: Scene3DObject): Record<string, unknown> {
   };
   if (o.rotation) out.rotation = [...o.rotation];
   if (o.scale) out.scale = [...o.scale];
+  // S134 — strict keyframes write: only the channels a key SHIPPED (the
+  // byte-stable round-trip law — parse must not invent, serialize must not
+  // fill).
+  if (o.keyframes) {
+    out.keyframes = o.keyframes.map((k) => ({
+      t: k.t,
+      ...(k.position ? { position: [...k.position] } : {}),
+      ...(k.rotation ? { rotation: [...k.rotation] } : {}),
+      ...(k.scale ? { scale: [...k.scale] } : {}),
+    }));
+  }
   return out;
 }
 
@@ -327,6 +385,65 @@ export function cameraAt(
     }
   }
   return { position: [...last.position], lookAt: [...last.lookAt] };
+}
+
+// ---------- the object path (S134 — pure, camera-consistent) ----------
+
+/** The object's frame state — what the renderer sets per frame. Strict
+ *  optionality mirrors the object: a channel the doc never drives stays
+ *  absent (the applier skips it, the byte-identity holds). */
+export interface Scene3DObjectState {
+  id: string;
+  position: [number, number, number];
+  rotation?: [number, number, number];
+  scale?: [number, number, number];
+}
+
+/**
+ * objectAt — the object at normalized time t (0..1), the cameraAt shape
+ * per channel: the keys that CARRY a channel form that channel's track;
+ * clamped holds outside (before the first key → the first key's value,
+ * after the last → the last — the author controls both edges by writing
+ * the edge keys); the static field is only the no-keys fallback. Pure,
+ * deterministic — the pins hold it and the renderer evaluates exactly
+ * this. Two adapters, one vocabulary: the same clamped-lerp law the S94
+ * camera established, now for objects — the PAE adapter contract.
+ */
+export function objectAt(obj: Scene3DObject, t: number): Scene3DObjectState {
+  const clamped = clamp(t, 0, 1);
+  const keys = obj.keyframes ?? [];
+  const evalChannel = (
+    channel: "position" | "rotation" | "scale",
+    fallback: [number, number, number] | undefined,
+  ): [number, number, number] | undefined => {
+    const ks = keys.filter((k) => k[channel] !== undefined) as Array<Scene3DObjectKeyframe & Record<typeof channel, [number, number, number]>>;
+    if (ks.length === 0) return fallback;
+    if (clamped <= ks[0].t) return [...ks[0][channel]];
+    const last = ks[ks.length - 1];
+    if (clamped >= last.t) return [...last[channel]];
+    for (let i = 0; i < ks.length - 1; i++) {
+      const a = ks[i];
+      const b = ks[i + 1];
+      if (clamped >= a.t && clamped <= b.t) {
+        const f = (clamped - a.t) / Math.max(b.t - a.t, 1e-9);
+        return lerp3(a[channel], b[channel], f);
+      }
+    }
+    return [...last[channel]];
+  };
+  // The position fallback is the object's MANDATORY field and every key
+  // that carries position ships a vec3 — the undefined branch below is
+  // unreachable by construction (a tripwire, not a defensive branch).
+  const position = evalChannel("position", obj.position);
+  if (position === undefined) {
+    throw new Error("objectAt: the position channel resolved to nothing — an engine bug");
+  }
+  const out: Scene3DObjectState = { id: obj.id, position };
+  const rotation = evalChannel("rotation", obj.rotation);
+  if (rotation !== undefined) out.rotation = rotation;
+  const scale = evalChannel("scale", obj.scale);
+  if (scale !== undefined) out.scale = scale;
+  return out;
 }
 
 // ---------- the durable job (the S88 shape) ----------

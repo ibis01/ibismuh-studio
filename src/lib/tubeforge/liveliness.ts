@@ -18,6 +18,9 @@
 //      camera keys / the plan's own motion:"off" / the human's per-scene
 //      motion-map "off" all pin the scene to Ken Burns (the KB engine
 //      renders the honest hold under the stills contract).
+//   4.5 the K1 native rig (S125) → a rigged character's cast scene draws
+//      its own pixels at $0 — native-first, between the stills contract
+//      and i2v (the roadmap §6 wording).
 //   5. plan needsI2V + a configured video provider → i2v (subject-real
 //      motion, metered under the same $5 gate via aiCall("video")).
 //   6. everything else → Ken Burns (the motion engine's camera plans).
@@ -30,8 +33,9 @@ import { classifyScene, type SceneKind } from "./motion";
 import type { DirectorScene } from "./director-plan";
 
 /** The one execution channel a scene's pixels come from. Matches the
- *  renderer's segment branches (slides / stock clip / i2v clip / KB graph). */
-export type LivelinessChannel = "i2v" | "stock" | "kenburns" | "slides";
+ *  renderer's segment branches (slides / stock clip / i2v clip / native rig
+ *  clip / KB graph). */
+export type LivelinessChannel = "i2v" | "stock" | "kenburns" | "slides" | "native-rig";
 
 /** Per-scene decision — the channel plus WHY (progress notes, render result,
  *  and the worklog's observability story all read this). */
@@ -57,10 +61,15 @@ export interface LivelinessInput {
   humanMotionOff: boolean[];
   /** The doc's studio camera keys exist for this scene (S2 wave 2). */
   docCameraKeys: boolean[];
-  /** A matched stock clip exists on disk for this scene. */
+  /** Matched stock footage wins for this scene (stock mode only). */
   hasStock: boolean[];
   /** The video capability is configured for i2v (provider "zai"). */
   i2vReady: boolean;
+  /** S125 (K1) — the cast character carries a VALID parsed rig doc AND the
+   *  scene is a cast scene (hostInScene): the native rig can draw this
+   *  scene's pixels at $0. False everywhere when no rig exists — the
+   *  byte-identical legacy path (the rollback law). */
+  nativeRig: boolean[];
 }
 
 /**
@@ -72,6 +81,7 @@ export function selectChannels(input: LivelinessInput): LivelinessDecision[] {
     input.planNeedsI2V.length ||
     input.hasStock.length ||
     input.docCameraKeys.length ||
+    input.nativeRig.length ||
     0;
   const at = <T>(arr: T[], i: number, fallback: T): T =>
     Array.isArray(arr) && i < arr.length ? arr[i] : fallback;
@@ -115,6 +125,20 @@ export function selectChannels(input: LivelinessInput): LivelinessDecision[] {
             ? "the director stilled this scene (plan motion off)"
             : "human motion override: off";
       out.push({ sceneIndex, channel: "kenburns", reason });
+      continue;
+    }
+    // 4.5) THE K1 NATIVE RIG (S125 — native-first, the §6 wording: the
+    //    channel sits "between kenburns and i2v"): a rigged character's
+    //    cast scene DRAWS its own pixels at $0 — the native rig outranks
+    //    the premium i2v escalation (native-first), and every senior rule
+    //    above still pins its channel (slides, animated, stock, and every
+    //    still order — a still order stills the rig too).
+    if (at(input.nativeRig, i, false)) {
+      out.push({
+        sceneIndex,
+        channel: "native-rig",
+        reason: "the native character rig draws this scene ($0, identity-locked)",
+      });
       continue;
     }
     // 5) THE S35 LOOP-CLOSURE: the Director's approved true-motion pick
@@ -173,6 +197,10 @@ export const I2V_CAMERA_PHRASES: Readonly<Record<string, string>> = {
   "diag-tl": "diagonal camera drift toward the upper left, natural parallax",
   "diag-br": "diagonal camera drift toward the lower right, natural parallax",
   "punch-in": "punch-in that settles on the subject — hard emphasis, then stillness",
+  // C2-ext — the cinematic vocabulary (tempo-neutral: the S63 law).
+  shake: "a brief bounded camera shake around the subject — impact energy, then stillness",
+  "push-follow": "a steady push-in that simultaneously glides toward the subject, natural parallax",
+  "drift-crawl": "a constant-direction camera creep — barely-there ambient motion, the scene itself still",
   // The legacy Director verbs (pre-S48 plans; a generative model CAN honor
   // them, so unlike Ken Burns they are NOT approximated here).
   "push-in": "steady dramatic push in toward the subject",

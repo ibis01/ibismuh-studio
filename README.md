@@ -9,8 +9,8 @@ standard + the content-policy visual scan under a restricted policy), and
 publishes to a connected YouTube channel — all inside a multi-user web
 application with metered AI spending and Stripe billing underneath.
 
-**Status:** S-series stage S120 + the W-track at W7 with W6+W7 LANDED (2026-11-14) — the whiteboard finishing track W1–W7 is COMPLETE; CI is 8/8
-green on `main` with the 597-test unit battery. The production loop is
+**Status:** S-series stage S120 + the W-track at W7 with W6+W7 LANDED (2026-11-14) — the whiteboard finishing track W1–W7 is COMPLETE; **S123 (milestone G1) landed the Motion Graphics Engine end-to-end (P0–P5)**; **S124 landed the element-level graphics editor (drag · scale · z-order, the Layout mode — the friction clean-room study, `docs/audits/external-friction-editor-study.md`)**; CI is 8/8
+green on `main` with the 597-test unit battery (the S123 execution branch carries 685; S124 carries 699). The production loop is
 feature-complete, and the production-readiness arc (S99–S108) closed every
 reliability gate with CI evidence — clean-clone bootstrap, queue leases +
 fencing, atomic storage admission, shared rate limiting + trusted-proxy IP law,
@@ -41,7 +41,11 @@ default). The blind re-scores and the operator-side staging drills remain. The e
 release candidate (see
 [`docs/production-readiness.md`](docs/production-readiness.md)). On top of the
 studio, the **Whiteboard Engine** (the native, $0-per-render creative mode —
-E0–E9 landed) and the **Creator Intelligence Engine** (hook scoring, packaging
+E0–E9 landed), the **Motion Graphics Engine** (S123 — a declarative GraphicsDoc v1
+grammar rendered natively at $0: kinetic headlines, counters, bars/charts,
+icons and shapes through the ONE compositor contract, with the Graphics Studio,
+labelled drafts, the frame-budget preflight wall and its own QC group), and
+the **Creator Intelligence Engine** (hook scoring, packaging
 lint, transcript-based Shorts selection, retention ingestion — CI-1..CI-4
 landed) are in the tree.
 

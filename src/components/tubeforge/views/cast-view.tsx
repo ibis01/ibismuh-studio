@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EmptyState, useVoices, VoiceSelectWithPreview } from "@/components/tubeforge/shared";
+import RigPanel from "@/components/tubeforge/characters/rig-panel";
 import {
   VOICES,
   ART_STYLES,
@@ -940,6 +941,16 @@ function CharacterStudio({
                 newest one, and the continuity checker reads them alongside it.
               </p>
             </div>
+
+            {/* S125 (K1) — the native rig: auto-rig action, compiled preview,
+                the pose-timeline strip. The character surface's K1 seat. */}
+            <RigPanel
+              characterId={c.id}
+              hasRig={c.hasRig}
+              onChanged={() => {
+                void refreshCharacter();
+              }}
+            />
           </div>
 
           {/* Editable profile column */}

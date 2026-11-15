@@ -23,7 +23,7 @@ import path from "path";
 import { promisify } from "util";
 import { log } from "./log";
 import { WB_CHROMIUM_LAUNCH_ARGS } from "./whiteboard/render";
-import { cameraAt, type Scene3D } from "./scene3d";
+import { cameraAt, objectAt, type Scene3D } from "./scene3d";
 
 const renderLog = log.child({ mod: "render3d" });
 const execFileAsync = promisify(execFile);
@@ -71,6 +71,7 @@ function pageHtml(width: number, height: number, threeSource: string, threeCoreS
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(doc.background);
   const camera = new THREE.PerspectiveCamera(doc.camera.fov, ${width} / ${height}, 0.1, 100);
+  const meshesById = new Map();
   for (const o of doc.objects) {
     let mesh = null;
     if (o.kind === "box") mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1));
@@ -90,6 +91,7 @@ function pageHtml(width: number, height: number, threeSource: string, threeCoreS
     if (o.scale) mesh.scale.set(...o.scale);
     mesh.name = o.id;
     scene.add(mesh);
+    meshesById.set(o.id, mesh);
   }
   for (const l of doc.lights) {
     if (l.kind === "ambient") {
@@ -101,6 +103,15 @@ function pageHtml(width: number, height: number, threeSource: string, threeCoreS
       scene.add(d);
     }
   }
+  window.__OBJECTS__ = (states) => {
+    for (const s of states) {
+      const mesh = meshesById.get(s.id);
+      if (!mesh) continue;
+      mesh.position.set(s.position[0], s.position[1], s.position[2]);
+      if (s.rotation) mesh.rotation.set(s.rotation[0], s.rotation[1], s.rotation[2]);
+      if (s.scale) mesh.scale.set(s.scale[0], s.scale[1], s.scale[2]);
+    }
+  };
   window.__CAMERA__ = (position, lookAt) => {
     camera.position.set(...position);
     camera.lookAt(...lookAt);
@@ -175,12 +186,22 @@ export async function renderScene3D(
     for (let f = 0; f < frames; f++) {
       const t = frames > 1 ? f / (frames - 1) : 0;
       const cam = cameraAt(doc.camera.keyframes, t);
+      // S134 — the objects ride the SAME normalized clock through the
+      // pure objectAt path (one evaluate per frame drives objects then
+      // camera; the camera call renders). Keyless objects come back as
+      // their static fields — the same values the build pass set, so the
+      // frames stay byte-identical to the pre-S134 lane.
+      const states = doc.objects.map((o) => objectAt(o, t));
       await page.evaluate(
-        // The page declares window.__CAMERA__ in its module script; the
-        // renderer drives it per frame (the pure cameraAt path).
-        ({ position, lookAt }) =>
-          (window as unknown as { __CAMERA__: (p: number[], l: number[]) => void }).__CAMERA__(position, lookAt),
-        { position: cam.position, lookAt: cam.lookAt }
+        ({ states, position, lookAt }) => {
+          const w = window as unknown as {
+            __OBJECTS__: (s: Array<{ id: string; position: number[]; rotation?: number[]; scale?: number[] }>) => void;
+            __CAMERA__: (p: number[], l: number[]) => void;
+          };
+          w.__OBJECTS__(states);
+          w.__CAMERA__(position, lookAt);
+        },
+        { states, position: cam.position, lookAt: cam.lookAt }
       );
       const shot = await page.screenshot({
         path: path.join(framesDir, `f${String(f).padStart(5, "0")}.jpg`),

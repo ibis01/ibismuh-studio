@@ -21,11 +21,20 @@ import { RENDER_MODES } from "./types";
  *     latest explicit truth, so job replays and bare callers agree);
  *   - a silent (or unrecognized) body defers to the row as before.
  *
+ * S123 — the graphics engine seats its lane in the SAME contract (the
+ * engine lanes are a set, not a special case): an explicit "graphics"
+ * resolves to the graphics lane and pins symmetrically with whiteboard.
+ * The lane SHIPS DARK (spec §10): RENDER_MODES gains the picker entry
+ * only in the lockstep commit that also lands the compositor case + the
+ * route branch (acceptance criterion 4) — a picker entry without its
+ * route branch would degrade to the story gates, the exact S119 bug
+ * class this resolver exists to kill. The unit suite pins the dark state.
+ *
  * Pure on purpose: the truth table below is unit-pinned, and the route
  * stays a thin persist-and-dispatch shell around it.
  */
 
-/** The story lane's sub-modes — every RENDER_MODES id except the whiteboard lane. */
+/** The story lane's sub-modes — every RENDER_MODES id except the engine lanes. */
 export type StoryRenderMode = "kenburns" | "stock" | "slides" | "animated";
 
 const STORY_MODE_IDS: readonly StoryRenderMode[] = ["kenburns", "stock", "slides", "animated"];
@@ -34,7 +43,18 @@ export function isStoryRenderMode(mode: string | null | undefined): mode is Stor
   return (STORY_MODE_IDS as readonly string[]).includes(mode ?? "");
 }
 
-export type RenderLane = "whiteboard" | "story";
+/** The engine lane ids — the modes that route to a native engine lane
+ *  (S119's whiteboard, S123's graphics). A closed set: a new engine lane
+ *  is a design-doc slice, never a drive-by union member. */
+export type EngineLaneId = "whiteboard" | "graphics";
+
+const ENGINE_LANE_IDS: readonly EngineLaneId[] = ["whiteboard", "graphics"];
+
+export function isEngineLaneId(mode: string | null | undefined): mode is EngineLaneId {
+  return (ENGINE_LANE_IDS as readonly string[]).includes(mode ?? "");
+}
+
+export type RenderLane = EngineLaneId | "story";
 
 export interface RenderLaneResolution {
   /** The engine lane this render must run through. */
@@ -43,10 +63,10 @@ export interface RenderLaneResolution {
    * The row update to persist BEFORE admission (null = the row already
    * agrees; no write). This is the same update PATCH /api/videos/[id]
    * applies for a manual mode switch — the route has already established
-   * format "story" (the whiteboard lane's only legal format) by the time
+   * format "story" (the engine lanes' only legal format) by the time
    * this runs.
    */
-  pinRenderMode: StoryRenderMode | "whiteboard" | null;
+  pinRenderMode: StoryRenderMode | EngineLaneId | null;
 }
 
 /**
@@ -58,35 +78,39 @@ export function resolveRenderLane(
   bodyMode: string | null,
   rowRenderMode: string | null
 ): RenderLaneResolution {
-  // Explicit whiteboard ask: take the engine lane, pinning the row when
-  // it does not already agree (idempotent — no redundant write).
-  if (bodyMode === "whiteboard") {
+  // Explicit engine ask (whiteboard or graphics): take that engine lane,
+  // pinning the row when it does not already agree (idempotent — no
+  // redundant write). Symmetric for both engine lanes.
+  if (isEngineLaneId(bodyMode)) {
     return {
-      lane: "whiteboard",
-      pinRenderMode: rowRenderMode === "whiteboard" ? null : "whiteboard",
+      lane: bodyMode,
+      pinRenderMode: rowRenderMode === bodyMode ? null : bodyMode,
     };
   }
-  // Explicit story ask on a whiteboard row: the user switched lanes in
+  // Explicit story ask on an engine row: the user switched lanes in
   // the picker — flip the row, then the story gates below apply honestly.
-  if (isStoryRenderMode(bodyMode) && rowRenderMode === "whiteboard") {
+  if (isStoryRenderMode(bodyMode) && isEngineLaneId(rowRenderMode)) {
     return { lane: "story", pinRenderMode: bodyMode };
   }
   // Silent or unrecognized body: the row is the truth (garbage never
-  // flips a lane — a buggy caller cannot silently kill a whiteboard row).
+  // flips a lane — a buggy caller cannot silently kill an engine row).
   return {
-    lane: rowRenderMode === "whiteboard" ? "whiteboard" : "story",
+    lane: isEngineLaneId(rowRenderMode) ? rowRenderMode : "story",
     pinRenderMode: null,
   };
 }
 
 /**
  * Lockstep law (the priors-table twin): every id the mode picker can send
- * must have a lane decision here. RENDER_MODES minus "whiteboard" must be
- * exactly STORY_MODE_IDS — a new picker mode that forgets its lane row
- * fails this check (and the unit suite that pins it).
+ * must have a lane decision here. RENDER_MODES minus the engine lanes
+ * (whiteboard, graphics) must be exactly STORY_MODE_IDS — a new picker
+ * mode that forgets its lane row fails this check (and the unit suite
+ * that pins it). The graphics lane resolves HERE while shipping dark:
+ * when its RENDER_MODES entry joins (the P3/P4 lockstep commit), this law
+ * keeps covering it from the engine-lane side automatically.
  */
 export function laneDecisionsComplete(): boolean {
-  const pickerIds = RENDER_MODES.map((m) => m.id).filter((id) => id !== "whiteboard");
+  const pickerIds = RENDER_MODES.map((m) => m.id).filter((id) => !isEngineLaneId(id));
   return (
     pickerIds.length === STORY_MODE_IDS.length &&
     pickerIds.every((id) => (STORY_MODE_IDS as readonly string[]).includes(id))

@@ -144,6 +144,74 @@ import {
   sceneSegmentSec,
   splitNarrationAt,
 } from "../src/lib/tubeforge/clip-ops";
+import { ANIM_FRAME_BUDGET, frameCountOf, framePlanWindows } from "../src/lib/tubeforge/anim/clock";
+import {
+  GRAPHICS_BUDGETS,
+  GRAPHICS_ELEMENT_KINDS,
+  GRAPHICS_FRAME_BUDGET,
+  GRAPHICS_ROUTING_REASON_MAX,
+  GRAPHICS_VERSION,
+  legalMotions,
+  MOTION_KINDS_BY_ELEMENT,
+  parseGraphicsDoc,
+  validGraphicsId,
+  validateGraphicsDoc,
+  writeGraphicsDoc,
+  type GraphicsDoc,
+  type GraphicsScene,
+} from "../src/lib/tubeforge/graphics/types";
+import { scaffoldGraphicsDoc } from "../src/lib/tubeforge/graphics/planner";
+import {
+  frameAt,
+  graphicsFrameCount,
+  graphicsSceneDurationsMs,
+  GRAPHICS_MOTION_SEMANTICS,
+  type GraphicsFrameState,
+} from "../src/lib/tubeforge/graphics/frame";
+import {
+  APPLY_GRAPHICS_FRAME_FN,
+  composeGraphicsScene,
+  formatCounter,
+  GRAPHICS_COMPOSE_DEFAULTS,
+  graphicsFramePayload,
+  graphicsGroupClaims,
+  placedGraphicsFrame,
+} from "../src/lib/tubeforge/graphics/compose";
+import {
+  assertGraphicsBudget,
+  graphicsBudgetReport,
+} from "../src/lib/tubeforge/graphics/preflight";
+import { graphicsTracks } from "../src/lib/tubeforge/graphics/tracks";
+// S123 P3 — the engine renderer's pure seams, the draft viewport law and
+// the graphics QC group (the matrix + the lane-aware battery helpers).
+import {
+  graphicsEncodeArgs,
+  graphicsAssemblyArgs,
+  sceneCursorMs,
+} from "../src/lib/tubeforge/graphics/render";
+import {
+  GRAPHICS_DRAFT_SCALES,
+  draftSurfaceDim,
+  graphicsDraftDoc,
+  graphicsDraftKey,
+  graphicsDraftPlan,
+  isGraphicsDraftScale,
+} from "../src/lib/tubeforge/graphics/draft";
+import {
+  graphicsExpectedCuts,
+  graphicsHoldWindows,
+  graphicsQcMatrix,
+} from "../src/lib/tubeforge/graphics/qc";
+import { judgeFreezes, judgeStaticRuns } from "../src/lib/tubeforge/qc";
+// S124 — the element editor's pure laws (hit-test, placement math, the
+// slots-law z-order) + the composer's placed-frame truth and claim map.
+import {
+  applyZOrder,
+  ELEMENT_EDITOR_LIMITS,
+  movedPlacement,
+  scaledPlacement,
+  topmostElementAt,
+} from "../src/lib/tubeforge/graphics/editor";
 
 const execFileAsync = promisify(execFile);
 
@@ -1575,6 +1643,92 @@ await test("cameraAt: exact interpolation, clamped ends", () => {
   approx(camera3dAt([{ t: 0, position: [1, 2, 3], lookAt: [0, 0, 0] }], 0.7).position[2], 3, 1e-9, "a single keyframe holds");
 });
 
+// ---------------------------------------------------------------------------
+// S134 (PAE-6) — the 3D object animation adapter: keyframes on the
+// NORMALIZED scene clock (the lane's own convention), evaluated through
+// the cameraAt shape per channel. Two adapters, one vocabulary. Pins: the
+// static passthrough (byte-identity), per-channel tracks with clamped
+// holds, the tolerant parse (junk keys drop, sort, cap), the strict
+// serialize round-trip, and the render-path equality for keyless scenes.
+// ---------------------------------------------------------------------------
+
+await test("S134 objectAt: keyless objects mirror their static fields exactly (the render-path byte-identity)", async () => {
+  const { objectAt, scaffoldScene3D } = await import("../src/lib/tubeforge/scene3d");
+  const doc = scaffoldScene3D("s134 pin");
+  for (const t of [0, 0.13, 0.5, 0.77, 1]) {
+    for (const o of doc.objects) {
+      const s = objectAt(o, t);
+      eq(s.id, o.id, "the id rides");
+      eq(s.position, o.position, `position passthrough at t=${t}`);
+      eq(s.rotation, o.rotation, `rotation passthrough at t=${t}`);
+      eq(s.scale, o.scale, `scale passthrough at t=${t}`);
+    }
+  }
+});
+
+await test("S134 objectAt: per-channel tracks, clamped holds, independent channels", async () => {
+  const { objectAt } = await import("../src/lib/tubeforge/scene3d");
+  const obj = {
+    id: "orb",
+    kind: "sphere" as const,
+    position: [0, 1, 0] as [number, number, number],
+    material: { color: "#888888" },
+    keyframes: [
+      { t: 0.25, position: [-2, 1, 0] as [number, number, number] },
+      { t: 0.75, position: [2, 1, 0] as [number, number, number] },
+      { t: 0.5, rotation: [0, Math.PI, 0] as [number, number, number] },
+    ],
+  };
+  const pre = objectAt(obj, 0.1);
+  eq(pre.position, [-2, 1, 0], "before the first position key → the first key's value holds");
+  eq(pre.rotation, [0, Math.PI, 0], "the rotation track holds its single key before it too (per-channel clamping)");
+  const mid = objectAt(obj, 0.5);
+  approx(mid.position[0], 0, 1e-9, "the position track lerps across its OWN keys only");
+  approx(mid.rotation[1], Math.PI, 1e-9, "the rotation track rides its single key");
+  const post = objectAt(obj, 0.9);
+  eq(post.position, [2, 1, 0], "after the last key → the last value holds");
+  approx(post.rotation[1], Math.PI, 1e-9, "the rotation holds past its last key too");
+  const scaled = objectAt({ ...obj, scale: [1, 1, 1] as [number, number, number], keyframes: [...obj.keyframes, { t: 0, scale: [2, 2, 2] as [number, number, number] }] }, 0.5);
+  approx(scaled.scale[0], 2, 1e-9, "a single scale key HOLDS everywhere — the static field is only the no-keys fallback");
+  const spanned = objectAt({ ...obj, scale: [1, 1, 1] as [number, number, number], keyframes: [...obj.keyframes, { t: 0, scale: [2, 2, 2] as [number, number, number] }, { t: 1, scale: [1, 1, 1] as [number, number, number] }] }, 0.5);
+  approx(spanned.scale[0], 1.5, 1e-9, "edge keys span the whole clock: 2→1 lerps to 1.5 at the midpoint");
+});
+
+await test("S134 the tolerant keyframes read + the strict write round-trip", async () => {
+  const { parseScene3D, serializeScene3D, scaffoldScene3D } = await import("../src/lib/tubeforge/scene3d");
+  const doc = scaffoldScene3D("s134 parse");
+  const keyed = {
+    ...doc,
+    objects: [
+      {
+        ...doc.objects[0],
+        keyframes: [
+          { t: 0.5, position: [1, 2, 3], junk: "field" },
+          { t: "junk" },
+          { t: 0.9 },
+          { t: 5, position: [0, 0, 0] },
+          { t: 0.1, position: [4, 5, 6] },
+        ],
+      },
+      ...doc.objects.slice(1),
+    ],
+  };
+  const parsed = parseScene3D(serializeScene3D(keyed));
+  ok(parsed != null, "the keyed scene parses");
+  const keys = parsed?.objects[0]?.keyframes;
+  eq(keys?.length, 3, "junk keys drop individually; the channel-less key drops");
+  eq(keys?.[0]?.t, 0.1, "the keys sort by t");
+  eq(keys?.[1]?.t, 0.5, "the mid key survives with its position");
+  eq(keys?.[2]?.t, 1, "the clamped t=5 → 1");
+  ok(keys?.[0] && !("junk" in keys[0]), "unknown key fields drop (strict write)");
+  const s1 = serializeScene3D(parsed);
+  eq(serializeScene3D(parseScene3D(s1)), s1, "serialize → parse → serialize is byte-identical with keyframes");
+  const plain = parseScene3D(serializeScene3D(doc));
+  ok(plain?.objects.every((o) => o.keyframes === undefined), "keyless objects never invent keyframes");
+  const written = JSON.parse(serializeScene3D(plain)) as { objects: Array<Record<string, unknown>> };
+  ok(written.objects.every((o) => !("keyframes" in o)), "a keyless scene writes no object-level keyframes (byte-identity; the camera's keyframes field is unrelated)");
+});
+
 suiteStart("art dedupe — dHash perceptual hashing");
 
 await test("dHash pure: flat frame → zero hash, self-distance 0", () => {
@@ -2277,11 +2431,11 @@ await test("queue: resumableKinds covers every kind the routes start", async () 
   // in review); every one must be resumable after a crash. Since the S33
   // contract fix, resumableKinds() is DERIVED from the handler registry, so
   // this test can no longer pass with a stale list — the literal below pins
-  // exhaustiveness: all 25 JobKind values are route-started AND
+  // exhaustiveness: all 26 JobKind values are route-started AND
   // handler-registered (director + continuity joined in Stage 5, upload in
   // Stage 6, whiteboard in S67, consistency in S77, reference in S88,
-  // scene3d in S94, scene-recheck in S116; the pre-fix copy listed only 18
-  // and enshrined the drift).
+  // scene3d in S94, scene-recheck in S116, graphics in S123; the pre-fix
+  // copy listed only 18 and enshrined the drift).
   const { resumableKinds } = await import("../src/lib/tubeforge/queue-handlers.ts");
   const kinds = resumableKinds();
   const expected = [
@@ -2289,7 +2443,7 @@ await test("queue: resumableKinds covers every kind the routes start", async () 
     "render", "short", "convert", "verify", "comments", "thumbnail",
     "variants", "slide", "portrait", "poses", "qc", "upload",
     "director", "continuity", "whiteboard", "consistency", "reference",
-    "scene3d", "scene-recheck",
+    "scene3d", "scene-recheck", "graphics",
   ];
   for (const k of expected) {
     ok(kinds.includes(k), `"${k}" is resumable`);
@@ -2837,8 +2991,8 @@ await test("M1: story regression — narrative profile output ≡ today's prompt
   ok(user.includes("Transition ids:"), "transition line present");
   ok(user.includes("Framings: wide, medium, close-up, extreme close-up, over-the-shoulder, pov, aerial."),
     "narrative keeps the FULL framings list");
-  ok(user.includes("Camera moves: static, zoom-in, zoom-out, pan-left, pan-right, tilt-up, tilt-down, diag-tl, diag-br, punch-in."),
-    "narrative keeps the FULL v2 camera moves list (S48: engine-verbatim)");
+  ok(user.includes("Camera moves: static, zoom-in, zoom-out, pan-left, pan-right, tilt-up, tilt-down, diag-tl, diag-br, punch-in, shake, push-follow, drift-crawl."),
+    "narrative keeps the FULL v2 camera moves list (S48 + C2-ext: engine-verbatim)");
   ok(user.includes("Compositions: rule of thirds, leading lines, golden ratio, centered symmetry, negative space, frame within frame, diagonal."),
     "narrative keeps the FULL compositions list");
   // The narrative profile DOES surface its default-tone hints — that line
@@ -10380,10 +10534,15 @@ await test("S80: normalizeConsistencyCheckMode — the two valid non-defaults pa
     eq(guardTimelineOverwrite("[1,2]").blocked, false, "a non-object body is not a doc");
     // Blocked: a stamp this build does not know = a newer build's doc.
     const future = JSON.parse(v2) as Record<string, unknown>;
-    future.schema = 3;
+    future.schema = 4;
     const g = guardTimelineOverwrite(JSON.stringify(future));
-    eq(g.blocked, true, "schema 3 = a newer build's doc — the write is refused");
-    eq(g.blocked ? g.storedSchema : null, 3, "the refusal echoes the stored stamp");
+    eq(g.blocked, true, "schema 4 = a newer build's doc — the write is refused");
+    eq(g.blocked ? g.storedSchema : null, 4, "the refusal echoes the stored stamp");
+    // Stage X — schema 3 is a KNOWN stamp now (the additive core): the
+    // guard reads N and N−1, and N grew to 3.
+    const three = JSON.parse(v2) as Record<string, unknown>;
+    three.schema = 3;
+    eq(guardTimelineOverwrite(JSON.stringify(three)).blocked, false, "schema 3 parses in this build (the X core landed)");
     const junk = JSON.parse(v2) as Record<string, unknown>;
     junk.schema = "garbage";
     eq(guardTimelineOverwrite(JSON.stringify(junk)).blocked, true, "a garbage stamp refuses too (never a guessed parse)");
@@ -10403,8 +10562,14 @@ await test("S80: normalizeConsistencyCheckMode — the two valid non-defaults pa
   await test("S87: parseTimeline — an UNKNOWN stamp is null, never a guessed parse", async () => {
     const doc = assembleTimeline(scenes, { ttsSpeed: 1, renderMode: "kenburns" });
     const future = JSON.parse(serializeTimeline(doc)) as Record<string, unknown>;
-    future.schema = 3; // a v3 doc under this build (slice 1 knows 2 and 1 only)
-    eq(parseTimeline(JSON.stringify(future)), null, "schema 3 → null (render recomputes inline; the guard keeps the write paths off it)");
+    future.schema = 4; // a v4 doc under this build (the X core knows 3, 2 and 1 only)
+    eq(parseTimeline(JSON.stringify(future)), null, "schema 4 → null (render recomputes inline; the guard keeps the write paths off it)");
+    // Stage X — schema 3 parses now (the additive core): the stamp alone
+    // does not force a payload; a payload-less 3 doc is legal.
+    future.schema = 3;
+    delete (future as Record<string, unknown>).engineTracks;
+    const three = parseTimeline(JSON.stringify(future));
+    ok(three !== null && three.schema === 3, "schema 3 parses (the X core landed)");
     future.schema = "garbage";
     eq(parseTimeline(JSON.stringify(future)), null, "a garbage stamp → null");
     // null/unreadable stays null (the pre-S87 contract, unchanged).
@@ -12949,9 +13114,121 @@ await test("s119: the render lane contract — resolveRenderLane truth table (pu
   ok(garbageStory.lane === "story" && garbageStory.pinRenderMode === null, "unrecognized mode on a story row defers to the row");
 
   // Lockstep with the picker list (the priors-table twin).
-  ok(laneDecisionsComplete(), "every RENDER_MODES id except whiteboard has a story-lane row (lockstep)");
+  ok(laneDecisionsComplete(), "every RENDER_MODES id except the engine lanes has a story-lane row (lockstep)");
   ok(isStoryRenderMode("kenburns") && isStoryRenderMode("stock") && isStoryRenderMode("slides") && isStoryRenderMode("animated"), "isStoryRenderMode accepts the four story modes");
   ok(!isStoryRenderMode("whiteboard") && !isStoryRenderMode("nonsense") && !isStoryRenderMode(null), "isStoryRenderMode rejects the lane id, garbage and null");
+});
+
+await test("s123: the graphics lane rows of the truth table + the ship-dark law", async () => {
+  const { resolveRenderLane, laneDecisionsComplete, isStoryRenderMode, isEngineLaneId } = await import(
+    "../src/lib/tubeforge/render-lane"
+  );
+  // Explicit graphics ask: the engine lane + pin (the whiteboard rows,
+  // mirrored symmetrically — the engine lanes are a set, not a case).
+  const g = resolveRenderLane("graphics", "kenburns");
+  ok(g.lane === "graphics" && g.pinRenderMode === "graphics", "explicit graphics on a story row pins + routes to the graphics lane");
+  ok(resolveRenderLane("graphics", "whiteboard").pinRenderMode === "graphics", "explicit graphics flips a whiteboard row to the graphics lane");
+  const gSame = resolveRenderLane("graphics", "graphics");
+  ok(gSame.lane === "graphics" && gSame.pinRenderMode === null, "explicit graphics on a graphics row pins nothing");
+  ok(resolveRenderLane("graphics", null).pinRenderMode === "graphics", "explicit graphics on a null-mode row pins");
+
+  // Story modes flip a graphics row back (the admission-time twin).
+  for (const m of ["kenburns", "stock", "slides", "animated"] as const) {
+    const r = resolveRenderLane(m, "graphics");
+    ok(r.lane === "story" && r.pinRenderMode === m, `explicit ${m} flips a graphics row back to the story lane`);
+  }
+
+  // Silent body defers to the row; garbage never flips a lane.
+  ok(resolveRenderLane(null, "graphics").lane === "graphics" && resolveRenderLane(null, "graphics").pinRenderMode === null, "silent body on a graphics row keeps the engine lane");
+  const garbageG = resolveRenderLane("nonsense", "graphics");
+  ok(garbageG.lane === "graphics" && garbageG.pinRenderMode === null, "unrecognized mode on a graphics row defers to the row");
+
+  // The lane-set laws.
+  ok(isEngineLaneId("whiteboard") && isEngineLaneId("graphics"), "isEngineLaneId accepts both engine lanes");
+  ok(!isEngineLaneId("kenburns") && !isEngineLaneId("nonsense") && !isEngineLaneId(null), "isEngineLaneId rejects story modes, garbage and null");
+  ok(!isStoryRenderMode("graphics"), "graphics is a lane id, not a story mode");
+
+  // Lockstep covers the engine-lane side automatically.
+  ok(laneDecisionsComplete(), "RENDER_MODES minus {whiteboard, graphics} is exactly the story modes (lockstep)");
+
+  // The lockstep law (spec §10 / acceptance criterion 4): the contract
+  // seats the lane and the picker offers it ONLY in the commit that also
+  // lands the route branch + the compositor dispatch — all three landed
+  // together in the S123 P3 commit, so this pin now asserts the SHIPPED
+  // state (a picker entry without its route branch is the S119 bug class;
+  // the source pin below holds the three files to the lockstep).
+  const { RENDER_MODES } = await import("../src/lib/tubeforge/types");
+  const graphicsMode = RENDER_MODES.find((m) => m.id === "graphics");
+  ok(graphicsMode !== undefined, "lockstep shipped: RENDER_MODES offers graphics (the P3 commit landed picker + route + dispatch in one commit)");
+  ok(graphicsMode?.icon === "BarChart3" && typeof graphicsMode?.desc === "string", "the graphics picker entry carries its icon + desc");
+});
+
+await test("s123 P3: the lane is wired end-to-end — route branch, job dispatch, queue handler, doc column (source pin)", async () => {
+  // The render route: the graphics branch validates the doc + runs the
+  // preflight wall at ADMISSION (on click, never in a failed job card),
+  // and the status surface reads the graphics job kind.
+  const route = fs.readFileSync("src/app/api/videos/[id]/render/route.ts", "utf8");
+  ok(
+    route.includes('if (lane.lane === "graphics")') &&
+      route.includes("assertGraphicsBudget(doc)") &&
+      route.includes("parseGraphicsDoc(video.graphicsDoc)"),
+    "POST /render carries the graphics lane branch: doc parse + the admission-time preflight wall + the engine enqueue"
+  );
+  ok(
+    route.includes('video.renderMode === "graphics" ? "graphics" : null'),
+    "GET /render status reads the graphics lane's job kind (progress/error come from the lane that is actually running)"
+  );
+  // The job dispatch: runRenderJob delegates a graphics row to the engine
+  // lane (the durable replay path — a stale compositor row never renders
+  // a graphics video through the story gates).
+  const jobs = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
+  ok(
+    jobs.includes('if (video.renderMode === "graphics") {\n    return runGraphicsJob(videoId);\n  }'),
+    "runRenderJob delegates a graphics row to runGraphicsJob (the whiteboard delegation, mirrored)"
+  );
+  ok(
+    jobs.includes('marker: "#scene" | "#slide" | "#wb" | "#g"'),
+    "splitEntityId carries the #g suffix (the durable draft-entity encoding)"
+  );
+  // The queue handler + the recovery law.
+  const handlers = fs.readFileSync("src/lib/tubeforge/queue-handlers.ts", "utf8");
+  ok(
+    handlers.includes('registerJobHandler("graphics"') && handlers.includes("parseGraphicsPayload"),
+    "the durable queue registers the graphics handler (a resumed row re-runs the SAME lane)"
+  );
+  const jobsKind = fs.readFileSync("src/lib/tubeforge/jobs.ts", "utf8");
+  ok(
+    jobsKind.includes('row.kind === "graphics" && row.entityId === baseEntityId(row.entityId)'),
+    "the graphics FULL render rides the idempotence recovery wall (an already-landed final is marked done, never re-rendered)"
+  );
+  // The compositor's routing wall — Stage X moved it onto the BUILDER
+  // REGISTRY (the refusal is registry-driven now, not a hard-coded kind
+  // list; the law is unchanged: engine clips execute through their lanes).
+  const compositor = fs.readFileSync("src/lib/tubeforge/render.ts", "utf8");
+  ok(
+    compositor.includes("validatePlanKinds((planScenes ?? []).map((ps) => ps.kind))"),
+    "the compositor's routing wall reads the builder registry (engine clips execute through their engine lanes only)"
+  );
+  // The doc column + its migration.
+  const schema = fs.readFileSync("prisma/schema.prisma", "utf8");
+  ok(
+    schema.includes("graphicsDoc String?"),
+    "Video.graphicsDoc exists (the eleventh JSON doc column — the engine doc's home)"
+  );
+  const migration = fs.readFileSync(
+    "prisma/migrations/20261120000000_s123_graphics_doc/migration.sql",
+    "utf8"
+  );
+  ok(
+    migration.includes('ADD COLUMN "graphicsDoc" TEXT'),
+    "the S123 migration adds the column for the postgres chain (the sqlite push mirrors it)"
+  );
+  // The plan contract seats the kind the wall refuses.
+  const plan = fs.readFileSync("src/lib/tubeforge/composition-plan.ts", "utf8");
+  ok(
+    plan.includes('c.kind === "graphics"'),
+    "planFromTracks maps graphics-kind clips onto the plan kind the compositor wall refuses"
+  );
 });
 
 await test("s119: the lane contract is wired — route resolves the lane, scaffold pins, dialog surfaces rejections (source pin)", async () => {
@@ -15065,7 +15342,4170 @@ await test("W7 seams: the render consumes the family + the sfx layer; the page s
   }
 });
 
-console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
+// ---------------------------------------------------------------------------
+// G1.1 — the GraphicsDoc grammar + validator (S120 §5). Pure units over the
+// closed v1 element set. Pins (Part B): the mixed doc round-trips
+// byte-identical, wall violations reject with NAMED walls, tolerant parse of
+// v-next fields, the id-charset law — plus the compatibility table, group
+// integrity, and time-sanity enforcement.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S123 G1.1 the doc contract + validator");
+
+const G_SLOT: Record<string, string> = {
+  headline: "text", subhead: "text", bullet: "text", counter: "counter",
+  bar: "bar", barChart: "bar", icon: "icon", callout: "callout",
+  shape: "shape", group: "group", sprite: "sprite",
+};
+
+function gPayload(kind: string): Record<string, unknown> {
+  switch (kind) {
+    case "headline": return { text: "Big title" };
+    case "subhead": return { text: "Sub title" };
+    case "bullet": return { text: "A point" };
+    case "counter": return { from: 0, to: 100, unit: "%", decimals: 0 };
+    case "bar":
+    case "barChart": return { data: [{ label: "a", value: 1 }, { label: "b", value: 2 }] };
+    case "icon": return { paths: ["M 0 0 L 8 8 L 16 0"] };
+    case "callout": return { text: "note", pointsAt: { x: 10, y: 20 } };
+    case "shape": return { kind: "rect", w: 120, h: 60 };
+    case "sprite": return { assetKey: "imp-abc123", layout: "sheet", frames: 4, fps: 24, frameW: 128, frameH: 128 };
+    default: return { children: [] };
+  }
+}
+
+function gEl(id: string, kind: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id,
+    kind,
+    at: { x: 120, y: 96, scale: 1, rotateDeg: 0 },
+    [G_SLOT[kind]]: gPayload(kind),
+    enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "ease-out" },
+    ...extra,
+  };
+}
+
+function gScene(id: string, elements: unknown[], extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return { id, narration: "two short words", background: "#ffffff", elements, ...extra };
+}
+
+function gDoc(scenes: unknown[], extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return { version: GRAPHICS_VERSION, title: "g1.1 fixture", width: 1920, height: 1080, fps: 24, scenes, ...extra };
+}
+
+function mustParse(json: string, label: string): GraphicsDoc {
+  const d = parseGraphicsDoc(json);
+  if (d === null) throw new Error(`${label} — parseGraphicsDoc returned null`);
+  return d;
+}
+
+function mustValidate(raw: unknown, label: string): GraphicsDoc {
+  const r = validateGraphicsDoc(raw);
+  if (r.doc === null) throw new Error(`${label} — errors: ${r.errors.join(" | ")}`);
+  return r.doc;
+}
+
+function mustReject(r: { doc: GraphicsDoc | null; errors: string[] }, label: string): string[] {
+  if (r.doc !== null) throw new Error(`${label} — expected a rejection, got a doc`);
+  if (r.errors.length === 0) throw new Error(`${label} — rejected with no errors`);
+  return r.errors;
+}
+
+const MIXED_RAW = gDoc([
+  gScene("s1", [
+    gEl("h1", "headline", {
+      text: { text: "Big title", sizePx: 64, weight: 800, color: "#112233", align: "center" },
+      enter: { kind: "rise", durationMs: 600, delayMs: 0, ease: "ease-back" },
+      exit: { kind: "fade", durationMs: 400, delayMs: 3400, ease: "linear" },
+      opacity: 0.9,
+    }),
+    gEl("sh", "subhead", { enter: { kind: "slide", durationMs: 500, delayMs: 200, ease: "ease-in-out" } }),
+    gEl("bl", "bullet", { enter: { kind: "pop", durationMs: 300, delayMs: 400, ease: "pop" } }),
+    gEl("cn", "counter", {
+      enter: { kind: "count", durationMs: 1200, delayMs: 600, ease: "linear" },
+      emphasis: { kind: "pop", durationMs: 300, delayMs: 2200, ease: "pop" },
+    }),
+    gEl("br", "bar", { enter: { kind: "wipe", durationMs: 800, delayMs: 300, ease: "ease-out" } }),
+    gEl("bc", "barChart", { enter: { kind: "grow", durationMs: 900, delayMs: 300, ease: "ease-out" } }),
+    gEl("ic1", "icon", { enter: { kind: "draw", durationMs: 1000, delayMs: 500, ease: "linear" } }),
+    gEl("co", "callout", { enter: { kind: "rise", durationMs: 400, delayMs: 800, ease: "ease-out" } }),
+    gEl("sp", "shape", { enter: { kind: "grow", durationMs: 500, delayMs: 100, ease: "ease-out" } }),
+    gEl("grp", "group", { group: { children: ["h1", "ic1"] } }),
+  ]),
+]);
+
+await test("G1.1 the mixed v1 doc — every element kind — round-trips byte-identical", () => {
+  const doc1 = mustParse(JSON.stringify(MIXED_RAW), "the mixed doc");
+  eq(doc1.scenes[0]?.elements.length, 10, "all ten element kinds kept");
+  const json1 = writeGraphicsDoc(doc1);
+  const doc2 = mustParse(json1, "the written doc");
+  eq(writeGraphicsDoc(doc2), json1, "write→parse→write is byte-identical");
+});
+
+await test("G1.1 validation is deterministic — same input, same report, byte-identical", () => {
+  mustValidate(MIXED_RAW, "the mixed doc");
+  const a = validateGraphicsDoc(MIXED_RAW);
+  const b = validateGraphicsDoc(MIXED_RAW);
+  eq(JSON.stringify(a), JSON.stringify(b), "same input → same report");
+});
+
+await test("G1.1 a higher version parses with a warning (v-next loads in v1 readers)", () => {
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")])], { version: 2, futureField: 1 }));
+  ok(r.doc !== null, "the v-next doc loads — errors: " + r.errors.join(" | "));
+  ok(r.warnings.some((w) => w.includes("version 2")), "the version warning names the version");
+  ok(r.warnings.some((w) => w.includes('unknown field "futureField"')), "v-next doc fields drop with warnings");
+});
+
+await test("G1.1 a junk version shape is unreadable — errors + parse null", () => {
+  const noVersion = gDoc([gScene("s1", [gEl("h1", "headline")])]);
+  const { version: _baseVersion, ...versionless } = noVersion;
+  for (const bad of [{ version: "1" }, { version: 1.5 }, {}]) {
+    const raw = { ...versionless, ...bad };
+    const r = validateGraphicsDoc(raw);
+    mustReject(r, `version ${JSON.stringify(bad.version ?? "(absent)")}`);
+    eq(parseGraphicsDoc(JSON.stringify(raw)), null, "parseGraphicsDoc nulls on the wrong version shape");
+  }
+});
+
+await test("G1.1 the id-charset law rejects separator-carrying and malformed ids", () => {
+  for (const bad of ["a--b", "a::b", "-lead", "x".repeat(65), "sp ace", ""]) {
+    const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl(bad, "headline")])]));
+    const errors = mustReject(r, `element id "${bad.slice(0, 12)}"`);
+    ok(errors.some((e) => e.includes("id law")), "the error names the id law");
+  }
+  const rScene = validateGraphicsDoc(gDoc([gScene("bad--scene", [gEl("h1", "headline")])]));
+  mustReject(rScene, "scene id with a separator");
+  ok(rScene.errors.some((e) => e.includes("id law")), "the law covers scene ids too");
+});
+
+await test("G1.1 validGraphicsId mirrors the whiteboard law exactly", () => {
+  eq(validGraphicsId("h1"), true, "plain");
+  eq(validGraphicsId("ok.id_1-2"), true, "charset");
+  eq(validGraphicsId("a--b"), false, "the -- separator ban");
+  eq(validGraphicsId("a::b"), false, "the :: separator ban");
+  eq(validGraphicsId("-lead"), false, "must start alphanumeric/underscore");
+  eq(validGraphicsId("x".repeat(65)), false, "the 64-char cap");
+  eq(validGraphicsId(""), false, "empty");
+});
+
+await test("G1.1 the elementsPerScene wall rejects with its name", () => {
+  const many = Array.from({ length: GRAPHICS_BUDGETS.elementsPerScene + 1 }, (_, i) => gEl(`e${i}`, "bullet"));
+  const errors = mustReject(validateGraphicsDoc(gDoc([gScene("s1", many)])), "33 elements");
+  ok(errors.some((e) => e.includes("elementsPerScene wall")), "the error names the wall");
+});
+
+await test("G1.1 the scenesPerProject wall rejects with its name", () => {
+  const scenes = Array.from({ length: GRAPHICS_BUDGETS.scenesPerProject + 1 }, (_, i) => gScene(`s${i}`, [gEl("h1", "headline")]));
+  const errors = mustReject(validateGraphicsDoc(gDoc(scenes)), "25 scenes");
+  ok(errors.some((e) => e.includes("scenesPerProject wall")), "the error names the wall");
+});
+
+await test("G1.1 the sceneDurationMsMax wall rejects with its name", () => {
+  const errors = mustReject(
+    validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: GRAPHICS_BUDGETS.sceneDurationMsMax + 1000 })])),
+    "121s scene",
+  );
+  ok(errors.some((e) => e.includes("sceneDurationMsMax wall")), "the error names the wall");
+});
+
+await test("G1.1 the projectExplicitDurationMsMax wall rejects with its name", () => {
+  const scenes = Array.from({ length: 8 }, (_, i) =>
+    gScene(`s${i}`, [gEl("h1", "headline")], { durationMs: GRAPHICS_BUDGETS.sceneDurationMsMax }));
+  const errors = mustReject(validateGraphicsDoc(gDoc(scenes)), "8×120s = 960s > 900s");
+  ok(errors.some((e) => e.includes("projectExplicitDurationMsMax wall")), "the error names the wall");
+});
+
+await test("G1.1 the barDataMax wall rejects with its name", () => {
+  const rows = Array.from({ length: GRAPHICS_BUDGETS.barDataMax + 1 }, (_, i) => ({ label: `r${i}`, value: i }));
+  const errors = mustReject(validateGraphicsDoc(gDoc([gScene("s1", [gEl("br", "bar", { bar: { data: rows } })])])), "9 bar rows");
+  ok(errors.some((e) => e.includes("barDataMax wall")), "the error names the wall");
+});
+
+await test("G1.1 the iconPathCommandBudget wall rejects with its name; junk paths refuse", () => {
+  const big = `M0 0${" L1 1".repeat(512)}`;
+  const errors = mustReject(validateGraphicsDoc(gDoc([gScene("s1", [gEl("ic", "icon", { icon: { paths: [big] } })])])), "513 commands");
+  ok(errors.some((e) => e.includes("iconPathCommandBudget wall")), "the error names the wall");
+  const junk = validateGraphicsDoc(gDoc([gScene("s1", [gEl("ic2", "icon", { icon: { paths: ["!!!"] } })])]));
+  mustReject(junk, "a non-path");
+  ok(junk.errors.some((e) => e.includes("does not parse")), "countPathCommands is the unit of account");
+});
+
+await test("G1.1 the groupDepthMax wall rejects with its name", () => {
+  const errors = mustReject(validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("h1", "headline"),
+    gEl("g2", "group", { group: { children: ["h1"] } }),
+    gEl("g1", "group", { group: { children: ["g2"] } }),
+  ])])), "nested groups");
+  ok(errors.some((e) => e.includes("groupDepthMax wall")), "the error names the wall");
+});
+
+// ── S128 — the char walls (the PR #24 review's F1/F2): the grammar's
+// structural walls never bounded the CHAR content of the strings riding
+// inside it. Required content refuses (never silently truncated); the
+// OPTIONAL decorations (units) warning-drop (the tolerance law).
+
+await test("S128 the textCharsMax wall — a megabyte headline refuses with its name; the boundary parses", () => {
+  const big = "A".repeat(GRAPHICS_BUDGETS.textCharsMax + 1);
+  const errors = mustReject(
+    validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { text: { text: big } })])])),
+    "2001-char headline",
+  );
+  ok(errors.some((e) => e.includes("textCharsMax wall")), "the error names the wall");
+  ok(errors.some((e) => e.includes(`${GRAPHICS_BUDGETS.textCharsMax + 1} chars`)), "the error counts the chars");
+  const at = mustValidate(
+    gDoc([gScene("s1", [gEl("h1", "headline", { text: { text: "A".repeat(GRAPHICS_BUDGETS.textCharsMax) } })])]),
+    "exactly at the wall",
+  );
+  eq(at.scenes[0]?.elements[0]?.text?.text.length, GRAPHICS_BUDGETS.textCharsMax, "the boundary string rides");
+});
+
+await test("S128 the textCharsMax wall — callout text and bar labels refuse too", () => {
+  const big = "B".repeat(GRAPHICS_BUDGETS.textCharsMax + 1);
+  const callout = mustReject(
+    validateGraphicsDoc(gDoc([gScene("s1", [gEl("co", "callout", { callout: { text: big } })])])),
+    "callout text",
+  );
+  ok(callout.some((e) => e.includes("textCharsMax wall")), "the callout error names the wall");
+  const rows = [{ label: big, value: 1 }];
+  const bar = mustReject(
+    validateGraphicsDoc(gDoc([gScene("s1", [gEl("br", "bar", { bar: { data: rows } })])])),
+    "bar label",
+  );
+  ok(bar.some((e) => e.includes("textCharsMax wall")), "the bar-label error names the wall");
+});
+
+await test("S128 the textCharsMax wall — narration and the doc title refuse", () => {
+  const big = "N".repeat(GRAPHICS_BUDGETS.textCharsMax + 1);
+  const narration = mustReject(
+    validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { narration: big })])),
+    "narration",
+  );
+  ok(narration.some((e) => e.includes("textCharsMax wall")), "the narration error names the wall");
+  const title = mustReject(validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")])], { title: big })), "title");
+  ok(title.some((e) => e.includes("textCharsMax wall")), "the title error names the wall");
+});
+
+await test("S128 the textCharsMax wall — OPTIONAL units warning-drop, never refuse (the tolerance law)", () => {
+  const bigUnit = "u".repeat(GRAPHICS_BUDGETS.textCharsMax + 1);
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("cn", "counter", { counter: { from: 0, to: 100, unit: bigUnit, decimals: 0 } }),
+    gEl("br", "bar", { bar: { data: [{ label: "a", value: 1 }], unit: bigUnit } }),
+  ])]));
+  if (r.doc === null) throw new Error(`units must NOT refuse — errors: ${r.errors.join(" | ")}`);
+  const cn = r.doc.scenes[0]?.elements[0]?.counter;
+  const br = r.doc.scenes[0]?.elements[1]?.bar;
+  eq(cn?.unit, undefined, "the counter unit dropped");
+  eq(br?.unit, undefined, "the bar unit dropped");
+  ok(r.warnings.some((w) => w.includes("unit dropped") && w.includes("textCharsMax wall")), "the warnings name the wall");
+});
+
+await test("S128 the iconPathCharsMax wall — one command with a huge literal refuses (the F2 hole)", () => {
+  // The iconPathCommandBudget counts COMMANDS: a single M with one
+  // megabyte coordinate literal is ONE command — the old walls rode under
+  // it. The char wall closes the hole.
+  const hugeLiteral = `M0 0 L${"9".repeat(GRAPHICS_BUDGETS.iconPathCharsMax)}`;
+  const errors = mustReject(
+    validateGraphicsDoc(gDoc([gScene("s1", [gEl("ic", "icon", { icon: { paths: [hugeLiteral] } })])])),
+    "one command, 4100-char literal",
+  );
+  ok(errors.some((e) => e.includes("iconPathCharsMax wall")), "the error names the wall");
+  // A legal path just under the char wall (and under the command budget) rides.
+  const long = `M0 0 ${"L1 1 ".repeat(200)}`.trim();
+  if (long.length > GRAPHICS_BUDGETS.iconPathCharsMax) throw new Error("fixture drifted over the wall");
+  mustValidate(gDoc([gScene("s1", [gEl("ic2", "icon", { icon: { paths: [long] } })])]), "long-but-legal path");
+});
+
+await test("G1.1 the compatibility table rejects cross-kind motions by name", () => {
+  const r1 = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { enter: { kind: "count", durationMs: 500, delayMs: 0, ease: "linear" } })])]));
+  const e1 = mustReject(r1, "count on a headline");
+  ok(e1.some((e) => e.includes('not legal on a "headline"')), "a count on a headline is a doc bug, not a renderer branch");
+  const r2 = validateGraphicsDoc(gDoc([gScene("s1", [gEl("sh", "subhead", { enter: { kind: "draw", durationMs: 500, delayMs: 0, ease: "linear" } })])]));
+  mustReject(r2, "draw on a subhead");
+  const clean = mustValidate(gDoc([gScene("s1", [
+    gEl("br", "bar", { enter: { kind: "wipe", durationMs: 500, delayMs: 0, ease: "ease-out" } }),
+    gEl("bc", "barChart", { enter: { kind: "grow", durationMs: 500, delayMs: 0, ease: "ease-out" } }),
+    gEl("ic", "icon", { enter: { kind: "draw", durationMs: 500, delayMs: 0, ease: "linear" } }),
+    gEl("cn", "counter", { enter: { kind: "count", durationMs: 500, delayMs: 0, ease: "linear" } }),
+    gEl("grp", "group", { group: { children: ["cn"] } }),
+  ])]), "the legal combos");
+  eq(clean.scenes[0]?.elements.length, 5, "legal combos all keep");
+});
+
+await test("G1.1 enter is required — an element that cannot enter has no reason to exist", () => {
+  const el = gEl("h1", "headline");
+  delete el.enter;
+  const errors = mustReject(validateGraphicsDoc(gDoc([gScene("s1", [el])])), "missing enter");
+  ok(errors.some((e) => e.includes("enter is required")), "the error names the enter slot");
+});
+
+await test("G1.1 unknown element kinds drop with warnings (the closed v1 set)", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline"), gEl("m1", "marquee")])]), "mixed known/unknown kinds");
+  eq(doc.scenes[0]?.elements.length, 1, "the unknown kind dropped, the known kind kept");
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("m1", "marquee")])]));
+  ok(r.warnings.some((w) => w.includes("unknown element kind")), "the warning explains the drop");
+});
+
+await test("G1.1 unknown fields drop with warnings at every level", () => {
+  const r = validateGraphicsDoc(gDoc(
+    [gScene("s1", [gEl("h1", "headline", { color2: "#ff0000" })], { board: "clean" })],
+    { futureDocField: true },
+  ));
+  ok(r.doc !== null, "unknown fields — the doc still parses: " + r.errors.join(" | "));
+  ok(r.warnings.some((w) => w.includes('unknown field "color2"')), "element level");
+  ok(r.warnings.some((w) => w.includes('unknown field "board"')), "scene level");
+  ok(r.warnings.some((w) => w.includes('unknown field "futureDocField"')), "doc level");
+});
+
+await test("G1.1 junk optional fields drop honestly; ranges clamp with warnings", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", { text: { text: "T", sizePx: "x", weight: 5000, align: "middle" }, opacity: 2 }),
+  ])]), "junk optionals");
+  eq(doc.scenes[0]?.elements[0]?.text?.sizePx, undefined, "junk sizePx dropped — absent stays absent");
+  eq(doc.scenes[0]?.elements[0]?.text?.weight, 900, "weight 5000 clamps to 900");
+  eq(doc.scenes[0]?.elements[0]?.opacity, 1, "opacity 2 clamps to 1");
+  ok(doc.scenes[0]?.elements[0]?.text?.align === undefined, "junk align dropped");
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("h1", "headline", { text: { text: "T", weight: 5000 } }),
+  ])]));
+  ok(r.warnings.some((w) => w.includes("clamped")), "the clamp says so");
+});
+
+await test("G1.1 an absent payload for a kind that has one warns but never refuses", () => {
+  const el = gEl("h1", "headline");
+  delete el.text;
+  const doc = mustValidate(gDoc([gScene("s1", [el])]), "payloadless headline");
+  ok(doc.scenes[0]?.elements[0]?.text === undefined, "the payload stays absent");
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [el])]));
+  ok(r.warnings.some((w) => w.includes("payload is absent")), "the composer-fallback note");
+});
+
+await test("G1.1 a payload parked under the wrong kind is ignored with a warning", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("br", "bar", { text: { text: "stray" } })])]), "stray payload");
+  ok(doc.scenes[0]?.elements[0]?.text === undefined && doc.scenes[0]?.elements[0]?.bar !== undefined, "the stray payload is not on the doc");
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("br", "bar", { text: { text: "stray" } })])]));
+  ok(r.warnings.some((w) => w.includes('a "text" payload on a "bar" is ignored')), "payload-per-kind enforced on read");
+});
+
+await test("G1.1 the counter shape: from < to, finite, decimals 0|1|2", () => {
+  const r1 = validateGraphicsDoc(gDoc([gScene("s1", [gEl("cn", "counter", { counter: { from: 100, to: 0 } })])]));
+  const e1 = mustReject(r1, "from ≥ to");
+  ok(e1.some((e) => e.includes("count-up law")), "the v1 count-up law names itself");
+  const r2 = validateGraphicsDoc(gDoc([gScene("s1", [gEl("cn", "counter", { counter: { from: "x", to: 10 } })])]));
+  mustReject(r2, "junk from");
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("cn", "counter", { counter: { from: 0, to: 10, decimals: 3 } })])]), "junk decimals");
+  ok(doc.scenes[0]?.elements[0]?.counter?.decimals === undefined, "decimals 3 dropped");
+});
+
+await test("G1.1 the bar shape: 1..barDataMax rows, label + finite value ≥ 0", () => {
+  const empty = validateGraphicsDoc(gDoc([gScene("s1", [gEl("br", "bar", { bar: { data: [] } })])]));
+  const e1 = mustReject(empty, "empty data");
+  ok(e1.some((e) => e.includes("1..8")), "the row band names itself");
+  const junk = validateGraphicsDoc(gDoc([gScene("s1", [gEl("br", "bar", { bar: { data: [{ label: "a", value: "x" }] } })])]));
+  mustReject(junk, "junk row");
+  const neg = validateGraphicsDoc(gDoc([gScene("s1", [gEl("br", "bar", { bar: { data: [{ label: "a", value: -1 }] } })])]));
+  mustReject(neg, "negative value");
+});
+
+await test("G1.1 group integrity: missing child and self-reference reject; dupes dedupe with a warning", () => {
+  const missing = validateGraphicsDoc(gDoc([gScene("s1", [gEl("grp", "group", { group: { children: ["ghost"] } })])]));
+  mustReject(missing, "missing child");
+  const self = validateGraphicsDoc(gDoc([gScene("s1", [gEl("grp", "group", { group: { children: ["grp"] } })])]));
+  mustReject(self, "self-reference");
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline"),
+    gEl("grp", "group", { group: { children: ["h1", "h1"] } }),
+  ])]), "dupe children");
+  eq(doc.scenes[0]?.elements[1]?.group?.children.length, 1, "deduplicated");
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("h1", "headline"),
+    gEl("grp", "group", { group: { children: ["h1", "h1"] } }),
+  ])]));
+  ok(r.warnings.some((w) => w.includes("deduplicated")), "the dedupe warns");
+});
+
+await test("G1.1 time sanity: negative delay, zero clock, spans past the scene clock", () => {
+  const neg = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { enter: { kind: "fade", durationMs: 500, delayMs: -1, ease: "linear" } })])]));
+  const e1 = mustReject(neg, "negative delay");
+  ok(e1.some((e) => e.includes("delayMs")), "the error names delayMs");
+  const zeroScene = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 0 })]));
+  mustReject(zeroScene, "zero scene clock");
+  const past = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { enter: { kind: "fade", durationMs: 500, delayMs: 5000, ease: "linear" } })])]));
+  const e3 = mustReject(past, "span past the clock");
+  ok(e3.some((e) => e.includes("past the scene clock")), "the span check names the clock");
+});
+
+await test("G1.1 the estimated clock (absent durationMs) uses the house 2.6-wps model", () => {
+  const words40 = Array.from({ length: 40 }, () => "word").join(" "); // ≈ 15385ms
+  const fits = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", { enter: { kind: "fade", durationMs: 300, delayMs: 15000, ease: "linear" } }),
+  ], { narration: words40 })]), "15300ms fits the 40-word estimate");
+  eq(fits.scenes[0]?.elements.length, 1, "parses on the estimate");
+  const explicitShort = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("h1", "headline", { enter: { kind: "fade", durationMs: 300, delayMs: 15000, ease: "linear" } }),
+  ], { narration: words40, durationMs: 5000 })]));
+  const e2 = mustReject(explicitShort, "the explicit clock overrides the estimate");
+  ok(e2.some((e) => e.includes("past the scene clock")), "15300ms > 5000ms — rejected");
+});
+
+await test("G1.1 fps ∈ {24, 30}; the surface must be a house size", () => {
+  const fps60 = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")])], { fps: 60 }));
+  mustReject(fps60, "fps 60");
+  const oddSize = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")])], { width: 1280, height: 720 }));
+  const e2 = mustReject(oddSize, "1280×720");
+  ok(e2.some((e) => e.includes("house surface")), "the surface check names the house sizes");
+  for (const [w, h] of [[1920, 1080], [1080, 1920], [1080, 1080]]) {
+    mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")])], { width: w, height: h }), `${w}×${h} loads`);
+  }
+});
+
+await test("G1.1 a junk background refuses (never substituted); junk palette fields drop", () => {
+  const bg = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { background: "white" })]));
+  const e1 = mustReject(bg, "junk background");
+  ok(e1.some((e) => e.includes("background")), "the scene canvas is a designed choice");
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", { text: { text: "T", color: "#zzzzzz" } }),
+  ])]), "junk optional color");
+  ok(doc.scenes[0]?.elements[0]?.text?.color === undefined, "the dropped color is absent");
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("h1", "headline", { text: { text: "T", color: "#zzzzzz" } }),
+  ])]));
+  ok(r.warnings.some((w) => w.includes("not #rrggbb")), "the drop warns");
+});
+
+await test("G1.1 duplicate element ids reject (the group seam); duplicate scene ids reject (S87 tracks)", () => {
+  const dupEl = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline"), gEl("h1", "bullet")])]));
+  const e1 = mustReject(dupEl, "duplicate element id");
+  ok(e1.some((e) => e.includes("duplicate element id")), "named");
+  const dupScene = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")]), gScene("s1", [gEl("h2", "bullet")])]));
+  mustReject(dupScene, "duplicate scene id");
+});
+
+await test("G1.1 one wall, two engines — GRAPHICS_FRAME_BUDGET is ANIM_FRAME_BUDGET", () => {
+  eq(GRAPHICS_FRAME_BUDGET, ANIM_FRAME_BUDGET, "re-exported, not re-declared");
+  eq(GRAPHICS_FRAME_BUDGET, 25_920, "25,920 frames");
+});
+
+await test("G1.1 the compatibility table is compile-total and closed", () => {
+  eq(Object.keys(MOTION_KINDS_BY_ELEMENT).length, 11, "every element kind has a row");
+  for (const m of Object.values(MOTION_KINDS_BY_ELEMENT).flat()) {
+    ok(["fade", "rise", "slide", "pop", "wipe", "count", "grow", "draw"].includes(m), `motion "${m}" is in the closed set`);
+  }
+  eq(MOTION_KINDS_BY_ELEMENT.headline.includes("count"), false, "no count on text kinds");
+});
+
+await test("G1.1 parseGraphicsDoc nulls on junk JSON and non-objects", () => {
+  eq(parseGraphicsDoc("{not json"), null, "syntax junk");
+  eq(parseGraphicsDoc("42"), null, "not an object");
+  eq(parseGraphicsDoc("[]"), null, "an array is not a doc");
+  eq(parseGraphicsDoc(null), null, "null in → null out");
+  eq(parseGraphicsDoc(undefined), null, "absent → null");
+});
+
+// ---------------------------------------------------------------------------
+// S129 (PAE-1) — the element tween directive: keyframed per-channel motion
+// on the scene clock, evaluated through the shared Stage-S substrate.
+// Pins: validator class split (junk warn-drops, time-sanity + compat-table
+// refusals), the named walls (tweensPerElementMax / tweenKeysPerChannelMax),
+// value-domain bounds, the byte-stable round-trip, the frame fold (additive
+// channels sum, multiplicative channels multiply, rotation unlocked,
+// emphasis STILL shapes the final state — the G1.2 pin in its tween form),
+// multi-tween phases, pre/post-window holds, tween-less byte-identity.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S129 (PAE-1) the tween directive");
+
+function twChannel(channel: string, keys: Array<Record<string, unknown>>): Record<string, unknown> {
+  return { channel, keys };
+}
+
+const TW_KEYS_LINEAR = [
+  { tMs: 0, value: -120 },
+  { tMs: 500, value: 0 },
+];
+
+await test("S129 a tweened doc round-trips byte-identical (strict write, declared order)", () => {
+  const raw = gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" },
+      tweens: [
+        { delayMs: 500, durationMs: 500, channels: [twChannel("dx", TW_KEYS_LINEAR)] },
+        {
+          delayMs: 1200, durationMs: 600,
+          channels: [
+            twChannel("rotateDeg", [{ tMs: 0, value: 0 }, { tMs: 300, value: 45, ease: "ease-out" }, { tMs: 600, value: 90 }]),
+            twChannel("scale", [{ tMs: 0, value: 1 }, { tMs: 600, value: 1.2 }]),
+          ],
+        },
+      ],
+    }),
+  ], { durationMs: 3000 })]);
+  const doc = mustValidate(raw, "the tweened doc");
+  eq(doc.scenes[0]?.elements[0]?.tweens?.length, 2, "both directives kept");
+  eq(doc.scenes[0]?.elements[0]?.tweens?.[1]?.channels.length, 2, "both channel tracks kept");
+  const json1 = writeGraphicsDoc(doc);
+  const doc2 = mustParse(json1, "the written tweened doc");
+  eq(writeGraphicsDoc(doc2), json1, "write→parse→write is byte-identical");
+});
+
+await test("S129 the tweensPerElementMax wall — excess directives warn-drop with the wall name", () => {
+  const tweens = [0, 1, 2, 3, 4].map((i) => ({
+    delayMs: 0, durationMs: 100, channels: [twChannel("dx", [{ tMs: 0, value: i === 0 ? -1 : 1 }, { tMs: 100, value: 0 }])],
+  }));
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { tweens })], { durationMs: 3000 })]));
+  ok(r.doc !== null, "the doc survives (decorations warn-drop, the tolerance law)");
+  ok(r.warnings.some((w) => w.includes("tweensPerElementMax wall (4)")), `the wall name is cited: ${r.warnings.join(" | ")}`);
+  eq(r.doc?.scenes[0]?.elements[0]?.tweens?.length, 4, "the first four kept");
+});
+
+await test("S129 the tweenKeysPerChannelMax wall — excess keys warn-drop with the wall name", () => {
+  const keys = Array.from({ length: 17 }, (_, i) => ({ tMs: i * 10, value: 0 }));
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("h1", "headline", { tweens: [{ delayMs: 0, durationMs: 500, channels: [twChannel("dy", keys)] }] }),
+  ], { durationMs: 3000 })]));
+  ok(r.doc !== null, "the doc survives");
+  ok(r.warnings.some((w) => w.includes("tweenKeysPerChannelMax wall (16)")), `the wall name is cited: ${r.warnings.join(" | ")}`);
+  eq(r.doc?.scenes[0]?.elements[0]?.tweens?.[0]?.channels[0]?.keys.length, 16, "the first sixteen keys kept");
+});
+
+await test("S129 tween time-sanity — a window past the scene clock REFUSES (the motions-loop law)", () => {
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      tweens: [{ delayMs: 2500, durationMs: 600, channels: [twChannel("dx", TW_KEYS_LINEAR)] }],
+    }),
+  ], { durationMs: 3000 })]));
+  const errors = mustReject(r, "the past-the-clock tween");
+  ok(errors.some((e) => e.includes("the tween window ends at 3100ms, past the scene clock (3000ms)")), errors.join(" | "));
+});
+
+await test("S129 a progress tween on a non-reveal kind REFUSES; on a bar it parses (the compat-table law)", () => {
+  const progressTween = { delayMs: 0, durationMs: 500, channels: [twChannel("progress", [{ tMs: 0, value: 1 }, { tMs: 500, value: 0.5 }])] };
+  const bad = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { tweens: [progressTween] })], { durationMs: 3000 })]));
+  const badErrors = mustReject(bad, "progress on a headline");
+  ok(badErrors.some((e) => e.includes("the progress tween is not legal on a \"headline\"") && e.includes("progress drives only the reveal kinds")), badErrors.join(" | "));
+  const good = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("br", "bar", { enter: { kind: "wipe", durationMs: 500, delayMs: 0, ease: "linear" }, tweens: [progressTween] }),
+  ], { durationMs: 3000 })]));
+  ok(good.doc !== null && good.doc.scenes[0]?.elements[0]?.tweens?.length === 1, "progress parses on a bar");
+});
+
+await test("S129 junk tween tracks warn-drop with their reasons; the element still renders", () => {
+  // Split across two elements — the tweensPerElementMax wall (4) would
+  // slice a single element's list before the later junk cases parse.
+  const junkA = [
+    { delayMs: 0, durationMs: 500, channels: [twChannel("spin", TW_KEYS_LINEAR)] }, // unknown channel
+    { delayMs: 0, durationMs: 500, channels: [twChannel("dx", [])] }, // no keys
+    { delayMs: 0, durationMs: 500, channels: [twChannel("dx", [{ tMs: 300, value: 0 }, { tMs: 100, value: 1 }])] }, // not ascending
+    { delayMs: 0, durationMs: 500, channels: [twChannel("dx", [{ tMs: 0, value: 3000 }, { tMs: 500, value: 0 }])] }, // offset domain
+  ];
+  const junkB = [
+    { delayMs: 0, durationMs: 500, channels: [twChannel("rotateDeg", [{ tMs: 0, value: 0 }, { tMs: 500, value: 90, ease: "zigzag" }])] }, // junk ease
+    { delayMs: 0, durationMs: 500, channels: [twChannel("dy", [{ tMs: 0, value: 0 }, { tMs: 700, value: 1 }])] }, // key past the window
+    { delayMs: 0, durationMs: 500, channels: [twChannel("dx", TW_KEYS_LINEAR), twChannel("dx", TW_KEYS_LINEAR)] }, // duplicate channel
+  ];
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("a", "headline", { tweens: junkA }),
+    gEl("b", "subhead", { tweens: junkB }),
+  ], { durationMs: 3000 })]));
+  ok(r.doc !== null, "the doc survives every junk track");
+  ok(r.warnings.some((w) => w.includes("not in the closed tween set")), "unknown channel cited");
+  ok(r.warnings.some((w) => w.includes("carries no keys")), "empty track cited");
+  ok(r.warnings.some((w) => w.includes("keys must strictly ascend")), "non-ascending cited");
+  ok(r.warnings.some((w) => w.includes("leaves the dx domain")), "value bound cited");
+  ok(r.warnings.some((w) => w.includes("not a Stage-S curve")), "junk ease cited");
+  ok(r.warnings.some((w) => w.includes("sits past the tween window (500ms)")), "key-past-window cited");
+  ok(r.warnings.some((w) => w.includes("duplicate dx track dropped")), "duplicate cited");
+  ok(r.doc?.scenes[0]?.elements[0]?.tweens === undefined, "element a's all-junk tweens parse to absent");
+  eq(r.doc?.scenes[0]?.elements[1]?.tweens?.length, 1, "element b keeps the tween whose duplicate track left one legal channel");
+  eq(r.doc?.scenes[0]?.elements[1]?.tweens?.[0]?.channels[0]?.channel, "dx", "the surviving track is the first dx");
+});
+
+await test("S129 unknown keys inside tween objects warn-drop (the id law rides every level)", () => {
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      tweens: [{ delayMs: 0, durationMs: 500, channels: [twChannel("dx", TW_KEYS_LINEAR)], secret: 1 }],
+    }),
+  ], { durationMs: 3000 })]));
+  ok(r.doc !== null, "the doc survives");
+  ok(r.warnings.some((w) => w.includes("secret")), `the unknown key is named: ${r.warnings.join(" | ")}`);
+});
+
+await test("S129 the fold — additive dx holds pre/post-window and glides linearly in between", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 100, delayMs: 0, ease: "linear" },
+      tweens: [{ delayMs: 500, durationMs: 500, channels: [twChannel("dx", TW_KEYS_LINEAR)] }],
+    }),
+  ], { durationMs: 3000 })]));
+  eq(g2ElById(frameAt(doc, 0), "h1").x, 0, "pre-window: the first key's offset holds (120 − 120)");
+  eq(g2ElById(frameAt(doc, 499), "h1").x, 0, "just before the window: still the hold");
+  eq(g2ElById(frameAt(doc, 750), "h1").x, 60, "mid-window: −120 + 120 × 0.5");
+  eq(g2ElById(frameAt(doc, 2500), "h1").x, 120, "post-window: the last key's value holds (the placement)");
+});
+
+await test("S129 the fold — rotateDeg unlocks rotation; the eased segment follows the destination key", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      at: { x: 120, y: 96, scale: 1, rotateDeg: 10 },
+      enter: { kind: "fade", durationMs: 100, delayMs: 0, ease: "linear" },
+      tweens: [{ delayMs: 0, durationMs: 400, channels: [twChannel("rotateDeg", [{ tMs: 0, value: 0 }, { tMs: 200, value: 90, ease: "ease-out" }, { tMs: 400, value: 0, ease: "linear" }])] }],
+    }),
+  ], { durationMs: 3000 })]));
+  const at100 = g2ElById(frameAt(doc, 100), "h1");
+  ok(Math.abs(at100.rotateDeg - (10 + 90 * (1 - Math.pow(1 - 0.5, 3)))) < 1e-9,
+    `the ease-out segment at u=0.5: ${at100.rotateDeg} ≈ 10 + 90 × 0.875`);
+  eq(g2ElById(frameAt(doc, 300), "h1").rotateDeg, 10 + 45, "the linear segment mid-way");
+  eq(g2ElById(frameAt(doc, 2000), "h1").rotateDeg, 10, "post-window hold returns to the placement rotation");
+});
+
+await test("S129 the fold — multiplicative channels compose with enter (progress × reveal, opacity × fade)", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("br", "bar", {
+      enter: { kind: "wipe", durationMs: 500, delayMs: 0, ease: "linear" },
+      opacity: 0.8,
+      tweens: [{ delayMs: 0, durationMs: 500, channels: [
+        twChannel("progress", [{ tMs: 0, value: 1 }, { tMs: 500, value: 0.5 }]),
+        twChannel("opacity", [{ tMs: 0, value: 0.5 }, { tMs: 500, value: 1 }]),
+      ] }],
+    }),
+  ], { durationMs: 3000 })]));
+  const f = g2ElById(frameAt(doc, 250), "br");
+  eq(f.progress, 0.375, "wipe assigns 0.5, the tween factor multiplies ×0.75");
+  ok(Math.abs(f.opacity - 0.8 * 0.75) < 1e-9, `base 0.8 × tween factor 0.75 (wipe never drives opacity): ${f.opacity}`);
+});
+
+await test("S129 composition order — emphasis STILL shapes the final state over tweens (the G1.2 pin, tween form)", () => {
+  const mk = (withEmphasis: boolean) => mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 100, delayMs: 0, ease: "linear" },
+      tweens: [{ delayMs: 0, durationMs: 1000, channels: [twChannel("scale", [{ tMs: 0, value: 1 }, { tMs: 1000, value: 2 }])] }],
+      ...(withEmphasis ? { emphasis: { kind: "pop", durationMs: 400, delayMs: 1000, ease: "linear" } } : {}),
+    }),
+  ], { durationMs: 3000 })]));
+  const withEmph = g2ElById(frameAt(mk(true), 1200), "h1").scale; // emphasis midpoint (env = 1)
+  const without = g2ElById(frameAt(mk(false), 1200), "h1").scale;
+  eq(without, 2, "tween holds its last key past the window");
+  ok(Math.abs(withEmph - 2 * (1 + GRAPHICS_MOTION_SEMANTICS.emphasisPopScale)) < 1e-9,
+    `emphasis pulses the tween state: ${withEmph} ≈ 2 × ${1 + GRAPHICS_MOTION_SEMANTICS.emphasisPopScale}`);
+});
+
+await test("S129 multi-tween phases fold in array order — move left, then right", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 100, delayMs: 0, ease: "linear" },
+      tweens: [
+        { delayMs: 0, durationMs: 500, channels: [twChannel("dx", [{ tMs: 0, value: -100 }, { tMs: 500, value: 0 }])] },
+        { delayMs: 500, durationMs: 500, channels: [twChannel("dx", [{ tMs: 0, value: 0 }, { tMs: 500, value: 100 }])] },
+      ],
+    }),
+  ], { durationMs: 3000 })]));
+  eq(g2ElById(frameAt(doc, 250), "h1").x, 120 - 50, "phase 1 mid-glide; phase 2 holds its first key");
+  eq(g2ElById(frameAt(doc, 750), "h1").x, 120 + 50, "phase 1 holds its last key; phase 2 mid-glide");
+  eq(g2ElById(frameAt(doc, 2000), "h1").x, 120 + 100, "both phases hold their ends");
+});
+
+await test("S129 tween-less byte-identity — an element's frames are untouched by OTHER elements' tweens", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("a", "headline"),
+    gEl("b", "subhead", {
+      enter: { kind: "fade", durationMs: 100, delayMs: 0, ease: "linear" },
+      tweens: [{ delayMs: 0, durationMs: 1000, channels: [twChannel("scale", [{ tMs: 0, value: 1 }, { tMs: 1000, value: 3 }])] }],
+    }),
+  ], { durationMs: 3000 })]));
+  const plain = mustValidate(gDoc([gScene("s1", [gEl("a", "headline"), gEl("b", "subhead")], { durationMs: 3000 })]), "plain doc");
+  eq(g2ElById(frameAt(doc, 500), "a").x, g2ElById(frameAt(plain, 500), "a").x, "element a identical with and without b's tween");
+  eq(JSON.stringify(frameAt(doc, 500).elements.find((e) => e.id === "a")), JSON.stringify(frameAt(plain, 500).elements.find((e) => e.id === "a")), "a's full frame state identical");
+});
+
+await test("S129 the tween fold is deterministic — the tweened sweep is byte-identical across two passes", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "rise", durationMs: 400, delayMs: 0, ease: "ease-out" },
+      exit: { kind: "fade", durationMs: 400, delayMs: 2200, ease: "linear" },
+      tweens: [
+        { delayMs: 400, durationMs: 800, channels: [
+          twChannel("dx", [{ tMs: 0, value: 0 }, { tMs: 400, value: 200, ease: "ease-in-out" }, { tMs: 800, value: 0 }]),
+          twChannel("rotateDeg", [{ tMs: 0, value: 0 }, { tMs: 800, value: 360 }]),
+        ] },
+      ],
+    }),
+  ], { durationMs: 3000 })]));
+  const a = g2Sweep(doc, 50, 3000);
+  const b = g2Sweep(doc, 50, 3000);
+  eq(a.length, b.length, "same frame count");
+  ok(a.every((f, i) => f === b[i]), "every frame byte-identical across passes");
+});
+
+// ---------------------------------------------------------------------------
+// S130 (PAE-2) — the scene camera directive: the ONE world→screen function
+// for the 2D adapter, on the scene-local clock, through the existing
+// applier. Pins: validator class split, the cameraKeysMax wall, the zoom
+// domain [1, 4] (the world→screen law — no void), the pan domain vs the
+// board, time-sanity refusal, cameraAt clamp/ease math, frame-state
+// presence only when directed, composer wrapper presence/absence
+// (byte-identity), payload serialization, applier transform pin, sweep
+// determinism.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S130 (PAE-2) the scene camera");
+
+function gCamKey(tMs: number, zoom: number, tx: number, ty: number, ease?: string): Record<string, unknown> {
+  return ease !== undefined ? { tMs, zoom, tx, ty, ease } : { tMs, zoom, tx, ty };
+}
+
+await test("S130 a camera'd doc round-trips byte-identical (strict write, declared order)", () => {
+  const raw = gDoc([gScene("s1", [gEl("h1", "headline")], {
+    durationMs: 3000,
+    camera: [gCamKey(0, 1, 0, 0), gCamKey(1000, 2, 100, -50, "ease-in-out"), gCamKey(2000, 1.5, 0, 0)],
+  })]);
+  const doc = mustValidate(raw, "the camera'd doc");
+  eq(doc.scenes[0]?.camera?.length, 3, "all three keys kept");
+  eq(doc.scenes[0]?.camera?.[1]?.ease, "ease-in-out", "the destination key's ease kept");
+  const json1 = writeGraphicsDoc(doc);
+  const doc2 = mustParse(json1, "the written camera'd doc");
+  eq(writeGraphicsDoc(doc2), json1, "write→parse→write is byte-identical");
+});
+
+await test("S130 the cameraKeysMax wall — excess keys warn-drop with the wall name", () => {
+  const keys = Array.from({ length: 17 }, (_, i) => gCamKey(i * 10, 1, 0, 0));
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 3000, camera: keys })]));
+  ok(r.doc !== null, "the doc survives");
+  ok(r.warnings.some((w) => w.includes("cameraKeysMax wall (16)")), `the wall name is cited: ${r.warnings.join(" | ")}`);
+  eq(r.doc?.scenes[0]?.camera?.length, 16, "the first sixteen keys kept");
+});
+
+await test("S130 junk camera keys warn-drop with their reasons; an all-junk camera parses to absent", () => {
+  // Distinct ascending tMs per key — the ascend check fires before the
+  // domain checks, so each reason needs its own slot on the clock.
+  const camera = [
+    gCamKey(100, 0.5, 0, 0), // zoom < 1 — the void
+    gCamKey(200, 9, 0, 0), // zoom > 4
+    gCamKey(300, 1, 3000, 0), // pan leaves the board
+    gCamKey(400, 1, 0, 2000), // pan leaves the board
+    gCamKey(500, 1, 0, 0, "zigzag"), // junk ease
+    gCamKey(600, 1, 0, 0), // kept — the ascend baseline
+    gCamKey(600, 1, 0, 0), // non-ascending (600 ≤ 600)
+    { tMs: 800 }, // missing fields — non-finite
+    "not-an-object", // junk shape
+  ];
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 3000, camera })]));
+  ok(r.doc !== null, "the doc survives every junk key");
+  ok(r.warnings.some((w) => w.includes("zoom 0.5 leaves the [1, 4] domain")), "low zoom cited");
+  ok(r.warnings.some((w) => w.includes("zoom 9 leaves the [1, 4] domain")), "high zoom cited");
+  ok(r.warnings.some((w) => w.includes("pan (3000, 0) leaves the ±1920/±1080 board domain")), "x pan cited");
+  ok(r.warnings.some((w) => w.includes("pan (0, 2000) leaves the ±1920/±1080 board domain")), "y pan cited");
+  ok(r.warnings.some((w) => w.includes("is not a Stage-S curve")), "junk ease cited");
+  ok(r.warnings.some((w) => w.includes("strictly ascend")), "non-ascending cited");
+  ok(r.warnings.some((w) => w.includes("a field is non-finite")), "missing fields cited");
+  eq(r.doc?.scenes[0]?.camera?.length, 1, "exactly the ascend baseline key survives");
+  eq(r.doc?.scenes[0]?.camera?.[0]?.zoom, 1, "the survivor is the legal baseline key");
+});
+
+await test("S130 camera time-sanity — a key past the scene clock REFUSES (the motions-loop law)", () => {
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], {
+    durationMs: 3000,
+    camera: [gCamKey(0, 1, 0, 0), gCamKey(3100, 2, 0, 0)],
+  })]));
+  const errors = mustReject(r, "the past-the-clock camera key");
+  ok(errors.some((e) => e.includes("a camera keyframe sits at 3100ms, past the scene clock (3000ms)")), errors.join(" | "));
+});
+
+await test("S130 cameraAt — clamped holds, linear glide, the destination key's ease", async () => {
+  const { cameraAt } = await import("../src/lib/tubeforge/graphics/camera");
+  const keys = [
+    { tMs: 0, zoom: 1, tx: 0, ty: 0 },
+    { tMs: 1000, zoom: 2, tx: 100, ty: -50, ease: "ease-out" as const },
+    { tMs: 2000, zoom: 1, tx: 0, ty: 0 },
+  ];
+  const pre = cameraAt(keys, -100);
+  ok(pre.zoom === 1 && pre.tx === 0 && pre.ty === 0, "pre-first-key holds");
+  const mid = cameraAt(keys, 500);
+  ok(Math.abs(mid.zoom - (1 + 0.875)) < 1e-9, `the ease-out segment: ${mid.zoom} ≈ 1.875`);
+  ok(Math.abs(mid.tx - 87.5) < 1e-9 && Math.abs(mid.ty - (-43.75)) < 1e-9, `the eased pan: ${mid.tx}, ${mid.ty}`);
+  const mid2 = cameraAt(keys, 1500);
+  ok(Math.abs(mid2.zoom - 1.5) < 1e-9 && mid2.tx === 50 && mid2.ty === -25, "the linear segment (no ease on the third key)");
+  const post = cameraAt(keys, 3000);
+  ok(post.zoom === 1 && post.tx === 0 && post.ty === 0, "post-last-key holds");
+  const detA = JSON.stringify(cameraAt(keys, 777));
+  const detB = JSON.stringify(cameraAt(keys, 777));
+  eq(detA, detB, "same input → byte-identical state");
+});
+
+await test("S130 frameAt carries the camera only when the scene directs it — camera-less frames unchanged", () => {
+  const camDoc = mustValidate(gDoc([
+    gScene("s1", [gEl("h1", "headline")], { durationMs: 2000, camera: [gCamKey(0, 1, 0, 0), gCamKey(1000, 2, 0, 0)] }),
+    gScene("s2", [gEl("b", "bullet")], { durationMs: 2000 }),
+  ]), "camera doc");
+  const inScene = frameAt(camDoc, 500);
+  ok(inScene.camera !== undefined && inScene.camera.zoom === 1.5, `scene 1 carries the camera: ${JSON.stringify(inScene.camera)}`);
+  const nextScene = frameAt(camDoc, 2500);
+  ok(nextScene.camera === undefined, "scene 2 (no camera) carries none");
+  const plain = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2000 })]), "plain doc");
+  ok(!graphicsFramePayload(frameAt(plain, 500)).includes("camera"), "a camera-less payload never carries the field (byte-identity)");
+});
+
+await test("S130 the composer wraps scene content in #gcam only when a camera exists (additive seam)", async () => {
+  const { composeGraphicsScene } = await import("../src/lib/tubeforge/graphics/compose");
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], {
+    durationMs: 2000,
+    camera: [gCamKey(0, 1, 0, 0), gCamKey(1000, 2, 100, 0)],
+  })]), "camera doc");
+  const withCam = composeGraphicsScene(doc.scenes[0], doc);
+  ok(withCam.html.includes('<g id="gcam">'), "the wrapper group is in the page");
+  const plain = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2000 })]), "plain doc");
+  const without = composeGraphicsScene(plain.scenes[0], plain);
+  ok(!without.html.includes('id="gcam"'), "no wrapper without a camera — the pre-S130 compose byte-identical");
+  ok(without.html.includes('id="ge-h1"'), "the element group is still emitted");
+});
+
+await test("S130 graphicsFramePayload serializes the camera state; the applier builds the board-center transform", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], {
+    durationMs: 2000,
+    camera: [gCamKey(0, 1, 0, 0), gCamKey(1000, 2, 100, -50)],
+  })]), "camera doc");
+  const payload = JSON.parse(graphicsFramePayload(frameAt(doc, 500))) as { camera?: { zoom: number; tx: number; ty: number } };
+  ok(payload.camera !== undefined && payload.camera.zoom === 1.5 && payload.camera.tx === 50 && payload.camera.ty === -25,
+    `the payload carries the world→screen inputs: ${JSON.stringify(payload.camera)}`);
+  // The applier is a JS string — pin its camera block: the transform is
+  // built from the board's own attributes about the center, one place.
+  ok(APPLY_GRAPHICS_FRAME_FN.includes("payload.camera"), "the applier reads the camera");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('document.getElementById("gcam")'), "the applier targets the wrapper group");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('board.getAttribute("width")'), "the applier reads board dims as attributes (never layout)");
+});
+
+await test("S130 the camera'd sweep is deterministic — byte-identical across two passes", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", { enter: { kind: "rise", durationMs: 400, delayMs: 0, ease: "ease-out" } }),
+    gEl("sh", "subhead", { enter: { kind: "fade", durationMs: 300, delayMs: 300, ease: "linear" } }),
+  ], { durationMs: 3000, camera: [gCamKey(0, 1.2, -40, 0), gCamKey(1200, 2.5, 0, -30, "ease-in-out"), gCamKey(2800, 1, 0, 0)] })]));
+  const a = g2Sweep(doc, 50, 3000);
+  const b = g2Sweep(doc, 50, 3000);
+  ok(a.every((f, i) => f === b[i]) && a.every((f) => f.includes("camera")), "every frame carries the camera and repeats byte-identically");
+});
+
+await test("S130 the tween + camera directives coexist on one scene (the PAE stack)", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 200, delayMs: 0, ease: "linear" },
+      tweens: [{ delayMs: 200, durationMs: 800, channels: [twChannel("rotateDeg", [{ tMs: 0, value: 0 }, { tMs: 800, value: 12 }])] }],
+    }),
+  ], { durationMs: 2000, camera: [gCamKey(0, 1, 0, 0), gCamKey(2000, 2, 0, 0)] })]));
+  const f = frameAt(doc, 600); // mid-window for BOTH directives
+  ok(f.camera !== undefined && f.camera.zoom === 1.3, `the camera rides: ${JSON.stringify(f.camera)}`);
+  const el = g2ElById(f, "h1");
+  eq(el.rotateDeg, 6, "the tween rides (12 × 0.5 mid-window)");
+});
+
+// ---------------------------------------------------------------------------
+// S131 (PAE-3) — the scene event channel: cue facts on the scene clock,
+// projected globally by graphicsEventList (cues are not clips — never a
+// track kind). Pins: validator class split, the eventsPerSceneMax wall,
+// the closed kind set, the eventLabelMax decoration drop, time-sanity
+// refusal, the global projection (frame accumulation + quantized tSec),
+// shape stability (no events → []), declared-order serialization.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S131 (PAE-3) the event channel");
+
+function gEvent(tMs: number, kind: string, label?: string): Record<string, unknown> {
+  return label !== undefined ? { tMs, kind, label } : { tMs, kind };
+}
+
+await test("S131 an evented doc round-trips byte-identical (events ride the PAE block, declared order)", () => {
+  const raw = gDoc([gScene("s1", [gEl("h1", "headline")], {
+    durationMs: 3000,
+    events: [gEvent(500, "hit", "boom"), gEvent(0, "sfx"), gEvent(2500, "cue", "hold")],
+    routing: { suggestedEngine: "graphics" },
+  })]);
+  const doc = mustValidate(raw, "the evented doc");
+  eq(doc.scenes[0]?.events?.length, 3, "all three cues kept");
+  const json1 = writeGraphicsDoc(doc);
+  const doc2 = mustParse(json1, "the written evented doc");
+  eq(writeGraphicsDoc(doc2), json1, "write→parse→write is byte-identical");
+  ok(json1.indexOf('"camera"') === -1 && json1.indexOf('"events"') > -1 && json1.indexOf('"events"') < json1.indexOf('"routing"'),
+    "events sit between the design fields and the advisory block in the written order");
+});
+
+await test("S131 the eventsPerSceneMax wall — excess cues warn-drop with the wall name", () => {
+  const events = Array.from({ length: 17 }, (_, i) => gEvent(i * 10, "hit"));
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 3000, events })]));
+  ok(r.doc !== null, "the doc survives");
+  ok(r.warnings.some((w) => w.includes("eventsPerSceneMax wall (16)")), `the wall name is cited: ${r.warnings.join(" | ")}`);
+  eq(r.doc?.scenes[0]?.events?.length, 16, "the first sixteen cues kept");
+});
+
+await test("S131 junk events warn-drop with their reasons; an all-junk array parses to absent", () => {
+  const events = [
+    gEvent(100, "explosion"), // not in the closed set
+    gEvent("soon", "hit"), // junk tMs
+    gEvent(200), // missing kind
+    gEvent(-50, "hit"), // negative
+    gEvent(300, "hit", "x".repeat(65)), // label over the wall — label drops, event stays
+    gEvent(400, "hit", ""), // empty label — drops
+    { tMs: 500, kind: "hit", secret: 1 }, // unknown key
+    "not-an-object",
+  ];
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 3000, events })]));
+  ok(r.doc !== null, "the doc survives every junk cue");
+  ok(r.warnings.some((w) => w.includes("kind \"explosion\" is not in the closed event set")), "kind cited");
+  ok(r.warnings.filter((w) => w.includes("tMs/kind junk")).length === 2, "junk tMs and missing kind cited");
+  ok(r.warnings.some((w) => w.includes("tMs must be ≥ 0")), "negative cited");
+  ok(r.warnings.some((w) => w.includes("label dropped (65 chars — the eventLabelMax wall is 64); the event stays")), "label wall cited");
+  ok(r.warnings.some((w) => w.includes("secret")), "unknown key cited");
+  eq(r.doc?.scenes[0]?.events?.length, 3, "the legal cues survive (label-wall, empty-label, unknown-key — junk shape/kind/time dropped)");
+  ok(r.doc?.scenes[0]?.events?.[0]?.label === undefined, "the over-long label stays absent");
+  eq(r.doc?.scenes[0]?.events?.[0]?.tMs, 300, "the first survivor is the label-wall cue");
+  eq(r.doc?.scenes[0]?.events?.[2]?.tMs, 500, "the unknown-key cue survives as an event (the key was noise)");
+});
+
+await test("S131 event time-sanity — a cue past the scene clock REFUSES (the motions-loop law)", () => {
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], {
+    durationMs: 3000,
+    events: [gEvent(3100, "hit")],
+  })]));
+  const errors = mustReject(r, "the past-the-clock cue");
+  ok(errors.some((e) => e.includes("an event sits at 3100ms, past the scene clock (3000ms)")), errors.join(" | "));
+});
+
+await test("S131 graphicsEventList — the global projection: frame accumulation across scenes, quantized tSec, 0-based index", async () => {
+  const { graphicsEventList } = await import("../src/lib/tubeforge/graphics/events");
+  const doc = mustValidate(gDoc([
+    gScene("s1", [gEl("a", "headline")], {
+      durationMs: 2000,
+      events: [gEvent(0, "sfx"), gEvent(510, "hit", "boom"), gEvent(1999, "cue")],
+    }),
+    gScene("s2", [gEl("b", "bullet")], {
+      durationMs: 1000,
+      events: [gEvent(250, "hit")],
+    }),
+  ]), "evented doc");
+  const slots = graphicsEventList(doc, 24);
+  eq(slots.length, 4, "all four cues projected");
+  eq(slots[0]?.frame, 0, "t=0 lands on frame 0 (the index law — no encode floor)");
+  eq(slots[0]?.tSec, 0, "t=0 → 0 s");
+  eq(slots[1]?.frame, 12, "510ms at 24fps rounds to frame 12");
+  eq(slots[1]?.tSec, 0.51, "the global second quantized");
+  eq(slots[1]?.label, "boom", "the label rides");
+  eq(slots[1]?.sceneId, "s1", "the scene id rides");
+  eq(slots[2]?.frame, 48, "1999ms at 24fps → frame 48 (scene 1's last delivered frame)");
+  eq(slots[3]?.frame, 54, "scene 2's 250ms: 48 delivered frames before + round(0.25×24)=6");
+  eq(slots[3]?.tSec, 2.25, "the global second spans scenes (2.0 + 0.25)");
+  eq(graphicsEventList(doc, 24), graphicsEventList(doc, 24), "same input → identical list");
+  const docNoEvents = mustValidate(gDoc([gScene("s1", [gEl("a", "headline")], { durationMs: 2000 })]), "plain doc");
+  eq(graphicsEventList(docNoEvents, 24).length, 0, "a doc with no events projects to [] — shape-stable, never undefined");
+});
+
+// ---------------------------------------------------------------------------
+// S132 (PAE-4) — the render resume manifest: scene-level recovery for the
+// graphics lane. Pins: the fingerprint (every input that shapes the scene
+// files — doc, VO, music, frame step, sprites — changes the hash; the same
+// inputs repeat it; map order never matters), the PURE resume decision
+// (fresh start / fail-closed refusal / encoded-and-present skips), the
+// manifest io round-trip + the tolerant read (corrupt → no manifest).
+// The chromium+ffmpeg flow itself rides the queue's crash-recovery tests.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S132 (PAE-4) render recovery");
+
+await test("S132 the render fingerprint — every scene-shaping input moves it; map order never does", async () => {
+  const { renderFingerprint } = await import("../src/lib/tubeforge/graphics/render");
+  const docA = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2000 })]), "doc a");
+  const docB = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2500 })]), "doc b");
+  const base = renderFingerprint(docA, {});
+  eq(renderFingerprint(docA, {}), base, "the same inputs repeat the hash");
+  ok(renderFingerprint(docB, {}) !== base, "a doc change moves it");
+  ok(renderFingerprint(docA, { voFiles: new Map([["s1", "/tmp/a.wav"]]) }) !== base, "a VO input moves it");
+  ok(renderFingerprint(docA, { musicPath: "/tmp/m.flac" }) !== base, "a music input moves it");
+  ok(renderFingerprint(docA, { frameStep: 2 }) !== base, "a frame-step change moves it");
+  ok(renderFingerprint(docA, { spriteAssets: new Map([["imp-x", ["data:image/png;base64,AAA"]]]) }) !== base, "a sprite asset moves it");
+  const orderA = renderFingerprint(docA, { voFiles: new Map([["s1", "/x.wav"], ["s2", "/y.wav"]]) });
+  const orderB = renderFingerprint(docA, { voFiles: new Map([["s2", "/y.wav"], ["s1", "/x.wav"]]) });
+  eq(orderA, orderB, "insertion order never matters (sorted entries)");
+});
+
+await test("S132 the resume decision — fresh start, fail-closed refusal, encoded-and-present skips", async () => {
+  const { resumePlan } = await import("../src/lib/tubeforge/graphics/render");
+  eq(resumePlan(null, "fp", () => true), null, "no manifest → nothing to resume (fresh start)");
+  const manifest = {
+    version: 1,
+    fingerprint: "fp",
+    scenes: [
+      { sceneId: "s1", index: 0, status: "encoded", file: "/out/scene-1.mp4", frames: 48 },
+      { sceneId: "s2", index: 1, status: "pending", file: "/out/scene-2.mp4", frames: 0 },
+      { sceneId: "s3", index: 2, status: "encoded", file: "/out/gone.mp4", frames: 24 },
+    ],
+  };
+  const refusal = resumePlan({ ...manifest, fingerprint: "OTHER" }, "fp", () => true);
+  ok(refusal !== null && "refusal" in refusal && refusal.refusal.includes("resume refuses rather than mixing two renders' scenes"),
+    "a fingerprint mismatch refuses with its reason");
+  const decision = resumePlan(manifest, "fp", (p) => p !== "/out/gone.mp4");
+  ok(decision !== null && "plan" in decision, "a matching manifest yields the plan");
+  if (decision !== null && "plan" in decision) {
+    eq(decision.resumable.size, 1, "only encoded AND present scenes skip");
+    const r0 = decision.resumable.get(0);
+    ok(r0 !== undefined && r0.file === "/out/scene-1.mp4" && r0.frames === 48, "the skip carries the manifest's file + frames");
+    ok(!decision.resumable.has(1), "a pending scene never skips");
+    ok(!decision.resumable.has(2), "an encoded scene whose file vanished never skips (a cleaned outDir re-renders)");
+  }
+  const empty = resumePlan(manifest, "fp", () => false);
+  ok(empty !== null && "plan" in empty && empty.resumable.size === 0, "no files present → the plan carries an EMPTY resumable set (all scenes re-render)");
+});
+
+await test("S132 the manifest io — round-trip through a real dir; corrupt/wrong-version reads as NO manifest", async () => {
+  const { renderFingerprint, readRenderManifest, writeRenderManifest, renderManifestPath, resumePlan } = await import("../src/lib/tubeforge/graphics/render");
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2000 })]), "manifest doc");
+  const fp = renderFingerprint(doc, {});
+  const tmp = fs.mkdtempSync("/tmp/s132-manifest-");
+  try {
+    const manifest = {
+      version: 1,
+      fingerprint: fp,
+      scenes: [{ sceneId: "s1", index: 0, status: "pending", file: path.join(tmp, "scene-1.mp4"), frames: 0 }],
+    };
+    writeRenderManifest(tmp, manifest);
+    eq(renderManifestPath(tmp), path.join(tmp, "render-manifest.json"), "the manifest lives at one known path");
+    const readBack = readRenderManifest(tmp);
+    ok(readBack !== null && readBack.version === 1 && readBack.fingerprint === fp && readBack.scenes.length === 1, "write → read round-trips");
+    fs.writeFileSync(renderManifestPath(tmp), "{corrupt json");
+    eq(readRenderManifest(tmp), null, "corrupt JSON reads as no manifest (start fresh, never resume from a lie)");
+    fs.writeFileSync(renderManifestPath(tmp), JSON.stringify({ ...manifest, version: 99 }));
+    eq(readRenderManifest(tmp), null, "a wrong version reads as no manifest");
+    fs.writeFileSync(renderManifestPath(tmp), JSON.stringify({ version: 1, fingerprint: fp, scenes: "nope" }));
+    eq(readRenderManifest(tmp), null, "structural nonsense reads as no manifest");
+    const decision = resumePlan(readBack, fp, () => false);
+    ok(decision !== null && "plan" in decision, "the round-tripped manifest feeds the resume decision");
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// S133 (PAE-5) — the animation QC lenses: the readcheck (the opuscar TEXTS
+// law, nativized) + the determinism sweep elevation. Pins: the read-time
+// formula, the visibility window (enter-end → exit-start, scene end when
+// no exit, 0 when they overlap), the longest-string rule, the sweep's
+// stability/finite/grid pins, the NaN tripwire, the matrix rows, the hold
+// windows extended by tweens + camera keys.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S133 (PAE-5) the QC lenses");
+
+await test("S133 the read-time formula — clamp(400 + 30 ms/char, 400, 4000), ONE home", async () => {
+  const { readcheckMinMs } = await import("../src/lib/tubeforge/graphics/qc");
+  eq(readcheckMinMs(0), 400, "the floor");
+  eq(readcheckMinMs(10), 700, "400 + 300");
+  eq(readcheckMinMs(100), 3400, "400 + 3000");
+  eq(readcheckMinMs(120), 4000, "the cap starts");
+  eq(readcheckMinMs(300), 4000, "the cap holds");
+});
+
+await test("S133 the readcheck lens — the visibility window math and the longest-string rule", async () => {
+  const { graphicsReadcheck, readcheckMinMs } = await import("../src/lib/tubeforge/graphics/qc");
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("ok", "headline", { enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" } }),
+    gEl("brief", "headline", {
+      text: { text: "Read me now" },
+      enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" },
+      exit: { kind: "fade", durationMs: 300, delayMs: 800, ease: "linear" },
+    }),
+    gEl("overlap", "subhead", {
+      enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" },
+      exit: { kind: "fade", durationMs: 300, delayMs: 200, ease: "linear" },
+    }),
+    gEl("chart", "barChart", {
+      enter: { kind: "wipe", durationMs: 400, delayMs: 100, ease: "linear" },
+      bar: { data: [{ label: "a", value: 1 }, { label: "long-label", value: 2 }] },
+    }),
+  ])], { durationMs: 3000 }));
+  const findings = graphicsReadcheck(doc);
+  const brief = findings.find((f) => f.elementId === "brief");
+  ok(brief !== undefined, "the too-brief headline is found");
+  eq(brief?.chars, 11, "the text payload's chars");
+  eq(brief?.visibleMs, 300, "enter-end 500 → exit-start 800");
+  eq(brief?.minMs, readcheckMinMs(11), "the floor from the ONE formula");
+  const overlap = findings.find((f) => f.elementId === "overlap");
+  ok(overlap !== undefined && overlap.visibleMs === 0, "an exit overlapping the enter → zero visibility");
+  const chart = findings.find((f) => f.elementId === "chart");
+  ok(chart === undefined, "the chart holds 2600ms — the longest label (10 chars → 700ms floor) passes");
+  ok(!findings.some((f) => f.elementId === "ok"), "the scene-end-window headline passes");
+});
+
+await test("S133 the determinism sweep — stable hash, finite channels, the ≤600 grid, the NaN tripwire", async () => {
+  const { graphicsDeterminismSweep } = await import("../src/lib/tubeforge/graphics/qc");
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "rise", durationMs: 400, delayMs: 0, ease: "ease-out" },
+      tweens: [{ delayMs: 400, durationMs: 800, channels: [twChannel("rotateDeg", [{ tMs: 0, value: 0 }, { tMs: 800, value: 90 }])] }],
+    }),
+  ], { durationMs: 3000 })]));
+  const a = graphicsDeterminismSweep(doc);
+  const b = graphicsDeterminismSweep(doc);
+  eq(a.hash, b.hash, "two sweeps of the same doc hash identically");
+  eq(a.finite, true, "every sampled channel finite");
+  eq(a.samples, 31, "3000ms at the 100ms floor step → 31 samples");
+  // The tripwire: a NaN smuggled past the validator (a caller bug the Part
+  // F law forbids) turns the sweep RED — evidence, not silence.
+  const broken = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2000 })]), "clean doc");
+  (broken.scenes[0].elements[0].at as { x: number }).x = Number.NaN;
+  eq(graphicsDeterminismSweep(broken).finite, false, "a non-finite channel flips the sweep");
+});
+
+await test("S133 the matrix rows — G1-READ-1 and G1-DET-1 ride the pre-render evidence", async () => {
+  const good = graphicsQcMatrix(mustValidate(gDoc([gScene("s1", [gEl("h", "headline")], { durationMs: 3000 })])), 0);
+  const readRow = good.rows.find((r) => r.id === "G1-READ-1");
+  const detRow = good.rows.find((r) => r.id === "G1-DET-1");
+  ok(readRow !== undefined && readRow.status === "pass", "a readable doc passes G1-READ-1");
+  ok(detRow !== undefined && detRow.status === "pass", "a validated doc passes G1-DET-1");
+  ok(good.passed, "the whole matrix stays green for an honest doc");
+  const brief = graphicsQcMatrix(mustValidate(gDoc([gScene("s1", [
+    gEl("h", "headline", {
+      enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" },
+      exit: { kind: "fade", durationMs: 300, delayMs: 800, ease: "linear" },
+    }),
+  ])], { durationMs: 3000 })), 0);
+  const briefRow = brief.rows.find((r) => r.id === "G1-READ-1");
+  ok(briefRow !== undefined && briefRow.status === "fail", "a too-brief text fails G1-READ-1");
+  ok(!brief.passed, "the matrix stays red for the readability defect (never silently shipped)");
+  ok(briefRow?.detail?.includes("s1/h"), "the finding names the scene/element");
+});
+
+await test("S133 the hold windows — tween and camera windows extend the legal hold start", async () => {
+  const { graphicsHoldWindows: holds } = await import("../src/lib/tubeforge/graphics/qc");
+  const plain = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", { enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" } }),
+  ])], { durationMs: 3000 }));
+  eq(holds(plain)[0]?.startSec, 0.5, "enter-only → the hold starts at the enter's end");
+  const tweened = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" },
+      tweens: [{ delayMs: 500, durationMs: 1000, channels: [twChannel("dx", [{ tMs: 0, value: 0 }, { tMs: 1000, value: 100 }])] }],
+    }),
+  ])], { durationMs: 3000 }));
+  eq(holds(tweened)[0]?.startSec, 1.5, "the tween's end extends the hold");
+  const cam = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", { enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" } }),
+  ], { durationMs: 3000, camera: [gCamKey(0, 1, 0, 0), gCamKey(2000, 2, 0, 0)] })]));
+  eq(holds(cam)[0]?.startSec, 2, "the camera's last key extends the hold (a hold under a panning board is not a hold)");
+});
+
+// ---------------------------------------------------------------------------
+// G1.2 — frame truth (Part B): frameAt is the ONE source of motion truth.
+// Pins: determinism (sweep hash over a fixed doc), the fixed composition
+// order (emphasis > exit > enter — applied last), element state never
+// non-finite outside motion windows, tween continuity at every motion
+// boundary, exact pre/post window states, scene-clock resolution.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S123 G1.2 frame truth");
+
+const G2_DOC = mustParse(JSON.stringify(MIXED_RAW), "the mixed doc for G1.2");
+
+function g2ElById(state: GraphicsFrameState, id: string) {
+  const f = state.elements.find((e) => e.id === id);
+  if (f === undefined) throw new Error(`element "${id}" missing from the frame state`);
+  return f;
+}
+
+function g2Sweep(doc: GraphicsDoc, stepMs: number, upToMs: number): string[] {
+  const frames: string[] = [];
+  for (let t = 0; t <= upToMs; t += stepMs) frames.push(JSON.stringify(frameAt(doc, t)));
+  return frames;
+}
+
+await test("G1.2 the frame sweep is deterministic — same doc, same grid, byte-identical", () => {
+  const a = g2Sweep(G2_DOC, 50, 4000);
+  const b = g2Sweep(G2_DOC, 50, 4000);
+  eq(a.length, 81, "81 frames on the 50ms grid");
+  eq(a.join("|"), b.join("|"), "the sweep hash is byte-identical");
+});
+
+await test("G1.2 element state is never non-finite anywhere — the named pin", () => {
+  const checkFinite = (doc: GraphicsDoc, label: string) => {
+    for (let t = 0; t <= 3990; t += 97) { // prime step — no grid aliasing
+      const s = frameAt(doc, t);
+      ok(Number.isFinite(s.sceneTMs), `${label} t=${t} sceneTMs`);
+      for (const f of s.elements) {
+        ok(Number.isFinite(f.opacity) && f.opacity >= 0 && f.opacity <= 1, `${label} t=${t} ${f.id} opacity`);
+        ok(Number.isFinite(f.x) && Number.isFinite(f.y) && Number.isFinite(f.scale) && Number.isFinite(f.rotateDeg), `${label} t=${t} ${f.id} transform`);
+        ok(Number.isFinite(f.progress) && f.progress >= 0 && f.progress <= 1, `${label} t=${t} ${f.id} progress`);
+        if (f.counterValue !== undefined) ok(Number.isFinite(f.counterValue), `${label} t=${t} ${f.id} counter`);
+      }
+    }
+  };
+  checkFinite(G2_DOC, "mixed");
+  for (const kind of GRAPHICS_ELEMENT_KINDS) {
+    for (const motion of legalMotions(kind)) {
+      const motions = {
+        enter: { kind: motion, durationMs: 700, delayMs: 200, ease: "ease-back" },
+        exit: { kind: motion, durationMs: 600, delayMs: 2600, ease: "linear" },
+        emphasis: { kind: motion, durationMs: 500, delayMs: 1500, ease: "pop" },
+      };
+      const tested = gEl(`x-${kind}-${motion}`, kind, {
+        ...motions,
+        ...(kind === "group" ? { group: { children: ["base"] } } : {}),
+      });
+      const sceneEls = kind === "group" ? [gEl("base", "headline"), tested] : [tested];
+      const doc = mustValidate(gDoc([gScene("s1", sceneEls)]), `${kind}+${motion}`);
+      checkFinite(doc, `${kind}+${motion}`);
+    }
+  }
+});
+
+await test("G1.2 tween continuity — no discontinuity at any motion boundary", () => {
+  const bounds: number[] = [];
+  const sceneEls = G2_DOC.scenes[0]?.elements ?? [];
+  for (const el of sceneEls) {
+    for (const m of [el.enter, el.exit, el.emphasis]) {
+      if (m === undefined) continue;
+      bounds.push(m.delayMs, m.delayMs + m.durationMs);
+    }
+  }
+  ok(bounds.length >= 12, `${bounds.length} boundaries collected`);
+  for (const b of bounds) {
+    if (b < 1 || b > 3999) continue;
+    const minus = frameAt(G2_DOC, b - 1);
+    const plus = frameAt(G2_DOC, b + 1);
+    for (let i = 0; i < minus.elements.length; i++) {
+      const a = minus.elements[i];
+      const c = plus.elements[i];
+      ok(a !== undefined && c !== undefined, `element lists align at b=${b}`);
+      ok(Math.abs(a.opacity - c.opacity) <= 0.02, `b=${b} ${a.id} opacity Δ=${Math.abs(a.opacity - c.opacity).toFixed(4)}`);
+      ok(Math.abs(a.x - c.x) <= 2 && Math.abs(a.y - c.y) <= 2, `b=${b} ${a.id} offset Δ`);
+      ok(Math.abs(a.scale - c.scale) <= 0.02, `b=${b} ${a.id} scale Δ`);
+      ok(Math.abs(a.progress - c.progress) <= 0.03, `b=${b} ${a.id} progress Δ`);
+      if (a.counterValue !== undefined && c.counterValue !== undefined) {
+        ok(Math.abs(a.counterValue - c.counterValue) <= 1, `b=${b} ${a.id} counter Δ`);
+      }
+    }
+  }
+});
+
+await test("G1.2 pre-enter holds the start state; post-enter holds the placed state", () => {
+  const pre = g2ElById(frameAt(G2_DOC, 50), "sh"); // slide enter, delay 200
+  eq(pre.opacity, 0, "pre-enter: invisible");
+  eq(pre.x, 0, "pre-enter: the full slide offset (120 − 120)");
+  const placed = g2ElById(frameAt(G2_DOC, 2000), "sh");
+  eq(placed.opacity, 1, "placed: full opacity");
+  eq(placed.x, 120, "placed: at rest");
+  eq(placed.progress, 1, "placed: fully revealed");
+  eq(g2ElById(frameAt(G2_DOC, 2000), "h1").opacity, 0.9, "base opacity multiplies through");
+});
+
+await test("G1.2 the exit drains to its end state — fade out, un-reveal, count-back", () => {
+  eq(g2ElById(frameAt(G2_DOC, 3900), "h1").opacity, 0, "fade exit end: invisible");
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("br", "bar", {
+      enter: { kind: "wipe", durationMs: 500, delayMs: 0, ease: "linear" },
+      exit: { kind: "wipe", durationMs: 500, delayMs: 3000, ease: "linear" },
+    }),
+    gEl("cn", "counter", {
+      counter: { from: 25, to: 100 },
+      enter: { kind: "count", durationMs: 800, delayMs: 0, ease: "linear" },
+      exit: { kind: "count", durationMs: 600, delayMs: 3200, ease: "linear" },
+    }),
+  ])]), "exit drains");
+  eq(g2ElById(frameAt(doc, 3900), "br").progress, 0, "wipe exit end: un-revealed");
+  eq(g2ElById(frameAt(doc, 3900), "cn").counterValue, 25, "count exit end: drained to from");
+  const atStart = g2ElById(frameAt(doc, 3200), "cn").counterValue ?? 0;
+  const preStart = g2ElById(frameAt(doc, 3199), "cn").counterValue ?? 0;
+  ok(Math.abs(atStart - preStart) <= 0.1, `the drain starts from the captured value (Δ=${Math.abs(atStart - preStart)})`);
+});
+
+await test("G1.2 emphasis composes over the exit state (fixed order: enter → exit → emphasis)", () => {
+  const mk = (withEmphasis: boolean) => mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" },
+      exit: { kind: "fade", durationMs: 800, delayMs: 800, ease: "linear" },
+      ...(withEmphasis ? { emphasis: { kind: "fade", durationMs: 400, delayMs: 1000, ease: "linear" } } : {}),
+    }),
+  ])]), withEmphasis ? "overlap doc" : "no-emphasis doc");
+  const withEmph = g2ElById(frameAt(mk(true), 1200), "h1").opacity; // emphasis midpoint
+  const without = g2ElById(frameAt(mk(false), 1200), "h1").opacity;
+  eq(without, 0.5, "exit-only: 1 − 0.5");
+  ok(Math.abs(withEmph - without * (1 - GRAPHICS_MOTION_SEMANTICS.emphasisFadeDip)) < 1e-9,
+    `emphasis dips the exit state: ${withEmph} ≈ ${without} × ${1 - GRAPHICS_MOTION_SEMANTICS.emphasisFadeDip}`);
+});
+
+await test("G1.2 the doc clock resolves the active scene and clamps (never NaN)", () => {
+  const doc = mustValidate(gDoc([
+    gScene("s1", [gEl("a", "headline")], { durationMs: 3000 }),
+    gScene("s2", [gEl("b", "bullet")]),
+  ]), "two scenes");
+  eq(frameAt(doc, 1000).sceneId, "s1", "scene 1 mid");
+  eq(frameAt(doc, 1000).sceneTMs, 1000, "the scene-local clock");
+  eq(frameAt(doc, 3500).sceneId, "s2", "scene 2 after s1 ends");
+  eq(frameAt(doc, 3500).sceneTMs, 500, "local clock in scene 2");
+  const end = frameAt(doc, 999_999);
+  eq(end.sceneId, "s2", "beyond-total clamps to the last scene");
+  eq(end.sceneTMs, 4000, "clamped to the last scene's end (the 2.6-wps estimate)");
+  const neg = frameAt(doc, -50);
+  eq(neg.sceneId, "s1", "negative clamps to scene 1");
+  eq(neg.sceneTMs, 0, "at zero");
+});
+
+await test("G1.2 the progress channel defaults to 1 when no motion drives it", () => {
+  for (let t = 0; t <= 3800; t += 200) {
+    eq(g2ElById(frameAt(G2_DOC, t), "sh").progress, 1, `t=${t}`);
+  }
+});
+
+await test("G1.2 base opacity multiplies the motion factor", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", { opacity: 0.5, enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" } }),
+  ])]), "half-opacity");
+  eq(g2ElById(frameAt(doc, 250), "h1").opacity, 0.25, "0.5 × 0.5 mid-fade");
+});
+
+await test("G1.2 emphasis count pulses the pop channel and leaves the value untouched", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("cn", "counter", {
+      counter: { from: 0, to: 100 },
+      enter: { kind: "count", durationMs: 500, delayMs: 0, ease: "linear" },
+      emphasis: { kind: "count", durationMs: 400, delayMs: 1000, ease: "linear" },
+    }),
+  ])]), "emphasis count");
+  const mid = g2ElById(frameAt(doc, 1200), "cn");
+  eq(mid.counterValue, 100, "the value channel is untouched (no falsifying overshoot)");
+  ok(mid.scale > 1, `the pop channel pulses (scale=${mid.scale})`);
+  eq(g2ElById(frameAt(doc, 1600), "cn").scale, 1, "emphasis releases cleanly at the window edge");
+});
+
+await test("G1.2 graphicsFrameCount is the doc clock in frames at the doc fps", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("a", "headline")], { durationMs: 3000 })]), "3s doc");
+  eq(graphicsFrameCount(doc), 72, "3000ms @ 24fps = 72 frames");
+});
+
+await test("G1.2 an empty doc is a caller bug — refused loudly, never fabricated", () => {
+  let threw = false;
+  try {
+    frameAt({ version: 1, title: "t", width: 1920, height: 1080, fps: 24, scenes: [] }, 0);
+  } catch {
+    threw = true;
+  }
+  eq(threw, true, "frameAt throws on scenes: []");
+});
+
+// ---------------------------------------------------------------------------
+// G1.3 — the composer (Part B): static skeleton + ONE applier. Pins: compose
+// determinism (byte-identical html/payload), the group nesting, the
+// hostile-icon fixture landing inert (sanitizeSvg + escape, never a second
+// parser), the compose defaults as the ONE table, the bar/icon/shape reveal
+// mechanisms baked per the ONE-channel law, formatCounter, the payload
+// round-trip, the poster state, and the applier's construction laws
+// (set-only writes, no element creation, no wall clock, no randomness —
+// idempotence by construction; the full DOM idempotence rides the G1.10
+// benchmark's frame-hash pin).
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S123 G1.3 the composer — static skeleton + one APPLY_FRAME_FN");
+
+function g3FirstScene(doc: GraphicsDoc): GraphicsScene {
+  const s = doc.scenes[0];
+  if (s === undefined) throw new Error("the doc's first scene vanished");
+  return s;
+}
+
+const G3_SCENE = g3FirstScene(G2_DOC);
+const G3 = composeGraphicsScene(G3_SCENE, G2_DOC);
+
+await test("G1.3 compose is deterministic — same scene, byte-identical html and payload", () => {
+  const b = composeGraphicsScene(G3_SCENE, G2_DOC);
+  eq(b.html, G3.html, "the skeleton is byte-stable");
+  const pa = graphicsFramePayload(frameAt(G2_DOC, 1500));
+  const pb = graphicsFramePayload(frameAt(G2_DOC, 1500));
+  eq(pb, pa, "the payload is byte-stable");
+});
+
+await test("G1.3 the skeleton carries every element; group children nest INSIDE the group", () => {
+  for (const el of G3_SCENE.elements) {
+    ok(G3.html.includes(`id="ge-${el.id}"`), `element ${el.id} present`);
+  }
+  const grp = G3.html.indexOf('id="ge-grp"');
+  const h1 = G3.html.indexOf('id="ge-h1"');
+  const ic1 = G3.html.indexOf('id="ge-ic1"');
+  ok(grp >= 0 && h1 > grp && ic1 > grp,
+    "h1 and ic1 render inside ge-grp — h1's doc position comes FIRST, so nesting moved it");
+  ok(G3.html.includes('<svg id="board" width="1920" height="1080"'), "the board root at the doc surface");
+  ok(G3.html.includes('width="1920" height="1080" fill="#ffffff"'), "the background rect is the designed canvas");
+});
+
+await test("G1.3 the hostile icon lands inert — sanitizeSvg strips the payload, escape holds the attribute", async () => {
+  const { sanitizeSvg, pathSegments, totalLength } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const hostile = 'M 0 0 L 8 8" onload="alert(1)//<script>alert(2)</script>';
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("ic", "icon", { icon: { paths: [hostile] } })])]), "hostile icon");
+  const { html } = composeGraphicsScene(g3FirstScene(doc), doc);
+  ok(!html.includes("<script"), "no script element survives");
+  ok(!html.includes("onload"), "the handler payload is stripped by sanitizeSvg");
+  ok(html.includes("&quot;"), "the surviving quote rides escaped — the attribute cannot break out");
+  const expected = String(Math.round(totalLength(pathSegments(sanitizeSvg(hostile))) * 1e6) / 1e6);
+  ok(expected === "11.313708", `the sanitized path still parses to geometry (len=${expected})`);
+  ok(html.includes(`data-len="${expected}"`), "the rendered path measures what survives sanitize");
+});
+
+await test("G1.3 the compose defaults are the ONE table — absent payload fields land on it", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", { text: { text: "T" } }),
+    gEl("ic", "icon"),
+    gEl("sp", "shape"),
+  ])]), "defaults doc");
+  const { html } = composeGraphicsScene(g3FirstScene(doc), doc);
+  ok(html.includes(`font-size="${GRAPHICS_COMPOSE_DEFAULTS.sizePx}"`), "sizePx 48");
+  ok(html.includes(`font-weight="${GRAPHICS_COMPOSE_DEFAULTS.weight}"`), "weight 700");
+  ok(html.includes(`fill="${GRAPHICS_COMPOSE_DEFAULTS.ink}"`), "the ink");
+  ok(html.includes(`stroke-width="${GRAPHICS_COMPOSE_DEFAULTS.iconStrokeWidth}"`), "icon stroke 4");
+  ok(html.includes(`stroke-width="${GRAPHICS_COMPOSE_DEFAULTS.shapeStrokeWidth}"`), "shape stroke 4");
+  ok(html.includes('fill="none"'), "shape fill defaults to none (stroke-only, the house aesthetic)");
+});
+
+await test("G1.3 bar lengths bake the data reveal — value/scaleMax × ½ surface, data-base for vertical", () => {
+  ok(G3.html.includes('data-len="270"'), "bar a: 1/2 × 540 (½ of the 1080 surface)");
+  ok(G3.html.includes('data-len="540"'), "bar b: full");
+  ok(G3.html.includes('data-axis="v"'), "vertical is the default");
+  ok(/data-base="[\d.]+"/.test(G3.html), "the baseline is baked for the grow-up applier");
+  ok(G3.html.includes(">a</text>") && G3.html.includes(">b</text>"), "the labels render");
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("br", "bar", { bar: { data: [{ label: "a", value: 1 }], horizontal: true } }),
+  ])]), "horizontal bar");
+  const { html } = composeGraphicsScene(g3FirstScene(doc), doc);
+  ok(html.includes('data-axis="h"'), "the horizontal flag flips the axis");
+  ok(html.includes('data-len="960"'), "value 1 of max 1 × boxW 960");
+});
+
+await test("G1.3 icon paths bake the stroke-dash reveal along their arc length (svg.ts geometry, reused)", async () => {
+  const { pathSegments, totalLength } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const d = "M 0 0 L 8 8 L 16 0";
+  const expected = String(Math.round(totalLength(pathSegments(d)) * 1e6) / 1e6);
+  ok(G3.html.includes(`stroke-dasharray="${expected}"`), "dasharray = the arc length");
+  ok(G3.html.includes(`data-len="${expected}"`), "the applier's unit of account");
+  ok(!G3.html.includes("stroke-dashoffset"), "poster = fully drawn (the offset rides the applier)");
+});
+
+await test("G1.3 the ONE reveal mechanism per element — grow/wipe/draw bake differently", () => {
+  ok(G3.html.includes('data-grow="1"'), "the mixed rect (grow enter): the geometry mechanism is armed");
+  ok(G3.html.includes('data-w="120"'), "full dims always baked");
+  ok(!G3.html.includes("clipPath"), "grow bakes no clip");
+  const wipe = mustValidate(gDoc([gScene("s1", [gEl("sp", "shape", {
+    shape: { kind: "circle", r: 90 },
+    enter: { kind: "fade", durationMs: 200, delayMs: 0, ease: "linear" },
+    exit: { kind: "wipe", durationMs: 400, delayMs: 2000, ease: "linear" },
+  })])]), "wipe circle");
+  const w3 = composeGraphicsScene(g3FirstScene(wipe), wipe);
+  ok(w3.html.includes('clip-path="url(#ge-sp--wipe)"') && w3.html.includes("<clipPath"), "the exit wipe arms the clip");
+  ok(w3.html.includes('data-w="180"'), "the clip's full width baked");
+  ok(!w3.html.includes("stroke-dasharray"), "ONE mechanism — no dash on a wipe shape");
+  const draw = mustValidate(gDoc([gScene("s1", [gEl("sp", "shape", {
+    shape: { kind: "line", w: 320 },
+    enter: { kind: "draw", durationMs: 500, delayMs: 0, ease: "linear" },
+  })])]), "draw line");
+  const d3 = composeGraphicsScene(g3FirstScene(draw), draw);
+  ok(d3.html.includes('stroke-dasharray="320"'), "line draw: dasharray = the extent");
+  ok(d3.html.includes('data-len="320"') && d3.html.includes('data-fill="1"'), "the fill-after-outline flip is armed");
+  const prec = mustValidate(gDoc([gScene("s1", [gEl("sp", "shape", {
+    shape: { kind: "rect", w: 100, h: 50 },
+    enter: { kind: "fade", durationMs: 200, delayMs: 0, ease: "linear" },
+    exit: { kind: "wipe", durationMs: 400, delayMs: 2000, ease: "linear" },
+    emphasis: { kind: "draw", durationMs: 300, delayMs: 1000, ease: "linear" },
+  })])]), "mechanism precedence");
+  const p3 = composeGraphicsScene(g3FirstScene(prec), prec);
+  ok(p3.html.includes("<clipPath"), "slot order: the exit wipe wins over the emphasis draw");
+  ok(!p3.html.includes("stroke-dasharray"), "and the draw does not double-bake");
+  const filled = mustValidate(gDoc([gScene("s1", [gEl("sp", "shape", {
+    shape: { kind: "rect", w: 100, h: 50, fill: "#ff0000" },
+    enter: { kind: "grow", durationMs: 500, delayMs: 0, ease: "linear" },
+  })])]), "filled grow");
+  const f3 = composeGraphicsScene(g3FirstScene(filled), filled);
+  ok(f3.html.includes('fill="#ff0000"') && !f3.html.includes('data-fill="1"'), "grow keeps its fill throughout");
+});
+
+await test("G1.3 formatCounter is the ONE formatter — decimals, unit, negatives", () => {
+  eq(formatCounter(100, 0, "%"), "100%");
+  eq(formatCounter(12.345, 1, "×"), "12.3×");
+  eq(formatCounter(-4, 0), "-4");
+  eq(formatCounter(7, 2, "k"), "7.00k");
+  eq(formatCounter(42), "42", "decimals default 0");
+});
+
+await test("G1.3 the counter bakes its format — the applier writes textContent from the tweened value", () => {
+  ok(G3.html.includes('data-counter="1"'), "the applier's hook");
+  ok(G3.html.includes('data-decimals="0"'), "the mixed counter's decimals");
+  ok(G3.html.includes('data-unit="%"'), "the unit rides the data attrs (entities decode back in the DOM)");
+  ok(G3.html.includes(">100%</text>"), "poster content = the final value");
+});
+
+await test("G1.3 the payload carries frameAt verbatim — same states, doc order, stable keys", () => {
+  const frame = frameAt(G2_DOC, 1500);
+  const parsed = JSON.parse(graphicsFramePayload(frame)) as GraphicsFrameState;
+  eq(parsed.sceneId, frame.sceneId, "the active scene rides");
+  eq(parsed.sceneTMs, frame.sceneTMs, "the scene-local clock rides");
+  eq(parsed.elements, frame.elements, "element states verbatim");
+  eq(parsed.elements.length, 10, "all ten mixed elements");
+});
+
+await test("G1.3 the applier's construction laws — set-only writes, no element creation, no wall clock, no randomness", () => {
+  for (const banned of ["Date.now", "Math.random", "new Date", "createElement", "appendChild", "insertAdjacentHTML", "innerHTML", "getBBox"]) {
+    ok(!APPLY_GRAPHICS_FRAME_FN.includes(banned), `no ${banned} — idempotence by construction`);
+  }
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('getElementById("ge-" + el.id)'), "the id seam is the skeleton's namespace");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('":scope > rect[data-len][data-axis]"'), "bars scoped to their own content (a group's pass never overwrites a child)");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('":scope > [data-len]:not([data-axis])"'), "draw scoped off the bars");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('"translate(" + el.x + " " + el.y + ") rotate(" + el.rotateDeg + ") scale(" + el.scale + ")"'),
+    "the transform order matches the whiteboard placement law");
+});
+
+await test("G1.3 the poster is the placed state — the skeleton renders truthfully before any apply", () => {
+  ok(G3.html.includes('transform="translate(120 96) rotate(0) scale(1)"'), "the placed transform");
+  ok(G3.html.includes('height="270"') && G3.html.includes('height="540"'), "bar heights = data-len (progress 1)");
+  ok(G3.html.includes('opacity="0.9"'), "base opacity rides the poster");
+});
+
+await test("G1.3 author text lands escaped — markup and quotes ride as content", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", { text: { text: '<b>bold</b> & "q"' } }),
+  ])]), "hostile text");
+  const { html } = composeGraphicsScene(g3FirstScene(doc), doc);
+  ok(html.includes("&lt;b&gt;bold&lt;/b&gt;"), "markup escaped");
+  ok(html.includes("&amp;"), "ampersand escaped");
+  ok(html.includes("&quot;q&quot;"), "quotes escaped");
+  ok(!html.includes("<b>"), "no raw markup in the output");
+});
+
+await test("G1.3 the surface drives the geometry — the same scene composes per house size", () => {
+  const vertical = mustValidate(gDoc([gScene("s1", [gEl("br", "bar")])], { width: 1080, height: 1920 }), "9:16 doc");
+  const v3a = composeGraphicsScene(g3FirstScene(vertical), vertical);
+  const v3b = composeGraphicsScene(g3FirstScene(vertical), vertical);
+  eq(v3b.html, v3a.html, "deterministic on the second surface too");
+  ok(v3a.html !== G3.html, "a different surface → different geometry");
+  ok(v3a.html.includes('data-len="480"'), "bar a: 1/2 × 960 (½ of the 1920 surface)");
+  ok(v3a.html.includes('data-len="960"'), "bar b: full");
+});
+
+// ---------------------------------------------------------------------------
+// G1.4 — the native scaffold planner + the LLM scaffold with per-element
+// degradation. Pins: determinism (byte-identical scaffold), validator-
+// clean output (every archetype), motion legality per the compatibility
+// table, the walls (scene budget, caps, count-up law), surface snapping,
+// and the LLM half: per-element normalization police with reported
+// drops, per-scene fallback, byte-identical degrade to the native doc.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S123 G1.4 the native planner + the LLM scaffold");
+
+const G14_SCENES = [
+  { index: 1, title: "The Growth Engine", narration: "Every product grows through three forces: reach, retention, and revenue." },
+  { index: 2, title: "The conversion lift", narration: "Teams see conversion climb to 87 percent within the first quarter." },
+  { index: 3, title: "Why teams switch", narration: "First, the setup takes minutes. Next, the workflow runs itself. Finally, the results compound every week." },
+  { index: 4, title: "The market data", narration: "Compared with last year, 42 percent versus 87 percent share." },
+  { index: 5, title: "Start today", narration: "Check your first workflow now and see the difference yourself." },
+];
+
+function g14Native(): GraphicsDoc {
+  return scaffoldGraphicsDoc({ scenes: G14_SCENES, topic: "Growth" });
+}
+
+await test("G1.4 the native scaffold is deterministic and validator-clean", async () => {
+  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
+  const a = scaffoldGraphicsDoc({ scenes: G14_SCENES, topic: "Growth" });
+  const b = scaffoldGraphicsDoc({ scenes: G14_SCENES, topic: "Growth" });
+  eq(JSON.stringify(a), JSON.stringify(b), "same story → byte-identical doc");
+  eq(a.version, GRAPHICS_VERSION, "version first-class");
+  eq([a.width, a.height], [1920, 1080], "default surface 16:9");
+  eq(a.fps, 24, "house default fps");
+  const r = validateGraphicsDoc(JSON.parse(JSON.stringify(a)));
+  ok(r.doc !== null && r.errors.length === 0, `the scaffold validates clean: ${r.errors.join(" | ")}`);
+  ok(g14Native().scenes.length === 5, "all five story scenes carried");
+});
+
+await test("G1.4 the rule table routes the archetypes — stat / list / chart / opener / closer", async () => {
+  const doc = g14Native();
+  const byId = new Map(doc.scenes.map((s) => [s.id, s]));
+  const opener = byId.get("scene-1");
+  ok(opener !== undefined, "opener present");
+  eq(opener.elements.map((e) => e.kind), ["headline", "subhead", "icon"], "opener: title + kicker + icon accent");
+  const stat = byId.get("scene-2");
+  ok(stat !== undefined, "stat scene present");
+  const counter = stat.elements.find((e) => e.kind === "counter");
+  ok(counter !== undefined, "one number → a counter");
+  eq(counter.counter, { from: 0, to: 87, unit: "%" }, "count-up to the story's number, unit from the story");
+  const list = byId.get("scene-3");
+  ok(list !== undefined, "list scene present");
+  const bullets = list.elements.filter((e) => e.kind === "bullet");
+  eq(bullets.length, 3, "the enumeration feeds three bullets");
+  const chart = byId.get("scene-4");
+  ok(chart !== undefined, "chart scene present");
+  const barChart = chart.elements.find((e) => e.kind === "barChart");
+  ok(barChart !== undefined, "data cue + two numbers → a barChart");
+  eq(barChart.bar?.data, [{ label: "42 percent", value: 42 }, { label: "87 percent", value: 87 }], "the numbers BECOME the chart rows");
+  const closer = byId.get("scene-5");
+  ok(closer !== undefined, "closer present");
+  eq(closer.elements.map((e) => e.kind), ["headline", "subhead"], "closer: title + kicker");
+  const icon = opener.elements.find((e) => e.kind === "icon");
+  ok(icon !== undefined && icon.icon !== undefined, "the opener carries an icon payload");
+  eq(icon.icon.paths.length >= 1, true, "icon paths come from the library");
+});
+
+await test("G1.4 every scaffold motion is legal per kind and inside the scene clock", async () => {
+  const { estimateNarrationMs } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const doc = g14Native();
+  for (const scene of doc.scenes) {
+    const clock = estimateNarrationMs(scene.narration);
+    for (const el of scene.elements) {
+      ok(
+        legalMotions(el.kind).includes(el.enter.kind),
+        `${scene.id}/${el.id}: enter "${el.enter.kind}" is legal on "${el.kind}"`
+      );
+      ok(
+        el.enter.delayMs + el.enter.durationMs <= clock,
+        `${scene.id}/${el.id}: enter span ${el.enter.delayMs + el.enter.durationMs}ms fits the ${clock}ms scene clock`
+      );
+    }
+  }
+});
+
+await test("G1.4 the walls — an empty story and an over-budget story refuse", async () => {
+  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
+  const { GRAPHICS_BUDGETS } = await import("../src/lib/tubeforge/graphics/types");
+  let threw = false;
+  try {
+    scaffoldGraphicsDoc({ scenes: [], topic: "x" });
+  } catch {
+    threw = true;
+  }
+  ok(threw, "an empty story is a bug, not an empty doc");
+  const many = Array.from({ length: GRAPHICS_BUDGETS.scenesPerProject + 1 }, (_, i) => ({
+    index: i + 1,
+    title: `Scene ${i + 1}`,
+    narration: "A few plain words here.",
+  }));
+  threw = false;
+  try {
+    scaffoldGraphicsDoc({ scenes: many, topic: "x" });
+  } catch (err) {
+    threw = true;
+    ok(String(err).includes("scene project budget"), "the refusal names the wall");
+  }
+  ok(threw, "over the scene budget refuses — never a silent truncation");
+});
+
+await test("G1.4 surface snapping — caller geometry lands on a house surface", async () => {
+  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
+  eq([scaffoldGraphicsDoc({ scenes: G14_SCENES.slice(0, 1), topic: "t", width: 1280, height: 720 }).width,
+      scaffoldGraphicsDoc({ scenes: G14_SCENES.slice(0, 1), topic: "t", width: 1280, height: 720 }).height],
+     [1920, 1080], "1280×720 snaps to 16:9");
+  const sq = scaffoldGraphicsDoc({ scenes: G14_SCENES.slice(0, 1), topic: "t", width: 1000, height: 1000 });
+  eq([sq.width, sq.height], [1080, 1080], "1:1 snaps to 1:1");
+  const vertical = scaffoldGraphicsDoc({ scenes: G14_SCENES.slice(0, 1), topic: "t", width: 600, height: 1300 });
+  eq([vertical.width, vertical.height], [1080, 1920], "600×1300 snaps to 9:16");
+  const junk = scaffoldGraphicsDoc({ scenes: G14_SCENES.slice(0, 1), topic: "t", width: 500 });
+  eq([junk.width, junk.height], [1920, 1080], "junk geometry → the 16:9 default");
+  const r = validateGraphicsDoc(JSON.parse(JSON.stringify(vertical)));
+  ok(r.doc !== null && r.errors.length === 0, `a snapped scaffold validates: ${r.errors.join(" | ")}`);
+});
+
+await test("G1.4 the icon library parses — every path under the command budget", async () => {
+  const { countPathCommands } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { GRAPHICS_BUDGETS } = await import("../src/lib/tubeforge/graphics/types");
+  const { GRAPHICS_ICON_LIBRARY } = await import("../src/lib/tubeforge/graphics/planner");
+  const ids = Object.keys(GRAPHICS_ICON_LIBRARY);
+  ok(ids.length >= 4, `the library is non-trivial (${ids.length} icons)`);
+  for (const id of ids) {
+    const icon = GRAPHICS_ICON_LIBRARY[id];
+    ok(icon !== undefined, `${id} exists in the library`);
+    ok(icon.paths.length >= 1, `${id} carries paths`);
+    for (const d of icon.paths) {
+      const commands = countPathCommands(d);
+      ok(commands > 0, `${id}: "${d.slice(0, 24)}" parses (${commands} commands)`);
+      ok(commands <= GRAPHICS_BUDGETS.iconPathCommandBudget, `${id} under the command budget`);
+    }
+  }
+});
+
+await test("G1.4 normalize polices the grammar — every drop reported, survivors clamped", async () => {
+  const { normalizeGraphicsProposals } = await import("../src/lib/tubeforge/graphics/llm-planner");
+  const out = normalizeGraphicsProposals(
+    [
+      {
+        scene: 1,
+        elements: [
+          { kind: "headline", text: "Model title", x: -50, y: 2000, scale: 99, rotateDeg: 720, enter: "rise" },
+          { kind: "counter", from: 50, to: 20 },
+          { kind: "banana" },
+          { kind: "icon", iconId: "ghost" },
+          { kind: "headline", text: "second line", id: "headline-1" },
+          { kind: "bullet", text: "   " },
+          { kind: "headline", text: "spin art", enter: "spin" },
+        ],
+      },
+      { scene: 9, elements: [{ kind: "headline", text: "nowhere" }] },
+      {
+        scene: 2,
+        elements: [
+          { kind: "barChart", data: [{ label: "", value: 1 }, { label: "ok", value: 5 }, { label: "neg", value: -3 }] },
+          { kind: "shape", shape: "triangle" },
+          { kind: "callout", text: "note", enter: "draw" },
+          { kind: "icon", paths: ["M 0 0 L 4 4"] },
+        ],
+      },
+    ],
+    { scenes: G14_SCENES, width: 1920, height: 1080 },
+  );
+  eq([...out.served.keys()].sort((a, b) => a - b), [1, 2], "scenes 1 + 2 served");
+  eq(out.fallback, [3, 4, 5], "unmentioned scenes fall back to the native table");
+  const s1 = out.served.get(1);
+  ok(s1 !== undefined, "scene 1 served");
+  eq(s1.elements.length, 2, "the headline survived twice (dup id renamed), the junk died");
+  const s1First = s1.elements[0];
+  const s1Second = s1.elements[1];
+  ok(s1First !== undefined && s1Second !== undefined, "both survivors present");
+  eq(s1First.id, "headline-1", "the first headline synthesized its id");
+  eq(s1Second.id, "headline-2", "the dupe id was re-keyed, not dropped");
+  eq(s1First.at, { x: 0, y: 1080, scale: 4, rotateDeg: 180 }, "the placement clamped onto the board");
+  eq(s1First.enter, { kind: "rise", durationMs: 600, delayMs: 0, ease: "ease-out" }, "a bare-kind enter rides the native defaults");
+  const s2 = out.served.get(2);
+  ok(s2 !== undefined, "scene 2 served");
+  eq(s2.elements.length, 2, "the chart (one clean row) and the raw-path icon survived");
+  const s2First = s2.elements[0];
+  ok(s2First !== undefined, "the chart survived");
+  eq(s2First.bar?.data, [{ label: "ok", value: 5 }], "junk bar rows dropped, the clean row kept");
+  const reasons = out.dropped.map((d) => d.reason).join(" | ");
+  for (const fragment of [
+    "count-up law",
+    "not in the closed motion set",
+    "not legal on a",
+    "not in the icon library",
+    "outside the story",
+    "bar rows require",
+    "shape kind must be",
+    'requires a non-empty "text"',
+  ]) {
+    ok(reasons.includes(fragment), `a drop names its reason: ${fragment}`);
+  }
+});
+
+await test("G1.4 normalize is pure — same proposals, same result, byte-identical", async () => {
+  const { normalizeGraphicsProposals } = await import("../src/lib/tubeforge/graphics/llm-planner");
+  const raw = [
+    { scene: 1, elements: [{ kind: "headline", text: "Hi", enter: { kind: "pop", durationMs: 300, delayMs: 100, ease: "pop" } }] },
+    { scene: 2, elements: [{ kind: "counter", from: 0, to: 10, enter: "count" }] },
+  ];
+  const a = normalizeGraphicsProposals(raw, { scenes: G14_SCENES, width: 1920, height: 1080 });
+  const b = normalizeGraphicsProposals(raw, { scenes: G14_SCENES, width: 1920, height: 1080 });
+  eq(JSON.stringify(a), JSON.stringify(b), "same input → same normalization");
+});
+
+await test("G1.4 the scene clock clamps overrunning motions and drops the unfittable", async () => {
+  const { normalizeGraphicsProposals } = await import("../src/lib/tubeforge/graphics/llm-planner");
+  const { estimateNarrationMs } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const scene2 = G14_SCENES[1];
+  ok(scene2 !== undefined, "fixture scene 2 present");
+  const clock = estimateNarrationMs(scene2.narration);
+  const out = normalizeGraphicsProposals(
+    [
+      {
+        scene: 2,
+        elements: [
+          { kind: "headline", text: "Long", enter: { kind: "rise", durationMs: 6000, delayMs: 0 } },
+          { kind: "bullet", text: "Late", enter: { kind: "slide", durationMs: 400, delayMs: clock - 100 } },
+          { kind: "callout", text: "Late exit", exit: { kind: "fade", durationMs: 400, delayMs: clock - 100 } },
+        ],
+      },
+    ],
+    { scenes: G14_SCENES, width: 1920, height: 1080 },
+  );
+  const s = out.served.get(2);
+  ok(s !== undefined, "the scene stays served");
+  const headline = s.elements.find((e) => e.id === "headline-1");
+  ok(headline !== undefined, "the clamped headline survived");
+  eq(headline.enter.durationMs, clock, "an over-long duration pulls back to the scene clock");
+  const bullets = s.elements.filter((e) => e.kind === "bullet");
+  eq(bullets.length, 0, "a motion that can never fit kills its element");
+  const callout = s.elements.find((e) => e.kind === "callout");
+  ok(callout !== undefined, "the callout survives its dead exit");
+  eq(callout.exit, undefined, "the unfittable exit slot dropped, the element stands");
+  ok(out.dropped.some((d) => /cannot fit the scene clock/.test(d.reason)), "both drops name the clock");
+});
+
+await test("G1.4 the group police — children must be accepted same-scene non-group elements", async () => {
+  const { normalizeGraphicsProposals } = await import("../src/lib/tubeforge/graphics/llm-planner");
+  const out = normalizeGraphicsProposals(
+    [
+      {
+        scene: 1,
+        elements: [
+          { kind: "headline", text: "A" },
+          { kind: "subhead", text: "B" },
+          { kind: "group", children: ["ghost", "subhead-1", "headline-1", "headline-1"] },
+          { kind: "group", children: ["ghost-only"] },
+        ],
+      },
+    ],
+    { scenes: G14_SCENES, width: 1920, height: 1080 },
+  );
+  const s = out.served.get(1);
+  ok(s !== undefined, "the scene stays served");
+  const groups = s.elements.filter((e) => e.kind === "group");
+  eq(groups.length, 1, "only the well-formed group survived");
+  const group = groups[0];
+  ok(group !== undefined, "the group present");
+  eq(group.group?.children, ["subhead-1", "headline-1"], "ghost/self/dup children dropped in order");
+  const reasons = out.dropped.map((d) => d.reason).join(" | ");
+  ok(reasons.includes("not an accepted element"), "the ghost child names its reason");
+  ok(reasons.includes("claimed twice"), "the duplicate child names its reason");
+  ok(reasons.includes("no valid children survived"), "a childless group dies with its reason");
+});
+
+await test("G1.4 the cap — over 6 elements per scene drops the extras and names the cap", async () => {
+  const { normalizeGraphicsProposals, GRAPHICS_PLANNER_ELEMENTS_PER_SCENE } = await import(
+    "../src/lib/tubeforge/graphics/llm-planner"
+  );
+  const out = normalizeGraphicsProposals(
+    [
+      {
+        scene: 1,
+        elements: Array.from({ length: GRAPHICS_PLANNER_ELEMENTS_PER_SCENE + 2 }, (_, i) => ({
+          kind: "bullet",
+          text: `point ${i + 1}`,
+        })),
+      },
+    ],
+    { scenes: G14_SCENES, width: 1920, height: 1080 },
+  );
+  const s = out.served.get(1);
+  ok(s !== undefined, "the scene stays served");
+  eq(s.elements.length, GRAPHICS_PLANNER_ELEMENTS_PER_SCENE, `capped at ${GRAPHICS_PLANNER_ELEMENTS_PER_SCENE}`);
+  const capped = out.dropped.filter((d) => /planner cap/.test(d.reason));
+  eq(capped.length, 2, "both extras dropped with the cap named");
+});
+
+await test("G1.4 compose — served scenes swap elements, unserved scenes pass byte-identical", async () => {
+  const { normalizeGraphicsProposals, composeGraphicsDoc } = await import("../src/lib/tubeforge/graphics/llm-planner");
+  const native = g14Native();
+  const { served } = normalizeGraphicsProposals(
+    [{ scene: 2, elements: [{ kind: "counter", from: 0, to: 50, unit: "%", enter: "count" }] }],
+    { scenes: G14_SCENES, width: native.width, height: native.height },
+  );
+  const composed = composeGraphicsDoc(native, G14_SCENES, served);
+  const c2 = composed.scenes[1];
+  ok(c2 !== undefined, "scene 2 present");
+  eq(c2.elements.length, 1, "the served scene carries the model's elements");
+  const nativeScene1 = native.scenes[0];
+  const nativeScene5 = native.scenes[4];
+  ok(nativeScene1 !== undefined && nativeScene5 !== undefined, "native scenes present");
+  eq(c2.narration, native.scenes[1]?.narration, "narration untouched — the clock stays the engine's");
+  eq(c2.background, "#ffffff", "background untouched");
+  eq(JSON.stringify(composed.scenes[0]), JSON.stringify(nativeScene1), "scene 1 passes through byte-identical");
+  eq(JSON.stringify(composed.scenes[4]), JSON.stringify(nativeScene5), "scene 5 passes through byte-identical");
+  const r = validateGraphicsDoc(JSON.parse(JSON.stringify(composed)));
+  ok(r.doc !== null && r.errors.length === 0, `the composed doc validates clean: ${r.errors.join(" | ")}`);
+});
+
+await test("G1.4 wrapper — a good reply composes an LLM doc that validates clean", async () => {
+  const { scaffoldGraphicsDocLlm } = await import("../src/lib/tubeforge/graphics/llm-planner");
+  const passThrough: import("../src/lib/tubeforge/whiteboard/llm-planner").PlannerCall = (_service, _label, fn) => fn();
+  const goodAsk = async () =>
+    JSON.stringify({
+      scenes: [
+        {
+          scene: 1,
+          elements: [
+            { kind: "headline", text: "The Growth Engine", x: 960, y: 420, enter: { kind: "rise", durationMs: 600, delayMs: 0, ease: "ease-back" } },
+            { kind: "subhead", text: "reach, retention, revenue", y: 600 },
+          ],
+        },
+        {
+          scene: 2,
+          elements: [
+            { kind: "counter", from: 0, to: 87, unit: "%", x: 960, y: 470, enter: "count" },
+            { kind: "subhead", text: "the conversion lift", y: 620 },
+          ],
+        },
+        {
+          scene: 3,
+          elements: [
+            { kind: "headline", text: "Why teams switch", y: 230 },
+            { kind: "bullet", text: "setup takes minutes", y: 450 },
+            { kind: "bullet", text: "the workflow runs itself", y: 620 },
+          ],
+        },
+      ],
+    });
+  const { doc, report } = await scaffoldGraphicsDocLlm({ scenes: G14_SCENES, topic: "Growth" }, { ask: goodAsk, call: passThrough });
+  eq(report.planner, "llm", "the honest planner label");
+  eq(report.servedScenes, 3, "three scenes served");
+  eq(report.fallbackScenes, [4, 5], "the untouched scenes honestly listed");
+  eq(report.degraded, false, "not degraded");
+  const r = validateGraphicsDoc(JSON.parse(JSON.stringify(doc)));
+  ok(r.doc !== null && r.errors.length === 0, `the LLM doc validates clean: ${r.errors.join(" | ")}`);
+  const docScene2 = doc.scenes[1];
+  ok(docScene2 !== undefined, "scene 2 present in the doc");
+  const counter = docScene2.elements.find((e) => e.kind === "counter");
+  ok(counter !== undefined, "the model's counter landed");
+  eq(counter.counter?.to, 87, "with the story's number");
+});
+
+await test("G1.4 wrapper — every failure degrades to the native doc, byte-identical, honestly labeled", async () => {
+  const { scaffoldGraphicsDocLlm } = await import("../src/lib/tubeforge/graphics/llm-planner");
+  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
+  const passThrough: import("../src/lib/tubeforge/whiteboard/llm-planner").PlannerCall = (_service, _label, fn) => fn();
+  const native = scaffoldGraphicsDoc({ scenes: G14_SCENES, topic: "Growth" });
+
+  // The gateway itself fails.
+  const dead = await scaffoldGraphicsDocLlm(
+    { scenes: G14_SCENES, topic: "Growth" },
+    { ask: async () => { throw new Error("429 too many requests"); }, call: passThrough }
+  );
+  eq(dead.report.planner, "native", "degraded honestly");
+  eq(dead.report.degraded, true, "the degraded flag stands");
+  eq(dead.report.servedScenes, 0, "nothing claimed as served");
+  ok(/429/.test(dead.report.degradeReason ?? ""), "the reason carries the failure");
+  eq(JSON.stringify(dead.doc), JSON.stringify(native), "the doc IS the native scaffold, byte-identical");
+
+  // Prose instead of JSON.
+  const prose = await scaffoldGraphicsDocLlm(
+    { scenes: G14_SCENES, topic: "Growth" },
+    { ask: async () => "I would rather not use JSON today, thanks.", call: passThrough }
+  );
+  eq(prose.report.degraded, true, "prose degrades");
+  eq(JSON.stringify(prose.doc), JSON.stringify(native), "prose → native doc, byte-identical");
+
+  // Structured but useless.
+  const wrongShape = await scaffoldGraphicsDocLlm(
+    { scenes: G14_SCENES, topic: "Growth" },
+    { ask: async () => JSON.stringify({ rows: [] }), call: passThrough }
+  );
+  eq(wrongShape.report.degraded, true, "a wrong-shape reply degrades after its retry");
+
+  // Structured, in-story, but every element junk → per-element degradation empties the board.
+  const allJunk = await scaffoldGraphicsDocLlm(
+    { scenes: G14_SCENES, topic: "Growth" },
+    {
+      ask: async () =>
+        JSON.stringify({
+          scenes: [
+            { scene: 1, elements: [{ kind: "banana" }] },
+            { scene: 2, elements: [{ kind: "counter", from: 9, to: 3 }] },
+          ],
+        }),
+      call: passThrough,
+    },
+  );
+  eq(allJunk.report.degraded, true, "an all-junk normalization degrades");
+  ok(/no scene was servable/.test(allJunk.report.degradeReason ?? ""), "the reason names the empty normalization");
+  eq(JSON.stringify(allJunk.doc), JSON.stringify(native), "all-junk → the native doc, byte-identical");
+  eq(allJunk.report.planner, "native", "labeled native — never presented as model work");
+});
+
+
+// ---------------------------------------------------------------------------
+// S123 pins (the P1 follow-up commit) — decision D2 (advisory routing
+// hints) + decision D3 (the 24/30 fps contract, spec §5.2). The compose
+// half of the D2 neutrality pin and the budget-at-fps pin land with the
+// P2 commit (they read compose.ts / preflight.ts, which merge in #16/#17).
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S123 pins: D2 routing neutrality + the 24/30 fps contract (D3)");
+
+const S123_MS_GRID: number[] = [];
+for (let t = 0; t <= 8600; t += 100) S123_MS_GRID.push(t);
+S123_MS_GRID.push(4999.5, 5000.5, 7499.5, 8599.5, 8600);
+
+const S123_SHA = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
+
+/** The pin fixture — 3 scenes with explicit clocks (5000 + 2500 + 1100 ms =
+ *  8600 ms of ms truth), mixed motions covering every channel. The
+ *  golden-frame hashes below are committed against THIS fixture; any drift
+ *  in the frame truth changes them (the drift detector). */
+const S123_SCENES: Array<Record<string, unknown>> = [
+  {
+    id: "scene-1", narration: "first scene narration", durationMs: 5000, background: "#ffffff",
+    elements: [
+      {
+        id: "h1", kind: "headline", at: { x: 960, y: 200, scale: 1, rotateDeg: 0 },
+        text: { text: "Big title", sizePx: 64, weight: 800, color: "#112233", align: "center" },
+        enter: { kind: "rise", durationMs: 600, delayMs: 0, ease: "ease-back" },
+        exit: { kind: "fade", durationMs: 400, delayMs: 3400, ease: "linear" },
+        opacity: 0.9,
+      },
+      {
+        id: "cn", kind: "counter", at: { x: 960, y: 540, scale: 1, rotateDeg: 0 },
+        counter: { from: 0, to: 100, unit: "%", decimals: 0 },
+        enter: { kind: "count", durationMs: 1200, delayMs: 600, ease: "linear" },
+        emphasis: { kind: "pop", durationMs: 300, delayMs: 2200, ease: "pop" },
+      },
+      {
+        id: "br", kind: "bar", at: { x: 480, y: 800, scale: 1, rotateDeg: 0 },
+        bar: { data: [{ label: "a", value: 1 }, { label: "b", value: 2 }] },
+        enter: { kind: "wipe", durationMs: 800, delayMs: 300, ease: "ease-out" },
+      },
+    ],
+  },
+  {
+    id: "scene-2", narration: "second scene words here", durationMs: 2500, background: "#f8f8f8",
+    elements: [
+      {
+        id: "sh", kind: "subhead", at: { x: 960, y: 300, scale: 1, rotateDeg: 0 },
+        text: { text: "Sub title" },
+        enter: { kind: "slide", durationMs: 500, delayMs: 200, ease: "ease-in-out" },
+      },
+    ],
+  },
+  {
+    id: "scene-3", narration: "third", durationMs: 1100, background: "#ffffff",
+    elements: [
+      {
+        id: "ic1", kind: "icon", at: { x: 300, y: 300, scale: 1, rotateDeg: 0 },
+        icon: { paths: ["M 0 0 L 8 8 L 16 0"] },
+        enter: { kind: "draw", durationMs: 500, delayMs: 500, ease: "linear" },
+      },
+    ],
+  },
+];
+
+function s123Doc(fps: 24 | 30): GraphicsDoc {
+  return mustValidate(
+    { version: GRAPHICS_VERSION, title: "s123 pin fixture", width: 1920, height: 1080, fps, scenes: S123_SCENES },
+    `the s123 fixture @ ${fps} fps`,
+  );
+}
+
+/** The routed twin of the pin fixture — scene 1 carries the advisory hints
+ *  (D2); everything else is byte-for-byte the same raw JSON. */
+const S123_ROUTED_RAW: Record<string, unknown> = {
+  version: GRAPHICS_VERSION,
+  title: "s123 pin fixture",
+  width: 1920,
+  height: 1080,
+  fps: 24,
+  scenes: [
+    {
+      ...S123_SCENES[0],
+      routing: { suggestedEngine: "graphics", confidence: 0.9, reason: "kinetic text scene" },
+    },
+    S123_SCENES[1],
+    S123_SCENES[2],
+  ],
+};
+
+const s123StripRouting = (scenes: Array<Record<string, unknown>>): Array<Record<string, unknown>> =>
+  scenes.map(({ routing: _routing, ...rest }) => rest);
+
+/** Full report — for the pins that must read the WARNINGS list (mustValidate
+ *  returns the doc alone, the established G1.1 helper). */
+function mustValidateReport(raw: unknown, label: string): { doc: GraphicsDoc; warnings: string[] } {
+  const r = validateGraphicsDoc(raw);
+  if (r.doc === null) throw new Error(`${label} — errors: ${r.errors.join(" | ")}`);
+  return { doc: r.doc, warnings: r.warnings };
+}
+
+const s123RoutedWith = (routing: unknown): Record<string, unknown> => ({
+  ...S123_ROUTED_RAW,
+  scenes: [{ ...S123_SCENES[0], routing }, S123_SCENES[1], S123_SCENES[2]],
+});
+
+await test("S123 pin 1 — frameCountOf round-trips the frame↔time conversion at both rates (D3 §5.2.1)", () => {
+  for (const fps of [24, 30] as const) {
+    // tMs = frame · 1000 / fps, frame = round(tMs · fps / 1000) — the
+    // conversion helpers derive from frameCountOf; indices never stored.
+    for (const n of [1, 2, 3, 7, 11, 24, 25, 29, 30, 31, 100, 331, 720, 863, 864, 1000, 2160, 25920]) {
+      eq(frameCountOf((n * 1000) / fps, fps), n, `frame ${n} @ ${fps} fps`);
+    }
+  }
+});
+
+await test("S123 pin 2 — framePlanWindows is contiguous with delivered = frames/fps at both rates; junk fps refuses loudly (D3 §5.2.2)", () => {
+  const sceneMs = [5000, 2500, 1100];
+  for (const fps of [24, 30] as const) {
+    const plan = framePlanWindows(sceneMs, fps);
+    eq(plan.scenes.length, 3, `${fps} fps: one window per scene`);
+    for (let i = 0; i < plan.scenes.length; i++) {
+      const w = plan.scenes[i];
+      eq(w.deliveredSec, w.frames / fps, `${fps} fps window ${i}: deliveredSec IS frames/fps (the encode's -t math)`);
+      const next = plan.scenes[i + 1];
+      if (next !== undefined) eq(next.startSec, w.endSec, `${fps} fps: window ${i} → ${i + 1} contiguous`);
+    }
+    const sumDelivered = plan.scenes.reduce((s, w) => s + w.deliveredSec, 0);
+    eq(plan.totalSec, Math.round(sumDelivered * 100) / 100, `${fps} fps: totalSec = r2(Σ deliveredSec)`);
+  }
+  // Contiguity by construction holds at the 24-scene wall too — uneven
+  // durations at either rate (D3: "either fps").
+  const wallMs: number[] = Array.from({ length: 24 }, (_, i) => 1000 + i * 137);
+  for (const fps of [24, 30] as const) {
+    const plan = framePlanWindows(wallMs, fps);
+    for (let i = 0; i + 1 < plan.scenes.length; i++) {
+      eq(plan.scenes[i + 1].startSec, plan.scenes[i].endSec, `${fps} fps wall-plan: window ${i} → ${i + 1} contiguous`);
+    }
+  }
+  // Junk fps refuses loudly (the anim/clock law — never a silent default).
+  for (const junk of [0, -12, Number.NaN, Number.POSITIVE_INFINITY]) {
+    let threw = false;
+    try {
+      framePlanWindows(sceneMs, junk);
+    } catch {
+      threw = true;
+    }
+    ok(threw, `junk fps ${String(junk)} refuses`);
+  }
+  let junkScene = false;
+  try {
+    framePlanWindows([5000, 0, 1100], 24);
+  } catch {
+    junkScene = true;
+  }
+  ok(junkScene, "a junk scene duration refuses (caller bug, never silently dropped)");
+});
+
+await test("S123 pin 3 — graphicsFrameCount reads doc.fps, never an assumed rate (D3 §5.2.3)", () => {
+  const d24 = s123Doc(24);
+  const d30 = s123Doc(30);
+  eq(graphicsSceneDurationsMs(d24), [5000, 2500, 1100], "the scene clocks are the ms truth (fps-free)");
+  eq(graphicsFrameCount(d24), frameCountOf(8600, 24), "24 fps: the doc counter = frameCountOf(totalMs, 24)");
+  eq(graphicsFrameCount(d24), 206, "24 fps: 8600 ms of truth = 206 frames");
+  eq(graphicsFrameCount(d30), frameCountOf(8600, 30), "30 fps: the doc counter = frameCountOf(totalMs, 30)");
+  eq(graphicsFrameCount(d30), 258, "30 fps: the same 8600 ms = 258 frames");
+  ok(graphicsFrameCount(d24) !== graphicsFrameCount(d30), "the same ms truth delivers DISTINCT frame series per rate");
+});
+
+await test("S123 pin 4 — golden frames: ms-sampled states are fps-free; the per-fps frame series hashes distinct and stable (D3 §5.2.4)", () => {
+  const d24 = s123Doc(24);
+  const d30 = s123Doc(30);
+  // (a) Coincident ms sampling — the states are IDENTICAL at either rate:
+  // motion truth is milliseconds; fps never enters frameAt.
+  const ms24 = S123_SHA(JSON.stringify(S123_MS_GRID.map((t) => frameAt(d24, t))));
+  const ms30 = S123_SHA(JSON.stringify(S123_MS_GRID.map((t) => frameAt(d30, t))));
+  eq(ms24, ms30, "the same doc, sampled at ms-grid times, hashes identically at 24 and 30 fps");
+  eq(ms24, "a26ebc7ba208c3bf3aed4c7c27bdc5627eac704b7223ed518d35fe86a203cbf0", "the ms-grid golden hash is stable (drift detector)");
+  // (b) Per-fps frame series — t = frame · 1000 / fps: the DELIVERED series
+  // differs per rate, and each is pinned byte-for-byte.
+  const seriesHash = (fps: 24 | 30): string => {
+    const doc = fps === 24 ? d24 : d30;
+    const count = graphicsFrameCount(doc);
+    const states: GraphicsFrameState[] = [];
+    for (let n = 0; n < count; n++) states.push(frameAt(doc, (n * 1000) / fps));
+    return S123_SHA(JSON.stringify(states));
+  };
+  eq(seriesHash(24), "5b9006ac4d45945de02ccf72f1a237d95ba505d90ffd00f9c19e03eea8f61878", "the 24 fps frame-series golden hash is stable");
+  eq(seriesHash(30), "84394bd9d737be4abb20d5d0fb6cc253b345b2b162cb859c4e7047d68c1f686c", "the 30 fps frame-series golden hash is stable");
+  // (c) Determinism — no clock, no randomness: an immediate re-run of the
+  // whole series is byte-identical (the S64 law, pinned over the full
+  // delivered series).
+  eq(seriesHash(24), seriesHash(24), "frame evaluation is deterministic (same doc → same hash)");
+});
+
+await test("S123 D2 — routing parses tolerantly, writes strictly, round-trips byte-identical (spec §5.1)", () => {
+  const routed = mustValidate(S123_ROUTED_RAW, "the routed doc");
+  eq(routed.scenes[0]?.routing, { suggestedEngine: "graphics", confidence: 0.9, reason: "kinetic text scene" }, "the hints land on the scene verbatim");
+  eq(routed.scenes[1]?.routing, undefined, "scenes without hints stay without (absent stays absent)");
+  const json = writeGraphicsDoc(routed);
+  ok(json.includes('"routing":{"suggestedEngine":"graphics","confidence":0.9,"reason":"kinetic text scene"}'), "strict write serializes the advisory block");
+  const again = mustParse(json, "the written routed doc");
+  eq(writeGraphicsDoc(again), json, "write→parse→write is byte-identical WITH routing");
+
+  // Junk never refuses — the tolerant-parse law (advisory metadata has no
+  // power over the doc).
+  const nonObject = mustValidateReport(s123RoutedWith(5), "routing not an object");
+  eq(nonObject.doc.scenes[0]?.routing, undefined, "a non-object routing drops");
+  ok(nonObject.warnings.some((w) => w.includes("routing dropped — not an object")), "the drop warns");
+
+  const junkFields = mustValidateReport(
+    s123RoutedWith({ suggestedEngine: "cinema", confidence: "high", reason: 9, speed: 4 }),
+    "routing junk fields",
+  );
+  eq(junkFields.doc.scenes[0]?.routing, undefined, "all-junk hints drop — the block stays absent");
+  ok(junkFields.warnings.some((w) => w.includes("suggestedEngine dropped")), "an out-of-set engine drops with a warning");
+  ok(junkFields.warnings.some((w) => w.includes("routing.confidence dropped")), "a non-numeric confidence drops");
+  ok(junkFields.warnings.some((w) => w.includes("routing.reason dropped")), "a non-string reason drops");
+  ok(junkFields.warnings.some((w) => w.includes('unknown field "speed"')), "unknown hint fields drop with the unknown-key warning");
+
+  const clamped = mustValidateReport(s123RoutedWith({ confidence: 1.7 }), "routing confidence clamp");
+  eq(clamped.doc.scenes[0]?.routing?.confidence, 1, "confidence clamps into 0..1");
+  ok(clamped.warnings.some((w) => w.includes("routing.confidence 1.7 clamped")), "the clamp warns");
+
+  const truncated = mustValidateReport(s123RoutedWith({ reason: "x".repeat(300) }), "routing reason truncation");
+  eq(truncated.doc.scenes[0]?.routing?.reason?.length, GRAPHICS_ROUTING_REASON_MAX, "reason truncates to the cap");
+  ok(truncated.warnings.some((w) => w.includes("routing.reason truncated")), "the truncation warns");
+});
+
+await test("S123 D2 — neutrality: with and without routing, the reads are byte-identical and frameAt never sees the hints (spec §5.1)", () => {
+  const routed = mustValidate(S123_ROUTED_RAW, "the routed doc");
+  const plain = mustValidate(
+    { ...S123_ROUTED_RAW, scenes: s123StripRouting(S123_ROUTED_RAW.scenes as Array<Record<string, unknown>>) },
+    "the plain doc",
+  );
+
+  // (a) Each doc round-trips byte-identically on its own.
+  eq(writeGraphicsDoc(mustParse(writeGraphicsDoc(routed), "routed")), writeGraphicsDoc(routed), "the routed doc round-trips");
+  eq(writeGraphicsDoc(mustParse(writeGraphicsDoc(plain), "plain")), writeGraphicsDoc(plain), "the plain doc round-trips");
+  // (b) The written bytes differ ONLY by the advisory block — it is
+  // serialized, never silently ignored.
+  ok(writeGraphicsDoc(routed) !== writeGraphicsDoc(plain), "the advisory block is present on write");
+  // (c) frameAt is blind to routing — the whole ms sweep hashes identically.
+  const routedHash = S123_SHA(JSON.stringify(S123_MS_GRID.map((t) => frameAt(routed, t))));
+  const plainHash = S123_SHA(JSON.stringify(S123_MS_GRID.map((t) => frameAt(plain, t))));
+  eq(routedHash, plainHash, "the full ms sweep of frameAt states is byte-identical with and without routing");
+  // (d) The frame counter is blind too.
+  eq(graphicsFrameCount(routed), graphicsFrameCount(plain), "graphicsFrameCount is routing-blind");
+  // (e) The composer is blind too (the P2 half of the pin, landed with
+  // compose.ts): the composed bytes and the payload string are identical.
+  eq(
+    JSON.stringify(composeGraphicsScene(routed.scenes[0], routed)),
+    JSON.stringify(composeGraphicsScene(plain.scenes[0], plain)),
+    "composeGraphicsScene is routing-blind",
+  );
+  eq(
+    graphicsFramePayload(frameAt(routed, 1234)),
+    graphicsFramePayload(frameAt(plain, 1234)),
+    "graphicsFramePayload is routing-blind",
+  );
+});
+
+await test("S123 pin 5 — the multi-scene clock law: motions evaluate against the SCENE-LOCAL clock (R-6)", () => {
+  // The R-6 regression pin: frameAt used to pass the GLOBAL doc time to the
+  // motion windows — scene 2+ skipped every entrance (motions are
+  // scene-local by the validator's time-sanity law). The single-scene G1.2
+  // fixture could not see it; this two-scene probe does.
+  const probe = mustValidate(
+    {
+      version: GRAPHICS_VERSION, title: "s123 multi-scene probe", width: 1920, height: 1080, fps: 24,
+      scenes: [
+        { id: "s1", narration: "one", durationMs: 1000, background: "#ffffff", elements: [] },
+        {
+          id: "s2", narration: "two", durationMs: 1000, background: "#ffffff",
+          elements: [
+            {
+              id: "sh", kind: "subhead", at: { x: 960, y: 300, scale: 1, rotateDeg: 0 },
+              text: { text: "Late" },
+              enter: { kind: "slide", durationMs: 500, delayMs: 200, ease: "linear" },
+            },
+          ],
+        },
+      ],
+    },
+    "the multi-scene probe doc",
+  );
+  // Scene 2 spans [1000, 2000]; its slide owns the SCENE-LOCAL window
+  // [200, 700] — the GLOBAL windows would be [1200, 1700] past the scene.
+  const start = frameAt(probe, 1000);
+  eq(start.sceneTMs, 0, "the scene-local clock starts at 0");
+  eq(start.elements[0]?.x, 840, "pre-window: the start state holds (x = 960 - slidePx)");
+  eq(start.elements[0]?.opacity, 0, "pre-window: opacity 0 (slide is fade-driven)");
+  const mid = frameAt(probe, 1350);
+  eq(mid.sceneTMs, 350, "scene-local time = doc time − scene start");
+  approx(mid.elements[0]?.x ?? 0, 876, 1e-9, "mid-window: x = 960 − slidePx·(1−e), e = 0.3 (linear)");
+  const done = frameAt(probe, 1800);
+  eq(done.elements[0]?.x, 960, "post-window: the placed state holds");
+  eq(done.elements[0]?.opacity, 1, "post-window: opacity 1");
+});
+
+await test("S123 pin 6 — the budget wall refuses at doc.fps against the DELIVERED count (D3 §5.2.5, R-1)", () => {
+  // 24 scenes × 37,500 ms = 900,000 ms — under the explicit-duration wall
+  // (900,000 ≤ 900,000) but OVER the frame wall at 30 fps (27,000 > 25,920)
+  // while PASSING at 24 fps (21,600) — the rate must come from doc.fps, the
+  // count from the delivered arithmetic.
+  const mk = (fps: 24 | 30) => mustValidate(
+    {
+      version: GRAPHICS_VERSION, title: "s123 budget probe", width: 1920, height: 1080, fps,
+      scenes: Array.from({ length: 24 }, (_, i) => ({
+        id: `scene-${i + 1}`, narration: "budget probe scene", durationMs: 37_500, background: "#ffffff",
+        elements: [],
+      })),
+    },
+    `the budget probe @ ${fps} fps`,
+  );
+  const over30 = mk(30);
+  const over24 = mk(24);
+  const r30 = graphicsBudgetReport(over30);
+  eq(r30.fps, 30, "the report reads the doc's fps");
+  eq(r30.frames, 27_000, "the delivered count: 24 × frameCountOf(37500, 30)");
+  eq(r30.wall, ANIM_FRAME_BUDGET, "the wall is the ONE wall (GRAPHICS_FRAME_BUDGET = ANIM_FRAME_BUDGET)");
+  eq(r30.capSec, 864, "the 30 fps cap is 864 s (14.4 min) — derived, never assumed");
+  eq(r30.ok, false, "27,000 frames > 25,920 — refuse");
+  ok(
+    r30.refusal !== null && r30.refusal.includes("frame budget wall") && r30.refusal.includes("the cap at 30 fps is 864.0s"),
+    "the refusal is a named-wall message citing the fps-derived cap",
+  );
+  let threw = false;
+  try {
+    assertGraphicsBudget(over30);
+  } catch {
+    threw = true;
+  }
+  ok(threw, "assertGraphicsBudget throws before chromium launches");
+
+  const r24 = graphicsBudgetReport(over24);
+  eq(r24.frames, 21_600, "the SAME scenes at 24 fps deliver 21,600 frames");
+  eq(r24.ok, true, "…and pass — the wall is frame-based, the rate is doc.fps's");
+
+  // Boundary: 24 × 36,000 ms at 30 fps delivers EXACTLY the wall — allowed
+  // (exceeding means strictly greater).
+  const boundary = mustValidate(
+    {
+      version: GRAPHICS_VERSION, title: "s123 budget boundary", width: 1920, height: 1080, fps: 30,
+      scenes: Array.from({ length: 24 }, (_, i) => ({
+        id: `scene-${i + 1}`, narration: "boundary scene", durationMs: 36_000, background: "#ffffff",
+        elements: [],
+      })),
+    },
+    "the boundary doc",
+  );
+  const rb = graphicsBudgetReport(boundary);
+  eq(rb.frames, 25_920, "864 s at 30 fps = exactly the wall");
+  eq(rb.ok, true, "the boundary passes");
+
+  // R-1: the DELIVERED arithmetic (Σ per-scene rounding) differs from the
+  // whole-doc figure — the preflight MUST use the delivered count. 1030 ms
+  // at 30 fps rounds UP per scene (30.9 → 31) but the whole-doc figure
+  // rounds the total once (741.6 → 742) — 24 delivered vs 742.
+  const asymmetry = mustValidate(
+    {
+      version: GRAPHICS_VERSION, title: "s123 r1 asymmetry", width: 1920, height: 1080, fps: 30,
+      scenes: Array.from({ length: 24 }, (_, i) => ({
+        id: `scene-${i + 1}`, narration: "asymmetry scene", durationMs: 1030, background: "#ffffff",
+        elements: [],
+      })),
+    },
+    "the asymmetry doc",
+  );
+  const ra = graphicsBudgetReport(asymmetry);
+  eq(ra.frames, 744, "delivered: 24 × round(30.9) = 24 × 31");
+  eq(graphicsFrameCount(asymmetry), 742, "whole-doc: round(741.6) — the figure R-1 forbids relying on");
+  ok(ra.frames > graphicsFrameCount(asymmetry), "per-scene rounding exceeds the whole-doc figure — the preflight uses delivered");
+  eq(ra.ok, true, "both figures sit under the wall here — the pin is the arithmetic, not the refusal");
+});
+
+await test("S123 tracks — graphicsTracks projects the frame plan onto the S87 contract at doc.fps", () => {
+  const d24 = s123Doc(24);
+  const d30 = s123Doc(30);
+  const t24 = graphicsTracks(d24);
+  const t30 = graphicsTracks(d30);
+  eq(t24.length, 3, "visual + audio + subtitle (shape-stable for the compositor's dispatch)");
+  eq(t24[0].kind, "graphics", "the visual track is the graphics kind (the contract seat)");
+  eq(t24[0].name, "visual", "…named visual");
+  eq(t24[0].clips.length, 3, "one clip per scene");
+  eq(t24[1].clips.length, 0, "audio is empty at P2 — VO slots ride the render call (P3)");
+  eq(t24[2].clips.length, 0, "subtitle empty (whiteboard parity)");
+
+  const plan24 = framePlanWindows([5000, 2500, 1100], 24);
+  t24[0].clips.forEach((clip, i) => {
+    eq(clip.kind, "graphics", `clip ${i}: graphics kind`);
+    eq(clip.id, `g${i}`, `clip ${i}: deterministic id`);
+    eq(clip.asset, null, `clip ${i}: asset null — the frame is drawn by the engine`);
+    eq(clip.transitionIn, null, `clip ${i}: no track blend in`);
+    eq(clip.transitionOut, null, `clip ${i}: no track blend out`);
+    eq(clip.startSec, plan24.scenes[i].startSec, `clip ${i}: the frame-quantized window start`);
+    eq(clip.endSec, plan24.scenes[i].endSec, `clip ${i}: the frame-quantized window end`);
+    const next = t24[0].clips[i + 1];
+    if (next !== undefined) eq(next.startSec, clip.endSec, `clip ${i} → ${i + 1}: contiguous`);
+  });
+  eq(t24[0].clips[0].sceneIndex, 1, "scene-1 → story row 1 (the planner's scene-N ids)");
+  eq(t24[0].clips[1].sceneIndex, 2, "scene-2 → row 2");
+  eq(t24[0].clips[2].sceneIndex, 3, "scene-3 → row 3");
+
+  // The same ms truth at 30 fps projects DIFFERENT (fps-correct) windows —
+  // the 1100 ms tail quantizes to 26 frames @ 24 (endSec 8.58) vs 33
+  // frames @ 30 (endSec 8.6); the 5000 ms head happens to quantize equal.
+  const plan30 = framePlanWindows([5000, 2500, 1100], 30);
+  eq(t30[0].clips[2].endSec, plan30.scenes[2].endSec, "30 fps: the windows follow framePlanWindows at doc.fps");
+  ok(t30[0].clips[2].endSec !== t24[0].clips[2].endSec, "the windows differ per rate (frame-quantized, never ms-raw)");
+
+  eq(JSON.stringify(graphicsTracks(d24)), JSON.stringify(t24), "deterministic — same doc, byte-identical projection");
+});
+
+await test("S123 tracks — hand-authored scene ids carry no row linkage (null is the honest read)", () => {
+  const doc = mustValidate(
+    {
+      version: GRAPHICS_VERSION, title: "s123 tracks linkage", width: 1920, height: 1080, fps: 24,
+      scenes: S123_SCENES.map((s, i) => (i === 0 ? { ...s, id: "intro" } : s)),
+    },
+    "the hand-authored doc",
+  );
+  const tracks = graphicsTracks(doc);
+  eq(tracks[0].clips[0].sceneIndex, null, '"intro" links to no story row');
+  eq(tracks[0].clips[1].sceneIndex, 2, "scene-2 still links row 2 — position still orders the clip");
+});
+
+// ---------------------------------------------------------------------------
+// graphics — S123 P3: the engine renderer's pure seams, the draft viewport
+// law, and the graphics QC group. The chromium loop itself is proven by the
+// P5 proof script (the real render); the pins here hold the CONTRACT the
+// loop reads — the arg lists, the clock math, the draft geometry, the QC
+// judgments — to byte-shapes the house can audit.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S123 P3: the renderer contract (pure seams), the draft viewport, the QC group");
+
+await test("S123 P3 — the draft viewport law: closed scales, even dims ≥ 64, non-reviewable, no credit (the b6 pattern)", () => {
+  eq([...GRAPHICS_DRAFT_SCALES], [0.5, 0.75, 1.0], "the scale set is closed: {0.5, 0.75, 1.0}");
+  for (const s of GRAPHICS_DRAFT_SCALES) ok(isGraphicsDraftScale(s), `${s}× is a legal draft scale`);
+  for (const junk of [0.25, 0.6, 1.5, "0.5", null, undefined, Number.NaN])
+    ok(!isGraphicsDraftScale(junk), `${String(junk)} is not a legal scale (never a silent snap)`);
+
+  // Even + ≥ 64 — the encoder floor, derived never assumed.
+  eq(draftSurfaceDim(960), 960, "1920 × 0.5 stays 960 (even)");
+  eq(draftSurfaceDim(1440), 1440, "1920 × 0.75 stays 1440 (even)");
+  eq(draftSurfaceDim(540), 540, "1080 × 0.5 stays 540 (even)");
+  eq(draftSurfaceDim(810), 810, "1080 × 0.75 stays 810 (even)");
+  eq(draftSurfaceDim(63), 64, "odd sub-64 clamps to the 64 px floor");
+  eq(draftSurfaceDim(65), 66, "odd values bump to even (the macroblock law)");
+
+  const doc = s123Doc(24);
+  const plan = graphicsDraftPlan(doc, 0.5);
+  ok(plan !== null, "the legal scale yields a plan");
+  ok(
+    plan?.reviewable === false && plan?.inheritedReviewCredit === false,
+    "a draft is labelled non-reviewable and inherits/grants NO review credit"
+  );
+  ok(plan?.width === 960 && plan?.height === 540, "the 0.5× draft surface is 960×540");
+  ok(graphicsDraftPlan(doc, 0.9) === null, "an illegal scale refuses (null, never a snap)");
+
+  // The draft doc: same scenes/clock/fps on the scaled surface — a draft is
+  // the SAME render on a smaller raster (the one-renderer rule).
+  const ddoc = graphicsDraftDoc(doc, 0.75);
+  ok(ddoc?.width === 1440 && ddoc?.height === 810, "the 0.75× draft doc rescales the surface");
+  ok(ddoc?.scenes.length === doc.scenes.length && ddoc?.fps === doc.fps, "the draft doc keeps every scene and the clock");
+  ok(graphicsDraftDoc(doc, 0.9) === null, "the draft doc refuses an illegal scale too");
+
+  // The artifact key: namespaced under graphics/, scale-scoped, OUTSIDE the
+  // standard preview/final namespaces by construction (a look can never
+  // shadow an artifact a gate reads).
+  eq(graphicsDraftKey("v1", 0.5, "scene-2"), "v1/graphics/draft-scene-scene-2-0.5.mp4", "the scene draft key names the scene + scale");
+  eq(graphicsDraftKey("v1", 0.75, null), "v1/graphics/draft-full-0.75.mp4", "the whole-doc draft key names the scope + scale");
+  ok(graphicsDraftKey("v1", 0.9, null) === null, "the key refuses an illegal scale");
+});
+
+await test("S123 P3 — the renderer's pure seams: the global frame clock, the encode args, the assembly args", () => {
+  const sceneMs = [5000, 2500, 1100];
+  eq(sceneCursorMs(sceneMs, 0), 0, "scene 1's cursor is 0");
+  eq(sceneCursorMs(sceneMs, 1), 5000, "scene 2's cursor is the exact ms sum of its predecessors");
+  eq(sceneCursorMs(sceneMs, 2), 7500, "scene 3's cursor is 7500 (NO frame quantization drift — the render reads the ms truth)");
+
+  // The render loop's frame-time law: the global doc clock resolves the
+  // RIGHT scene, scene-locally (the R-6 law the render reads by calling
+  // frameAt(doc, cursor + sceneLocal)).
+  const doc = s123Doc(24);
+  const midScene2 = sceneCursorMs(sceneMs, 1) + 1200;
+  const f2 = frameAt(doc, midScene2);
+  eq(f2.sceneId, "scene-2", "the global clock resolves scene 2 at cursor+1200");
+  eq(f2.sceneTMs, 1200, "the frame state carries the SCENE-LOCAL clock");
+  const lateScene2 = sceneCursorMs(sceneMs, 1) + 2600;
+  eq(frameAt(doc, lateScene2).sceneId, "scene-3", "2600 ms into scene 2's window crosses its 2500 ms boundary into scene 3 (the cursor math is exact)");
+
+  // The encode args: the S87 slice-5 stream-homogeneity law + the apad law.
+  // (Substring reads ride the JOINED arg string — filter chains are single
+  // elements; exact reads ride the element list.)
+  const vo = graphicsEncodeArgs({ framesDir: "d", fps: 24, durSec: 5.0, voPath: "vo.wav", silentFill: false, sceneFile: "s.mp4" });
+  ok(vo.includes("-framerate") && vo.includes("24"), "the encode rides doc.fps (never an assumed rate)");
+  ok(vo.includes("vo.wav") && vo.includes("-map") && vo.includes("1:a") && vo.includes("apad"), "a VO scene maps the slot and PADS it (never -shortest — the tail survives)");
+  ok(vo.includes("-t") && vo.includes("5.000"), "the encode is bounded to the DELIVERED seconds (the R-1 arithmetic)");
+  const fill = graphicsEncodeArgs({ framesDir: "d", fps: 30, durSec: 2.5, voPath: null, silentFill: true, sceneFile: "s.mp4" });
+  ok(fill.some((a) => a.includes("anullsrc")), "a silent scene ahead of a voiced one fills with anullsrc (the concat is stream-homogeneous)");
+  const silent = graphicsEncodeArgs({ framesDir: "d", fps: 24, durSec: 1.1, voPath: null, silentFill: false, sceneFile: "s.mp4" });
+  ok(!silent.some((a) => a.includes("anullsrc")) && !silent.includes("1:a"), "a FULLY silent project keeps the video-only shape (the silent-draft law)");
+
+  // The assembly args: the bed gains + normalize=0, the copy path. The bed
+  // chain rides the single -filter_complex element (index after the flag).
+  const bedVo = graphicsAssemblyArgs({ listFile: "c.txt", finalFile: "final.mp4", totalSec: 8.6, musicPath: "bed.flac", anyVoAudio: true });
+  const bedVoFilter = bedVo[bedVo.indexOf("-filter_complex") + 1];
+  ok(bedVoFilter.includes("volume=0.16"), "a bed under narration ducks to 0.16 (the S64 receipt)");
+  ok(bedVoFilter.includes("normalize=0") && bedVoFilter.includes("duration=first"), "the amix arm never divides the voice (normalize=0) and bounds on the program (duration=first)");
+  const bedSolo = graphicsAssemblyArgs({ listFile: "c.txt", finalFile: "final.mp4", totalSec: 8.6, musicPath: "bed.flac", anyVoAudio: false });
+  // JS number concat renders 1.0 as "1" — the whiteboard chain is byte-identical ("volume=1,afade…").
+  ok(bedSolo[bedSolo.indexOf("-filter_complex") + 1].includes("volume=1,"), "a SOLO bed carries the program at full level (the S64 receipt)");
+  const copy = graphicsAssemblyArgs({ listFile: "c.txt", finalFile: "final.mp4", totalSec: 8.6, musicPath: null, anyVoAudio: true });
+  ok(copy.includes("-c") && copy.includes("copy"), "no bed = the concat stream-copies (the whole program)");
+});
+
+await test("S123 P3 — the tracks projection gains the audio truth (VO slots + the bed clip), absent opts stays byte-identical", () => {
+  const doc = s123Doc(24);
+  // Absent opts: the P2 pinned shape (empty audio) — byte-identical.
+  const p2 = graphicsTracks(doc);
+  eq(p2[1].clips.length, 0, "absent opts: the audio track stays empty (the P2 contract verbatim)");
+  // With the render's audio truth: one slot per voiced scene over the SAME
+  // window + one doc-spanning bed clip.
+  const voiced = graphicsTracks(doc, { voSceneIds: ["scene-1", "scene-3"], musicOn: true });
+  eq(voiced[1].clips.length, 3, "two VO slots + one bed clip");
+  eq(voiced[1].clips[0].id, "a-g0", "the slot grammar mirrors the whiteboard's");
+  eq(voiced[1].clips[0].startSec, 0, "slot 1 rides scene 1's window");
+  eq(voiced[1].clips[1].startSec, voiced[0].clips[2].startSec, "slot 3 rides scene 3's window (the same window the picture was delivered on)");
+  eq(voiced[1].clips[2].id, "a-music", "the bed clip is the contract's doc-spanning grammar");
+  eq(voiced[1].clips[2].sceneIndex, null, "the bed is scene-unbound");
+});
+
+await test("S123 P3 — the graphics QC matrix: re-derived, fail-closed, never a broad-pass cover", () => {
+  const doc = s123Doc(24);
+  const report = graphicsQcMatrix(doc, 2);
+  ok(report.passed, "a valid doc with accounted VO passes every row");
+  const ids = report.rows.map((r) => r.id);
+  ok(ids.includes("G1-PROJ-1") && ids.includes("G1-PROJ-2") && ids.includes("G1-PROJ-3") && ids.includes("G1-PROJ-4"), "the rows carry their Stickman-structure ids");
+
+  // The wall row reads the DELIVERED arithmetic (R-1), not the whole-doc.
+  const budgetRow = report.rows.find((r) => r.id === "G1-PROJ-1");
+  ok(budgetRow?.value.includes("858") || budgetRow?.value.includes("/25920"), `the wall row records the delivered count (${budgetRow?.value})`);
+
+  // More VO claims than scenes = a fail (no broad-pass cover).
+  const overVoiced = graphicsQcMatrix(doc, doc.scenes.length + 1);
+  const voRow = overVoiced.rows.find((r) => r.id === "G1-PROJ-3");
+  eq(voRow?.status, "fail", "VO slots exceeding the scene count fail the row (a mapping bug, not a warning)");
+
+  // The projection row measures contiguity honestly.
+  const projRow = report.rows.find((r) => r.id === "G1-PROJ-2");
+  eq(projRow?.status, "pass", "the S87 projection is contiguous from zero for the pinned fixture");
+});
+
+await test("S123 P3 — the lane-aware battery judgments: designed holds + hard cuts (the graphics group)", () => {
+  const doc = s123Doc(24);
+
+  // The hold windows: absolute seconds AFTER the last motion window ends.
+  const holds = graphicsHoldWindows(doc);
+  eq(holds.length, 3, "every pinned scene has a legal hold (its motions end before the scene does)");
+  const r2 = (v: number): number => Math.round(v * 100) / 100;
+  eq(holds[0].startSec, r2((sceneCursorMs([5000, 2500, 1100], 0) + 3800) / 1000), "scene 1's hold starts when its LAST motion ends (h1's exit @3400+400)");
+  eq(holds[0].endSec, 5.0, "scene 1's hold ends at its scene boundary");
+  ok(holds[1].startSec > holds[0].endSec, "holds are doc-absolute — scene 2's hold starts after scene 1 ends");
+  eq(holds[2].endSec, 8.6, "the last hold ends at the doc total (8600 ms)");
+
+  // The freeze judgment: inside a hold = designed; outside = the defect.
+  const starts = holds.map((h) => h.startSec + 0.01);
+  const split = judgeFreezes(starts, holds.map((h) => [h.startSec, h.endSec] as [number, number]));
+  eq(split.unexpected.length, 0, `freezes that begin inside the doc's holds are the design (${split.designedCount} designed)`);
+  const rogue = judgeFreezes([1.0], holds.map((h) => [h.startSec, h.endSec] as [number, number]));
+  eq(rogue.unexpected.length, 1, "a freeze BEFORE any hold is a dead compositor (unexpected)");
+  const runSplit = judgeStaticRuns(
+    holds.map((h) => ({ startSec: h.startSec, endSec: h.endSec })),
+    holds.map((h) => [h.startSec, h.endSec] as [number, number])
+  );
+  eq(runSplit.unexpected.length, 0, "static runs overlapping the holds are the design");
+  ok(judgeFreezes([2.0], []).unexpected.length === 1, "absent windows = the pre-S123 judgment verbatim (every freeze unexpected)");
+
+  // The hard-cut expectation: n−1 cuts at the frame-quantized boundaries.
+  const cuts = graphicsExpectedCuts(doc);
+  eq(cuts.cuts.length, 2, "three scenes → two boundaries");
+  eq(cuts.cuts[0], 5.0, "boundary 1 lands at the quantized end of scene 1 (120 frames @ 24)");
+  eq(cuts.cuts[1], 7.5, "boundary 2 lands at the quantized end of scene 2");
+  eq(cuts.windows.length, 0, "no blend windows — the doc's exits are in-scene motion, the track cuts are HARD");
+
+  // A single-scene doc expects NO cuts (any detected cut is a break).
+  const single = s123Doc(24);
+  single.scenes = single.scenes.slice(0, 1);
+  const singleCuts = graphicsExpectedCuts(single);
+  eq(singleCuts.cuts.length, 0, "a single-scene doc books no cuts");
+  eq(singleCuts.windows.length, 0, "and no windows");
+});
+
+// ---------------------------------------------------------------------------
+// S124 — the element editor: the placed-frame truth, the claim map, the
+// hit-test, the placement math, the slots-law z-order. The interactive
+// layer is thin by construction — every law is pinned HERE.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S124 the element editor: placed truth, hit-test, placement math, the z-order law");
+
+const S124_SCENE = G2_DOC.scenes[0];
+if (S124_SCENE === undefined) throw new Error("the mixed doc's first scene vanished");
+const S124_COMPOSED = composeGraphicsScene(S124_SCENE, G2_DOC);
+
+await test("S124 the placed frame rides the placement — at, base opacity, full reveal, no counter channel", () => {
+  const placed = placedGraphicsFrame(S124_SCENE);
+  eq(placed.sceneId, S124_SCENE.id, "the scene id rides");
+  eq(placed.elements.length, S124_SCENE.elements.length, "one frame per element, doc order");
+  for (const el of S124_SCENE.elements) {
+    const f = placed.elements.find((e) => e.id === el.id);
+    if (f === undefined) throw new Error(`placed frame missing for ${el.id}`);
+    eq(f.x, el.at.x, `${el.id} x`);
+    eq(f.y, el.at.y, `${el.id} y`);
+    eq(f.scale, el.at.scale, `${el.id} scale`);
+    eq(f.rotateDeg, el.at.rotateDeg, `${el.id} rotate`);
+    eq(f.opacity, el.opacity ?? 1, `${el.id} base opacity`);
+    eq(f.progress, 1, `${el.id} full reveal`);
+    ok(f.counterValue === undefined, `${el.id} carries no counter channel — the poster's baked end value holds`);
+  }
+});
+
+await test("S124 the placed frame IS the poster — the skeleton's baked transform/opacity match (the one-truth pin)", () => {
+  const placed = placedGraphicsFrame(S124_SCENE);
+  for (const f of placed.elements) {
+    // elementNode bakes `translate(x y) rotate(r) scale(s)` + opacity —
+    // parse the REAL html and compare numerically (fmt's 6dp rounding).
+    const re = new RegExp(
+      `<g id="ge-${f.id}" transform="translate\\(([-\\d.]+) ([-\\d.]+)\\) rotate\\(([-\\d.]+)\\) scale\\(([-\\d.]+)\\)" opacity="([-.\\d]+)">`
+    );
+    const m = re.exec(S124_COMPOSED.html);
+    if (!m) throw new Error(`the skeleton carries no baked node for ${f.id}`);
+    eq(Number(m[1]), f.x, `${f.id} baked x == placed x`);
+    eq(Number(m[2]), f.y, `${f.id} baked y == placed y`);
+    eq(Number(m[3]), f.rotateDeg, `${f.id} baked rotate == placed rotate`);
+    eq(Number(m[4]), f.scale, `${f.id} baked scale == placed scale`);
+    eq(Number(m[5]), f.opacity, `${f.id} baked opacity == placed opacity`);
+  }
+});
+
+await test("S124 the placed payload is byte-stable through the ONE serializer — double-run identical", () => {
+  const a = graphicsFramePayload(placedGraphicsFrame(S124_SCENE));
+  const b = graphicsFramePayload(placedGraphicsFrame(S124_SCENE));
+  eq(b, a, "double-run byte-identical");
+  ok(!a.includes("counterValue"), "the placed payload never carries the counter channel");
+  ok(a.includes('"progress":1'), "every element rides full reveal");
+});
+
+await test("S124 the claim map is the ONE claim truth — matches the composer's emission pass", () => {
+  const claims = graphicsGroupClaims(S124_SCENE);
+  eq(claims.size, 2, "the mixed doc claims exactly two children");
+  eq(claims.get("h1"), "grp", "h1 rides grp");
+  eq(claims.get("ic1"), "grp", "ic1 rides grp");
+  const unclaimed = S124_SCENE.elements.filter((el) => !claims.has(el.id)).map((el) => el.id);
+  eq(unclaimed.length, S124_SCENE.elements.length - 2, "the rest are unclaimed");
+  ok(!unclaimed.includes("h1") && !unclaimed.includes("ic1"), "claimed ids never appear unclaimed");
+});
+
+await test("S124 the hit-test reads doc order — the topmost containing bounds wins, edges inclusive, miss is null", () => {
+  const bounds = [
+    { id: "a", x: 0, y: 0, w: 10, h: 10 },
+    { id: "b", x: 5, y: 5, w: 10, h: 10 },
+  ];
+  eq(topmostElementAt(bounds, 6, 6), "b", "overlap reads the later doc order");
+  eq(topmostElementAt(bounds, 1, 1), "a", "a-only region reads a");
+  eq(topmostElementAt(bounds, 14, 14), "b", "b-only region reads b");
+  eq(topmostElementAt(bounds, 20, 20), null, "a miss is null");
+  eq(topmostElementAt(bounds, 5, 5), "b", "the shared corner is inclusive");
+});
+
+await test("S124 the hit slop keeps zero-area geometry grabbable — a bare line along its length", () => {
+  const line = [{ id: "ln", x: 0, y: 100, w: 300, h: 0 }];
+  eq(topmostElementAt(line, 150, 100), "ln", "a point ON the zero-height box hits even at slop 0 (inclusive edges)");
+  eq(topmostElementAt(line, 150, 104), null, "4 doc units off the line misses at slop 0");
+  eq(topmostElementAt(line, 150, 106, 8), "ln", "slop 8 covers the stroke neighborhood");
+  eq(topmostElementAt(line, 150, 120, 8), null, "beyond the slop is a miss");
+});
+
+await test("S124 move is exact and unclamped — scene-unit deltas, off-canvas is legal", () => {
+  const at = { x: 960, y: 540, scale: 2, rotateDeg: 15 };
+  const moved = movedPlacement(at, -1200, 300);
+  eq(moved.x, -240, "negative x is legal (slide entrances start off-canvas)");
+  eq(moved.y, 840, "exact y delta");
+  eq(moved.scale, 2, "scale untouched");
+  eq(moved.rotateDeg, 15, "rotate untouched");
+});
+
+await test("S124 scale rides the band — the ratio applies, the clamps hold, non-finite is a no-op", () => {
+  const at = { x: 100, y: 100, scale: 2, rotateDeg: 0 };
+  eq(scaledPlacement(at, 0.5).scale, 1, "half the distance, half the scale");
+  eq(scaledPlacement(at, 1000).scale, ELEMENT_EDITOR_LIMITS.scaleMax, "the ceiling holds");
+  eq(scaledPlacement(at, 0.0001).scale, ELEMENT_EDITOR_LIMITS.scaleMin, "the floor holds (the validator would collapse <=0 to 1 — the editor never ships it)");
+  eq(scaledPlacement(at, -3).scale, ELEMENT_EDITOR_LIMITS.scaleMin, "a negative factor clamps to the floor, never ships a silent rewrite");
+  const same = scaledPlacement(at, Number.NaN);
+  eq(same.scale, 2, "non-finite factor is a no-op");
+  eq(same.x, 100, "no-op keeps the placement");
+});
+
+function s124FlatScene(): GraphicsScene {
+  return mustValidate(
+    gDoc([gScene("flat", [gEl("a", "bullet"), gEl("b", "bullet"), gEl("c", "bullet"), gEl("d", "bullet")])]),
+    "the flat z-order scene"
+  ).scenes[0] as GraphicsScene;
+}
+
+await test("S124 z-order: the four actions on a flat scene — exact expected arrays", () => {
+  const top = s124FlatScene();
+  const rTop = applyZOrder(top, "b", "top");
+  ok(rTop.ok, "top accepts");
+  if (rTop.ok) eq(rTop.elements.map((e) => e.id).join("|"), "a|c|d|b", "top moves b to the end (paints last)");
+
+  const bottom = s124FlatScene();
+  const rBottom = applyZOrder(bottom, "c", "bottom");
+  ok(rBottom.ok, "bottom accepts");
+  if (rBottom.ok) eq(rBottom.elements.map((e) => e.id).join("|"), "c|a|b|d", "bottom moves c first (paints first)");
+
+  const raise = s124FlatScene();
+  const rRaise = applyZOrder(raise, "b", "raise");
+  ok(rRaise.ok, "raise accepts");
+  if (rRaise.ok) eq(rRaise.elements.map((e) => e.id).join("|"), "a|c|b|d", "raise swaps with the next neighbor");
+
+  const lower = s124FlatScene();
+  const rLower = applyZOrder(lower, "c", "lower");
+  ok(rLower.ok, "lower accepts");
+  if (rLower.ok) eq(rLower.elements.map((e) => e.id).join("|"), "a|c|b|d", "lower swaps with the previous neighbor");
+
+  const edge = s124FlatScene();
+  const rEdge = applyZOrder(edge, "d", "raise");
+  ok(rEdge.ok, "raise at the top is legal");
+  if (rEdge.ok) eq(rEdge.elements.map((e) => e.id).join("|"), "a|b|c|d", "and is an honest no-op");
+});
+
+await test("S124 z-order: the slots law — claimed children keep their exact array slots; the group's rank moves them", () => {
+  // Array order [A, GRP, B(claimed), C] — B lives at slot 2.
+  const scene = mustValidate(
+    gDoc([
+      gScene("slotted", [
+        gEl("A", "bullet"),
+        gEl("GRP", "group", { group: { children: ["B"] } }),
+        gEl("B", "icon", { enter: { kind: "draw", durationMs: 500, delayMs: 0, ease: "linear" } }),
+        gEl("C", "bullet"),
+      ]),
+    ]),
+    "the slotted scene"
+  ).scenes[0] as GraphicsScene;
+  const r = applyZOrder(scene, "GRP", "top");
+  ok(r.ok, "the group is a claimant — z-order applies to it");
+  if (r.ok) {
+    eq(r.elements.map((e) => e.id).join("|"), "A|C|B|GRP", "GRP moved last; B KEPT its slot 2 — the composer nests it inside GRP, so the child's effective z rides the group");
+    ok(r.elements[2]?.id === "B", "slot 2 still holds B's object");
+  }
+});
+
+await test("S124 z-order refusals — unknown ids and claimed members (the error names the owning group)", () => {
+  const scene = mustValidate(
+    gDoc([
+      gScene("refuse", [
+        gEl("h", "bullet"),
+        gEl("GRP", "group", { group: { children: ["k"] } }),
+        gEl("k", "icon", { enter: { kind: "draw", durationMs: 500, delayMs: 0, ease: "linear" } }),
+      ]),
+    ]),
+    "the refusal scene"
+  ).scenes[0] as GraphicsScene;
+  const unknown = applyZOrder(scene, "zz", "raise");
+  ok(!unknown.ok, "an unknown id refuses");
+  if (!unknown.ok) ok(unknown.error.includes("zz"), "the error names the id");
+  const claimed = applyZOrder(scene, "k", "top");
+  ok(!claimed.ok, "a claimed member refuses");
+  if (!claimed.ok) ok(claimed.error.includes("GRP"), "the error names the owning group");
+});
+
+await test("S124 z-order purity — the input scene is never mutated", () => {
+  const scene = s124FlatScene();
+  const before = JSON.stringify(scene);
+  applyZOrder(scene, "b", "top");
+  applyZOrder(scene, "a", "bottom");
+  eq(JSON.stringify(scene), before, "the input scene is byte-identical after the actions");
+});
+
+await test("S124 a z-ordered + re-placed doc round-trips the validator byte-stable", () => {
+  const doc = mustValidate(
+    gDoc([gScene("rt", [gEl("h", "headline"), gEl("s", "shape", { enter: { kind: "grow", durationMs: 500, delayMs: 0, ease: "ease-out" } }), gEl("b", "bullet")])]),
+    "the round-trip doc"
+  );
+  const scene = doc.scenes[0];
+  if (scene === undefined) throw new Error("the round-trip scene vanished");
+  const z = applyZOrder(scene, "h", "top");
+  ok(z.ok, "z applies");
+  if (z.ok) scene.elements = z.elements;
+  for (const el of scene.elements) {
+    el.at = movedPlacement(el.at, 120, -40);
+    el.at = scaledPlacement(el.at, 1.5);
+  }
+  const json1 = writeGraphicsDoc(doc);
+  const reparsed = mustParse(json1, "the round-trip write");
+  eq(writeGraphicsDoc(reparsed), json1, "write → parse → write is byte-identical");
+  const rScene = reparsed.scenes[0];
+  if (rScene === undefined) throw new Error("the reparsed scene vanished");
+  eq(rScene.elements.map((e) => e.id).join("|"), "s|b|h", "the new doc order survives the strict write");
+  const h = rScene.elements.find((e) => e.id === "h");
+  if (h === undefined) throw new Error("h vanished");
+  // gEl's at is (120, 96, scale 1): +120/-40 → (240, 56); ×1.5 → scale 1.5.
+  eq(h.at.x, 240, "the moved x survives");
+  eq(h.at.y, 56, "the moved y survives");
+  eq(h.at.scale, 1.5, "the scaled placement survives — inside the band, the validator stays silent");
+});
+
+await test("S124 the editor limits keep the validator silent at both band edges", () => {
+  const lo = mustValidate(
+    gDoc([gScene("lo", [gEl("a", "bullet", { at: { x: 0, y: 0, scale: ELEMENT_EDITOR_LIMITS.scaleMin, rotateDeg: 0 } })])]),
+    "scale floor"
+  );
+  eq(lo.scenes[0]?.elements[0]?.at.scale, ELEMENT_EDITOR_LIMITS.scaleMin, "the floor survives validation with no rewrite");
+  const hi = mustValidate(
+    gDoc([gScene("hi", [gEl("a", "bullet", { at: { x: 0, y: 0, scale: ELEMENT_EDITOR_LIMITS.scaleMax, rotateDeg: 0 } })])]),
+    "scale ceiling"
+  );
+  eq(hi.scenes[0]?.elements[0]?.at.scale, ELEMENT_EDITOR_LIMITS.scaleMax, "the ceiling survives validation with no rewrite");
+});
+
+// ---------------------------------------------------------------------------
+// S125 (K1) — the 2D character rig: the CharacterRigDoc grammar, the parts
+// library, the standard slot vocabulary (design record docs/design/s125-character-rig.md §3).
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S125 the rig grammar (rig2d)");
+
+import {
+  RIG_BUDGETS,
+  RIG_MOUTH_SLOTS,
+  RIG_VERSION,
+  parseRigDoc,
+  parseRigParts,
+  readEase,
+  scaffoldRigDoc,
+  standardPoseIds,
+  validateRigDoc,
+  validateRigParts,
+  writeRigDoc,
+  writeRigParts,
+  type RigPartArt,
+} from "../src/lib/tubeforge/characters/rig2d";
+
+const RIG_STAGE = 1080;
+
+function rigArt(overrides: Partial<RigPartArt> & { id: string; slot: RigPartArt["slot"] }): RigPartArt {
+  return { svg: `<circle cx="540" cy="400" r="60" fill="#e8b98a"/>`, ...overrides };
+}
+
+const ART: RigPartArt[] = [
+  rigArt({ id: "torso-art", slot: "torso", svg: `<rect x="420" y="520" width="240" height="320" rx="40" fill="#4a3a6a"/>` }),
+  rigArt({ id: "head-art", slot: "head" }),
+  rigArt({ id: "brow-art", slot: "brow", svg: `<rect x="470" y="330" width="140" height="12" rx="6" fill="#2a1f3a"/>` }),
+  rigArt({ id: "arm-l-art", slot: "arm-l", svg: `<rect x="360" y="540" width="60" height="220" rx="30" fill="#4a3a6a"/>` }),
+  rigArt({ id: "arm-r-art", slot: "arm-r", svg: `<rect x="660" y="540" width="60" height="220" rx="30" fill="#4a3a6a"/>` }),
+  ...RIG_MOUTH_SLOTS.map((v) => rigArt({ id: `mouth-${v}-art`, slot: "mouth", variant: v, svg: `<ellipse cx="540" cy="470" rx="30" ry="14" fill="#7a2e3a"/>` })),
+];
+
+function rigDocInput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    version: RIG_VERSION,
+    width: RIG_STAGE,
+    height: RIG_STAGE,
+    fps: 30,
+    background: "#1c1424",
+    parts: [
+      { id: "torso", slot: "torso", svgRef: "torso-art", z: 10, pivot: { x: 540, y: 680 }, rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      { id: "head", slot: "head", svgRef: "head-art", z: 20, pivot: { x: 540, y: 520 }, parent: "torso", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      { id: "brow", slot: "brow", svgRef: "brow-art", z: 22, pivot: { x: 540, y: 336 }, parent: "head", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      { id: "arm-l", slot: "arm-l", svgRef: "arm-l-art", z: 9, pivot: { x: 420, y: 560 }, parent: "torso", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      { id: "arm-r", slot: "arm-r", svgRef: "arm-r-art", z: 11, pivot: { x: 660, y: 560 }, parent: "torso", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      ...RIG_MOUTH_SLOTS.map((v, i) => ({
+        id: `mouth-${v}`,
+        slot: "mouth",
+        variant: v,
+        svgRef: `mouth-${v}-art`,
+        z: 24 + i,
+        pivot: { x: 540, y: 470 },
+        parent: "head",
+        rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 },
+      })),
+    ],
+    poses: [
+      { id: "arm-l-raise", name: "Raise left arm", joints: { "arm-l": { rotateDeg: -140 } } },
+      { id: "arm-r-point", name: "Point right", joints: { "arm-r": { rotateDeg: 120 }, "head": { rotateDeg: 6 } } },
+      { id: "brow-raise", name: "Raise brow", joints: { "brow": { rotateDeg: 0, y: -14 } } },
+    ],
+    ...overrides,
+  };
+}
+
+function mustValidateDoc(raw: unknown, parts: RigPartArt[] | null, label: string) {
+  const r = validateRigDoc(raw, parts);
+  ok(r.doc !== null, `${label}: expected a doc, got errors ${JSON.stringify(r.errors)}`);
+  return r.doc as NonNullable<typeof r.doc>;
+}
+
+await test("S125 the rig doc round-trips byte-stable (write ∘ validate ∘ parse ∘ write)", () => {
+  const doc = mustValidateDoc(rigDocInput(), ART, "round-trip");
+  const bytes = writeRigDoc(doc);
+  const reparsed = parseRigDoc(bytes, writeRigParts(ART));
+  ok(reparsed !== null, "the strict write reparses");
+  eq(writeRigDoc(reparsed as NonNullable<typeof reparsed>), bytes, "byte-stable round-trip");
+});
+
+await test("S125 the standard slot vocabulary maps from the parts (the §6 slot law)", () => {
+  const doc = mustValidateDoc(rigDocInput(), ART, "slots");
+  eq(
+    standardPoseIds(doc).sort(),
+    ["arm-l-point", "arm-l-raise", "arm-l-rest", "arm-r-point", "arm-r-raise", "arm-r-rest", "brow-raise", "brow-rest"],
+    "two 3-way arms + the brow pair, derived from the parts"
+  );
+  const mouthless = mustValidateDoc(rigDocInput({ parts: rigDocInput().parts.filter?.((p: Record<string, unknown>) => p.slot !== "mouth") ?? [] }), ART.filter((a) => a.slot !== "mouth"), "mouthless");
+  ok(mouthless.parts.every((p) => p.slot !== "mouth"), "the mouthless rig carries no mouth parts");
+});
+
+await test("S125 a partial mouth set is an ERROR — the speaking beats would visibly break", () => {
+  const partsInput = rigDocInput();
+  const cut = (partsInput.parts as Record<string, unknown>[]).filter(
+    (p) => !(p.slot === "mouth" && p.variant === "oh")
+  );
+  const r = validateRigDoc(rigDocInput({ parts: cut }), ART.filter((a) => !(a.slot === "mouth" && a.variant === "oh")));
+  ok(r.doc === null, "the partial mouth set refuses");
+  ok(r.errors.some((e) => e.includes("mouth set incomplete") && e.includes("oh")), `the error names the missing shape: ${r.errors[0]}`);
+});
+
+await test("S125 a mouthless rig validates with the honesty warning (the rig will not fake speech)", () => {
+  const partsOnly = ART.filter((a) => a.slot !== "mouth");
+  const partsInput = rigDocInput();
+  const cut = (partsInput.parts as Record<string, unknown>[]).filter((p) => p.slot !== "mouth");
+  const r = validateRigDoc(rigDocInput({ parts: cut }), partsOnly);
+  ok(r.doc !== null, "the mouthless rig is legal");
+  ok(r.warnings.some((w) => w.includes("no mouth parts") && w.includes("will not fake speech")), `the warning says the honest thing: ${r.warnings[0]}`);
+});
+
+await test("S125 referential integrity — unresolved svgRef, unknown pose joint, cyclic parent, junk pivot all refuse", () => {
+  const badRef = rigDocInput();
+  (badRef.parts as Record<string, unknown>[])[0].svgRef = "no-such-art";
+  ok(validateRigDoc(badRef, ART).doc === null, "unresolved svgRef refuses");
+  ok(validateRigDoc(badRef, ART).errors[0].includes("referential integrity"), "the error names the law");
+
+  const badJoint = rigDocInput({ poses: [{ id: "x", name: "X", joints: { "ghost-part": { rotateDeg: 10 } } }] });
+  ok(validateRigDoc(badJoint, ART).doc === null, "an unknown pose joint key refuses");
+
+  const cyclic = rigDocInput();
+  const parts = cyclic.parts as Record<string, unknown>[];
+  const torso = parts.find((p) => p.id === "torso");
+  ok(torso !== undefined, "the fixture's torso part exists");
+  torso.parent = "head";
+  const r = validateRigDoc(cyclic, ART);
+  ok(r.doc === null, "a parent cycle refuses");
+  ok(r.errors.some((e) => e.includes("cyclic")), "the cycle is named");
+
+  const junkPivot = rigDocInput();
+  (junkPivot.parts as Record<string, unknown>[])[0].pivot = { x: Number.NaN, y: 0 };
+  ok(validateRigDoc(junkPivot, ART).doc === null, "a NaN pivot refuses (pivot sanity)");
+});
+
+await test("S125 the walls — joint bands, pose budget, stage bounds, junk background, fps pin", () => {
+  const overRot = rigDocInput({ poses: [{ id: "x", name: "X", joints: { "arm-l": { rotateDeg: 361 } } }] });
+  ok(validateRigDoc(overRot, ART).doc === null, "rotateDeg beyond ±360 refuses");
+  const overScale = rigDocInput({ poses: [{ id: "x", name: "X", joints: { "arm-l": { rotateDeg: 0, scale: 3.01 } } }] });
+  ok(validateRigDoc(overScale, ART).doc === null, "scale beyond the band refuses");
+  const junkBg = rigDocInput({ background: "purple" });
+  ok(validateRigDoc(junkBg, ART).doc === null, "a junk background is refused, never substituted");
+  const junkFps = rigDocInput({ fps: 60 });
+  ok(validateRigDoc(junkFps, ART).doc === null, "fps must be 24 or 30 (the shared timebase)");
+  const tinyStage = rigDocInput({ width: 100 });
+  ok(validateRigDoc(tinyStage, ART).doc === null, "the stage walls hold");
+  const manyPoses = rigDocInput({
+    poses: Array.from({ length: RIG_BUDGETS.poses + 1 }, (_, i) => ({ id: `p${i}`, name: "P", joints: {} })),
+  });
+  ok(validateRigDoc(manyPoses, ART).doc === null, "the pose-sheet wall holds");
+});
+
+await test("S125 the missing standard poses WARN and the planner degrades (quality loss, never breakage)", () => {
+  const r = validateRigDoc(rigDocInput({ poses: [] }), ART);
+  ok(r.doc !== null, "an empty sheet is valid");
+  ok(r.warnings.some((w) => w.includes('standard pose "arm-l-raise" missing')), "the arm warnings name the degrade");
+  ok(r.warnings.some((w) => w.includes('standard pose "brow-raise" missing')), "the brow warning names the degrade");
+});
+
+await test("S125 the parts library — duplicate mouth variants refuse, junk slot refuses, the budget wall holds", () => {
+  const dup = [...ART, rigArt({ id: "mouth-open-dupe", slot: "mouth", variant: "open" })];
+  const r = validateRigParts(dup);
+  ok(r.parts === null, "duplicate mouth variants refuse at the library");
+  ok(r.errors[0].includes("duplicate mouth variants"), "the error names the set law");
+  const junkSlot = validateRigParts([rigArt({ id: "x", slot: "antenna" as never })]);
+  ok(junkSlot.parts === null, "a slot outside the closed vocabulary refuses");
+  const tooMany = validateRigParts(
+    Array.from({ length: RIG_BUDGETS.parts + 1 }, (_, i) => rigArt({ id: `p${i}`, slot: "prop" }))
+  );
+  ok(tooMany.parts === null, "the parts wall holds");
+  ok(parseRigParts("junk{") === null, "tolerant parse returns null on junk JSON");
+});
+
+await test("S125 the scaffold builds a valid doc from seeds + art (the auto planner's native half)", () => {
+  const seeds = (rigDocInput().parts as Record<string, unknown>[]).map((p) => ({
+    id: String(p.id),
+    slot: p.slot as RigPartArt["slot"],
+    variant: p.variant as RigPartArt["variant"],
+    svgRef: String(p.svgRef),
+    z: Number(p.z),
+    pivot: p.pivot as { x: number; y: number },
+    parent: p.parent as string | undefined,
+  }));
+  const r = scaffoldRigDoc({ parts: seeds, art: ART });
+  ok(r.doc !== null, `the scaffold validates: ${JSON.stringify(r.errors)}`);
+  eq(r.doc?.parts.every((p) => p.rest.scale === 1 && p.rest.rotateDeg === 0), true, "rest = identity (the art IS the rest)");
+  ok(r.doc?.poses.length === 0, "the sheet starts empty — the standard poses arrive from the parts pass");
+});
+
+await test("S125 the ease reader — the shared check for the doc and the timeline grammars", () => {
+  eq(readEase("pop"), "pop", "a legal curve rides");
+  eq(readEase("spin"), "linear", "junk falls back to linear (motion is honest before it is pretty)");
+});
+
+// ---------------------------------------------------------------------------
+// S125 (K1) — the rig frame truth: poseAt (FK, pose rows, tween windows),
+// the mouth schedule (W4 word anchors → syllable-counted beats) and the
+// one-classifier-two-consumers law (design record §4).
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S125 the rig frame truth (rig-frame)");
+
+import { classifySentence } from "../src/lib/tubeforge/whiteboard/beat-plan";
+import {
+  MOUTH_MIN_OPEN_MS,
+  POSE_TWEEN_MS,
+  SPEECH_CYCLE,
+  countSyllables,
+  mouthBeatsFromSpans,
+  mouthSchedule,
+  poseAt,
+  restRigFrame,
+  wordSpansFromAnchors,
+  type Matrix6,
+  type WordSpan,
+} from "../src/lib/tubeforge/characters/rig-frame";
+
+const RIG_DOC = mustValidateDoc(rigDocInput(), ART, "frame-truth fixture");
+const RIG_POSES = new Map(RIG_DOC.poses.map((p) => [p.id, p]));
+
+/** The arm rotation an absolute matrix implies about its pivot (deg) — the
+ *  FK pins read this, not internal matrices. */
+function impliedRotation(m: Matrix6): number {
+  return Math.atan2(m[1], m[0]) * (180 / Math.PI);
+}
+
+function finiteMatrix(m: Matrix6): boolean {
+  return m.every(Number.isFinite);
+}
+
+await test("S125 poseAt is deterministic — same inputs, byte-identical frame states", () => {
+  const timeline = {
+    durationMs: 4000,
+    rows: [
+      { tMs: 0, poseId: "arm-l-raise" },
+      { tMs: 2000, poseId: "arm-r-point", ease: "pop" as const },
+    ],
+  };
+  const a = poseAt(RIG_DOC, timeline, 1300, { segments: [], speaking: false });
+  const b = poseAt(RIG_DOC, timeline, 1300, { segments: [], speaking: false });
+  eq(JSON.stringify(a), JSON.stringify(b), "byte-identical evaluation");
+  ok(a.parts.every((p) => p.matrix.every(Number.isFinite)), "all matrices finite");
+});
+
+await test("S125 the FK chain — a torso rotation carries the head, brow and arms with it", () => {
+  const rest = poseAt(RIG_DOC, { durationMs: 4000, rows: [] }, 0);
+  const timeline = { durationMs: 4000, rows: [{ tMs: 0, poseId: null }] };
+  const turned = poseAt(RIG_DOC, timeline, 0);
+  eq(JSON.stringify(turned), JSON.stringify(rest), "rest rows ≡ no rows");
+
+  const withTurn = poseAt(
+    RIG_DOC,
+    { durationMs: 4000, rows: [{ tMs: 0, poseId: "arm-r-point" }] },
+    POSE_TWEEN_MS + 1
+  );
+  // arm-r-point rotates arm-r AND the head 6°: the head's absolute matrix
+  // differs from rest, the torso's does not (only arm-r + head are jointed).
+  const headRest = rest.parts.find((p) => p.id === "head");
+  const headMoved = withTurn.parts.find((p) => p.id === "head");
+  const torsoRest = rest.parts.find((p) => p.id === "torso");
+  const torsoMoved = withTurn.parts.find((p) => p.id === "torso");
+  ok(headRest && headMoved, "head frames exist");
+  ok(torsoRest && torsoMoved, "torso frames exist");
+  eq(JSON.stringify(torsoRest.matrix), JSON.stringify(torsoMoved.matrix), "the untwisted parent keeps rest");
+  ok(JSON.stringify(headRest.matrix) !== JSON.stringify(headMoved.matrix), "the child rides its own joint");
+});
+
+await test("S125 a parent rotation carries children — FK, not per-part absolutes", () => {
+  // Author a pose that rotates the TORSO: the head's absolute matrix must
+  // move even though the head carries no joint in the pose.
+  const sheetPose = { id: "lean", name: "Lean", joints: { torso: { rotateDeg: 30 } } };
+  const leanDoc = mustValidateDoc(
+    rigDocInput({ poses: [...(rigDocInput().poses as unknown[]), sheetPose] }),
+    ART,
+    "lean fixture"
+  );
+  const rest = poseAt(leanDoc, { durationMs: 2000, rows: [] }, 0);
+  const lean = poseAt(leanDoc, { durationMs: 2000, rows: [{ tMs: 0, poseId: "lean" }] }, POSE_TWEEN_MS + 1);
+  const headRest = rest.parts.find((p) => p.id === "head");
+  const headLean = lean.parts.find((p) => p.id === "head");
+  const torsoLean = lean.parts.find((p) => p.id === "torso");
+  ok(headRest && headLean && torsoLean, "frames exist");
+  ok(
+    JSON.stringify(headRest.matrix) !== JSON.stringify(headLean.matrix),
+    "the head moved without its own joint — the chain carried it"
+  );
+  approx(impliedRotation(torsoLean.matrix), 30, 0.001, "the torso itself reads 30°");
+  approx(impliedRotation(headLean.matrix), 30, 0.001, "the head reads the carried 30°");
+});
+
+await test("S125 pose rows hold; the tween window clamps; rest before the first row", () => {
+  const timeline = { durationMs: 6000, rows: [{ tMs: 1000, poseId: "arm-l-raise" }] };
+  const before = poseAt(RIG_DOC, timeline, 999);
+  const atStart = poseAt(RIG_DOC, timeline, 1000);
+  const mid = poseAt(RIG_DOC, timeline, 1000 + POSE_TWEEN_MS / 2);
+  const settled = poseAt(RIG_DOC, timeline, 1000 + POSE_TWEEN_MS + 1);
+  const armL = (f: ReturnType<typeof poseAt>) => f.parts.find((p) => p.id === "arm-l");
+  const rotOf = (f: ReturnType<typeof poseAt>) => impliedRotation((armL(f) as { matrix: Matrix6 }).matrix);
+  const target = (RIG_POSES.get("arm-l-raise")?.joints["arm-l"]?.rotateDeg ?? 0);
+  approx(rotOf(before), 0, 0.01, "rest before the row");
+  approx(rotOf(atStart), 0, 0.01, "the tween starts at the previous pose (u=0)");
+  const midRot = rotOf(mid);
+  ok(midRot !== 0 && Math.abs(midRot - target) > 0.01, "mid-tween is between rest and target");
+  approx(rotOf(settled), target, 0.01, "the pose holds after the tween");
+  const held = poseAt(RIG_DOC, timeline, 5999);
+  approx(rotOf(held), target, 0.01, "hold to the end — no drift");
+});
+
+await test("S125 an unknown pose id resolves to rest — authored timelines stay honest", () => {
+  const timeline = { durationMs: 2000, rows: [{ tMs: 0, poseId: "no-such-pose" }] };
+  const f = poseAt(RIG_DOC, timeline, POSE_TWEEN_MS + 1);
+  const armL = f.parts.find((p) => p.id === "arm-l");
+  ok(armL, "the arm frame exists");
+  approx(impliedRotation((armL as { matrix: Matrix6 }).matrix), 0, 0.01, "unknown → rest, not a crash");
+});
+
+await test("S125 the syllable counter — deterministic vowel-group beats (beat-sync, not phonemes)", () => {
+  eq(countSyllables("cat"), 1, "one group");
+  eq(countSyllables("money"), 2, "mon-ey (the ey group)");
+  eq(countSyllables("tube"), 1, "the silent trailing e");
+  eq(countSyllables("beautiful"), 3, "eau-ti-ful → 3 groups");
+  eq(countSyllables(""), 1, "junk still beats once (a closed-open pulse, never zero)");
+  eq(countSyllables("character"), 3, "cha-rac-ter");
+});
+
+await test("S125 mouth beats land STRICTLY INSIDE their word spans (the W4 tolerance pin)", () => {
+  const spans: WordSpan[] = [
+    { word: "hello", startMs: 0, endMs: 400 },
+    { word: "there", startMs: 500, endMs: 800 },
+  ];
+  const beats = mouthBeatsFromSpans(spans, 1000);
+  ok(beats.length > 0, "beats exist");
+  for (const b of beats) {
+    const owner = spans.find((s) => b.startMs >= s.startMs && b.endMs <= s.endMs);
+    ok(owner !== undefined, `beat ${b.startMs}..${b.endMs} inside its word span`);
+  }
+  ok(!beats.some((b) => b.startMs >= 400 && b.endMs <= 500), "the gap between words stays closed");
+  const expectedFirst = SPEECH_CYCLE[0];
+  eq(beats[0].variant, expectedFirst, "the cycle opens on the first speech variant");
+  const short = mouthBeatsFromSpans([{ word: "a", startMs: 0, endMs: 50 }], 100);
+  eq(short.length, 1, "a sub-floor span carries ONE beat");
+  ok(short[0].endMs - short[0].startMs >= Math.min(MOUTH_MIN_OPEN_MS, 50 * 0.55) - 0.001, "the open floor holds");
+});
+
+await test("S125 the schedule ladder — anchors first, estimator fallback, no narration → closed", () => {
+  const narration = "hello extraordinary friend";
+  const tokens = narration.split(" ");
+  const anchors = {
+    byWord: [
+      { index: 0, startMs: 0, endMs: 150 },
+      { index: 1, startMs: 150, endMs: 500 },
+      { index: 2, startMs: 500, endMs: 600 },
+    ],
+  };
+  const spansA = wordSpansFromAnchors(narration, anchors, 600);
+  ok(spansA !== null, "anchored spans resolve");
+  eq(spansA?.map((s) => s.word), tokens, "the tokenizer index space lines up");
+  eq(spansA?.[1].endMs, 500, "the anchored span rides its own clock (uneven)");
+  const anchored = mouthSchedule({ narration, anchors, durationMs: 600 });
+  const est = mouthSchedule({ narration, anchors: null, durationMs: 600 });
+  ok(anchored.segments.length > 0 && est.segments.length > 0, "both paths beat");
+  ok(JSON.stringify(anchored.segments) !== JSON.stringify(est.segments), "the estimator is a different clock (the fallback is honest about it)");
+  const silent = mouthSchedule({ narration: "", anchors: null, durationMs: 600 });
+  eq(silent.segments.length, 0, "no narration → no beats (closed mouth)");
+  eq(silent.speaking, false, "the rig will not fake speech");
+  const mismatch = wordSpansFromAnchors(narration, { byWord: anchors.byWord.slice(0, 1) }, 600);
+  eq(mismatch, null, "an index-space mismatch degrades to null → the estimator");
+});
+
+await test("S125 the mouth visibility swap — one shape visible, the rest hidden, closed at rest", () => {
+  const timeline = { durationMs: 4000, rows: [] };
+  const speech = {
+    segments: [{ startMs: 0, endMs: 300, variant: "open" as const }],
+    speaking: true,
+  };
+  const open = poseAt(RIG_DOC, timeline, 100, speech);
+  eq(open.mouthVariant, "open", "the speech segment owns the variant");
+  ok(open.speaking, "speaking reads true on an open beat");
+  const visibleMouths = open.parts.filter((p) => p.id.startsWith("mouth-") && p.visible);
+  eq(visibleMouths.map((p) => p.id), ["mouth-open"], "exactly the open shape shows");
+  const after = poseAt(RIG_DOC, timeline, 400, speech);
+  eq(after.mouthVariant, "closed", "between beats the mouth closes");
+  eq(
+    after.parts.filter((p) => p.id.startsWith("mouth-") && p.visible).map((p) => p.id),
+    ["mouth-closed"],
+    "exactly the closed shape shows between beats"
+  );
+  const rest = restRigFrame(RIG_DOC);
+  eq(rest.mouthVariant, "closed", "the poster frame is closed");
+  eq(
+    rest.parts.filter((p) => p.id.startsWith("mouth-") && p.visible).map((p) => p.id),
+    ["mouth-closed"],
+    "the closed mouth art is the rest state"
+  );
+});
+
+await test("S125 the gesture mouth override wins its window — smile is a gesture, never speech", () => {
+  const timeline = {
+    durationMs: 4000,
+    rows: [
+      { tMs: 1000, poseId: "arm-l-raise", mouth: "smile" as const },
+      { tMs: 2500, poseId: null },
+    ],
+  };
+  const speech = {
+    segments: [{ startMs: 1200, endMs: 2000, variant: "open" as const }],
+    speaking: true,
+  };
+  eq(poseAt(RIG_DOC, timeline, 1500, speech).mouthVariant, "smile", "the override owns its window");
+  eq(poseAt(RIG_DOC, timeline, 1200, speech).mouthVariant, "smile", "…from the row's tMs");
+  eq(poseAt(RIG_DOC, timeline, 2501, speech).mouthVariant, "closed", "the window ends at the next row");
+  eq(poseAt(RIG_DOC, timeline, 500, speech).mouthVariant, "closed", "before the row, speech governs");
+});
+
+await test("S125 never-NaN at the band edges — ±360°, scale 0.2/3, offset extremes stay finite", () => {
+  const edgePose = {
+    id: "edges",
+    name: "Edges",
+    joints: {
+      torso: { rotateDeg: 360, x: 1600, y: -1600, scale: 3 },
+      "arm-l": { rotateDeg: -360, scale: 0.2 },
+      head: { rotateDeg: 359.9, y: 800 },
+    },
+  };
+  const edgeDoc = mustValidateDoc(
+    rigDocInput({ poses: [...(rigDocInput().poses as unknown[]), edgePose] }),
+    ART,
+    "edge fixture"
+  );
+  const f = poseAt(edgeDoc, { durationMs: 1000, rows: [{ tMs: 0, poseId: "edges" }] }, POSE_TWEEN_MS + 1);
+  ok(f.parts.every((p) => finiteMatrix(p.matrix)), "every matrix finite at the band edges");
+  const tweening = poseAt(edgeDoc, { durationMs: 1000, rows: [{ tMs: 0, poseId: "edges" }] }, POSE_TWEEN_MS / 2);
+  ok(tweening.parts.every((p) => finiteMatrix(p.matrix)), "finite mid-tween too");
+});
+
+await test("S125 classifySentence is exported and unchanged — one classifier, two consumers", () => {
+  eq(classifySentence("Imagine a world where money grows on trees.", 0), "setup", "the opener reads setup");
+  eq(classifySessionlessEmphasis(), "emphasis", "emphasis wins over everything");
+  eq(classifySentence("Then the flow moves to the next stage.", 2), "action", "action cues read");
+  function classifySessionlessEmphasis(): string {
+    return classifySentence("This is the crucial point!", 3);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// S125 (K1) — the contract seats: the compose seam + the ONE applier, the
+// characterTracks projection (the S87 contract) and the delivered-count
+// preflight wall (R-1) (design record §5).
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S125 the contract seats (compose, tracks, preflight)");
+
+import { planFromTracks } from "../src/lib/tubeforge/composition-plan";
+import {
+  APPLY_RIG_FRAME_FN,
+  composeRigScene,
+  rigFramePayload,
+  rigPartNodeId,
+} from "../src/lib/tubeforge/characters/rig-compose";
+import { characterTracks, type RigSceneSlot } from "../src/lib/tubeforge/characters/tracks";
+import { assertRigBudget, rigBudgetReport, rigBudgetRefusal } from "../src/lib/tubeforge/characters/preflight";
+
+await test("S125 the compose skeleton — z-ordered rp- groups at rest, the closed mouth visible, sanitize on every fragment", () => {
+  const dirtyArt: RigPartArt[] = ART.map((a) =>
+    a.id === "head-art"
+      ? {
+          ...a,
+          svg: `<circle cx="540" cy="400" r="60" fill="#e8b98a" onclick="alert(1)"/><script>alert(2)</script>`,
+        }
+      : a
+  );
+  const { html } = composeRigScene(RIG_DOC, dirtyArt);
+  ok(html.includes(`id="${rigPartNodeId("head")}"`), "the head group carries the rp- id");
+  ok(!html.includes("onclick"), "event handlers are stripped (the sanitizer is the first line)");
+  ok(!html.includes("<script"), "script subtrees are stripped");
+  // Draw order: the torso group (z 10) precedes head (z 20) in the DOM.
+  const torsoAt = html.indexOf(`id="${rigPartNodeId("torso")}"`);
+  const headAt = html.indexOf(`id="${rigPartNodeId("head")}"`);
+  ok(torsoAt >= 0 && headAt > torsoAt, "the skeleton's DOM order is the z order");
+  // Mouth visibility at rest: closed shows, the others hide.
+  ok(html.includes(`id="${rigPartNodeId("mouth-closed")}"`), "the closed mouth group exists");
+  for (const v of ["open", "wide", "oh", "smile"]) {
+    const g = html.indexOf(`id="${rigPartNodeId(`mouth-${v}`)}"`);
+    ok(g >= 0, `the ${v} group exists`);
+    ok(html.slice(g, g + 140).includes('display="none"'), `the ${v} shape starts hidden (the rest mouth is closed)`);
+  }
+});
+
+await test("S125 the applier — absolute matrix/display writes, idempotence by construction (the source pin)", () => {
+  ok(APPLY_RIG_FRAME_FN.includes('"transform", "matrix("'), "the transform is an absolute matrix set");
+  ok(APPLY_RIG_FRAME_FN.includes('"display", part.visible ? "" : "none"'), "mouth visibility is an absolute display write");
+  ok(APPLY_RIG_FRAME_FN.includes("JSON.parse(payloadJson)"), "the payload string is parsed inside the page (the double-encode law)");
+  ok(!APPLY_RIG_FRAME_FN.includes("createElement"), "the applier creates nothing");
+  const frame = poseAt(RIG_DOC, { durationMs: 1000, rows: [{ tMs: 0, poseId: "arm-l-raise" }] }, 400);
+  const payload = rigFramePayload(frame);
+  eq(JSON.parse(payload).parts.length, RIG_DOC.parts.length, "one row per part, draw order");
+  eq(JSON.parse(payload).mouthVariant, frame.mouthVariant, "the variant rides");
+  const frame2 = poseAt(RIG_DOC, { durationMs: 1000, rows: [{ tMs: 0, poseId: "arm-l-raise" }] }, 400);
+  eq(rigFramePayload(frame2), payload, "equal frames serialize byte-identical");
+});
+
+await test("S125 characterTracks — the S87 projection: contiguous from zero at either fps, contract read-back", () => {
+  const slots: RigSceneSlot[] = [
+    { sceneIndex: 2, durationMs: 3000, voOn: true },
+    { sceneIndex: 5, durationMs: 2500 },
+  ];
+  for (const fps of [24, 30] as const) {
+    const tracks = characterTracks(slots, { fps, musicOn: true });
+    eq(tracks.length, 3, "visual + audio + subtitle (the shape-stable dispatch)");
+    eq(tracks[0].kind, "character", "the visual track is character-kind");
+    eq(tracks[0].clips.length, 2, "one clip per slot");
+    ok(tracks[0].clips[0].startSec === 0, "contiguous from zero");
+    approx(tracks[0].clips[1].startSec, tracks[0].clips[0].endSec, 1e-9, "the windows tile");
+    ok(tracks[0].clips.every((c) => c.asset === null && c.transitionIn === null && c.transitionOut === null), "engine-drawn, hard cuts, asset null");
+    eq(tracks[0].clips[0].sceneIndex, 2, "the story-row linkage rides");
+    eq(tracks[1].clips.map((c) => c.id), ["a-r0", "a-music"], "the VO slot + the bed clip");
+    // The contract read-back: the plan derives and the clocks agree.
+    const plan = planFromTracks({ tracks }, slots.length);
+    ok(plan !== null, `planFromTracks reads the projection at ${fps}`);
+    approx(
+      (plan as NonNullable<typeof plan>).totalSec,
+      tracks[0].clips[tracks[0].clips.length - 1].endSec,
+      0.011,
+      "the plan's clock ≡ the delivered windows"
+    );
+  }
+});
+
+await test("S125 the preflight wall — the DELIVERED arithmetic is the truth (R-1), the refusal names the cap", () => {
+  const slots: RigSceneSlot[] = [
+    { sceneIndex: 1, durationMs: 1018 },
+    { sceneIndex: 2, durationMs: 1018 },
+  ];
+  const report = rigBudgetReport(slots, 30);
+  eq(report.frames, 62, "Σ per-slot frames (31 + 31 — per-slot rounding)");
+  ok(report.frames > Math.round((2036 / 1000) * 30), "delivered > the whole-program figure (the two arithmetics differ)");
+  ok(report.ok, "62 frames is well under the wall");
+  eq(report.wall, 25_920, "one wall — the shared ANIM_FRAME_BUDGET");
+  approx(report.capSec, 25_920 / 30, 1e-9, "the cap derives from fps, never assumed");
+  const refusal = rigBudgetRefusal(30, 25_921, 900_000);
+  ok(refusal.includes("25920") && refusal.includes("864.0"), `the refusal names the wall and the ${25920 / 30}s cap`);
+  const over: RigSceneSlot[] = [{ sceneIndex: 1, durationMs: 900_001 }];
+  const overReport = rigBudgetReport(over, 30);
+  ok(!overReport.ok && overReport.refusal !== null, "an over-budget program refuses");
+  let threw = "";
+  try {
+    assertRigBudget(over, 30);
+  } catch (e) {
+    threw = e instanceof Error ? e.message : String(e);
+  }
+  ok(threw.includes("frame budget wall"), "the admission gate throws the named wall BEFORE chromium");
+  let emptyThrew = "";
+  try {
+    rigBudgetReport([], 30);
+  } catch (e) {
+    emptyThrew = e instanceof Error ? e.message : String(e);
+  }
+  ok(emptyThrew.includes("no slots"), "an empty slot list is a caller bug, refused loudly");
+});
+
+// ---------------------------------------------------------------------------
+// S125 (K1) — the planner (rig-director: one classifier, two consumers —
+// the compile-only law) and the renderer contract (rig-render: the encode
+// args + the cache hash) (design record §2/§5).
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S125 the planner + the renderer contract");
+
+import { planRigTimeline } from "../src/lib/tubeforge/characters/rig-director";
+import { rigClipHash, rigEncodeArgs } from "../src/lib/tubeforge/characters/rig-render";
+
+await test("S125 the planner is deterministic and compile-only — byte-identical timelines, speech rides", () => {
+  const narration = "Imagine a world of ideas. Then the water flows to the sea. This is the crucial point!";
+  const input = { narration, rig: RIG_DOC, durationMs: 6000, anchors: null };
+  const a = planRigTimeline(input);
+  const b = planRigTimeline(input);
+  eq(JSON.stringify(a), JSON.stringify(b), "byte-identical compile");
+  ok(a.speech.segments.length > 0, "the mouth schedule rides the plan");
+  ok(a.timeline.rows.length > 0 && a.timeline.rows.length <= RIG_BUDGETS.timelineRows, "rows land inside the compile wall");
+  for (const row of a.timeline.rows) {
+    ok(row.tMs >= 0 && row.tMs <= 6000, "rows sit on the scene clock");
+    ok(row.poseId === null || RIG_POSES.has(row.poseId), "rows reference sheet poses only (unknown → rest is the applier's rule, the planner never emits it)");
+  }
+});
+
+await test("S125 the gesture table — setup welcomes, action points (alternating arms), support rests", () => {
+  const doc = mustValidateDoc(
+    rigDocInput({
+      poses: [
+        { id: "welcoming", name: "Welcome", joints: { "arm-l": { rotateDeg: -120 } } },
+        { id: "arm-r-point", name: "Point", joints: { "arm-r": { rotateDeg: 120 } } },
+        { id: "arm-l-point", name: "Point left", joints: { "arm-l": { rotateDeg: 120 } } },
+      ],
+    }),
+    ART,
+    "gesture fixture"
+  );
+  const setupOnly = planRigTimeline({ narration: "Imagine a tiny workshop.", rig: doc, durationMs: 2000, anchors: null });
+  eq(setupOnly.timeline.rows.map((r) => r.poseId), ["welcoming", null], "setup → welcoming (the first candidate on the sheet)");
+
+  const actions = planRigTimeline({
+    narration: "The pump pushes water. Then the valve turns. Then the tank fills up.",
+    rig: doc,
+    durationMs: 9000,
+    anchors: null,
+  });
+  const poseRows = actions.timeline.rows.filter((r) => r.poseId !== null);
+  ok(poseRows.length >= 2, "action sentences gesture");
+  eq(poseRows[0].poseId, "arm-r-point", "action parity 0 → arm-r-point");
+  eq(poseRows[1].poseId, "arm-l-point", "action parity 1 → arm-l-point (deterministic alternation)");
+
+  const support = planRigTimeline({ narration: "The machine hums quietly. A quiet unremarkable sentence.", rig: doc, durationMs: 4000, anchors: null });
+  const supportPoses = support.timeline.rows.filter((r) => r.poseId !== null);
+  eq(supportPoses.length, 1, "only the opening setup gestures — support rests");
+  eq(supportPoses[0].poseId, "welcoming", "the opener's gesture is the only one");
+
+  const noSheet = planRigTimeline({ narration: "Imagine a tiny workshop.", rig: RIG_DOC, durationMs: 2000, anchors: null });
+  ok(noSheet.timeline.rows.every((r) => r.poseId !== "welcoming"), "absent poses degrade (the sheet has arm-l-raise → that wins)");
+});
+
+await test("S125 gesture rows sit INSIDE their sentence windows; the compile wall caps rows", () => {
+  const longNarration = Array.from({ length: 20 }, (_, i) => `Then the machine ${["pushes", "turns", "moves"][i % 3]} the part forward.`).join(" ");
+  const plan = planRigTimeline({ narration: longNarration, rig: RIG_DOC, durationMs: 40_000, anchors: null });
+  ok(plan.timeline.rows.length <= RIG_BUDGETS.timelineRows, `the wall holds (${plan.timeline.rows.length} rows)`);
+  for (let i = 1; i < plan.timeline.rows.length; i++) {
+    ok(plan.timeline.rows[i].tMs >= plan.timeline.rows[i - 1].tMs, "rows are time-ascending");
+  }
+  const silent = planRigTimeline({ narration: "", rig: RIG_DOC, durationMs: 2000, anchors: null });
+  eq(silent.timeline.rows.length, 0, "no narration → no gestures");
+  eq(silent.speech.segments.length, 0, "no narration → no mouth beats");
+});
+
+await test("S125 the renderer's encode args — video-only, -t bounded (the arg list IS the contract)", () => {
+  const args = rigEncodeArgs({ framesDir: "/t/rig-frames", fps: 30, durSec: 3.033, sceneFile: "/t/rig-scene.mp4" });
+  ok(args.includes("-framerate") && args.includes("30"), "the rate rides");
+  ok(args.includes("-t") && args.includes("3.033"), "the delivered seconds bound the stream");
+  ok(!args.includes("anullsrc") && !args.some((a) => a.includes("1:a")) && args.filter((a) => a === "-map").length === 1, "video-only — no audio inputs, no silent fill (the segment owns the mix)");
+  ok(args.includes("libx264") && args.some((a) => a.includes("yuv420p")), "the house encode law rides");
+});
+
+await test("S125 the clip hash — deterministic, sensitive to every render input", () => {
+  const baseArgs = {
+    rig: RIG_DOC,
+    art: ART,
+    timeline: { durationMs: 3000, rows: [{ tMs: 500, poseId: "arm-l-raise" as const }] },
+    speech: { segments: [], speaking: false },
+    slot: { sceneIndex: 3, durationMs: 3000 },
+    opts: { outDir: "/t", canvas: { width: 1920, height: 1080 }, fps: 30 },
+  };
+  const a = rigClipHash(baseArgs);
+  eq(rigClipHash({ ...baseArgs }), a, "equal inputs → equal hash");
+  ok(rigClipHash({ ...baseArgs, slot: { sceneIndex: 3, durationMs: 3100 } }) !== a, "a duration change re-renders");
+  ok(
+    rigClipHash({
+      ...baseArgs,
+      rig: mustValidateDoc(
+        rigDocInput({ poses: [...(rigDocInput().poses as unknown[]), { id: "extra", name: "E", joints: { torso: { rotateDeg: 4 } } }] }),
+        ART,
+        "hash fixture"
+      ),
+    }) !== a,
+    "an edited rig re-renders (the cache never lies)"
+  );
+  ok(
+    rigClipHash({ ...baseArgs, speech: { segments: [{ startMs: 0, endMs: 100, variant: "open" as const }], speaking: true } }) !== a,
+    "a speech change re-renders"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// S125 (K1) — the lane wiring: the native-rig channel's precedence (rule
+// 4.5, native-first between the stills contract and i2v) + the end-to-end
+// source pins (the S123 P3 pattern) (design record §6).
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S125 the lane wiring (liveliness + the render hook)");
+
+import { selectChannels, type LivelinessInput } from "../src/lib/tubeforge/liveliness";
+
+function chanInput(overrides: Partial<LivelinessInput> = {}): LivelinessInput {
+  return {
+    mode: "kenburns",
+    motionOff: false,
+    planNeedsI2V: [false, false],
+    planMotionOff: [false, false],
+    humanMotionOff: [false, false],
+    docCameraKeys: [false, false],
+    hasStock: [false, false],
+    i2vReady: true,
+    nativeRig: [false, false],
+    ...overrides,
+  };
+}
+
+await test("S125 rule 4.5 — the native rig sits BETWEEN the stills contract and the i2v pick (native-first)", () => {
+  const rigged: LivelinessInput = chanInput({ nativeRig: [true, true], planNeedsI2V: [true, true] });
+  const out = selectChannels(rigged);
+  eq(out[0].channel, "native-rig", "the rig outranks the director's true-motion pick (native-first)");
+  ok(out[0].reason.includes("$0"), "the reason names the native-first law");
+  // Every senior rule still pins its channel:
+  eq(
+    selectChannels(chanInput({ nativeRig: [true, true], motionOff: true }))[0].channel,
+    "kenburns",
+    "the stills contract stills the rig"
+  );
+  eq(
+    selectChannels(chanInput({ nativeRig: [true, true], docCameraKeys: [true, false] }))[0].channel,
+    "kenburns",
+    "the studio's camera keys outrank the rig (a user edit is senior)"
+  );
+  eq(
+    selectChannels(chanInput({ nativeRig: [true, true], planMotionOff: [true, false] }))[0].channel,
+    "kenburns",
+    "the plan's own still order outranks the rig"
+  );
+  eq(
+    selectChannels(chanInput({ nativeRig: [true, true], humanMotionOff: [true, false] }))[0].channel,
+    "kenburns",
+    "the human's per-scene still order outranks the rig"
+  );
+  eq(
+    selectChannels(chanInput({ mode: "stock", nativeRig: [true, true], hasStock: [true, false] }))[0].channel,
+    "stock",
+    "matched stock outranks the rig (rule 3 senior)"
+  );
+  eq(selectChannels(chanInput({ mode: "slides", nativeRig: [true, true] }))[0].channel, "slides", "slides outrank the rig");
+  eq(selectChannels(chanInput({ mode: "animated", nativeRig: [true, true] }))[0].channel, "i2v", "the video-level animated pick outranks the rig");
+});
+
+await test("S125 no rig → the byte-identical legacy path (the rollback law)", () => {
+  const legacy = selectChannels(chanInput({ planNeedsI2V: [true, false] }));
+  eq(legacy[0].channel, "i2v", "the i2v pick plays when no rig exists");
+  eq(legacy[1].channel, "kenburns", "the default stays Ken Burns");
+  eq(
+    JSON.stringify(selectChannels(chanInput({}))),
+    JSON.stringify(selectChannels(chanInput({ nativeRig: [false, false] }))),
+    "false flags ≡ absent flags"
+  );
+});
+
+await test("S125 the lane is wired end-to-end — route/job/schema sources (the P3 source-pin pattern)", async () => {
+  const renderSrc = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  const jobsSrc = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const schemaSrc = await fsp.readFile("prisma/schema.prisma", "utf8");
+  const livelinessSrc = await fsp.readFile("src/lib/tubeforge/liveliness.ts", "utf8");
+  ok(renderSrc.includes('if (chan === "native-rig") {'), "the render hook carries the native-rig branch");
+  ok(renderSrc.includes("parseRigDoc(opts.character.rigDoc"), "the rig columns parse at the orchestrator (additive)");
+  ok(renderSrc.includes("rig: chan === \"native-rig\" ? rigInputs : null"), "the rig pair rides ONLY on the rig channel (the rollback law)");
+  ok(jobsSrc.includes("select: { hasPortrait: true, rigDoc: true, parts: true }"), "the job body selects the rig columns");
+  ok(schemaSrc.includes("rigDoc          String?") && schemaSrc.includes("parts           String?"), "the schema carries the additive columns");
+  ok(livelinessSrc.includes('"native-rig"'), "the selector speaks the channel");
+  ok(renderSrc.includes("planRigTimeline({"), "the planner compiles at the hook (compile-only)");
+  ok(renderSrc.includes("asr: false,"), "the anchors ride the $0 ladder (no paid ASR at the hook)");
+});
+
+await test("S125 the admission routes — the validator is the gate, the pass degrades per-part (the source pins)", async () => {
+  const rigRoute = await fsp.readFile("src/app/api/characters/[id]/rig/route.ts", "utf8");
+  const autoRoute = await fsp.readFile("src/app/api/characters/[id]/rig/auto/route.ts", "utf8");
+  const charsSrc = await fsp.readFile("src/lib/tubeforge/characters.ts", "utf8");
+  const typesSrc = await fsp.readFile("src/lib/tubeforge/types.ts", "utf8");
+  ok(rigRoute.includes("validateRigParts(parts)"), "the PUT gates the parts library first");
+  ok(rigRoute.includes("validateRigDoc(doc, partsResult.parts)"), "the doc's svgRefs resolve against the SAME payload");
+  ok(rigRoute.includes("writeRigDoc(docResult.doc)"), "what lands in the columns is the validator's output (byte-stable)");
+  ok(autoRoute.includes("generateCharacterParts"), "the auto route rides the parts pass");
+  ok(charsSrc.includes("RIG_SLOT_SEEDS"), "the scaffold kinematics come from the ONE seed table");
+  ok(charsSrc.includes("mouth parts dropped"), "a partial mouth set drops ALL mouth rows (the honesty law)");
+  ok(charsSrc.includes("pose proposal was refused"), "a refused pose proposal degrades to the empty sheet");
+  ok(typesSrc.includes("hasRig: boolean;"), "the DTO carries the rig seat (the studio reads it)");
+  ok(charsSrc.includes("hasRig: Boolean(c.rigDoc)"), "the serializer reports the seat");
+});
+
+// ---------------------------------------------------------------------------
+// S126 — the external import lane: the sprite grammar (the ONE syntax
+// extension), the frame index channel, the compose/applier seats, the
+// G1-IMP lens, the pure gates, and the source pins (design record
+// docs/design/s126-import-lane.md).
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S126 the external import lane");
+
+import {
+  parsePngHeader,
+  parseWebpHeader,
+  sanitizeProvenance,
+  snapFps,
+  sniffImportKind,
+  validateSequenceFrame,
+  validateSheetImport,
+} from "../src/lib/tubeforge/graphics/import-validate";
+
+/** A minimal alpha PNG (IHDR color type 6) — the parser reads fixed
+ *  offsets, so the fixture is synthetic bytes, not an encoded file. */
+function alphaPng(width: number, height: number, colorType = 6): Buffer {
+  const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const ihdr = Buffer.alloc(21); // len(4) + "IHDR"(4) + data(13)
+  ihdr.writeUInt32BE(13, 0);
+  ihdr.write("IHDR", 4, "latin1");
+  ihdr.writeUInt32BE(width, 8);
+  ihdr.writeUInt32BE(height, 12);
+  ihdr[16] = 8; // bit depth
+  ihdr[17] = colorType;
+  ihdr[18] = 0; // compression
+  ihdr[19] = 0; // filter
+  ihdr[20] = 0; // interlace
+  const idat = Buffer.alloc(12);
+  idat.writeUInt32BE(0, 0);
+  idat.write("IDAT", 4, "latin1");
+  return Buffer.concat([sig, ihdr, idat]);
+}
+
+await test("S126 the sprite grammar — the closed-kind extension validates and round-trips byte-stable", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("a", "sprite")])]), "sprite doc");
+  const el = doc.scenes[0]?.elements[0];
+  ok(el && el.kind === "sprite", "the sprite element rides");
+  eq(el?.sprite?.assetKey, "imp-abc123", "the assetKey rides");
+  eq(el?.sprite?.layout, "sheet", "the layout rides");
+  eq(el?.sprite?.frames, 4, "the frames ride");
+  eq(el?.sprite?.fps, 24, "the fps rides");
+  eq(el?.sprite?.frameW, 128, "frameW rides");
+  eq(el?.sprite?.frameH, 128, "frameH rides");
+  const bytes = writeGraphicsDoc(doc);
+  eq(writeGraphicsDoc(mustParse(bytes, "sprite round-trip")), bytes, "byte-stable round-trip with a sprite");
+});
+
+await test("S126 the sprite compatibility table — fade/slide/pop only; draw/grow/count refuse", () => {
+  const legal = mustValidate(gDoc([gScene("s1", [gEl("a", "sprite", { enter: { kind: "pop", durationMs: 400, delayMs: 0, ease: "pop" } })])]), "pop sprite");
+  eq(legal.scenes[0]?.elements[0]?.enter.kind, "pop", "a pop enter is legal");
+  for (const motion of ["draw", "grow", "count", "rise", "wipe"]) {
+    const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("a", "sprite", { enter: { kind: motion, durationMs: 400, delayMs: 0, ease: "ease-out" } })])]));
+    ok(r.doc === null, `the ${motion} motion refuses on a sprite`);
+    ok(r.errors[0].includes("compatibility table"), `the ${motion} refusal names the table`);
+  }
+});
+
+await test("S126 the sprite payload walls — junk key, layout, frames, fps, dims all refuse", () => {
+  const cases: [Record<string, unknown>, string][] = [
+    [{ assetKey: "bad key!" }, "assetKey id law"],
+    [{ layout: "grid" }, "layout closed set"],
+    [{ frames: 0 }, "frames floor"],
+    [{ frames: GRAPHICS_BUDGETS.spriteFramesMax + 1 }, "frames wall"],
+    [{ fps: 60 }, "the shared timebase"],
+    [{ frameW: 0 }, "dim floor"],
+    [{ frameH: 5000 }, "dim wall"],
+  ];
+  for (const [override, label] of cases) {
+    const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("a", "sprite", { sprite: { assetKey: "imp-ok", layout: "sequence", frames: 3, fps: 24, frameW: 100, frameH: 100, ...override } })])]));
+    ok(r.doc === null, `${label} refuses`);
+  }
+});
+
+await test("S126 the frame index channel — bounded, scene-local, deterministic (no second clock)", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("a", "sprite", { sprite: { assetKey: "imp-fx", layout: "sequence", frames: 48, fps: 24, frameW: 64, frameH: 64 } })], { durationMs: 2000 })]), "index fixture");
+  const at0 = frameAt(doc, 0);
+  const at500 = frameAt(doc, 500);
+  const at9999 = frameAt(doc, 9999);
+  eq(at0.elements[0]?.frameIndex, 0, "t=0 → frame 0");
+  eq(at500.elements[0]?.frameIndex, 12, "t=500 @24fps → frame 12 (floor(0.5*24))");
+  eq(at9999.elements[0]?.frameIndex, 47, "past the clock the index clamps to frames-1");
+  ok(at9999.sceneTMs <= 2000, "the doc clock clamps to the scene");
+  eq(at500.elements[0]?.frameIndex, frameAt(doc, 500).elements[0]?.frameIndex, "deterministic re-evaluation");
+  // A 24fps 4-frame sprite at t=1000: idx = floor(1.0*24)=24 → clamps to 3.
+  const four = mustValidate(gDoc([gScene("s1", [gEl("a", "sprite", { sprite: { assetKey: "imp-f4", layout: "sheet", frames: 4, fps: 24, frameW: 64, frameH: 64 } })], { durationMs: 2000 })]), "four-frame fixture");
+  eq(frameAt(four, 1000).elements[0]?.frameIndex, 3, "the index bounds to frames-1 (the clip ends on its last frame)");
+});
+
+await test("S126 the compose seats — sheet window, sequence toggle, missing assets recorded", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("a", "sprite", { sprite: { assetKey: "imp-sh", layout: "sheet", frames: 4, fps: 24, frameW: 128, frameH: 64 } }), gEl("b", "sprite", { sprite: { assetKey: "imp-sq", layout: "sequence", frames: 3, fps: 24, frameW: 64, frameH: 64 } })])]), "compose fixture");
+  const uris = new Map<string, string[]>([
+    ["imp-sh", ["data:image/png;base64,AAAA"]],
+    ["imp-sq", ["data:image/png;base64,BBBB", "data:image/png;base64,CCCC", "data:image/png;base64,DDDD"]],
+  ]);
+  const { html, missingAssets } = composeGraphicsScene(doc.scenes[0], doc, { spriteAssets: uris });
+  eq(missingAssets.length, 0, "nothing missing when the map resolves");
+  ok(html.includes('data-sprite="sheet"') && html.includes('data-fw="128"'), "the sheet node carries the window facts");
+  ok(html.includes('viewBox="0 0 128 64"'), "the sheet window starts at frame 0");
+  ok(html.includes('data-frame="2"') && html.includes('display="none"'), "the sequence stacks + hides non-zero frames");
+  // A SHORT frame list records the key and emits nothing for it.
+  const short = composeGraphicsScene(doc.scenes[0], doc, { spriteAssets: new Map([["imp-sh", ["data:image/png;base64,AAAA"]]]) });
+  eq(short.missingAssets, ["imp-sq"], "the short sequence is recorded as missing");
+  ok(!short.html.includes("BBBB"), "the short element emits nothing (fail-closed, not a placeholder lie)");
+  // No context → both sprites are missing (the rollback shape is honest).
+  const bare = composeGraphicsScene(doc.scenes[0], doc);
+  eq(bare.missingAssets.sort(), ["imp-sh", "imp-sq"], "the bare compose records every sprite key");
+});
+
+await test("S126 the payload + applier — the frameIndex channel rides, the sprite writes are absolute sets (source pins)", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("a", "sprite", { sprite: { assetKey: "imp-fx", layout: "sequence", frames: 48, fps: 24, frameW: 64, frameH: 64 } })], { durationMs: 2000 })]), "payload fixture");
+  const payload = graphicsFramePayload(frameAt(doc, 500));
+  ok(payload.includes('"frameIndex":12'), "the frameIndex rides the payload");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('viewBox", String(el.frameIndex * fw)'), "the sheet window slides (absolute set)");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('img.setAttribute("display", Number(img.getAttribute("data-frame")) === el.frameIndex'), "the sequence toggles (absolute set)");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes("image[data-frame]"), "the :scope selector is the mouth-swap discipline");
+});
+
+await test("S126 the G1-IMP lens — spriteless docs pass vacuously; broken payloads fail the row", () => {
+  const clean = graphicsQcMatrix(mustValidate(gDoc([gScene("s1", [gEl("h", "headline")])])), 0);
+  const cleanRow = clean.rows.find((r) => r.id === "G1-IMP-1");
+  ok(cleanRow !== undefined && cleanRow.status === "pass", "the lens exists and passes vacuously");
+  const lensDoc = mustValidate(
+    gDoc([gScene("s1", [gEl("a", "sprite", { sprite: { assetKey: "imp-x", layout: "sheet", frames: 20, fps: 24, frameW: 850, frameH: 60 } })])]),
+    "lens fixture"
+  );
+  const report = graphicsQcMatrix(lensDoc, 0);
+  const row = report.rows.find((r) => r.id === "G1-IMP-1");
+  ok(row !== undefined && row.status === "fail", "a 17000px strip fails the decode-wall row");
+  ok((row?.detail ?? "").includes("17000"), "the lens cites the strip width it measured");
+});
+
+await test("S126 the pure gates — sniff, PNG/WebP headers, sheet law, sequence law, fps snap, provenance", () => {
+  const png = alphaPng(512, 128);
+  eq(sniffImportKind(png), "png", "the PNG magic rides");
+  eq(sniffImportKind(Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0])), "webm", "the WebM EBML magic rides");
+  eq(sniffImportKind(Buffer.from("plain text")), null, "text refuses");
+  const header = parsePngHeader(png);
+  ok(header !== null && header.width === 512 && header.height === 128, "the IHDR dims parse");
+  eq(header?.hasAlpha, true, "color type 6 carries alpha");
+  const opaque = parsePngHeader(alphaPng(64, 64, 2));
+  eq(opaque?.hasAlpha, false, "color type 2 (rgb) has no alpha");
+  const trns = alphaPng(64, 64, 3);
+  trns.writeUInt32BE(0, 8 + 25); // the tRNS chunk's length (0)
+  trns.write("tRNS", 8 + 25 + 4, "latin1"); // the type, after the length
+  eq(parsePngHeader(trns)?.hasAlpha, true, "a tRNS chunk carries palette alpha");
+  // WebP VP8X with the alpha flag.
+  const webp = Buffer.alloc(40);
+  webp.write("RIFF", 0, "latin1");
+  webp.write("WEBP", 8, "latin1");
+  webp.write("VP8X", 12, "latin1");
+  webp[20] = 0x10; // the ALPHA flag
+  webp.writeUIntLE(639, 24, 3); // canvas minus one → 640
+  webp.writeUIntLE(255, 27, 3); // 256
+  const wh = parseWebpHeader(webp);
+  ok(wh !== null && wh.hasAlpha && wh.width === 640 && wh.height === 256, "the VP8X alpha flag + canvas parse");
+  // The sheet law: alpha present, even division, walls.
+  const good = validateSheetImport(alphaPng(512, 128), 4);
+  ok(good.ok && good.frameW === 128 && good.frameH === 128, "a 512x128 strip declares 4 frames of 128");
+  const uneven = validateSheetImport(alphaPng(513, 128), 4);
+  ok(!uneven.ok && uneven.errors[0].includes("divide evenly"), "the uneven strip refuses");
+  const noAlpha = validateSheetImport(alphaPng(512, 128, 2), 4);
+  ok(!noAlpha.ok && noAlpha.errors[0].includes("no alpha"), "the opaque sheet refuses (the lane composites transparency)");
+  const tooWide = validateSheetImport(alphaPng(20000, 100), 10);
+  ok(!tooWide.ok, "the strip decode wall holds");
+  // The sequence law.
+  const frame = validateSequenceFrame(alphaPng(200, 200));
+  ok(frame.ok && frame.width === 200, "a uniform alpha frame passes");
+  const bigFrame = validateSequenceFrame(alphaPng(5000, 200));
+  ok(!bigFrame.ok, "the dim wall holds on frames");
+  // The fps snap (the D3 normalization law).
+  eq(snapFps(24), 24, "24 stays 24");
+  eq(snapFps(29.97), 30, "29.97 snaps to 30");
+  eq(snapFps(25), 24, "25 snaps to 24 (the nearer rail, ties down)");
+  eq(snapFps(28), 30, "28 snaps to 30");
+  eq(snapFps(0), 24, "junk snaps to the film tempo");
+  // Provenance.
+  const prov = sanitizeProvenance({ source: "  opentoonz export  ", license: "CC-BY" });
+  eq(prov.source, "opentoonz export", "the source trims");
+  eq(prov.license, "CC-BY", "the license rides");
+  const clamped = sanitizeProvenance({ source: "x".repeat(400) });
+  eq(clamped.source?.length, 300, "the source clamps to 300");
+  eq(sanitizeProvenance({}).source, null, "absent provenance is legal (the tag rides when declared)");
+});
+
+await test("S126 the lane wiring — the seven gates, the one-seam resolution, the fail-closed render (source pins)", async () => {
+  const route = await fsp.readFile("src/app/api/videos/[id]/graphics/import/route.ts", "utf8");
+  const store = await fsp.readFile("src/lib/tubeforge/graphics/import-store.ts", "utf8");
+  const jobs = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const gRender = await fsp.readFile("src/lib/tubeforge/graphics/render.ts", "utf8");
+  const schema = await fsp.readFile("prisma/schema.prisma", "utf8");
+  const importValidate = await fsp.readFile("src/lib/tubeforge/graphics/import-validate.ts", "utf8");
+  ok(importValidate.includes("Magic-byte sniff"), "gate 2 — the sniff is header law, never extension trust");
+  ok(route.includes("alphaextract"), "gate 3 — the WebM alpha probe rides ffmpeg");
+  ok(route.includes("snapFps"), "gate 5 — the fps snaps to the shared timebase");
+  ok(route.includes("importCountWalls"), "gate 6 — the count walls run");
+  ok(route.includes("resolveSpriteAssets"), "the editor's resolve seam rides the SAME store");
+  ok(route.includes("el.sprite?.assetKey === importId"), "the delete reference-guards the doc");
+  ok(store.includes("resolveSpriteAssets"), "the store carries the ONE resolution seam");
+  ok(store.includes("data:${row.mime};base64,"), "the bytes ride as data URIs (the network-aborted page law)");
+  ok(jobs.includes("resolveSpriteAssets(videoId, referencedKeys)"), "the render job resolves through the store seam");
+  ok(jobs.includes("missingImports.length > 0"), "the job refuses fail-closed on missing imports");
+  ok(gRender.includes("composed.missingAssets.length > 0"), "the renderer refuses fail-closed on unresolved sprites");
+  ok(schema.includes("model GraphicsImport"), "the manifest model rides");
+  ok(schema.includes("source         String?") && schema.includes("license        String?"), "provenance rides the manifest (the reception rule)");
+  ok(schema.includes("graphicsImports        GraphicsImport[]"), "the Video relation rides");
+});
+
+// ---------------------------------------------------------------------------
+// S125-ext (K1-ext) — the FreeMoCap sidecar adapter: the clean-room BVH
+// parser, the slot mapping, the authored-motion ladder seat (design:
+// docs/audits/external-six-repo-reception.md §2.6 — our parser, the
+// documented interchange format, no AGPL linkage).
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S125-ext the BVH sidecar (K1-ext)");
+
+import { buildMocapTimeline, mapJointToSlot, parseBvh } from "../src/lib/tubeforge/characters/bvh";
+
+const BVH_FIXTURE = `HIERARCHY
+ROOT Hips
+{
+  OFFSET 0 0 0
+  CHANNELS 6 Xposition Yposition Zposition Yrotation Xrotation Zrotation
+  JOINT Head
+  {
+    OFFSET 0 8 0
+    CHANNELS 3 Zrotation Xrotation Yrotation
+    End Site
+    {
+      OFFSET 0 6 0
+    }
+  }
+  JOINT LeftArm
+  {
+    OFFSET -5 4 0
+    CHANNELS 3 Zrotation Xrotation Yrotation
+  }
+  JOINT RightArm
+  {
+    OFFSET 5 4 0
+    CHANNELS 3 Zrotation Xrotation Yrotation
+  }
+  JOINT Tail
+  {
+    OFFSET 0 -2 0
+    CHANNELS 3 Xrotation Yrotation Zrotation
+  }
+}
+MOTION
+Frames: 6
+Frame Time: 0.0416667
+0 0 0 10 0 0 0 0 0 20 0 0 -20 0 0 0 0 0
+0 0 0 12 0 0 1 0 0 24 0 0 -24 0 0 2 0 0
+0 0 0 14 0 0 2 0 0 28 0 0 -28 0 0 4 0 0
+0 0 0 16 0 0 3 0 0 32 0 0 -32 0 0 6 0 0
+0 0 0 18 0 0 4 0 0 36 0 0 -36 0 0 8 0 0
+0 0 0 400 0 0 5 0 0 720 0 0 -720 0 0 10 0 0`;
+
+await test("S125-ext the BVH parser — the documented format, structure-strict, junk refuses", () => {
+  const r = parseBvh(BVH_FIXTURE);
+  ok(r.doc !== null, `the fixture parses: ${r.errors[0] ?? ""}`);
+  eq(r.doc?.joints.length, 5, "Hips + Head + LeftArm + RightArm + Tail");
+  eq(r.doc?.frames, 6, "the header's frame count rides");
+  approx(r.doc?.frameTimeMs ?? 0, 41.66667, 0.001, "the frame time converts to ms");
+  eq(r.doc?.joints[0]?.channels.length, 6, "the root carries 6 channels");
+  eq(r.doc?.joints[0]?.columnStart, 0, "the root owns columns 0..5");
+  eq(r.doc?.joints[2]?.columnStart, 9, "LeftArm starts after the root's 6 + Head's 3");
+  ok(r.doc?.motion[0] instanceof Float64Array, "the rows are numeric");
+  for (const junk of ["", "MOTION\nFrames: 1\nFrame Time: 0.01\n1", "HIERARCHY\nROOT Hips\n{\n CHANNELS 3 Xrotation Yrotation Zrotation\n}\nMOTION\nFrames: 2\nFrame Time: 0.01\n1 2 3"]) {
+    const j = parseBvh(junk);
+    ok(j.doc === null, "junk refuses");
+    ok(j.errors.length > 0, "the refusal names a reason");
+  }
+  const wideRow = BVH_FIXTURE.replace("0 0 0 10 0 0 0 0 0 20 0 0 -20 0 0 0 0 0", "0 0 0 10 0 0 0 0 0 20 0 0 -20 0 0 0 0");
+  const wide = parseBvh(wideRow);
+  ok(wide.doc === null && wide.errors[0].includes("values, the hierarchy declared"), "a row-width mismatch refuses");
+});
+
+await test("S125-ext the slot mapping — the ONE name table, unknown joints skip", () => {
+  eq(mapJointToSlot("Hips"), "torso", "Hips → torso");
+  eq(mapJointToSlot("LeftArm"), "arm-l", "LeftArm → arm-l");
+  eq(mapJointToSlot("RightArm"), "arm-r", "RightArm → arm-r");
+  eq(mapJointToSlot("Head"), "head", "Head → head");
+  eq(mapJointToSlot("Tail"), null, "an unmapped joint is honest about it");
+  eq(mapJointToSlot("left_forearm"), "forearm-l", "the separator-normalized alias rides");
+});
+
+await test("S125-ext the converter — deterministic, stride ≤ the compile wall, the band clamps, unmapped skips", () => {
+  const bvh = parseBvh(BVH_FIXTURE);
+  ok(bvh.doc !== null, "the fixture parses");
+  const slots = ["torso", "head", "arm-l", "arm-r"];
+  const a = buildMocapTimeline({ bvh: bvh.doc, rigSlots: slots, durationMs: 2000, fps: 24 });
+  const b = buildMocapTimeline({ bvh: bvh.doc, rigSlots: slots, durationMs: 2000, fps: 24 });
+  eq(JSON.stringify(a), JSON.stringify(b), "byte-identical conversion");
+  ok(a.timeline.rows.length > 0 && a.timeline.rows.length <= RIG_BUDGETS.timelineRows, `the compile wall holds (${a.timeline.rows.length} rows)`);
+  eq(a.mapped.sort(), ["arm-l", "arm-r", "head", "torso"], "the mapped slots ride");
+  ok(a.skipped.length === 0, "no skipped joints in this fixture (Tail maps to nothing and is not a rig slot)");
+  for (const row of a.timeline.rows) {
+    ok(row.tMs >= 0 && row.tMs <= 2000, "rows sit on the scene clock");
+    ok(row.joints !== undefined, "authored rows carry INLINE joints (the mocap ladder's data)");
+    for (const j of Object.values(row.joints ?? {})) {
+      ok(Math.abs(j.rotateDeg) <= 360, "the band clamps (the ±720 capture lands inside ±360)");
+    }
+  }
+  const last = a.timeline.rows[a.timeline.rows.length - 1];
+  eq(last?.joints?.["arm-l"]?.rotateDeg, 360, "the ±720 arm clamps to the band (the last frame's extreme)");
+  // A rig without some mapped slots skips honestly (the skip records
+  // joints whose slot maps but the rig lacks).
+  const narrow = buildMocapTimeline({ bvh: bvh.doc, rigSlots: ["torso"], durationMs: 2000, fps: 24 });
+  ok(narrow.timeline.rows.length > 0, "torso still maps (rows build)");
+  eq(narrow.skipped.sort(), ["Head", "LeftArm", "RightArm"], "the unmapped-for-this-rig joints are reported");
+  const propOnly = buildMocapTimeline({ bvh: bvh.doc, rigSlots: ["prop"], durationMs: 2000, fps: 24 });
+  eq(propOnly.timeline.rows.length, 0, "no slot overlap → no rows (the honest empty)");
+});
+
+await test("S125-ext the ladder seat — authored inline rows tween and outrank the pose channel", () => {
+  const timeline = {
+    durationMs: 2000,
+    rows: [
+      { tMs: 0, poseId: "arm-l-raise", joints: { torso: { rotateDeg: 0 } } },
+      { tMs: 1000, poseId: null, joints: { torso: { rotateDeg: 30 } } },
+    ],
+  };
+  const mid = poseAt(RIG_DOC, timeline, 1000 + POSE_TWEEN_MS / 2);
+  const torso = mid.parts.find((p) => p.id === "torso");
+  ok(torso, "the torso frame exists");
+  const rot = impliedRotation((torso as { matrix: Matrix6 }).matrix);
+  approx(rot, 15, 0.5, "inline rows tween between authored states (30° halves mid-tween)");
+  const settled = poseAt(RIG_DOC, timeline, 1000 + POSE_TWEEN_MS + 1);
+  const torso2 = settled.parts.find((p) => p.id === "torso");
+  approx(impliedRotation((torso2 as { matrix: Matrix6 }).matrix), 30, 0.01, "the authored state holds");
+  // The poseId channel is OVERRIDDEN by inline joints (a row carrying both
+  // uses its joints — authored DATA beats sheet references).
+  const conflict = {
+    durationMs: 2000,
+    rows: [{ tMs: 0, poseId: "arm-l-raise", joints: { torso: { rotateDeg: 0 } } }],
+  };
+  const f = poseAt(RIG_DOC, conflict, POSE_TWEEN_MS + 1);
+  const armL = f.parts.find((p) => p.id === "arm-l");
+  approx(impliedRotation((armL as { matrix: Matrix6 }).matrix), 0, 0.01, "the inline row wins over the poseId channel");
+});
+
+await test("S125-ext the sidecar wiring — the clean-room boundary, the route, the hook ladder (source pins)", async () => {
+  const route = await fsp.readFile("src/app/api/videos/[id]/character/mocap/route.ts", "utf8");
+  const hook = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  const bvhSrc = await fsp.readFile("src/lib/tubeforge/characters/bvh.ts", "utf8");
+  ok(bvhSrc.toLowerCase().includes("clean-room") && bvhSrc.includes("no linkage"), "the clean-room boundary is stated in the module");
+  ok(!/import\s+[^;]*freemocap/i.test(bvhSrc), "the module names the boundary, never imports it");
+  ok(!bvhSrc.includes("from \"freemocap\"") && !bvhSrc.includes("require('freemocap')"), "no FreeMoCap dependency, ever");
+  ok(route.includes("parseBvh"), "the route rides the clean-room parser");
+  ok(route.includes("scene-${sceneIndex}") || route.includes("`scene-${sceneIndex}`"), "the authored file keys by scene");
+  ok(route.includes("hostInScene"), "mocap rides cast scenes only (the continuity law)");
+  ok(hook.includes("character/mocap.json"), "the hook reads the authored-motion file");
+  ok(hook.includes("authoredTimeline"), "the ladder's authored rung rides the hook");
+  ok(hook.includes("authoredTimeline\n        ?"), "authored > compiled (the ladder order)");
+});
+
+// ---------------------------------------------------------------------------
+// C2-ext — the cinematic vocabulary (§7): shake / push-follow / drift-crawl.
+// Each verb = a table row + one branch in the zoompan builder; the QC
+// flicker lens bounds the shake (§7's named risk, pinned first).
+// ---------------------------------------------------------------------------
+
+suiteStart("motion — C2-ext the cinematic verbs");
+
+await test("C2-ext the verbs are wired through the tables — CAMERA_MOVES → CAMERA_TO_MOVE → MoveKind", async () => {
+  const { CAMERA_MOVES } = await import("../src/lib/tubeforge/director-plan");
+  const { CAMERA_TO_MOVE } = await import("../src/lib/tubeforge/shots.ts");
+  const { MOTION_MOVE_LABELS } = await import("../src/lib/tubeforge/motion");
+  for (const verb of ["shake", "push-follow", "drift-crawl"]) {
+    ok((CAMERA_MOVES as readonly string[]).includes(verb), `the director vocabulary carries "${verb}"`);
+    eq(CAMERA_TO_MOVE[verb], verb, `the mapping is verbatim for "${verb}"`);
+    ok(MOTION_MOVE_LABELS[verb as keyof typeof MOTION_MOVE_LABELS] !== undefined, `the label table carries "${verb}"`);
+  }
+});
+
+await test("C2-ext the shake — integer-cycle sinusoid (edge-pinned by construction), bounded amp", async () => {
+  const { sceneFilterGraph, SHAKE_AMP_FRAC_X, SHAKE_AMP_FRAC_Y, SHAKE_CYCLES_PER_SEC } = await import("../src/lib/tubeforge/motion");
+  const settings = { mode: "on" as const, intensity: 12, curve: "smooth" as const };
+  const shot = { kind: "shake" as const, zStart: 1.06, zEnd: 1.06, focal: { x: 0.5, y: 0.4 }, travel: 0, sec: 2.5 };
+  const graph = sceneFilterGraph({
+    dur: 2.5,
+    plan: { sceneType: "suspense", move: "Impact shake", shots: [shot], staticImage: false },
+    settings,
+    fps: 30,
+  });
+  const cycles = Math.max(1, Math.round(2.5 * SHAKE_CYCLES_PER_SEC)); // 6 — an integer
+  ok(graph.includes(`sin(2*PI*${cycles}*on/`), `the x jitter carries ${cycles} integer cycles`);
+  ok(graph.includes(`cos(2*PI*${cycles}*on/`), "the y jitter rides cos (the phase offset)");
+  ok(graph.includes(`clip(`) && graph.includes(`iw-iw/zoom`), "the jitter clamps into the legal window");
+  ok(SHAKE_AMP_FRAC_X <= 0.008 && SHAKE_AMP_FRAC_Y <= 0.008, "the amp stays under the flicker lens's sensitivity (the named risk, pinned first)");
+  const graph2 = sceneFilterGraph({ dur: 2.5, plan: { sceneType: "suspense", move: "Impact shake", shots: [shot], staticImage: false }, settings, fps: 30 });
+  eq(graph2, graph, "deterministic rebuild (the S64 law)");
+});
+
+await test("C2-ext push-follow — the zoom and the travel compose in ONE shot (they were exclusive)", async () => {
+  const { sceneFilterGraph } = await import("../src/lib/tubeforge/motion");
+  const settings = { mode: "on" as const, intensity: 12, curve: "smooth" as const };
+  const shot = { kind: "push-follow" as const, zStart: 1, zEnd: 1.18, focal: { x: 0.4, y: 0.5 }, travel: 0.5, sec: 3 };
+  const graph = sceneFilterGraph({ dur: 3, plan: { sceneType: "standard", move: "Push with follow", shots: [shot], staticImage: false }, settings, fps: 30 });
+  ok(graph.includes("zoompan=z='1.0000+0.1800*"), "the zoom lerp rides");
+  // The COMPOSITION: the eased clock multiplies BOTH the zoom and the
+  // travel lerp (two occurrences — the exclusive-per-shot law is gone).
+  const easedCount = graph.split("0.5-0.5*cos(PI*on/").length - 1;
+  ok(easedCount >= 2, `the eased clock drives zoom AND follow (${easedCount} channels)`);
+});
+
+await test("C2-ext drift-crawl — the LINEAR clock (constant velocity) and the tiny zoom creep", async () => {
+  const { sceneFilterGraph, DRIFT_CRAWL_ZOOM } = await import("../src/lib/tubeforge/motion");
+  const settings = { mode: "on" as const, intensity: 8, curve: "smooth" as const };
+  const shot = { kind: "drift-crawl" as const, zStart: 1.02, zEnd: 1.02, focal: { x: 0.5, y: 0.5 }, travel: 0.4, sec: 4 };
+  const graph = sceneFilterGraph({ dur: 4, plan: { sceneType: "establishing", move: "Ambient drift", shots: [shot], staticImage: false }, settings, fps: 30 });
+  ok(graph.includes("zoompan=z='1.0200+0.0300*(on/"), `the crawl's zoom creep is ${DRIFT_CRAWL_ZOOM} on the LINEAR clock`);
+  ok(graph.includes("*(on/"), "the crawl rides (on/last) — constant velocity, no eased breathing");
+  ok(!graph.includes("0.5-0.5*cos(PI*on/"), "the crawl carries NO eased clock");
+  // Determinism.
+  const graph2 = sceneFilterGraph({ dur: 4, plan: { sceneType: "establishing", move: "Ambient drift", shots: [shot], staticImage: false }, settings, fps: 30 });
+  eq(graph2, graph, "deterministic rebuild");
+});
+
+await test("C2-ext the shot joins stay kind-agnostic — a shake shot books its boundary like any shot", async () => {
+  const { shotGraphJoins } = await import("../src/lib/tubeforge/motion");
+  const shots = [
+    { kind: "shake" as const, zStart: 1.05, zEnd: 1.05, focal: { x: 0.5, y: 0.5 }, travel: 0, sec: 1.5 },
+    { kind: "push-follow" as const, zStart: 1, zEnd: 1.15, focal: { x: 0.45, y: 0.5 }, travel: 0.4, sec: 1.5 },
+    { kind: "drift-crawl" as const, zStart: 1.02, zEnd: 1.02, focal: { x: 0.5, y: 0.45 }, travel: 0.3, sec: 1.5 },
+  ];
+  const joins = shotGraphJoins({ dur: 4.5, shots, fps: 30 });
+  eq(joins.length, 2, "two joins across three C2 shots (the cut boundaries the QC lens reads)");
+});
+
+// ---------------------------------------------------------------------------
+// Stage R — the AI director's ADVISORY engine pick (§9): AI suggests, human
+// approves; the D2 firewall (no routing logic reads it) until Stage X.
+// ---------------------------------------------------------------------------
+
+suiteStart("director — Stage R the advisory engine pick");
+
+await test("Stage R the advisory field parses tolerantly — legal ids ride, junk drops, v2 plans read fine", async () => {
+  const { parsePlan, DIRECTOR_ENGINE_OPTIONS } = await import("../src/lib/tubeforge/director-plan");
+  const planJson = (engines: unknown[]) =>
+    JSON.stringify({
+      version: 2,
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      concept: "c",
+      scenes: engines.map((engine, i) => ({
+        sceneIndex: i + 1,
+        mood: "m",
+        transitionIn: i === 0 ? "" : "fade",
+        motion: "smart",
+        needsI2V: false,
+        useStock: false,
+        pacing: "normal",
+        ambience: "none",
+        sfx: "none",
+        engine,
+        shots: [{ shotIndex: 0, framing: "wide", camera: "zoom-in", lens: "24mm wide", composition: "leading lines", duration: 2.8, imagePrompt: "p", subject: "s", subjectAction: "a", cameraHeight: "eye-level", angle: "front", depthOfField: "deep", lighting: "l", colorGrade: "g", focal: "center", moveSpeed: "normal", transitionOut: "cut", purpose: "establish", notes: "" }],
+      })),
+    });
+  const legal = parsePlan(planJson(["graphics", "graphics"]));
+  ok(legal !== null, "the plan parses");
+  eq(legal?.scenes[0]?.engine, "graphics", "the advisory pick rides");
+  eq(legal?.scenes[1]?.engine, "graphics", "both scenes carry it");
+  const junk = parsePlan(planJson([" warp-speed ", 42, "AUTO"]));
+  ok(junk !== null, "junk never refuses the plan (metadata, not a grammar gate)");
+  eq(junk?.scenes[0]?.engine, undefined, "a junk id drops");
+  eq(junk?.scenes[1]?.engine, undefined, "a non-string drops");
+  eq(junk?.scenes[2]?.engine, "auto", "the case-insensitive id rides");
+  eq(DIRECTOR_ENGINE_OPTIONS.length, 6, "the §9 vocabulary is closed (auto + the five lanes)");
+});
+
+await test("Stage R the conflict report — unanimous vs mixed, the honest surface (no silent mode-flip)", async () => {
+  const { engineProposalReport } = await import("../src/lib/tubeforge/director-plan");
+  const unanimous = engineProposalReport([{ engine: "graphics" }, { engine: "graphics" }]);
+  eq(unanimous.unanimous, "graphics", "one lane across every scene");
+  eq(unanimous.mixed, false, "no conflict");
+  const withAuto = engineProposalReport([{ engine: "graphics" }, { engine: "auto" }]);
+  eq(withAuto.unanimous, null, "an auto pick breaks unanimity (the lane is not PROVEN)");
+  eq(withAuto.mixed, false, "auto is not a conflicting pick — it defers");
+  const mixed = engineProposalReport([{ engine: "graphics" }, { engine: "whiteboard" }]);
+  eq(mixed.mixed, true, "the mixed conflict NAMES itself");
+  eq(mixed.unanimous, null, "no unanimous lane");
+  const absent = engineProposalReport([{}, {}]);
+  eq(absent.unanimous, null, "absence is honest silence");
+  eq(absent.mixed, false, "no proposals, no conflict");
+});
+
+await test("Stage R the D2 firewall — no routing logic reads the advisory field (the source pins)", async () => {
+  const renderSrc = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  const planSrc = await fsp.readFile("src/lib/tubeforge/composition-plan.ts", "utf8");
+  const livelinessSrc = await fsp.readFile("src/lib/tubeforge/liveliness.ts", "utf8");
+  const directorSrc = await fsp.readFile("src/lib/tubeforge/director.ts", "utf8");
+  ok(!renderSrc.includes(".engine"), "render.ts never branches on the advisory pick");
+  ok(!planSrc.includes(".engine"), "composition-plan.ts never branches on the advisory pick");
+  ok(!livelinessSrc.includes(".engine"), "the liveliness selector never branches on the advisory pick");
+  ok(directorSrc.includes("NEVER routed automatically"), "the prompt says the honest thing (AI suggests, human approves)");
+  ok(directorSrc.includes("engine"), "the LLM proposes the pick into the plan (the proposed state, like shots)");
+});
+
+// ---------------------------------------------------------------------------
+// Stage X (additive core) — schema 3: the verified engine-authored tracks
+// (the S87 §11 refinement made executable: never blindly stored — verified
+// or refused) + the compositor's segment-builder registry. The per-scene
+// dispatch for the engine kinds is the recorded gated half.
+// ---------------------------------------------------------------------------
+
+suiteStart("timeline — Stage X the schema-3 core");
+
+await test("Stage X schema 3 parses and round-trips — the stamp is a KNOWN one (the guard unblocks)", async () => {
+  const t = await import("../src/lib/tubeforge/timeline");
+  const scenes = [
+    { index: 1, title: "a", narration: "two short words", visual: "v", startSec: 0, endSec: 4, durationSec: 4, transitionIn: "", transitionOut: "", caption: "c" },
+    { index: 2, title: "b", narration: "two more words", visual: "v", startSec: 4, endSec: 8, durationSec: 4, transitionIn: "fade", transitionOut: "", caption: "c" },
+  ];
+  const doc = {
+    schema: 3,
+    scenes,
+    tracks: t.deriveTracks(scenes as never),
+    engineTracks: [
+      {
+        kind: "graphics",
+        name: "visual",
+        clips: [
+          { id: "g0", kind: "graphics", sceneIndex: 1, startSec: 0, endSec: 4, transitionIn: null, transitionOut: null, asset: null },
+          { id: "g1", kind: "graphics", sceneIndex: 2, startSec: 4, endSec: 8, transitionIn: null, transitionOut: null, asset: null },
+        ],
+      },
+    ],
+    sceneCount: 2,
+    totalDurationSec: 8,
+    generatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const bytes = JSON.stringify(doc);
+  const parsed = t.parseTimeline(bytes);
+  ok(parsed !== null, "schema 3 parses");
+  eq(parsed?.schema, 3, "the stamp rides");
+  eq(parsed?.engineTracks?.length, 1, "the engine tracks ride");
+  const re = t.serializeTimeline(parsed as never);
+  const reparsed = t.parseTimeline(re);
+  ok(reparsed !== null && reparsed.schema === 3, "the round-trip keeps the stamp");
+  eq(JSON.stringify(reparsed?.engineTracks), JSON.stringify(parsed?.engineTracks), "the engine tracks round-trip byte-stable");
+  // The overwrite guard: schema 3 is KNOWN — a write never blocks on it.
+  const guard = t.guardTimelineOverwrite(bytes);
+  eq(guard.blocked, false, "schema 3 is a known stamp (the guard reads N and N−1)");
+});
+
+await test("Stage X the verifier refuses — junk grammar, bad windows, phantom scenes, clock disagreement", async () => {
+  const t = await import("../src/lib/tubeforge/timeline");
+  const scenes = [
+    { index: 1, title: "a", narration: "two short words", visual: "v", startSec: 0, endSec: 4, durationSec: 4, transitionIn: "", transitionOut: "", caption: "c" },
+  ];
+  const derived = t.deriveTracks(scenes as never);
+  const track = (clips: unknown[]) => [{ kind: "graphics", name: "visual", clips }];
+  const clip = (over: Record<string, unknown> = {}) => ({
+    id: "g0", kind: "graphics", sceneIndex: 1, startSec: 0, endSec: 4, transitionIn: null, transitionOut: null, asset: null, ...over,
+  });
+  const refuse = (tracks: unknown[], label: string) => {
+    const verdict = t.verifyEngineTracks(tracks as never, scenes as never, derived);
+    ok(!verdict.ok, `${label} refuses`);
+    ok((verdict as { reason: string }).reason.length > 0, `${label} names the reason`);
+  };
+  refuse(track([clip({ kind: "holo" })]), "a kind outside the grammar");
+  refuse(track([clip({ startSec: 2, endSec: 1 })]), "an illegal window");
+  refuse(track([clip(), clip({ id: "g1", sceneIndex: 1, startSec: 2, endSec: 6 })]), "an overlapping pair");
+  refuse(track([clip({ sceneIndex: 9 })]), "a phantom scene");
+  refuse(track([clip({ startSec: 1, endSec: 5 })]), "a clock disagreement with the derived twin");
+  const okVerdict = t.verifyEngineTracks(track([clip()]) as never, scenes as never, derived);
+  ok(okVerdict.ok, "the agreeing twin passes");
+  // The parse refuses a schema-3 doc with junk engine tracks (verified or refused).
+  const doc = { schema: 3, scenes, tracks: derived, engineTracks: track([clip({ sceneIndex: 9 })]), sceneCount: 1, totalDurationSec: 4 };
+  eq(t.parseTimeline(JSON.stringify(doc)), null, "the parse refuses the whole doc");
+});
+
+await test("Stage X the writer verifies before storing — a disagreeing payload drops and stamps 2", async () => {
+  const t = await import("../src/lib/tubeforge/timeline");
+  const scenes = [
+    { index: 1, title: "a", narration: "two short words", visual: "v", startSec: 0, endSec: 4, durationSec: 4, transitionIn: "", transitionOut: "", caption: "c" },
+  ];
+  const doc = {
+    schema: 2 as const,
+    scenes: scenes as never,
+    tracks: t.deriveTracks(scenes as never),
+    // A WRONG window — the writer must refuse to store it.
+    engineTracks: [{ kind: "graphics", name: "visual", clips: [{ id: "g0", kind: "graphics", sceneIndex: 1, startSec: 0, endSec: 9, transitionIn: null, transitionOut: null, asset: null }] }],
+    sceneCount: 1,
+    totalDurationSec: 4,
+    generatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const bytes = t.serializeTimeline(doc as never);
+  const raw = JSON.parse(bytes) as { schema: number; engineTracks?: unknown };
+  eq(raw.schema, 2, "the disagreeing payload dropped — the doc stamps 2 (the honest degradation)");
+  eq(raw.engineTracks, undefined, "nothing unverified persisted");
+});
+
+await test("Stage X the builder registry — the multi-kind gate is a registry, not a hard-coded wall", async () => {
+  const cp = await import("../src/lib/tubeforge/composition-plan");
+  eq(cp.COMPOSITOR_SEGMENT_KINDS.length, 2, "today's builders: video + image (the engine kinds land with their dispatch)");
+  const okVerdict = cp.validatePlanKinds(["video", "image"]);
+  ok(okVerdict.ok && okVerdict.unsupported.length === 0, "today's plans pass");
+  const engine = cp.validatePlanKinds(["graphics", "video"]);
+  ok(!engine.ok && engine.unsupported.length === 1 && engine.unsupported[0] === "graphics", "an engine kind without a builder names itself");
+  const mixed = cp.validatePlanKinds(["whiteboard", "character"]);
+  ok(!mixed.ok && mixed.unsupported.length === 2, "every unsupported kind is listed (the all-or-nothing law)");
+  // The compositor's wall READS the registry (the source pin).
+  const renderSrc = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  ok(renderSrc.includes("validatePlanKinds("), "the wall consumes the registry");
+  ok(renderSrc.includes("visual kinds without a compositor segment builder"), "the refusal names the registry law");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

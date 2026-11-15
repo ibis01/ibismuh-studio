@@ -117,7 +117,12 @@ const SETUP_RE = /\b(imagine|picture|let's|lets|consider|suppose|first(ly)?|to s
 const SUBJECT_RE = /\b(is|are|means|refers?|called|known as|defined as|represents|stands for)\b/i;
 const ACTION_RE = /\b(then|next|after|now|push(es|ed)?|flows?|moves?|sends?|draws?|writes?|adds?|takes?|turns?|becomes?|starts?|begins?|runs?|grows?|rises?|falls?|beats?|pumps?|launch(es|ed)?)\b/i;
 
-function classifySentence(sentence: string, index: number): BeatPurpose {
+// S125 (K1) — exported (was module-private): the rig director consumes the
+// SAME classifier for its gesture beats ("reusing beat-plan.ts#classifySentence
+// instead of duplicating it, one classifier, two consumers" — roadmap §6).
+// The cue rules and the precedence below are UNCHANGED; the whiteboard beat
+// plan's own outputs are byte-identical.
+export function classifySentence(sentence: string, index: number): BeatPurpose {
   if (EMPHASIS_RE.test(sentence)) return "emphasis";
   if (SETUP_RE.test(sentence)) return "setup";
   if (SUBJECT_RE.test(sentence)) return "subject";

@@ -22,16 +22,30 @@ function linear(t: number): number {
 
 /** The whiteboard family's cubic ease-in-out (timing.ts easeInOut — the
  *  same closed form, so a G1/K1 tween and a whiteboard stroke share one
- *  motion feel). */
+ *  motion feel).
+ *
+ *  The cubic is EXACT IEEE multiplication, never Math.pow — pow's result is
+ *  an implementation-defined approximation of x³, and V8 builds disagree
+ *  by 1 ULP on fractional inputs (the 2026-11-15 dispatch receipt: CI's
+ *  node 22 and the sandbox's node 24 split the S123 pin 4 30 fps golden
+ *  frame hash while the 24 fps series agreed — one pow input, one ULP, one
+ *  different byte string). + − × ÷ are exactly specified by the language,
+ *  so w*w*w is byte-stable across every engine and version: the golden
+ *  hashes below are re-pinned on the exact form. */
 function easeInOut(t: number): number {
   const u = clamp01(t);
-  return u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+  if (u < 0.5) return 4 * u * u * u;
+  const w = -2 * u + 2;
+  return 1 - (w * w * w) / 2;
 }
 
-/** Fast start, gentle settle (cubic out — the same family's exit). */
+/** Fast start, gentle settle (cubic out — the same family's exit). The
+ *  exact-multiplication law as above — Math.pow(1-u, 3) is an
+ *  implementation-defined approximation; b*b*b is the language's truth. */
 function easeOut(t: number): number {
   const u = clamp01(t);
-  return 1 - Math.pow(1 - u, 3);
+  const b = 1 - u;
+  return 1 - b * b * b;
 }
 
 /** Back-overshoot constants: s1 sets how far past the target the curve

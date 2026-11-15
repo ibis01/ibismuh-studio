@@ -33,6 +33,7 @@ import { InlineCloneSetup } from "@/components/tubeforge/inline-clone-setup";
 import { BrandKitCard } from "@/components/tubeforge/brand-kit";
 import { SceneEditorDialog } from "@/components/tubeforge/scene-editor";
 import WhiteboardStudio from "@/components/tubeforge/whiteboard/whiteboard-studio";
+import GraphicsStudio from "@/components/tubeforge/graphics/graphics-studio";
 import { DirectorCard } from "@/components/tubeforge/director-card";
 import { CriticCard } from "@/components/tubeforge/critic-card";
 import { ProductionBoard } from "@/components/tubeforge/production-board";
@@ -4152,6 +4153,19 @@ export function VideoDetailDialog({
                      render. The scene grid / Director card return for every
                      other mode. */
                   <WhiteboardStudio
+                    videoId={video.id}
+                    hasVideo={video.hasVideo}
+                    onRenderQueued={() => {
+                      void refreshVideo(video.id);
+                      bumpRefresh();
+                    }}
+                  />
+                ) : renderMode === "graphics" ? (
+                  /* S123 (G1) — the Graphics Studio owns this tab in
+                     graphics mode: scaffold → scrub/play the WHOLE doc
+                     through the frame-truth seam → labelled drafts →
+                     render. The same peer-engine law as the whiteboard. */
+                  <GraphicsStudio
                     videoId={video.id}
                     hasVideo={video.hasVideo}
                     onRenderQueued={() => {

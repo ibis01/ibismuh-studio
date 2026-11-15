@@ -34,9 +34,36 @@ import type { AssembledTimeline, TimelineTrack } from "./timeline";
  *  "image" = the designed PNG IS the frame (slides today); "video" = a
  *  moving or footage-derived clip; "whiteboard" = the engine DRAWS the
  *  frames (the Whiteboard lane owns execution — the compositor's segment
- *  builders refuse the kind as a routing wall). 3d/character/graphics land
- *  with the engines that own them. */
-export type PlanVisualKind = "video" | "image" | "whiteboard";
+ *  builders refuse the kind as a routing wall). "graphics" = S123 (G1):
+ *  the motion-graphics lane draws the frames the same way (the compositor
+ *  refuses it on the SAME routing wall). 3d/character land with the
+ *  engines that own them. */
+export type PlanVisualKind = "video" | "image" | "whiteboard" | "graphics";
+
+/**
+ * Stage X — the compositor's SEGMENT-BUILDER registry: the visual kinds the
+ * story compositor can actually BUILD a per-scene segment for today
+ * ("all-or-nothing law extends: every kind must have a segment builder").
+ * Engine kinds land here WITH their builders (the per-scene dispatch the
+ * extension-points audit identified) — a kind in PlanVisualKind but not in
+ * this registry is a plan the compositor refuses HONESTLY (the routing
+ * wall's message names the registry, never a hard-coded kind list).
+ */
+export const COMPOSITOR_SEGMENT_KINDS = ["video", "image"] as const satisfies readonly PlanVisualKind[];
+
+export interface PlanKindsVerdict {
+  ok: boolean;
+  /** The plan's kinds that have no segment builder (empty when ok). */
+  unsupported: PlanVisualKind[];
+}
+
+/** Validate a plan's kinds against the builder registry — the multi-kind
+ *  gate every compositionPlan consumer runs before dispatch. PURE. */
+export function validatePlanKinds(kinds: readonly PlanVisualKind[]): PlanKindsVerdict {
+  const registry = COMPOSITOR_SEGMENT_KINDS as readonly string[];
+  const unsupported = [...new Set(kinds.filter((k) => !registry.includes(k)))];
+  return { ok: unsupported.length === 0, unsupported };
+}
 
 export interface CompositionPlanScene {
   /** Play-order position (0-based) — the row's scenes align BY POSITION
@@ -104,7 +131,14 @@ export function planFromTracks(
     scenes.push({
       position: i,
       sceneIndex: typeof c.sceneIndex === "number" ? c.sceneIndex : i + 1,
-      kind: c.kind === "image" ? "image" : c.kind === "whiteboard" ? "whiteboard" : "video",
+      kind:
+        c.kind === "image"
+          ? "image"
+          : c.kind === "whiteboard"
+            ? "whiteboard"
+            : c.kind === "graphics"
+              ? "graphics"
+              : "video",
       assetSource:
         c.asset?.source === "stock"
           ? "stock"

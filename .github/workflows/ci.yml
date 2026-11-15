@@ -28,6 +28,21 @@
 # the suite itself was skipped, not failed. Pin the image; bump Playwright
 # only when it actually supports 26.04.
 #
+# NOTE (S128-ext, 2026-11-15): every job rides node 24, not 22. Receipt: the
+# first dispatched runs (43694769530, 43696075518) failed `eslint .` with
+# "Parsing error: Maximum call stack size exceeded" on whiteboard/glyphs.ts —
+# a file byte-identical to main (diff 0, gate-proven), on the same node
+# 22.23.4 + eslint 10.14.0 + lockfile that had linted it GREEN the day before
+# (run 132556761745). The file sits exactly on node 22's parser-recursion
+# edge: outcomes flip with per-machine memory layout (5/5 red locally on
+# 22.23.5, green on the runner, red on the runner). The whiteboard tree is
+# frozen (the §6 law), so the fix is the RUNTIME: node 24 is where every
+# golden pin and lint gate was recorded (the sandbox), node 24 is the active
+# LTS, Playwright 1.65 declares node >=20, and the easing goldens are now
+# IEEE-exact (version-independent by construction). Same class of receipt as
+# the ubuntu-24.04 pin above: pin the runtime when platform drift breaks the
+# gate. Record: docs/audits/s128-ext-ci-dispatch-record.md §Finding 3.
+#
 # Pushing this file requires a PAT with `workflow` scope (GitHub rejects
 # workflow files otherwise). See worklog T-1.5 / T-5.2 / S33.
 
@@ -37,6 +52,14 @@ on:
   push:
     branches: [main]
   pull_request:
+  # S128 (the PR #24 integration review, 2026-11-15): the Docker production
+  # smoke had skipped on BOTH open integration PRs (#23, #24) because its
+  # `if` fired only on pushes to main — and main had not moved. Two opt-in
+  # triggers close the gap without paying the ~10-minute build on every PR:
+  #   workflow_dispatch — "Run workflow" in the Actions UI boots the FULL
+  #     gate (Docker smoke included) on ANY branch, on demand;
+  #   the `docker-smoke` label on a PR opts that PR's run in.
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -76,7 +99,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install ffmpeg (QC fixtures + render pipeline)
@@ -192,7 +215,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies (postinstall bootstraps SQLite + Prisma)
@@ -222,7 +245,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install ffmpeg (QC fixtures + render pipeline)
@@ -327,7 +350,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       # Pass 1 — the clean chain is expected to wedge (42P07 at auth_setting,
@@ -363,7 +386,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies (provides tsx; warms the npm cache for the clone)
@@ -378,12 +401,18 @@ jobs:
   # web + worker, and walks register → login → create project → ffmpeg
   # render → MinIO artifact round-trip (the S101 lifecycle) → cross-process
   # job execution → worker-restart recovery (the S100 reap, token bumped).
-  # Runs on main pushes only (the build costs ~10 min; PR runs get the rest
-  # of the gate).
+  # Runs on pushes to main (as before) AND, since S128, on demand:
+  #   workflow_dispatch — run the whole gate on any branch from the UI;
+  #   a PR carrying the `docker-smoke` label opts its own run in.
+  # The 2026-11-15 external audit flagged the smoke as "skipped, not passed"
+  # on both open integration PRs — this is the root cause and the fix.
   docker-smoke:
     name: Docker production smoke (P0.6)
     runs-on: ubuntu-24.04
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'docker-smoke'))
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -404,7 +433,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install ffmpeg (render pipeline)

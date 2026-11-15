@@ -134,6 +134,13 @@ export const RENDER_MODES = [
     eta: "≈ 2–6 min",
   },
   {
+    id: "graphics",
+    label: "Motion graphics",
+    icon: "BarChart3",
+    desc: "Kinetic explainer — a native engine animates headlines, counters, bar charts, icons and shapes from a declarative doc, cut to your narration (no image gen, $0)",
+    eta: "≈ 1–4 min",
+  },
+  {
     id: "animated",
     label: "Full AI animation",
     icon: "Clapperboard",
@@ -881,6 +888,9 @@ export interface CharacterDTO {
   voice: string;
   artStyle: string;
   hasPortrait: boolean;
+  /** S125 (K1) — the character carries a validated rig doc (the native
+   *  character lane's seat; the studio shows the rig editor when true). */
+  hasRig: boolean;
   videoCount: number;
   poseCount: number;
   portraitUrl: string | null;
