@@ -1,0 +1,707 @@
+     1→// timeline.ts — Stage 6 scene assembly (T-6.1).
+     2→//
+     3→// Pure functions that build the "preview timeline" from a video row's
+     4→// scenes + shotList + audio settings. POST /api/videos/[id]/assemble returns
+     5→// this JSON; the render job consumes the SAVED version (PUT /assemble) instead
+     6→// of recomputing inline (T-6.10 — a later task in this stage).
+     7→//
+     8→// The timeline is the user-editable preview of what the render will produce:
+     9→//   * per-scene start/end times from the scene's MEASURED read length when
+    10→//     the per-scene WAV exists (wavDurations — the exact segment the render
+    11→//     will build: wav + lead + tail, MIN_SEG floor), falling back to the
+    12→//     narration word count + TTS speed estimate for scenes not yet voiced;
+    13→//   * per-scene transition in/out from the video override or the approved
+    14→//     shot plan (so the user sees what the AI Director picked);
+    15→//   * per-scene audio levels (voice / music / SFX / ambient) from the video
+    16→//     settings + scene mood (the same resolvers the render uses);
+    17→//   * per-scene caption text + timing (the scene's caption field, timed to the
+    18→//     scene's voiceover window);
+    19→//   * the source kind (ai | stock | slides) and the stock reference when set.
+    20→//
+    21→// Two design notes:
+    22→//  1. The timeline is a PROJECTION — never the source of truth. The video
+    23→//     row (scenes, shotList, music*) is. Saving a user-edited timeline
+    24→//     writes the edited fields back to the row; the timeline column just
+    25→//     caches the assembled form for the render job.
+    26→//  2. Estimated durations silently TRIM at render time (the render honors
+    27→//     doc windows positionally — T-6.10): a scene whose real read runs
+    28→//     longer than its word-count share would lose its last words without
+    29→//     anyone editing anything. That is why measured WAV lengths win whenever
+    30→//     they exist — the assembled doc starts honest, and the user's explicit
+    31→//     trims (shorter windows) are the only cuts the render makes.
+    32→
+    33→import type { Scene } from "./types";
+    34→import type { DirectorPlan } from "./director-plan";
+    35→import { planSceneDuration, planTransitionIn } from "./director-plan";
+    36→import { sanitizeTransition, TRANSITION_IDS, type TransitionStyle } from "./transitions";
+    37→import { R_LEAD_SEC, R_TAIL_SEC, R_MIN_SEG_SEC } from "./preview-lanes";
+    38→import { sanitizeSfxKind, sanitizeAmbienceKind } from "./studio-sound";
+    39→import {
+    40→  sanitizeGrade,
+    41→  sanitizeTitle,
+    42→  sanitizeCamera,
+    43→  sanitizeSpeed,
+    44→  sanitizeVoiceFades,
+    45→  sanitizeChroma,
+    46→  sanitizePip,
+    47→  sanitizeRenderPrefs,
+    48→  type SceneGrade,
+    49→  type SceneTitle,
+    50→  type SceneCameraKeys,
+    51→  type SceneChroma,
+    52→  type ScenePip,
+    53→  type RenderPrefs,
+    54→} from "./studio-doc";
+    55→
+    56→export type SceneSource = "ai" | "stock" | "slides";
+    57→
+    58→export interface TimelineShot {
+    59→  framing: string | null;
+    60→  camera: string | null;
+    61→  lens: string | null;
+    62→  composition: string | null;
+    63→  motion: string | null;
+    64→  mood: string | null;
+    65→}
+    66→
+    67→export interface TimelineAudio {
+    68→  voice: {
+    69→    enabled: boolean;
+    70→    level: number;
+    71→    /** S2 wave 2 — narration fade in/out (seconds, 0..3); absent = none. */
+    72→    fadeInSec?: number;
+    73→    fadeOutSec?: number;
+    74→  }; // 0..1
+    75→  music: { enabled: boolean; level: number; ducking: boolean };
+    76→  sfx: { enabled: boolean; level: number; kind: string | null };
+    77→  ambient: { enabled: boolean; level: number; kind: string | null };
+    78→}
+    79→
+    80→export interface TimelineCaption {
+    81→  text: string;
+    82→  startSec: number;
+    83→  endSec: number;
+    84→}
+    85→
+    86→// ---------- S87 slice 1 — the v2 tracks projection ----------
+    87→//
+    88→// The Universal Timeline contract's multi-track shape (S76 §4.C): every
+    89→// engine describes its cut as TRACKS of kind video/image/whiteboard/3d/
+    90→// character/audio/subtitle/graphics. Slice 1 derives the three scenes-
+    91→// backed tracks (visual + audio + subtitle) from the scene list; slices
+    92→// 3+ let ENGINES own their tracks (whiteboard's planner, 3D).
+    93→//
+    94→// THE PROJECTION LAW, ENFORCED STRUCTURALLY (the slice-1 refinement):
+    95→// tracks are derived AT SERIALIZATION from the scenes being written —
+    96→// never carried through parse-modify-serialize cycles. A carried tracks[]
+    97→// goes stale the moment a clip op edits scenes; a derived one cannot
+    98→// (every serialize re-derives from the scenes it is handed). A tracks
+    99→// field on an in-memory doc is a display echo; the WRITER never reads it.
+   100→
+   101→export type TimelineTrackKind =
+   102→  | "video"
+   103→  | "image"
+   104→  | "whiteboard"
+   105→  | "3d"
+   106→  | "character"
+   107→  | "audio"
+   108→  | "subtitle"
+   109→  | "graphics";
+   110→
+   111→export interface TimelineClip {
+   112→  /** Deterministic clip id — `s{sceneIndex}` (visual), `a-s{sceneIndex}`
+   113→   *  (voiceover), `a-music` (the bed), `sub-s{sceneIndex}` (caption). */
+   114→  id: string;
+   115→  kind: TimelineTrackKind;
+   116→  /** The row linkage — the scene this clip projects (null for doc-spanning
+   117→   *  clips like the music bed). The row is the truth; clips always point
+   118→   *  back at it (design note 1). */
+   119→  sceneIndex: number | null;
+   120→  /** Timing on the composition clock (seconds). */
+   121→  startSec: number;
+   122→  endSec: number;
+   123→  /** The scene-boundary transitions this clip enters/exits with (null for
+   124→   *  non-visual tracks — audio does not blend). */
+   125→  transitionIn: string | null;
+   126→  transitionOut: string | null;
+   127→  /** The asset reference (the stock pointer / source kind). null = the
+   128→   *  frame is generated (ai) or the clip is not visual (audio/subtitle). */
+   129→  asset: {
+   130→    source: SceneSource;
+   131→    stockSource: string | null;
+   132→    stockQuery: string | null;
+   133→  } | null;
+   134→}
+   135→
+   136→export interface TimelineTrack {
+   137→  kind: TimelineTrackKind;
+   138→  name: string;
+   139→  clips: TimelineClip[];
+   140→}
+   141→
+   142→/** Defensive timing read — a PUT body scene is a client roundtrip cast, so
+   143→ *  derivation must tolerate junk timings (0 fallback, never NaN). */
+   144→function trackSec(v: unknown): number {
+   145→  const n = Number(v);
+   146→  return Number.isFinite(n) && n >= 0 ? n : 0;
+   147→}
+   148→
+   149→/** Derive the v2 tracks projection from a scene list — the pure,
+   150→ *  deterministic function serializeTimeline applies on every write.
+   151→ *
+   152→ *  Three tracks, all scene-backed (the slices-3+ engine tracks land later):
+   153→ *  • visual — one clip per scene; kind image when the scene source is
+   154→ *    slides (the designed PNG IS the frame), video otherwise (ai/stock);
+   155→ *    timing + transitions + the asset reference mirror the scene.
+   156→ *  • audio — one clip per scene over the same measured window (the
+   157→ *    voiceover/sfx/ambient bed is scene-bound), plus ONE doc-spanning
+   158→ *    music-bed clip when the doc says the music is on (the doc mirrors
+   159→ *    the per-video music flag identically on every scene; scenes[0] is
+   160→ *    the honest read).
+   161→ *  • subtitle — clips ONLY where the doc carries a caption block (the
+   162→ *    S43 seeding rule: human-edited captions live in the doc; LLM script
+   163→ *    captions stay on the row). Caption timing wins over scene timing.
+   164→ *
+   165→ *  Per-scene mix levels / creative overrides deliberately stay in the
+   166→ *  scenes list (the S2 doctrine — clips reference scenes by index;
+   167→ *  duplicating levels into clips would fork the truth slice 2 consumes).
+   168→ *  Empty scenes → the three tracks with empty clip lists (shape-stable
+   169→ *  for the compositor's dispatch). */
+   170→export function deriveTracks(scenes: TimelineScene[]): TimelineTrack[] {
+   171→  const list = Array.isArray(scenes) ? scenes : [];
+   172→  const visualKind: TimelineTrackKind = list[0]?.source === "slides" ? "image" : "video";
+   173→
+   174→  const visualClips: TimelineClip[] = list.map((s) => ({
+   175→    id: `s${s?.index ?? 0}`,
+   176→    kind: s?.source === "slides" ? "image" : "video",
+   177→    sceneIndex: typeof s?.index === "number" ? s.index : null,
+   178→    startSec: trackSec(s?.startSec),
+   179→    endSec: trackSec(s?.endSec),
+   180→    transitionIn: typeof s?.transitionIn === "string" ? s.transitionIn : null,
+   181→    transitionOut: typeof s?.transitionOut === "string" ? s.transitionOut : null,
+   182→    asset: {
+   183→      source: s?.source === "slides" ? "slides" : s?.source === "stock" ? "stock" : "ai",
+   184→      stockSource: typeof s?.stockSource === "string" ? s.stockSource : null,
+   185→      stockQuery: typeof s?.stockQuery === "string" ? s.stockQuery : null,
+   186→    },
+   187→  }));
+   188→
+   189→  const audioClips: TimelineClip[] = list.map((s) => ({
+   190→    id: `a-s${s?.index ?? 0}`,
+   191→    kind: "audio",
+   192→    sceneIndex: typeof s?.index === "number" ? s.index : null,
+   193→    startSec: trackSec(s?.startSec),
+   194→    endSec: trackSec(s?.endSec),
+   195→    transitionIn: null,
+   196→    transitionOut: null,
+   197→    asset: null,
+   198→  }));
+   199→  const musicOn = list[0]?.audio?.music?.enabled === true;
+   200→  if (musicOn && list.length > 0) {
+   201→    const total = Math.max(...list.map((s) => trackSec(s?.endSec)));
+   202→    audioClips.push({
+   203→      id: "a-music",
+   204→      kind: "audio",
+   205→      sceneIndex: null, // doc-spanning bed — not scene-bound
+   206→      startSec: 0,
+   207→      endSec: total,
+   208→      transitionIn: null,
+   209→      transitionOut: null,
+   210→      asset: null,
+   211→    });
+   212→  }
+   213→
+   214→  const subtitleClips: TimelineClip[] = list
+   215→    .filter((s) => typeof s?.caption?.text === "string" && s.caption.text.trim().length > 0)
+   216→    .map((s) => ({
+   217→      id: `sub-s${s.index}`,
+   218→      kind: "subtitle" as const,
+   219→      sceneIndex: typeof s.index === "number" ? s.index : null,
+   220→      startSec: trackSec(s.caption?.startSec ?? s.startSec),
+   221→      endSec: trackSec(s.caption?.endSec ?? s.endSec),
+   222→      transitionIn: null,
+   223→      transitionOut: null,
+   224→      asset: null,
+   225→    }));
+   226→
+   227→  return [
+   228→    { kind: visualKind, name: "visual", clips: visualClips },
+   229→    { kind: "audio", name: "audio", clips: audioClips },
+   230→    { kind: "subtitle", name: "subtitle", clips: subtitleClips },
+   231→  ];
+   232→}
+   233→
+   234→export interface TimelineScene {
+   235→  index: number;
+   236→  title: string;
+   237→  narration: string;
+   238→  visual: string;
+   239→  startSec: number;
+   240→  endSec: number;
+   241→  durationSec: number;
+   242→  transitionIn: string | null;
+   243→  transitionOut: string | null;
+   244→  audio: TimelineAudio;
+   245→  caption: TimelineCaption | null;
+   246→  source: SceneSource;
+   247→  stockSource: string | null; // "pexels" | "pixabay" | null
+   248→  stockQuery: string | null;
+   249→  shot: TimelineShot | null;
+   250→  /** S2 wave 2 — per-scene creative overrides. Optional + absent from the
+   251→   *  assembly seed (the classic look is the default), present once edited. */
+   252→  grade?: SceneGrade | null;
+   253→  titleOverlay?: SceneTitle | null;
+   254→  cameraKeys?: SceneCameraKeys | null;
+   255→  speed?: number | null;
+   256→  /** S3 — chroma key + corner logo overlay (absent = none). */
+   257→  chroma?: SceneChroma | null;
+   258→  pip?: ScenePip | null;
+   259→}
+   260→
+   261→export interface AssembledTimeline {
+   262→  /** S87 — the doc's schema stamp. 1 = the scene-level projection (slice 0);
+   263→   *  2 = the doc that also carries the derived v2 tracks (slice 1). A build
+   264→   *  that knows version N reads N and N−1 — a build meeting an UNKNOWN
+   265→   *  stamp must treat the doc as unreadable (parseTimeline → null → the
+   266→   *  render recomputes inline) and NEVER overwrite it (the slice-1
+   267→   *  guardTimelineOverwrite law). Legacy docs without the stamp parse as
+   268→   *  v1 (the tolerant-read law). */
+   269→  schema: 1 | 2;
+   270→  scenes: TimelineScene[];
+   271→  /** S87 slice 1 — the derived v2 tracks projection. In memory this is a
+   272→   *  display convenience; the WRITER re-derives at serialization (the
+   273→   *  projection law, enforced structurally — a stale copy cannot persist). */
+   274→  tracks: TimelineTrack[];
+   275→  sceneCount: number;
+   276→  totalDurationSec: number;
+   277→  generatedAt: string;
+   278→  /** S3 — render preferences persisted with the doc (quality tier; the
+   279→   *  aspect/fps/burnCaptions live on the video row). Absent = standard. */
+   280→  renderPrefs?: RenderPrefs | null;
+   281→}
+   282→
+   283→// ---------- helpers ----------
+   284→
+   285→/** Estimate a scene's narration duration in seconds. TTS at 1.0× averages
+   286→ *  ~150 words per minute (2.5 wps) for the studio voices; pace scales that.
+   287→ *  Adds a 0.4 s scene lead-in (the lead-in the compositor places before each
+   288→ *  scene's narration) and clamps to a sensible minimum so a one-word scene
+   289→ *  doesn't read as zero seconds. */
+   290→export function estimateNarrationSec(narration: string, ttsSpeed = 1): number {
+   291→  const words = narration.trim().split(/\s+/).filter(Boolean).length;
+   292→  if (words === 0) return 1.5; // silent scene still needs a visible beat
+   293→  const wps = 2.5 * (Number.isFinite(ttsSpeed) && ttsSpeed > 0 ? ttsSpeed : 1);
+   294→  return Math.max(1.5, words / wps + 0.4);
+   295→}
+   296→
+   297→/** Total estimated duration across scenes — used when no measured voiceover
+   298→ *  length is available. */
+   299→export function sumEstimatedDuration(scenes: Scene[], ttsSpeed = 1): number {
+   300→  return scenes.reduce((acc, s) => acc + estimateNarrationSec(s.narration, ttsSpeed), 0);
+   301→}
+   302→
+   303→/** Distribute the measured voiceover length across scenes proportional to
+   304→ *  each scene's word count. Falls back to the estimate when no measured
+   305→ *  audio exists; always returns one duration per scene in the same order. */
+   306→function deriveSceneDurations(
+   307→  scenes: Scene[],
+   308→  audioDurationSec: number | null,
+   309→  ttsSpeed: number
+   310→): number[] {
+   311→  if (scenes.length === 0) return [];
+   312→  const estimates = scenes.map((s) => estimateNarrationSec(s.narration, ttsSpeed));
+   313→  const totalEstimate = estimates.reduce((a, b) => a + b, 0);
+   314→  if (!audioDurationSec || audioDurationSec <= 0) return estimates;
+   315→  // Proportional split — keeps a long monologue scene longer than a punchy one.
+   316→  return estimates.map((e) => (e / totalEstimate) * audioDurationSec);
+   317→}
+   318→
+   319→const SFX_LEVEL: Record<string, number> = {
+   320→  whoosh: 0.35,
+   321→  boom: 0.55,
+   322→  riser: 0.4,
+   323→  sting: 0.45,
+   324→  none: 0,
+   325→};
+   326→
+   327→// ---------- assembly ----------
+   328→
+   329→export interface AssembleOptions {
+   330→  shotPlan?: DirectorPlan | null;
+   331→  transitionStyle?: string | null;
+   332→  transitionDuration?: number | null;
+   333→  audioDurationSec?: number | null;
+   334→  ttsSpeed?: number;
+   335→  renderMode?: string;
+   336→  /** Per-video music overrides (null = defaults). */
+   337→  musicEnabled?: boolean | null;
+   338→  musicVolume?: number | null;
+   339→  musicDucking?: boolean | null;
+   340→  /** Measured per-scene read lengths (sceneIndex → seconds) — the same map
+   341→ *  the assemble GET returns from disk. When present for a scene, its window
+   342→ *  is the render's exact segment (wav + lead + tail, MIN_SEG floor) instead
+   343→ *  of a word-count estimate, so an assembled doc never silently trims a
+   344→ *  long read. */
+   345→  wavDurations?: Record<number, number> | null;
+   346→}
+   347→
+   348→/** Build the preview timeline from scenes + the per-video/per-plan options. */
+   349→export function assembleTimeline(scenes: Scene[], opts: AssembleOptions = {}): AssembledTimeline {
+   350→  const ttsSpeed = Number.isFinite(opts.ttsSpeed) && (opts.ttsSpeed ?? 0) > 0 ? (opts.ttsSpeed as number) : 1;
+   351→  const durations = deriveSceneDurations(scenes, opts.audioDurationSec ?? null, ttsSpeed);
+   352→  const plan = opts.shotPlan ?? null;
+   353→  const renderMode = opts.renderMode ?? "kenburns";
+   354→
+   355→  // Music + SFX defaults mirror the render's resolvers (music.ts / sfx.ts).
+   356→  // The timeline is a PROJECTION — the render is the source of truth.
+   357→  const musicEnabled = opts.musicEnabled ?? true;
+   358→  const musicVolume = opts.musicVolume ?? 0.6;
+   359→  const musicDucking = opts.musicDucking ?? true;
+   360→
+   361→  let cursor = 0;
+   362→  // First pass: per-scene transitionIn + duration (transitionOut for scene N
+   363→  // is the transitionIn for scene N+1 — precomputed here so the map below can
+   364→  // emit both fields without revisiting the plan).
+   365→  const perSceneTransitionIn = scenes.map((scene) => {
+   366→    const videoTransition = sanitizeTransition({
+   367→      style: opts.transitionStyle ?? null,
+   368→      durationSec: opts.transitionDuration ?? null,
+   369→    });
+   370→    const planTransition = plan ? planTransitionIn(plan, scene.index) : null;
+   371→    return planTransition || videoTransition.style;
+   372→  });
+   373→
+   374→  const out: TimelineScene[] = scenes.map((scene, i) => {
+   375→    // Plan-determined duration can only EXTEND a scene beyond its narration
+   376→    // share (deliberate dramatic hold) — never shorten it. The narration
+   377→    // share is the floor: a plan whose invented pacing totals less than the
+   378→    // measured voiceover (Battle Yamuk: 111 s plan vs 143 s narration)
+   379→    // otherwise ships a timeline that cuts words at render time.
+   380→    const planDuration = plan ? planSceneDuration(plan, scene.index) : 0;
+   381→    // Measured read wins over the estimate (see design note 2 above): the
+   382→    // render builds this scene's segment as wav + lead + tail (MIN_SEG
+   383→    // floor) — mirror it exactly, the way clip-ops' sceneSegmentSec does.
+   384→    const realWav = opts.wavDurations?.[scene.index] ?? null;
+   385→    const narrationSec =
+   386→      realWav && realWav > 0
+   387→        ? Math.max(R_MIN_SEG_SEC, realWav + R_LEAD_SEC + R_TAIL_SEC)
+   388→        : Math.max(0.5, durations[i] ?? 1.5);
+   389→    const durationSec = planDuration > 0 ? Math.max(planDuration, narrationSec) : narrationSec;
+   390→    const startSec = cursor;
+   391→    const endSec = cursor + durationSec;
+   392→    cursor = endSec;
+   393→
+   394→    const transitionIn = perSceneTransitionIn[i];
+   395→    // transitionOut of scene N = transitionIn of scene N+1; the LAST scene
+   396→    // fades to black by convention.
+   397→    const transitionOut = i < scenes.length - 1 ? perSceneTransitionIn[i + 1] : "fade";
+   398→
+   399→    // Shot — only present under an approved plan (mirrors the render hook
+   400→    // in story.ts; proposed/dismissed plans never reach the visual pipeline).
+   401→    const shotScene = plan?.scenes.find((s) => s.sceneIndex === scene.index) ?? null;
+   402→    const shot0 = shotScene?.shots[0] ?? null;
+   403→    const shot: TimelineShot | null = shot0
+   404→      ? {
+   405→          framing: shot0.framing ?? null,
+   406→          camera: shot0.camera ?? null,
+   407→          lens: shot0.lens ?? null,
+   408→          composition: shot0.composition ?? null,
+   409→          // motion lives on DirectorScene (per-scene), not DirectorShot.
+   410→          motion: shotScene?.motion ?? null,
+   411→          mood: shotScene?.mood ?? null,
+   412→        }
+   413→      : null;
+   414→
+   415→    // Audio: per-scene SFX (scene.sfx) + plan-level ambient kind; the music
+   416→    // bed is per-video (the resolver picks one track for the whole video).
+   417→    const sfxKind = scene.sfx && scene.sfx !== "none" ? scene.sfx : null;
+   418→    const ambientKind = shotScene?.ambience ?? null;
+   419→
+   420→    const source: SceneSource =
+   421→      renderMode === "slides" ? "slides" : renderMode === "stock" && scene.stock ? "stock" : "ai";
+   422→
+   423→    // S43 — seed the doc's caption slot ONLY from human-edited captions
+   424→    // (captionUser, set by the Scene Studio PATCH). The script LLM fills
+   425→    // `caption` on every scene; seeding those here made every assembled doc
+   426→    // override the word-synced narration chunks with one frozen LLM line per
+   427→    // scene, and froze the assembly snapshot against later row edits.
+   428→    const caption: TimelineCaption | null =
+   429→      scene.captionUser && scene.caption
+   430→        ? { text: scene.caption, startSec, endSec }
+   431→        : null;
+   432→
+   433→    return {
+   434→      index: scene.index,
+   435→      title: scene.title,
+   436→      narration: scene.narration,
+   437→      visual: scene.visual,
+   438→      startSec: Math.round(startSec * 100) / 100,
+   439→      endSec: Math.round(endSec * 100) / 100,
+   440→      durationSec: Math.round(durationSec * 100) / 100,
+   441→      transitionIn,
+   442→      transitionOut,
+   443→      audio: {
+   444→        voice: { enabled: true, level: 1.0 },
+   445→        music: { enabled: musicEnabled, level: musicVolume, ducking: musicDucking },
+   446→        sfx: {
+   447→          enabled: sfxKind !== null,
+   448→          level: sfxKind ? (SFX_LEVEL[sfxKind] ?? 0.35) : 0,
+   449→          kind: sfxKind,
+   450→        },
+   451→        ambient: {
+   452→          enabled: ambientKind !== null,
+   453→          // Mirrors the render mix (sceneAudio): beds sit at 0.10 —
+   454→          // synthesized noise beds any louder read as constant hiss.
+   455→          level: ambientKind ? 0.1 : 0,
+   456→          kind: ambientKind,
+   457→        },
+   458→      },
+   459→      caption,
+   460→      source,
+   461→      stockSource: scene.stock?.source ?? null,
+   462→      stockQuery: scene.stock?.query ?? null,
+   463→      shot,
+   464→    };
+   465→  });
+   466→
+   467→  return {
+   468→    // S87 slice 1 — assemble builds the v2 doc (the writer re-stamps at
+   469→    // serialization; the in-memory stamp describes the doc's shape).
+   470→    schema: 2,
+   471→    scenes: out,
+   472→    tracks: deriveTracks(out),
+   473→    sceneCount: out.length,
+   474→    totalDurationSec: Math.round(cursor * 100) / 100,
+   475→    generatedAt: new Date().toISOString(),
+   476→  };
+   477→}
+   478→
+   479→// ---------- (de)serialization for the Video.timeline column ----------
+   480→
+   481→// ---------- doc overlay (S2 — what the render reads back) ----------
+   482→//
+   483→// The saved timeline doc is the Studio's editable projection of the video
+   484→// row. S2 makes the render CONSUME the edited fields instead of just the
+   485→// durations: per-scene transition style, per-scene audio levels, per-scene
+   486→// caption text. This interface is that bridge — extracted from the doc,
+   487→// sanitized, aligned BY POSITION to the row's scenes (the sceneOrder
+   488→// contract keeps them in the same play order).
+   489→
+   490→export interface DocSceneSettings {
+   491→  /** Valid catalog transition id for the seam INTO this scene (null = no
+   492→   *  override — the video-level style wins). */
+   493→  transitionIn: string | null;
+   494→  /** 0..1 narration level (null = doc silent — render default 1.0). */
+   495→  voiceLevel: number | null;
+   496→  /** 0..1 music-bed level for this scene's window (null = no override). */
+   497→  musicLevel: number | null;
+   498→  /** 0..1 SFX cue weight (null = no override — render default 0.35). */
+   499→  sfxLevel: number | null;
+   500→  /** 0..1 ambience bed weight (null = no override — render default 0.10). */
+   501→  ambientLevel: number | null;
+   502→  /** Edited caption text (null = no override — the row's field wins). */
+   503→  caption: string | null;
+   504→  /** S2 wave 2 — creative layer. Null = classic render behavior. */
+   505→  grade: SceneGrade | null;
+   506→  titleOverlay: SceneTitle | null;
+   507→  cameraKeys: SceneCameraKeys | null;
+   508→  speed: number | null;
+   509→  /** Per-scene narration fade in/out (null = no afade). */
+   510→  voiceFades: { inSec: number; outSec: number } | null;
+   511→  /** S3 — chroma key / corner logo overlay (null = none). */
+   512→  chroma: SceneChroma | null;
+   513→  pip: ScenePip | null;
+   514→  /** S5 — the studio's sound picks (null = no override — the plan's cue/bed
+   515→   *  wins). Sanitized against the studio-sound catalogs at the extraction
+   516→   *  choke point; the render resolves precedence with resolveSoundChoice. */
+   517→  sfxKind: string | null;
+   518→  ambientKind: string | null;
+   519→}
+   520→
+   521→/** Clamp a doc level into 0..1; anything absent/out-of-range is null (no
+   522→ *  override — never a silent clamp that would mask a corrupt doc). */
+   523→function docLevel(v: unknown): number | null {
+   524→  const n = Number(v);
+   525→  if (!Number.isFinite(n) || n < 0 || n > 1) return null;
+   526→  return n;
+   527→}
+   528→
+   529→/**
+   530→ * Extract the render-facing per-scene settings from a saved timeline doc.
+   531→ * Returns null when the doc is absent or out of alignment with the scene
+   532→ * count (the same guard the duration consumption uses — a stale doc must
+   533→ * never reach the render partially). Docs saved by older studio versions
+   534→ * may lack audio/caption blocks; every field is optional-chained so those
+   535→ * docs read as "no override" instead of crashing.
+   536→ */
+   537→export function docSceneSettings(
+   538→  timeline: AssembledTimeline | null,
+   539→  sceneCount: number
+   540→): DocSceneSettings[] | null {
+   541→  if (!timeline || !Array.isArray(timeline.scenes)) return null;
+   542→  if (timeline.scenes.length !== sceneCount || sceneCount === 0) return null;
+   543→  return timeline.scenes.map((s) => ({
+   544→    transitionIn:
+   545→      typeof s.transitionIn === "string" && TRANSITION_IDS.has(s.transitionIn as TransitionStyle)
+   546→        ? s.transitionIn
+   547→        : null,
+   548→    voiceLevel: docLevel(s.audio?.voice?.level),
+   549→    musicLevel: docLevel(s.audio?.music?.level),
+   550→    sfxLevel: docLevel(s.audio?.sfx?.level),
+   551→    ambientLevel: docLevel(s.audio?.ambient?.level),
+   552→    caption:
+   553→      typeof s.caption?.text === "string" && s.caption.text.trim().length > 0
+   554→        ? s.caption.text
+   555→        : null,
+   556→    // S2 wave 2 — the creative layer, re-sanitized at the extraction choke
+   557→    // point (the UI normalizes on load too; both call studio-doc's exact
+   558→    // functions so a hostile persisted doc can never reach the render raw).
+   559→    grade: sanitizeGrade(s.grade),
+   560→    titleOverlay: sanitizeTitle(s.titleOverlay),
+   561→    cameraKeys: sanitizeCamera(s.cameraKeys),
+   562→    speed: sanitizeSpeed(s.speed),
+   563→    voiceFades: sanitizeVoiceFades(s.audio?.voice?.fadeInSec, s.audio?.voice?.fadeOutSec),
+   564→    // S3 — keying + overlay, sanitized at the same choke point.
+   565→    chroma: sanitizeChroma(s.chroma),
+   566→    pip: sanitizePip(s.pip),
+   567→    // S5 — the sound picks, sanitized at the same choke point (the UI
+   568→    // normalizes on load too; both call studio-sound's exact functions so a
+   569→    // hostile persisted doc can never reach the render raw).
+   570→    sfxKind: sanitizeSfxKind(s.audio?.sfx?.kind),
+   571→    ambientKind: sanitizeAmbienceKind(s.audio?.ambient?.kind),
+   572→  }));
+   573→}
+   574→
+   575→/** Parse a persisted timeline JSON. Tolerant of legacy/null — null when the
+   576→ *  structure is unreadable (the render falls back to recomputing inline).
+   577→ *  S87 — the schema stamp: absent = legacy v1 (docs predate the field),
+   578→ *  1 = the scene-level projection, 2 = the doc that also carries the v2
+   579→ *  tracks (this build re-derives tracks from the scenes — a stored copy is
+   580→ *  never trusted on read, so junk tracks cannot enter memory). Any OTHER
+   581→ *  stamp = a doc this build does not know → null (never a guessed parse;
+   582→ *  the render recomputes inline, and guardTimelineOverwrite keeps every
+   583→ *  write path from destroying the newer doc). */
+   584→export function parseTimeline(json: string | null | undefined): AssembledTimeline | null {
+   585→  if (!json) return null;
+   586→  try {
+   587→    const raw = JSON.parse(json) as unknown;
+   588→    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+   589→    const obj = raw as { schema?: unknown; scenes?: unknown; sceneCount?: unknown; totalDurationSec?: unknown; generatedAt?: unknown; renderPrefs?: unknown };
+   590→    // A build reads N and N−1: this build knows 2, so 2, 1 and absent
+   591→    // (legacy v1) parse; anything else refuses.
+   592→    const known = obj.schema === undefined || obj.schema === 1 || obj.schema === 2;
+   593→    if (!known) return null; // unknown future schema — refuse, never guess
+   594→    if (!Array.isArray(obj.scenes)) return null;
+   595→    const scenes = obj.scenes as TimelineScene[];
+   596→    return {
+   597→      schema: obj.schema === 2 ? 2 : 1,
+   598→      scenes,
+   599→      // The tracks projection is ALWAYS re-derived from the parsed scenes —
+   600→      // tolerant read of junk tracks (they never enter memory), and the
+   601→      // roundtrip (serialize → parse → serialize) holds by construction.
+   602→      tracks: deriveTracks(scenes),
+   603→      sceneCount: Number(obj.sceneCount) || 0,
+   604→      totalDurationSec: Number(obj.totalDurationSec) || 0,
+   605→      generatedAt: typeof obj.generatedAt === "string" ? obj.generatedAt : new Date().toISOString(),
+   606→      // S3 — render prefs ride the root (dropped silently when corrupt).
+   607→      renderPrefs: sanitizeRenderPrefs(obj.renderPrefs),
+   608→    };
+   609→  } catch {
+   610→    return null;
+   611→  }
+   612→}
+   613→
+   614→/** The doc's scene vocabulary — serializeTimeline emits EXACTLY these keys,
+   615→ *  in this order, nothing else. A hostile client (or a lost older doc) can
+   616→ *  carry junk keys (`art`, `image`, `poster`, …) in the persisted column;
+   617→ *  passthrough parsing tolerates them on read, but the WRITER never stores
+   618→ *  what the type doesn't declare — the same "never passed through" doctrine
+   619→ *  the S2/S3 sanitizers apply to the known fields. */
+   620→const TIMELINE_SCENE_FIELDS = [
+   621→  "index",
+   622→  "title",
+   623→  "narration",
+   624→  "visual",
+   625→  "startSec",
+   626→  "endSec",
+   627→  "durationSec",
+   628→  "transitionIn",
+   629→  "transitionOut",
+   630→  "audio",
+   631→  "caption",
+   632→  "source",
+   633→  "stockSource",
+   634→  "stockQuery",
+   635→  "shot",
+   636→  "grade",
+   637→  "titleOverlay",
+   638→  "cameraKeys",
+   639→  "speed",
+   640→  "chroma",
+   641→  "pip",
+   642→] as const;
+   643→
+   644→export function serializeTimeline(timeline: AssembledTimeline): string {
+   645→  return JSON.stringify({
+   646→    // S87 slice 1 — the writer owns the contract version: every persisted
+   647→    // doc is stamped 2 and carries the tracks derived FROM THE SCENES IT IS
+   648→    // HANDED (the refinement: derive at serialization — no write path can
+   649→    // persist stale tracks). The doc's in-memory .tracks is never read here.
+   650→    schema: 2,
+   651→    scenes: timeline.scenes.map((s) => {
+   652→      const rec = s as unknown as Record<string, unknown>;
+   653→      const out: Record<string, unknown> = {};
+   654→      for (const f of TIMELINE_SCENE_FIELDS) {
+   655→        if (f in rec) out[f] = rec[f];
+   656→      }
+   657→      return out;
+   658→    }),
+   659→    // The v2 projection, derived from the same scenes written above —
+   660→    // structurally incapable of going stale (the slice-1 refinement).
+   661→    tracks: deriveTracks(timeline.scenes),
+   662→    sceneCount: timeline.sceneCount,
+   663→    totalDurationSec: timeline.totalDurationSec,
+   664→    generatedAt: timeline.generatedAt,
+   665→    ...(timeline.renderPrefs ? { renderPrefs: timeline.renderPrefs } : {}),
+   666→  });
+   667→}
+   668→
+   669→// ---------- S87 slice 1 — the overwrite guard ----------
+   670→//
+   671→// The forward-compat hazard the version stamp exposes: a build meeting an
+   672→// unknown-stamp doc parses it as null, recomputes a fresh projection, and
+   673→// a naive write path would DESTROY a newer build's doc with an older-
+   674→// schema one. One law, six write paths (assemble POST + PUT, the scenes
+   675→// route's caption sync, studio clip/voice/pace): read the RAW stored
+   676→// stamp; a doc this build cannot parse must never be overwritten. The
+   677→// explicit DELETE /assemble stays unguarded — it IS the human's escape
+   678→// hatch, a deliberate decision rather than a blind clobber.
+   679→
+   680→export type TimelineOverwriteGuard = { blocked: false } | { blocked: true; storedSchema: unknown };
+   681→
+   682→/** The 409 body for a refused overwrite — every guarded route answers with
+   683→ *  this message so clients match one string. */
+   684→export const TIMELINE_OVERWRITE_ERROR =
+   685→  "A newer-schema timeline doc is stored — this build cannot read it, so the write was refused " +
+   686→  "(clear it explicitly via DELETE /assemble if you really want to start over)";
+   687→
+   688→/** Inspect the RAW stored timeline JSON (never the parsed doc — the parse
+   689→ *  of an unknown stamp is null and loses the stamp). Blocked when the
+   690→ *  stored doc carries a stamp this build does not parse (not absent, not
+   691→ *  1, not 2). Corrupt JSON / non-object bodies are NOT newer docs — the
+   692→ *  fail-open law applies (the render recomputes inline anyway), so the
+   693→ *  write proceeds. */
+   694→export function guardTimelineOverwrite(stored: string | null | undefined): TimelineOverwriteGuard {
+   695→  if (!stored) return { blocked: false };
+   696→  let raw: unknown;
+   697→  try {
+   698→    raw = JSON.parse(stored);
+   699→  } catch {
+   700→    return { blocked: false }; // corrupt ≠ newer — legacy fail-open
+   701→  }
+   702→  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { blocked: false };
+   703→  const schema = (raw as { schema?: unknown }).schema;
+   704→  if (schema === undefined || schema === 1 || schema === 2) return { blocked: false };
+   705→  return { blocked: true, storedSchema: schema };
+   706→}
+   707→
