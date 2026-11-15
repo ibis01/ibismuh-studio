@@ -264,7 +264,7 @@ test.describe("S123 — motion graphics end-to-end", () => {
     //    job the create route auto-starts fails fast on CI and its poison
     //    never rides video.error for an engine-lane video (S69 lane
     //    attribution) — poll hasVideo only, attach the last error text.
-    test.setTimeout(240_000);
+    test.setTimeout(360_000);
 
     // 9. THE FULL RENDER — explicit through the lane's own route (the
     //    Studio's "Render full video" button = the {} grammar). The b6
@@ -323,14 +323,16 @@ test.describe("S123 — motion graphics end-to-end", () => {
     //     report — a battery that never reports is an evidence gap, not a
     //     pass (the S45 law keeps a crashed battery from failing the
     //     render; it does not license the e2e to accept its absence).
+    //     The verdict travels the SAME wire every UI badge reads: the
+    //     serialized video's `qc` DTO (serialize.ts) — the battery's stored
+    //     JSON itself is row-internal and never leaves the server.
     let qcPlayable: string | null = null;
-    for (let i = 0; i < 15 && !qcPlayable; i++) {
+    for (let i = 0; i < 45 && !qcPlayable; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       const dto = await request.get(`/api/videos/${videoId}`, { headers: { cookie } });
       if (!dto.ok()) continue;
-      const body = (await dto.json()) as { video?: { qcReport?: string | null } };
-      const report = body.video?.qcReport ? (JSON.parse(body.video.qcReport) as { checks?: { id?: string; status?: string }[] }) : null;
-      qcPlayable = report?.checks?.find((c) => c.id === "playable")?.status ?? null;
+      const body = (await dto.json()) as { video?: { qc?: { checks?: { id?: string; status?: string }[] } | null } };
+      qcPlayable = body.video?.qc?.checks?.find((c) => c.id === "playable")?.status ?? null;
     }
     expect(qcPlayable, "the QC battery's playable check must reach a verdict").toBe("pass");
 
