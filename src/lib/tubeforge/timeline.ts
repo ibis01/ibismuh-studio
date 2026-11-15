@@ -260,18 +260,27 @@ export interface TimelineScene {
 
 export interface AssembledTimeline {
   /** S87 — the doc's schema stamp. 1 = the scene-level projection (slice 0);
-   *  2 = the doc that also carries the derived v2 tracks (slice 1). A build
-   *  that knows version N reads N and N−1 — a build meeting an UNKNOWN
-   *  stamp must treat the doc as unreadable (parseTimeline → null → the
-   *  render recomputes inline) and NEVER overwrite it (the slice-1
+   *  2 = the doc that also carries the derived v2 tracks (slice 1); 3 = the
+   *  doc that ALSO carries verified engine-authored tracks (Stage X's
+   *  additive core — the recorded S87 open tail). A build that knows
+   *  version N reads N and N−1 — a build meeting an UNKNOWN stamp must
+   *  treat the doc as unreadable (parseTimeline → null → the render
+   *  recomputes inline) and NEVER overwrite it (the slice-1
    *  guardTimelineOverwrite law). Legacy docs without the stamp parse as
    *  v1 (the tolerant-read law). */
-  schema: 1 | 2;
+  schema: 1 | 2 | 3;
   scenes: TimelineScene[];
   /** S87 slice 1 — the derived v2 tracks projection. In memory this is a
    *  display convenience; the WRITER re-derives at serialization (the
    *  projection law, enforced structurally — a stale copy cannot persist). */
   tracks: TimelineTrack[];
+  /** Stage X (schema 3) — the ENGINES' OWN tracks, persisted at assemble
+   *  time (e.g. graphicsTracks / characterTracks output). NEVER blindly
+   *  stored: the writer verifies through verifyEngineTracks before a byte
+   *  lands, and the reader re-verifies (junk refuses the whole doc). The
+   *  scene-derived projection above stays the composition truth; the
+   *  engine tracks are the per-scene execution facts riding beside it. */
+  engineTracks?: TimelineTrack[];
   sceneCount: number;
   totalDurationSec: number;
   generatedAt: string;
@@ -581,25 +590,114 @@ export function docSceneSettings(
  *  stamp = a doc this build does not know → null (never a guessed parse;
  *  the render recomputes inline, and guardTimelineOverwrite keeps every
  *  write path from destroying the newer doc). */
+/**
+ * Stage X (schema 3) — verifyEngineTracks: the re-derive/compare
+ * consistency check the S87 §11 refinement specifies ("never blindly
+ * stored — verified or refused"). The stored engine tracks must:
+ *   1. speak the track grammar (kinds in the union, finite clip windows,
+ *      ascending non-overlapping clips per track, contiguous from zero on
+ *      the visual track);
+ *   2. reference only REAL scenes (every sceneIndex resolves);
+ *   3. agree with the scene-derived projection's per-scene windows — an
+ *      engine clip over scene N must match the derived clip's window for
+ *      scene N (the two clocks the whole contract rests on).
+ * A violation refuses the WHOLE doc (null on parse) — a stored engine
+ * truth that disagrees with the projection is exactly the desync the
+ * contract exists to prevent. PURE.
+ */
+export function verifyEngineTracks(
+  engineTracks: TimelineTrack[],
+  scenes: TimelineScene[],
+  derived: TimelineTrack[]
+): { ok: true } | { ok: false; reason: string } {
+  const KINDS: readonly string[] = [
+    "video", "image", "whiteboard", "3d", "character", "audio", "subtitle", "graphics",
+  ];
+  for (const track of engineTracks) {
+    if (!track || typeof track !== "object") return { ok: false, reason: "an engine track is not an object" };
+    if (!KINDS.includes(track.kind)) return { ok: false, reason: `engine track kind "${String(track.kind)}" is outside the grammar` };
+    if (!track.name || typeof track.name !== "string") return { ok: false, reason: "an engine track carries no name" };
+    if (!Array.isArray(track.clips)) return { ok: false, reason: "an engine track carries no clips" };
+    let cursor = -1;
+    for (const clip of track.clips) {
+      if (!clip || typeof clip !== "object") return { ok: false, reason: "an engine clip is not an object" };
+      if (!KINDS.includes(String(clip.kind))) return { ok: false, reason: `engine clip "${String(clip.id)}" kind is outside the grammar` };
+      const { startSec, endSec } = clip;
+      if (!Number.isFinite(startSec) || !Number.isFinite(endSec) || startSec < 0 || endSec <= startSec) {
+        return { ok: false, reason: `engine clip "${clip.id}" carries an illegal window` };
+      }
+      if (cursor >= 0 && startSec < cursor - 1e-9) {
+        return { ok: false, reason: `engine clip "${clip.id}" overlaps its predecessor` };
+      }
+      cursor = endSec;
+      if (clip.sceneIndex !== null && clip.sceneIndex !== undefined) {
+        if (!Number.isInteger(clip.sceneIndex) || clip.sceneIndex < 1 || clip.sceneIndex > scenes.length) {
+          return { ok: false, reason: `engine clip "${clip.id}" references scene ${String(clip.sceneIndex)} — no such scene` };
+        }
+      }
+    }
+  }
+  // The visual track must be contiguous from zero (the S87 law) and its
+  // per-scene windows must MATCH the derived projection (the compare).
+  const visual = engineTracks.find((t) => t.name === "visual");
+  if (visual && visual.clips.length > 0) {
+    if (visual.clips[0].startSec !== 0) {
+      return { ok: false, reason: "the engine visual track does not start at zero" };
+    }
+    const derivedVisual = derived.find((t) => t.name === "visual");
+    if (derivedVisual) {
+      for (const clip of visual.clips) {
+        if (clip.sceneIndex === null || clip.sceneIndex === undefined) continue;
+        const twin = derivedVisual.clips.find((c) => c.sceneIndex === clip.sceneIndex);
+        if (!twin) {
+          return { ok: false, reason: `engine clip over scene ${clip.sceneIndex} has no derived twin` };
+        }
+        if (Math.abs(twin.startSec - clip.startSec) > 0.011 || Math.abs(twin.endSec - clip.endSec) > 0.011) {
+          return {
+            ok: false,
+            reason: `engine clip over scene ${clip.sceneIndex} disagrees with the derived window (${clip.startSec}..${clip.endSec} vs ${twin.startSec}..${twin.endSec})`,
+          };
+        }
+      }
+    }
+  }
+  return { ok: true };
+}
+
 export function parseTimeline(json: string | null | undefined): AssembledTimeline | null {
   if (!json) return null;
   try {
     const raw = JSON.parse(json) as unknown;
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-    const obj = raw as { schema?: unknown; scenes?: unknown; sceneCount?: unknown; totalDurationSec?: unknown; generatedAt?: unknown; renderPrefs?: unknown };
-    // A build reads N and N−1: this build knows 2, so 2, 1 and absent
-    // (legacy v1) parse; anything else refuses.
-    const known = obj.schema === undefined || obj.schema === 1 || obj.schema === 2;
+    const obj = raw as { schema?: unknown; scenes?: unknown; engineTracks?: unknown; sceneCount?: unknown; totalDurationSec?: unknown; generatedAt?: unknown; renderPrefs?: unknown };
+    // A build reads N and N−1: this build knows 3 (Stage X), so 3, 2, 1
+    // and absent (legacy v1) parse; anything else refuses.
+    const known = obj.schema === undefined || obj.schema === 1 || obj.schema === 2 || obj.schema === 3;
     if (!known) return null; // unknown future schema — refuse, never guess
     if (!Array.isArray(obj.scenes)) return null;
     const scenes = obj.scenes as TimelineScene[];
+    const derivedTracks = deriveTracks(scenes);
+    // Stage X — schema 3 carries engine-authored tracks; they are VERIFIED
+    // on every read (never blindly trusted). A schema-3 doc without them
+    // is legal (the stamp alone does not force the payload); junk tracks
+    // refuse the WHOLE doc (the S87 §11 refinement).
+    let engineTracks: TimelineTrack[] | undefined;
+    if (obj.schema === 3) {
+      if (obj.engineTracks !== undefined) {
+        if (!Array.isArray(obj.engineTracks)) return null;
+        const verdict = verifyEngineTracks(obj.engineTracks as TimelineTrack[], scenes, derivedTracks);
+        if (!verdict.ok) return null; // verified or refused — never a guess
+        engineTracks = obj.engineTracks as TimelineTrack[];
+      }
+    }
     return {
-      schema: obj.schema === 2 ? 2 : 1,
+      schema: obj.schema === 3 ? 3 : obj.schema === 2 ? 2 : 1,
       scenes,
       // The tracks projection is ALWAYS re-derived from the parsed scenes —
       // tolerant read of junk tracks (they never enter memory), and the
       // roundtrip (serialize → parse → serialize) holds by construction.
-      tracks: deriveTracks(scenes),
+      tracks: derivedTracks,
+      ...(engineTracks ? { engineTracks } : {}),
       sceneCount: Number(obj.sceneCount) || 0,
       totalDurationSec: Number(obj.totalDurationSec) || 0,
       generatedAt: typeof obj.generatedAt === "string" ? obj.generatedAt : new Date().toISOString(),
@@ -642,12 +740,23 @@ const TIMELINE_SCENE_FIELDS = [
 ] as const;
 
 export function serializeTimeline(timeline: AssembledTimeline): string {
+  // Stage X — engine-authored tracks ride ONLY when they verify against
+  // the scenes being written (the S87 §11 refinement at the write side:
+  // never blindly stored). A failed verification drops the payload and the
+  // doc stamps 2 (the honest degradation — the render recomputes).
+  let engineTracks: TimelineTrack[] | undefined;
+  if (timeline.engineTracks && timeline.engineTracks.length > 0) {
+    const derived = deriveTracks(timeline.scenes);
+    const verdict = verifyEngineTracks(timeline.engineTracks, timeline.scenes, derived);
+    if (verdict.ok) engineTracks = timeline.engineTracks;
+  }
   return JSON.stringify({
     // S87 slice 1 — the writer owns the contract version: every persisted
-    // doc is stamped 2 and carries the tracks derived FROM THE SCENES IT IS
-    // HANDED (the refinement: derive at serialization — no write path can
-    // persist stale tracks). The doc's in-memory .tracks is never read here.
-    schema: 2,
+    // doc is stamped 2, or 3 when VERIFIED engine tracks ride. The tracks
+    // are derived FROM THE SCENES HANDED (the refinement: derive at
+    // serialization — no write path can persist stale tracks). The doc's
+    // in-memory .tracks is never read here.
+    ...(engineTracks ? { schema: 3 } : { schema: 2 }),
     scenes: timeline.scenes.map((s) => {
       const rec = s as unknown as Record<string, unknown>;
       const out: Record<string, unknown> = {};
@@ -659,6 +768,7 @@ export function serializeTimeline(timeline: AssembledTimeline): string {
     // The v2 projection, derived from the same scenes written above —
     // structurally incapable of going stale (the slice-1 refinement).
     tracks: deriveTracks(timeline.scenes),
+    ...(engineTracks ? { engineTracks } : {}),
     sceneCount: timeline.sceneCount,
     totalDurationSec: timeline.totalDurationSec,
     generatedAt: timeline.generatedAt,
@@ -701,6 +811,6 @@ export function guardTimelineOverwrite(stored: string | null | undefined): Timel
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { blocked: false };
   const schema = (raw as { schema?: unknown }).schema;
-  if (schema === undefined || schema === 1 || schema === 2) return { blocked: false };
+  if (schema === undefined || schema === 1 || schema === 2 || schema === 3) return { blocked: false };
   return { blocked: true, storedSchema: schema };
 }

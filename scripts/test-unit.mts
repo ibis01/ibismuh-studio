@@ -10448,10 +10448,15 @@ await test("S80: normalizeConsistencyCheckMode — the two valid non-defaults pa
     eq(guardTimelineOverwrite("[1,2]").blocked, false, "a non-object body is not a doc");
     // Blocked: a stamp this build does not know = a newer build's doc.
     const future = JSON.parse(v2) as Record<string, unknown>;
-    future.schema = 3;
+    future.schema = 4;
     const g = guardTimelineOverwrite(JSON.stringify(future));
-    eq(g.blocked, true, "schema 3 = a newer build's doc — the write is refused");
-    eq(g.blocked ? g.storedSchema : null, 3, "the refusal echoes the stored stamp");
+    eq(g.blocked, true, "schema 4 = a newer build's doc — the write is refused");
+    eq(g.blocked ? g.storedSchema : null, 4, "the refusal echoes the stored stamp");
+    // Stage X — schema 3 is a KNOWN stamp now (the additive core): the
+    // guard reads N and N−1, and N grew to 3.
+    const three = JSON.parse(v2) as Record<string, unknown>;
+    three.schema = 3;
+    eq(guardTimelineOverwrite(JSON.stringify(three)).blocked, false, "schema 3 parses in this build (the X core landed)");
     const junk = JSON.parse(v2) as Record<string, unknown>;
     junk.schema = "garbage";
     eq(guardTimelineOverwrite(JSON.stringify(junk)).blocked, true, "a garbage stamp refuses too (never a guessed parse)");
@@ -10471,8 +10476,14 @@ await test("S80: normalizeConsistencyCheckMode — the two valid non-defaults pa
   await test("S87: parseTimeline — an UNKNOWN stamp is null, never a guessed parse", async () => {
     const doc = assembleTimeline(scenes, { ttsSpeed: 1, renderMode: "kenburns" });
     const future = JSON.parse(serializeTimeline(doc)) as Record<string, unknown>;
-    future.schema = 3; // a v3 doc under this build (slice 1 knows 2 and 1 only)
-    eq(parseTimeline(JSON.stringify(future)), null, "schema 3 → null (render recomputes inline; the guard keeps the write paths off it)");
+    future.schema = 4; // a v4 doc under this build (the X core knows 3, 2 and 1 only)
+    eq(parseTimeline(JSON.stringify(future)), null, "schema 4 → null (render recomputes inline; the guard keeps the write paths off it)");
+    // Stage X — schema 3 parses now (the additive core): the stamp alone
+    // does not force a payload; a payload-less 3 doc is legal.
+    future.schema = 3;
+    delete (future as Record<string, unknown>).engineTracks;
+    const three = parseTimeline(JSON.stringify(future));
+    ok(three !== null && three.schema === 3, "schema 3 parses (the X core landed)");
     future.schema = "garbage";
     eq(parseTimeline(JSON.stringify(future)), null, "a garbage stamp → null");
     // null/unreadable stays null (the pre-S87 contract, unchanged).
@@ -13104,11 +13115,13 @@ await test("s123 P3: the lane is wired end-to-end — route branch, job dispatch
     jobsKind.includes('row.kind === "graphics" && row.entityId === baseEntityId(row.entityId)'),
     "the graphics FULL render rides the idempotence recovery wall (an already-landed final is marked done, never re-rendered)"
   );
-  // The compositor's routing wall grew the graphics refusal.
+  // The compositor's routing wall — Stage X moved it onto the BUILDER
+  // REGISTRY (the refusal is registry-driven now, not a hard-coded kind
+  // list; the law is unchanged: engine clips execute through their lanes).
   const compositor = fs.readFileSync("src/lib/tubeforge/render.ts", "utf8");
   ok(
-    compositor.includes('ps.kind === "whiteboard" || ps.kind === "graphics"'),
-    "the compositor's routing wall refuses graphics-kind plans (engine clips execute through their engine lanes only)"
+    compositor.includes("validatePlanKinds((planScenes ?? []).map((ps) => ps.kind))"),
+    "the compositor's routing wall reads the builder registry (engine clips execute through their engine lanes only)"
   );
   // The doc column + its migration.
   const schema = fs.readFileSync("prisma/schema.prisma", "utf8");
@@ -18533,6 +18546,116 @@ await test("Stage R the D2 firewall — no routing logic reads the advisory fiel
   ok(!livelinessSrc.includes(".engine"), "the liveliness selector never branches on the advisory pick");
   ok(directorSrc.includes("NEVER routed automatically"), "the prompt says the honest thing (AI suggests, human approves)");
   ok(directorSrc.includes("engine"), "the LLM proposes the pick into the plan (the proposed state, like shots)");
+});
+
+// ---------------------------------------------------------------------------
+// Stage X (additive core) — schema 3: the verified engine-authored tracks
+// (the S87 §11 refinement made executable: never blindly stored — verified
+// or refused) + the compositor's segment-builder registry. The per-scene
+// dispatch for the engine kinds is the recorded gated half.
+// ---------------------------------------------------------------------------
+
+suiteStart("timeline — Stage X the schema-3 core");
+
+await test("Stage X schema 3 parses and round-trips — the stamp is a KNOWN one (the guard unblocks)", async () => {
+  const t = await import("../src/lib/tubeforge/timeline");
+  const scenes = [
+    { index: 1, title: "a", narration: "two short words", visual: "v", startSec: 0, endSec: 4, durationSec: 4, transitionIn: "", transitionOut: "", caption: "c" },
+    { index: 2, title: "b", narration: "two more words", visual: "v", startSec: 4, endSec: 8, durationSec: 4, transitionIn: "fade", transitionOut: "", caption: "c" },
+  ];
+  const doc = {
+    schema: 3,
+    scenes,
+    tracks: t.deriveTracks(scenes as never),
+    engineTracks: [
+      {
+        kind: "graphics",
+        name: "visual",
+        clips: [
+          { id: "g0", kind: "graphics", sceneIndex: 1, startSec: 0, endSec: 4, transitionIn: null, transitionOut: null, asset: null },
+          { id: "g1", kind: "graphics", sceneIndex: 2, startSec: 4, endSec: 8, transitionIn: null, transitionOut: null, asset: null },
+        ],
+      },
+    ],
+    sceneCount: 2,
+    totalDurationSec: 8,
+    generatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const bytes = JSON.stringify(doc);
+  const parsed = t.parseTimeline(bytes);
+  ok(parsed !== null, "schema 3 parses");
+  eq(parsed?.schema, 3, "the stamp rides");
+  eq(parsed?.engineTracks?.length, 1, "the engine tracks ride");
+  const re = t.serializeTimeline(parsed as never);
+  const reparsed = t.parseTimeline(re);
+  ok(reparsed !== null && reparsed.schema === 3, "the round-trip keeps the stamp");
+  eq(JSON.stringify(reparsed?.engineTracks), JSON.stringify(parsed?.engineTracks), "the engine tracks round-trip byte-stable");
+  // The overwrite guard: schema 3 is KNOWN — a write never blocks on it.
+  const guard = t.guardTimelineOverwrite(bytes);
+  eq(guard.blocked, false, "schema 3 is a known stamp (the guard reads N and N−1)");
+});
+
+await test("Stage X the verifier refuses — junk grammar, bad windows, phantom scenes, clock disagreement", async () => {
+  const t = await import("../src/lib/tubeforge/timeline");
+  const scenes = [
+    { index: 1, title: "a", narration: "two short words", visual: "v", startSec: 0, endSec: 4, durationSec: 4, transitionIn: "", transitionOut: "", caption: "c" },
+  ];
+  const derived = t.deriveTracks(scenes as never);
+  const track = (clips: unknown[]) => [{ kind: "graphics", name: "visual", clips }];
+  const clip = (over: Record<string, unknown> = {}) => ({
+    id: "g0", kind: "graphics", sceneIndex: 1, startSec: 0, endSec: 4, transitionIn: null, transitionOut: null, asset: null, ...over,
+  });
+  const refuse = (tracks: unknown[], label: string) => {
+    const verdict = t.verifyEngineTracks(tracks as never, scenes as never, derived);
+    ok(!verdict.ok, `${label} refuses`);
+    ok((verdict as { reason: string }).reason.length > 0, `${label} names the reason`);
+  };
+  refuse(track([clip({ kind: "holo" })]), "a kind outside the grammar");
+  refuse(track([clip({ startSec: 2, endSec: 1 })]), "an illegal window");
+  refuse(track([clip(), clip({ id: "g1", sceneIndex: 1, startSec: 2, endSec: 6 })]), "an overlapping pair");
+  refuse(track([clip({ sceneIndex: 9 })]), "a phantom scene");
+  refuse(track([clip({ startSec: 1, endSec: 5 })]), "a clock disagreement with the derived twin");
+  const okVerdict = t.verifyEngineTracks(track([clip()]) as never, scenes as never, derived);
+  ok(okVerdict.ok, "the agreeing twin passes");
+  // The parse refuses a schema-3 doc with junk engine tracks (verified or refused).
+  const doc = { schema: 3, scenes, tracks: derived, engineTracks: track([clip({ sceneIndex: 9 })]), sceneCount: 1, totalDurationSec: 4 };
+  eq(t.parseTimeline(JSON.stringify(doc)), null, "the parse refuses the whole doc");
+});
+
+await test("Stage X the writer verifies before storing — a disagreeing payload drops and stamps 2", async () => {
+  const t = await import("../src/lib/tubeforge/timeline");
+  const scenes = [
+    { index: 1, title: "a", narration: "two short words", visual: "v", startSec: 0, endSec: 4, durationSec: 4, transitionIn: "", transitionOut: "", caption: "c" },
+  ];
+  const doc = {
+    schema: 2 as const,
+    scenes: scenes as never,
+    tracks: t.deriveTracks(scenes as never),
+    // A WRONG window — the writer must refuse to store it.
+    engineTracks: [{ kind: "graphics", name: "visual", clips: [{ id: "g0", kind: "graphics", sceneIndex: 1, startSec: 0, endSec: 9, transitionIn: null, transitionOut: null, asset: null }] }],
+    sceneCount: 1,
+    totalDurationSec: 4,
+    generatedAt: "2026-01-01T00:00:00.000Z",
+  };
+  const bytes = t.serializeTimeline(doc as never);
+  const raw = JSON.parse(bytes) as { schema: number; engineTracks?: unknown };
+  eq(raw.schema, 2, "the disagreeing payload dropped — the doc stamps 2 (the honest degradation)");
+  eq(raw.engineTracks, undefined, "nothing unverified persisted");
+});
+
+await test("Stage X the builder registry — the multi-kind gate is a registry, not a hard-coded wall", async () => {
+  const cp = await import("../src/lib/tubeforge/composition-plan");
+  eq(cp.COMPOSITOR_SEGMENT_KINDS.length, 2, "today's builders: video + image (the engine kinds land with their dispatch)");
+  const okVerdict = cp.validatePlanKinds(["video", "image"]);
+  ok(okVerdict.ok && okVerdict.unsupported.length === 0, "today's plans pass");
+  const engine = cp.validatePlanKinds(["graphics", "video"]);
+  ok(!engine.ok && engine.unsupported.length === 1 && engine.unsupported[0] === "graphics", "an engine kind without a builder names itself");
+  const mixed = cp.validatePlanKinds(["whiteboard", "character"]);
+  ok(!mixed.ok && mixed.unsupported.length === 2, "every unsupported kind is listed (the all-or-nothing law)");
+  // The compositor's wall READS the registry (the source pin).
+  const renderSrc = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  ok(renderSrc.includes("validatePlanKinds("), "the wall consumes the registry");
+  ok(renderSrc.includes("visual kinds without a compositor segment builder"), "the refusal names the registry law");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

@@ -51,7 +51,7 @@ import {
   slideSegmentGraph,
   type SlideBrand,
 } from "./slides";
-import type { CompositionPlan, PlanVisualKind } from "./composition-plan";
+import { validatePlanKinds, type CompositionPlan, type PlanVisualKind } from "./composition-plan";
 import {
   planSceneMovements,
   sceneFilterGraph,
@@ -1619,10 +1619,17 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
   // BEFORE any paid motion planning or geometry work runs.
   // S123 (G1) — the graphics lane rides the SAME wall: graphics-kind clips
   // execute through the graphics lane only.
-  if (planScenes?.some((ps) => ps.kind === "whiteboard" || ps.kind === "graphics"))
-    throw new Error(
-      "engine-kind clips (whiteboard/graphics) execute through their engine lanes — the compositor received an engine plan, which is a routing bug (not a render input problem)"
-    );
+  // Stage X — the refusal reads the BUILDER REGISTRY (composition-plan's
+  // COMPOSITOR_SEGMENT_KINDS), not a hard-coded kind list: a kind without a
+  // segment builder refuses with the registry's name (the per-scene
+  // dispatch lands kind by kind; the wall message stays one string).
+  {
+    const unsupported = validatePlanKinds((planScenes ?? []).map((ps) => ps.kind)).unsupported;
+    if (unsupported.length > 0)
+      throw new Error(
+        `visual kinds without a compositor segment builder (${unsupported.join(", ")}) execute through their engine lanes — the compositor received an engine plan, which is a routing bug (not a render input problem)`
+      );
+  }
   const sceneKindOf = (i: number): PlanVisualKind =>
     planScenes?.[i]?.kind ?? (opts.mode === "slides" ? "image" : "video");
   const assetSourceOf = (i: number): "ai" | "stock" | "slides" | null =>
