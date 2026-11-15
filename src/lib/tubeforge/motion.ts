@@ -239,6 +239,13 @@ export type MoveKind =
   | "diag-br" // drift toward lower-right (x+, y+)
   | "punch" // fast attack then slow drift (rehook opener)
   | "studio" // S2: the user's two-key camera (from/to framing + ease)
+  // C2-ext (§7) — the cinematic vocabulary extension:
+  | "shake" // bounded jitter around the focal — the visual-audio pairing
+            // for boom/sting cues (the punch pattern: the cue fires, the
+            // frame answers)
+  | "push-follow" // zoom AND simultaneous focal travel (they were exclusive
+                  // per shot before C2)
+  | "drift-crawl" // slow constant-direction creep for ambient scenes
   | "hold"; // static frame
 
 export interface MotionShot {
@@ -275,8 +282,19 @@ export const MOTION_MOVE_LABELS: Record<MoveKind, string> = {
   "diag-br": "Diagonal drift (down-right)",
   punch: "Punch-in hook",
   studio: "Studio keyframes",
+  shake: "Impact shake",
+  "push-follow": "Push with follow",
+  "drift-crawl": "Ambient drift",
   hold: "Static hold",
 };
+
+// C2-ext — the shake's named constants (the QC flicker lens is the judge:
+// the amplitude stays UNDER the flicker-sample sensitivity — a bounded
+// jitter reads as impact, never as a light flicker). Exported for the pins.
+export const SHAKE_AMP_FRAC_X = 0.006; // of the work raster's width
+export const SHAKE_AMP_FRAC_Y = 0.004; // of the work raster's height
+export const SHAKE_CYCLES_PER_SEC = 2.2;
+export const DRIFT_CRAWL_ZOOM = 0.03; // the crawl's total zoom creep
 
 /** S2 — build the ONE-shot plan a doc's cameraKeys renders through: the user
  *  two-key camera spans the whole scene, outranking the Director's auto
@@ -337,7 +355,8 @@ const isPan = (k: MoveKind) =>
   k === "tilt-up" ||
   k === "tilt-down" ||
   k === "diag-tl" ||
-  k === "diag-br";
+  k === "diag-br" ||
+  k === "drift-crawl"; // C2-ext — the crawl is a slow pan (the planning family)
 
 /** Rotation pool for multi-shot scenes (never repeats back-to-back). */
 const ROTATION: MoveKind[] = [
@@ -858,6 +877,45 @@ function shotZoompan(
     zExpr = `if(lte(on\\,${attack})\\,${a}+(${fmt(shot.zEnd - shot.zStart, 4)})*on/${attack}\\,${b}+${fmt(0.04, 4)}*(on-${attack})/${Math.max(last - attack, 1)})`;
     xExpr = focalAnchorExpr("x", shot.focal.x);
     yExpr = focalAnchorExpr("y", shot.focal.y);
+  } else if (kind === "shake") {
+    // C2-ext — the impact shake: a bounded sinusoid around the focal.
+    // EDGE-PINNED BY CONSTRUCTION: the cycle count k is an INTEGER, so
+    // sin(2·PI·k·on/last) is exactly 0 at on=0 and on=last — the window
+    // starts and ends ON the focal anchor (the 8% pad law's spirit: the
+    // jitter never leaves the anchored framing, and the join to the next
+    // shot lands clean). The amp rides the work raster's fraction — a
+    // bounded ~0.6%/0.4% of the frame, under the QC flicker lens's
+    // sensitivity (the visual-audio pairing like the punch pattern).
+    const cycles = Math.max(1, Math.round(shot.sec * SHAKE_CYCLES_PER_SEC));
+    const ax = fmt(work[0] * SHAKE_AMP_FRAC_X, 2);
+    const ay = fmt(work[1] * SHAKE_AMP_FRAC_Y, 2);
+    zExpr = fmt(shot.zStart, 4);
+    xExpr = `clip(${focalAnchorExpr("x", shot.focal.x)}+${ax}*sin(2*PI*${cycles}*on/${last}),0,iw-iw/zoom)`;
+    yExpr = `clip(${focalAnchorExpr("y", shot.focal.y)}+${ay}*cos(2*PI*${cycles}*on/${last}),0,ih-ih/zoom)`;
+  } else if (kind === "push-follow") {
+    // C2-ext — the zoom and the travel were exclusive per shot; this verb
+    // composes them: the window pushes in AND glides toward its follow
+    // target (the shot's travel fraction, clamped by the pan law's pad).
+    zExpr = `${fmt(shot.zStart, 4)}+${fmt(shot.zEnd - shot.zStart, 4)}*${p}`;
+    const travel = Math.min(Math.max(shot.travel, 0), 1);
+    const dirX: -1 | 1 = shot.focal.x > 0.6 ? -1 : 1;
+    const [x0, x1] = panEndpoints("x", shot.focal.x, dirX, travel, shot.zStart, work);
+    xExpr = `${fmt(x0, 2)}+${fmt(x1 - x0, 2)}*${p}`;
+    yExpr = focalAnchorExpr("y", shot.focal.y);
+  } else if (kind === "drift-crawl") {
+    // C2-ext — the ambient crawl: a slow constant-direction creep with a
+    // LINEAR clock (constant velocity — the eased curves breathe; a crawl
+    // should not) and a tiny zoom creep. Direction follows the focal-edge
+    // rule (the subject keeps its pad; the window drifts past it).
+    const crawl = `(on/${last})`;
+    const travel = Math.min(Math.max(shot.travel, 0), 1);
+    const dirX: -1 | 1 = shot.focal.x > 0.6 ? -1 : 1;
+    const dirY: -1 | 1 = shot.focal.y > 0.6 ? -1 : shot.focal.y < 0.4 ? 1 : -1;
+    zExpr = `${fmt(shot.zStart, 4)}+${fmt(DRIFT_CRAWL_ZOOM, 4)}*${crawl}`;
+    const [x0, x1] = panEndpoints("x", shot.focal.x, dirX, travel, shot.zStart, work);
+    const [y0, y1] = panEndpoints("y", shot.focal.y, dirY, travel * 0.5, shot.zStart, work);
+    xExpr = `${fmt(x0, 2)}+${fmt(x1 - x0, 2)}*${crawl}`;
+    yExpr = `${fmt(y0, 2)}+${fmt(y1 - y0, 2)}*${crawl}`;
   } else {
     // Pans/tilts/diagonals: numeric lerp between two clamped window
     // positions (precomputed), constant zoom — diagonals add a faint zoom.

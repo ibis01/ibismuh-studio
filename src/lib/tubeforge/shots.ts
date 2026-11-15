@@ -62,6 +62,10 @@ export const CAMERA_TO_MOVE: Readonly<Record<string, MoveKind>> = {
   "diag-tl": "diag-tl",
   "diag-br": "diag-br",
   "punch-in": "punch",
+  // --- C2-ext (the cinematic vocabulary) ---
+  shake: "shake",
+  "push-follow": "push-follow",
+  "drift-crawl": "drift-crawl",
   // --- v1 legacy (pre-S48 plans; documented approximations) ---
   "push-in": "zoom-in",
   "pull-out": "zoom-out",

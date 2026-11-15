@@ -2905,8 +2905,8 @@ await test("M1: story regression — narrative profile output ≡ today's prompt
   ok(user.includes("Transition ids:"), "transition line present");
   ok(user.includes("Framings: wide, medium, close-up, extreme close-up, over-the-shoulder, pov, aerial."),
     "narrative keeps the FULL framings list");
-  ok(user.includes("Camera moves: static, zoom-in, zoom-out, pan-left, pan-right, tilt-up, tilt-down, diag-tl, diag-br, punch-in."),
-    "narrative keeps the FULL v2 camera moves list (S48: engine-verbatim)");
+  ok(user.includes("Camera moves: static, zoom-in, zoom-out, pan-left, pan-right, tilt-up, tilt-down, diag-tl, diag-br, punch-in, shake, push-follow, drift-crawl."),
+    "narrative keeps the FULL v2 camera moves list (S48 + C2-ext: engine-verbatim)");
   ok(user.includes("Compositions: rule of thirds, leading lines, golden ratio, centered symmetry, negative space, frame within frame, diagonal."),
     "narrative keeps the FULL compositions list");
   // The narrative profile DOES surface its default-tone hints — that line
@@ -18391,6 +18391,80 @@ await test("S125-ext the sidecar wiring — the clean-room boundary, the route, 
   ok(hook.includes("character/mocap.json"), "the hook reads the authored-motion file");
   ok(hook.includes("authoredTimeline"), "the ladder's authored rung rides the hook");
   ok(hook.includes("authoredTimeline\n        ?"), "authored > compiled (the ladder order)");
+});
+
+// ---------------------------------------------------------------------------
+// C2-ext — the cinematic vocabulary (§7): shake / push-follow / drift-crawl.
+// Each verb = a table row + one branch in the zoompan builder; the QC
+// flicker lens bounds the shake (§7's named risk, pinned first).
+// ---------------------------------------------------------------------------
+
+suiteStart("motion — C2-ext the cinematic verbs");
+
+await test("C2-ext the verbs are wired through the tables — CAMERA_MOVES → CAMERA_TO_MOVE → MoveKind", async () => {
+  const { CAMERA_MOVES } = await import("../src/lib/tubeforge/director-plan");
+  const { CAMERA_TO_MOVE } = await import("../src/lib/tubeforge/shots.ts");
+  const { MOTION_MOVE_LABELS } = await import("../src/lib/tubeforge/motion");
+  for (const verb of ["shake", "push-follow", "drift-crawl"]) {
+    ok((CAMERA_MOVES as readonly string[]).includes(verb), `the director vocabulary carries "${verb}"`);
+    eq(CAMERA_TO_MOVE[verb], verb, `the mapping is verbatim for "${verb}"`);
+    ok(MOTION_MOVE_LABELS[verb as keyof typeof MOTION_MOVE_LABELS] !== undefined, `the label table carries "${verb}"`);
+  }
+});
+
+await test("C2-ext the shake — integer-cycle sinusoid (edge-pinned by construction), bounded amp", async () => {
+  const { sceneFilterGraph, SHAKE_AMP_FRAC_X, SHAKE_AMP_FRAC_Y, SHAKE_CYCLES_PER_SEC } = await import("../src/lib/tubeforge/motion");
+  const settings = { mode: "on" as const, intensity: 12, curve: "smooth" as const };
+  const shot = { kind: "shake" as const, zStart: 1.06, zEnd: 1.06, focal: { x: 0.5, y: 0.4 }, travel: 0, sec: 2.5 };
+  const graph = sceneFilterGraph({
+    dur: 2.5,
+    plan: { sceneType: "suspense", move: "Impact shake", shots: [shot], staticImage: false },
+    settings,
+    fps: 30,
+  });
+  const cycles = Math.max(1, Math.round(2.5 * SHAKE_CYCLES_PER_SEC)); // 6 — an integer
+  ok(graph.includes(`sin(2*PI*${cycles}*on/`), `the x jitter carries ${cycles} integer cycles`);
+  ok(graph.includes(`cos(2*PI*${cycles}*on/`), "the y jitter rides cos (the phase offset)");
+  ok(graph.includes(`clip(`) && graph.includes(`iw-iw/zoom`), "the jitter clamps into the legal window");
+  ok(SHAKE_AMP_FRAC_X <= 0.008 && SHAKE_AMP_FRAC_Y <= 0.008, "the amp stays under the flicker lens's sensitivity (the named risk, pinned first)");
+  const graph2 = sceneFilterGraph({ dur: 2.5, plan: { sceneType: "suspense", move: "Impact shake", shots: [shot], staticImage: false }, settings, fps: 30 });
+  eq(graph2, graph, "deterministic rebuild (the S64 law)");
+});
+
+await test("C2-ext push-follow — the zoom and the travel compose in ONE shot (they were exclusive)", async () => {
+  const { sceneFilterGraph } = await import("../src/lib/tubeforge/motion");
+  const settings = { mode: "on" as const, intensity: 12, curve: "smooth" as const };
+  const shot = { kind: "push-follow" as const, zStart: 1, zEnd: 1.18, focal: { x: 0.4, y: 0.5 }, travel: 0.5, sec: 3 };
+  const graph = sceneFilterGraph({ dur: 3, plan: { sceneType: "standard", move: "Push with follow", shots: [shot], staticImage: false }, settings, fps: 30 });
+  ok(graph.includes("zoompan=z='1.0000+0.1800*"), "the zoom lerp rides");
+  // The COMPOSITION: the eased clock multiplies BOTH the zoom and the
+  // travel lerp (two occurrences — the exclusive-per-shot law is gone).
+  const easedCount = graph.split("0.5-0.5*cos(PI*on/").length - 1;
+  ok(easedCount >= 2, `the eased clock drives zoom AND follow (${easedCount} channels)`);
+});
+
+await test("C2-ext drift-crawl — the LINEAR clock (constant velocity) and the tiny zoom creep", async () => {
+  const { sceneFilterGraph, DRIFT_CRAWL_ZOOM } = await import("../src/lib/tubeforge/motion");
+  const settings = { mode: "on" as const, intensity: 8, curve: "smooth" as const };
+  const shot = { kind: "drift-crawl" as const, zStart: 1.02, zEnd: 1.02, focal: { x: 0.5, y: 0.5 }, travel: 0.4, sec: 4 };
+  const graph = sceneFilterGraph({ dur: 4, plan: { sceneType: "establishing", move: "Ambient drift", shots: [shot], staticImage: false }, settings, fps: 30 });
+  ok(graph.includes("zoompan=z='1.0200+0.0300*(on/"), `the crawl's zoom creep is ${DRIFT_CRAWL_ZOOM} on the LINEAR clock`);
+  ok(graph.includes("*(on/"), "the crawl rides (on/last) — constant velocity, no eased breathing");
+  ok(!graph.includes("0.5-0.5*cos(PI*on/"), "the crawl carries NO eased clock");
+  // Determinism.
+  const graph2 = sceneFilterGraph({ dur: 4, plan: { sceneType: "establishing", move: "Ambient drift", shots: [shot], staticImage: false }, settings, fps: 30 });
+  eq(graph2, graph, "deterministic rebuild");
+});
+
+await test("C2-ext the shot joins stay kind-agnostic — a shake shot books its boundary like any shot", async () => {
+  const { shotGraphJoins } = await import("../src/lib/tubeforge/motion");
+  const shots = [
+    { kind: "shake" as const, zStart: 1.05, zEnd: 1.05, focal: { x: 0.5, y: 0.5 }, travel: 0, sec: 1.5 },
+    { kind: "push-follow" as const, zStart: 1, zEnd: 1.15, focal: { x: 0.45, y: 0.5 }, travel: 0.4, sec: 1.5 },
+    { kind: "drift-crawl" as const, zStart: 1.02, zEnd: 1.02, focal: { x: 0.5, y: 0.45 }, travel: 0.3, sec: 1.5 },
+  ];
+  const joins = shotGraphJoins({ dur: 4.5, shots, fps: 30 });
+  eq(joins.length, 2, "two joins across three C2 shots (the cut boundaries the QC lens reads)");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

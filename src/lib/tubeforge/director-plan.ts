@@ -41,6 +41,11 @@ export const CAMERA_MOVES = [
   "diag-tl",
   "diag-br",
   "punch-in",
+  // C2-ext — the cinematic vocabulary: the impact shake (the boom/sting
+  // pairing), the zoom+follow composition, the ambient crawl.
+  "shake",
+  "push-follow",
+  "drift-crawl",
 ] as const;
 
 /** Pre-S48 plans carry these verbs. parsePlan still accepts them (snapped

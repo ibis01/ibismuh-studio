@@ -197,6 +197,10 @@ export const I2V_CAMERA_PHRASES: Readonly<Record<string, string>> = {
   "diag-tl": "diagonal camera drift toward the upper left, natural parallax",
   "diag-br": "diagonal camera drift toward the lower right, natural parallax",
   "punch-in": "punch-in that settles on the subject — hard emphasis, then stillness",
+  // C2-ext — the cinematic vocabulary (tempo-neutral: the S63 law).
+  shake: "a brief bounded camera shake around the subject — impact energy, then stillness",
+  "push-follow": "a steady push-in that simultaneously glides toward the subject, natural parallax",
+  "drift-crawl": "a constant-direction camera creep — barely-there ambient motion, the scene itself still",
   // The legacy Director verbs (pre-S48 plans; a generative model CAN honor
   // them, so unlike Ken Burns they are NOT approximated here).
   "push-in": "steady dramatic push in toward the subject",
