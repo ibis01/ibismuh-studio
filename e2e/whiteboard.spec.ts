@@ -342,7 +342,11 @@ test.describe("S68 — whiteboard studio end-to-end", () => {
     expect(entry?.uploaded).toBe(true);
     expect(entry?.svg).toBeTruthy();
     expect(entry?.svg).not.toContain("<script");
-    expect(entry?.paths).toEqual(["hp1", "hp2"]);
+    // S139: the sketch pass derives at REGISTRATION — every authored path
+    // grows its -od overdraw retrace (no -h here: neither path has a fill).
+    // The uploaded asset gets the naturalist treatment just like library
+    // assets; only hands are excluded (a hand is not drawn; it draws).
+    expect(entry?.paths).toEqual(["hp1", "hp1-od", "hp2", "hp2-od"]);
 
     // 4. PUT a doc PLACING the upload (rev 1), then render a scene preview
     //    through it — the merged library must validate + RENDER the upload.
