@@ -184,6 +184,38 @@ export const CAMERA_BOUNDS = {
   zoomMax: 4,
 } as const;
 
+// ---------------------------------------------------------------------------
+// S131 (PAE-3) — the scene event channel: cue facts on the scene clock.
+//
+// The opuscar study's EV idea, nativized: a scene may declare timed events
+// ({tMs, kind, label}) — hit points, SFX cues, mixer cues — that the audio
+// and QC consumers read through ONE pure projection (graphics/events.ts,
+// graphicsEventList) onto the GLOBAL doc clock. Deliberately NOT a track
+// kind: the timeline grammar carries composition truth (clips), and cues
+// are not clips — bending the contract to smuggle them in would break the
+// two-clock pin the tracks exist to hold. Events are decoration-class in
+// parse (junk warn-drops) and error-class in time-sanity (an event past
+// the scene clock is a planner bug, like every motion's).
+// ---------------------------------------------------------------------------
+
+/** The closed event vocabulary. "hit" = a visual/beat hit point (the
+ *  cuecheck idea — 0 ms targets); "sfx" = a foley/cue slot the audio
+ *  assembly may consume; "cue" = an advisory timing marker for the QC
+ *  battery. The set is closed like every grammar set — a new kind is a
+ *  design-doc slice. */
+export const GRAPHICS_EVENT_KINDS = ["sfx", "hit", "cue"] as const;
+export type GraphicsEventKind = (typeof GRAPHICS_EVENT_KINDS)[number];
+
+/** One timed event on the scene-local clock. */
+export interface GraphicsEvent {
+  /** ≥ 0, validator-pinned against the scene clock. */
+  tMs: number;
+  kind: GraphicsEventKind;
+  /** ≤ eventLabelMax chars — optional, decoration-class (junk drops, the
+   *  event stays). */
+  label?: string;
+}
+
 export const GRAPHICS_ELEMENT_KINDS = [
   "headline", "subhead", "bullet", "counter", "bar", "barChart",
   "icon", "callout", "shape", "group", "sprite",
@@ -401,6 +433,10 @@ export interface GraphicsScene {
    *  time-sanity error-class like every motion). Absent ⇒ the frame is the
    *  placed board, byte-identical to the pre-S130 compose. */
   camera?: GraphicsCameraKeyframe[];
+  /** S131 — timed cue events on the scene-local clock (optional,
+   *  decoration-class parse, time-sanity error-class). Projected globally
+   *  by graphicsEventList — never a track kind (cues are not clips). */
+  events?: GraphicsEvent[];
   elements: GraphicsElement[];
 }
 
@@ -474,6 +510,12 @@ export const GRAPHICS_BUDGETS = {
   /** S130 — max keyframes per scene camera. A longer camera path is a
    *  design-doc slice. */
   cameraKeysMax: 16,
+  /** S131 — max events per scene. More cues than this and the beat map
+   *  belongs in the planner (decorations beyond the wall warn-drop). */
+  eventsPerSceneMax: 16,
+  /** S131 — max chars per event label (optional decoration; junk drops,
+   *  the event stays). */
+  eventLabelMax: 64,
 } as const;
 
 /** Borrowed readable-ink wall (the whiteboard's WB_STROKE_WIDTH_MAX
@@ -523,7 +565,7 @@ const ELEMENT_KEYS = new Set([
 ]);
 
 const DOC_KEYS = new Set(["version", "title", "width", "height", "fps", "scenes"]);
-const SCENE_KEYS = new Set(["id", "narration", "durationMs", "background", "routing", "camera", "elements"]);
+const SCENE_KEYS = new Set(["id", "narration", "durationMs", "background", "routing", "camera", "events", "elements"]);
 
 const ROUTING_KEYS = new Set(["suggestedEngine", "confidence", "reason"]);
 
@@ -937,6 +979,79 @@ function parseCamera(
     keys.push(ease !== undefined ? { tMs, zoom, tx, ty, ease } : { tMs, zoom, tx, ty });
   }
   return keys.length > 0 ? keys : null;
+}
+
+// ---------------------------------------------------------------------------
+// S131 — the event parser. Decoration-class junk warn-drops; time-sanity
+// refuses. An over-long label drops ITSELF (the event stays) — the label
+// is decoration riding the cue, the cue is the fact.
+// ---------------------------------------------------------------------------
+
+const EVENT_KEYS = new Set(["tMs", "kind", "label"]);
+
+function parseEvents(
+  raw: unknown,
+  where: string,
+  sceneMs: number,
+  warnings: string[],
+  errors: string[],
+): GraphicsEvent[] | null {
+  if (raw === undefined) return null;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    warnings.push(`${where}: events dropped — not a non-empty array`);
+    return null;
+  }
+  let list = raw;
+  if (list.length > GRAPHICS_BUDGETS.eventsPerSceneMax) {
+    warnings.push(
+      `${where}: events dropped ${list.length - GRAPHICS_BUDGETS.eventsPerSceneMax} cues past the eventsPerSceneMax wall (${GRAPHICS_BUDGETS.eventsPerSceneMax})`,
+    );
+    list = list.slice(0, GRAPHICS_BUDGETS.eventsPerSceneMax);
+  }
+  const out: GraphicsEvent[] = [];
+  for (const eRaw of list) {
+    if (!isObj(eRaw)) {
+      warnings.push(`${where}: an event dropped — not an object`);
+      continue;
+    }
+    warnUnknownKeys(eRaw, EVENT_KEYS, where, warnings);
+    const tMs = num(eRaw.tMs);
+    const kind = str(eRaw.kind);
+    if (tMs === null || kind === null) {
+      warnings.push(`${where}: an event dropped — tMs/kind junk`);
+      continue;
+    }
+    if (!GRAPHICS_EVENT_KINDS.includes(kind as GraphicsEventKind)) {
+      warnings.push(
+        `${where}: the event at ${String(tMs)}ms dropped — kind "${kind}" is not in the closed event set (${GRAPHICS_EVENT_KINDS.join(", ")})`,
+      );
+      continue;
+    }
+    const evKind = kind as GraphicsEventKind;
+    if (tMs > sceneMs) {
+      errors.push(
+        `${where}: an event sits at ${String(tMs)}ms, past the scene clock (${sceneMs}ms)`,
+      );
+      return null;
+    }
+    if (tMs < 0) {
+      warnings.push(`${where}: the ${evKind} event dropped — tMs must be ≥ 0`);
+      continue;
+    }
+    let label: string | undefined;
+    if (eRaw.label !== undefined) {
+      const labelStr = str(eRaw.label);
+      if (labelStr === null || labelStr.length > GRAPHICS_BUDGETS.eventLabelMax) {
+        warnings.push(
+          `${where}: the ${evKind} event's label dropped (${labelStr === null ? "junk" : `${labelStr.length} chars`} — the eventLabelMax wall is ${GRAPHICS_BUDGETS.eventLabelMax}); the event stays`,
+        );
+      } else if (labelStr.length > 0) {
+        label = labelStr;
+      }
+    }
+    out.push(label !== undefined ? { tMs, kind: evKind, label } : { tMs, kind: evKind });
+  }
+  return out.length > 0 ? out : null;
 }
 
 // --- per-kind payload parsers: shape violations are ERRORS (a payload
@@ -1437,6 +1552,9 @@ function parseScene(
   // sanity — the class split is the parser's block comment).
   const camera = parseCamera(raw.camera, where, docWidth, docHeight, sceneMs, warnings, errors);
   if (errors.length > 0) return null;
+  // S131 — the scene events (same class split).
+  const events = parseEvents(raw.events, where, sceneMs, warnings, errors);
+  if (errors.length > 0) return null;
   const elements: GraphicsElement[] = [];
   const ids = new Set<string>();
   for (const elRaw of raw.elements) {
@@ -1496,6 +1614,7 @@ function parseScene(
   if (explicitMs !== null && explicitMs > 0) scene.durationMs = explicitMs;
   if (routing !== null) scene.routing = routing;
   if (camera !== null) scene.camera = camera;
+  if (events !== null) scene.events = events;
   return scene;
 }
 
@@ -1701,6 +1820,15 @@ function serializeCameraKey(k: GraphicsCameraKeyframe): Rec {
   return out;
 }
 
+/** S131 — strict event write: exactly the declared fields, declared
+ *  order — the event block round-trips byte-stable like everything else
+ *  on the scene. */
+function serializeEvent(e: GraphicsEvent): Rec {
+  const out: Rec = { tMs: e.tMs, kind: e.kind };
+  if (e.label !== undefined) out.label = e.label;
+  return out;
+}
+
 /** Strict advisory write (D2): exactly the declared hint fields, declared
  *  order — the routing block round-trips byte-stable like everything else
  *  on the scene. */
@@ -1823,6 +1951,9 @@ export function writeGraphicsDoc(doc: GraphicsDoc): string {
       // S130 — the camera sits with the scene-level design fields, before
       // the advisory routing block — declared order, byte-stable.
       if (s.camera !== undefined) out.camera = s.camera.map(serializeCameraKey);
+      // S131 — the events ride with the PAE directive block — declared
+      // order, byte-stable.
+      if (s.events !== undefined) out.events = s.events.map(serializeEvent);
       // (D2) advisory block sits between the scene-level design fields and
       // the element list — declared order, byte-stable like the rest.
       if (s.routing !== undefined) out.routing = serializeRouting(s.routing);

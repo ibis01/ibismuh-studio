@@ -45,6 +45,7 @@ import { framePlanWindows } from "../anim/clock";
 import { planFromTracks, type CompositionPlan } from "../composition-plan";
 import type { TimelineTrack } from "../timeline";
 import { APPLY_GRAPHICS_FRAME_FN, composeGraphicsScene, graphicsFramePayload } from "./compose";
+import { graphicsEventList, type GraphicsEventSlot } from "./events";
 import { frameAt, graphicsSceneDurationsMs } from "./frame";
 import { assertGraphicsBudget } from "./preflight";
 import { graphicsTracks } from "./tracks";
@@ -104,6 +105,10 @@ export interface GraphicsRenderResult {
   file: string;
   tracks: TimelineTrack[];
   plan: CompositionPlan;
+  /** S131 — the doc's events projected onto the global doc clock (the
+   *  event channel's one seam — the audio/QC consumers' fact source;
+   *  cues are not clips, so they never ride the tracks). */
+  events: GraphicsEventSlot[];
 }
 
 /** The scene clock's absolute start in ms — the EXACT running sum of the
@@ -348,7 +353,7 @@ export async function renderGraphics(
       musicPath: opts.musicPath ?? null,
       anyVoAudio,
     }));
-    return { scenes: sceneFiles, file: finalFile, tracks, plan: contractPlan };
+    return { scenes: sceneFiles, file: finalFile, tracks, plan: contractPlan, events: graphicsEventList(doc, doc.fps) };
   } finally {
     await browser.close();
   }

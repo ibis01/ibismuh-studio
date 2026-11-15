@@ -16110,6 +16110,105 @@ await test("S130 the tween + camera directives coexist on one scene (the PAE sta
 });
 
 // ---------------------------------------------------------------------------
+// S131 (PAE-3) — the scene event channel: cue facts on the scene clock,
+// projected globally by graphicsEventList (cues are not clips — never a
+// track kind). Pins: validator class split, the eventsPerSceneMax wall,
+// the closed kind set, the eventLabelMax decoration drop, time-sanity
+// refusal, the global projection (frame accumulation + quantized tSec),
+// shape stability (no events → []), declared-order serialization.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S131 (PAE-3) the event channel");
+
+function gEvent(tMs: number, kind: string, label?: string): Record<string, unknown> {
+  return label !== undefined ? { tMs, kind, label } : { tMs, kind };
+}
+
+await test("S131 an evented doc round-trips byte-identical (events ride the PAE block, declared order)", () => {
+  const raw = gDoc([gScene("s1", [gEl("h1", "headline")], {
+    durationMs: 3000,
+    events: [gEvent(500, "hit", "boom"), gEvent(0, "sfx"), gEvent(2500, "cue", "hold")],
+    routing: { suggestedEngine: "graphics" },
+  })]);
+  const doc = mustValidate(raw, "the evented doc");
+  eq(doc.scenes[0]?.events?.length, 3, "all three cues kept");
+  const json1 = writeGraphicsDoc(doc);
+  const doc2 = mustParse(json1, "the written evented doc");
+  eq(writeGraphicsDoc(doc2), json1, "write→parse→write is byte-identical");
+  ok(json1.indexOf('"camera"') === -1 && json1.indexOf('"events"') > -1 && json1.indexOf('"events"') < json1.indexOf('"routing"'),
+    "events sit between the design fields and the advisory block in the written order");
+});
+
+await test("S131 the eventsPerSceneMax wall — excess cues warn-drop with the wall name", () => {
+  const events = Array.from({ length: 17 }, (_, i) => gEvent(i * 10, "hit"));
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 3000, events })]));
+  ok(r.doc !== null, "the doc survives");
+  ok(r.warnings.some((w) => w.includes("eventsPerSceneMax wall (16)")), `the wall name is cited: ${r.warnings.join(" | ")}`);
+  eq(r.doc?.scenes[0]?.events?.length, 16, "the first sixteen cues kept");
+});
+
+await test("S131 junk events warn-drop with their reasons; an all-junk array parses to absent", () => {
+  const events = [
+    gEvent(100, "explosion"), // not in the closed set
+    gEvent("soon", "hit"), // junk tMs
+    gEvent(200), // missing kind
+    gEvent(-50, "hit"), // negative
+    gEvent(300, "hit", "x".repeat(65)), // label over the wall — label drops, event stays
+    gEvent(400, "hit", ""), // empty label — drops
+    { tMs: 500, kind: "hit", secret: 1 }, // unknown key
+    "not-an-object",
+  ];
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 3000, events })]));
+  ok(r.doc !== null, "the doc survives every junk cue");
+  ok(r.warnings.some((w) => w.includes("kind \"explosion\" is not in the closed event set")), "kind cited");
+  ok(r.warnings.filter((w) => w.includes("tMs/kind junk")).length === 2, "junk tMs and missing kind cited");
+  ok(r.warnings.some((w) => w.includes("tMs must be ≥ 0")), "negative cited");
+  ok(r.warnings.some((w) => w.includes("label dropped (65 chars — the eventLabelMax wall is 64); the event stays")), "label wall cited");
+  ok(r.warnings.some((w) => w.includes("secret")), "unknown key cited");
+  eq(r.doc?.scenes[0]?.events?.length, 3, "the legal cues survive (label-wall, empty-label, unknown-key — junk shape/kind/time dropped)");
+  ok(r.doc?.scenes[0]?.events?.[0]?.label === undefined, "the over-long label stays absent");
+  eq(r.doc?.scenes[0]?.events?.[0]?.tMs, 300, "the first survivor is the label-wall cue");
+  eq(r.doc?.scenes[0]?.events?.[2]?.tMs, 500, "the unknown-key cue survives as an event (the key was noise)");
+});
+
+await test("S131 event time-sanity — a cue past the scene clock REFUSES (the motions-loop law)", () => {
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], {
+    durationMs: 3000,
+    events: [gEvent(3100, "hit")],
+  })]));
+  const errors = mustReject(r, "the past-the-clock cue");
+  ok(errors.some((e) => e.includes("an event sits at 3100ms, past the scene clock (3000ms)")), errors.join(" | "));
+});
+
+await test("S131 graphicsEventList — the global projection: frame accumulation across scenes, quantized tSec, 0-based index", async () => {
+  const { graphicsEventList } = await import("../src/lib/tubeforge/graphics/events");
+  const doc = mustValidate(gDoc([
+    gScene("s1", [gEl("a", "headline")], {
+      durationMs: 2000,
+      events: [gEvent(0, "sfx"), gEvent(510, "hit", "boom"), gEvent(1999, "cue")],
+    }),
+    gScene("s2", [gEl("b", "bullet")], {
+      durationMs: 1000,
+      events: [gEvent(250, "hit")],
+    }),
+  ]), "evented doc");
+  const slots = graphicsEventList(doc, 24);
+  eq(slots.length, 4, "all four cues projected");
+  eq(slots[0]?.frame, 0, "t=0 lands on frame 0 (the index law — no encode floor)");
+  eq(slots[0]?.tSec, 0, "t=0 → 0 s");
+  eq(slots[1]?.frame, 12, "510ms at 24fps rounds to frame 12");
+  eq(slots[1]?.tSec, 0.51, "the global second quantized");
+  eq(slots[1]?.label, "boom", "the label rides");
+  eq(slots[1]?.sceneId, "s1", "the scene id rides");
+  eq(slots[2]?.frame, 48, "1999ms at 24fps → frame 48 (scene 1's last delivered frame)");
+  eq(slots[3]?.frame, 54, "scene 2's 250ms: 48 delivered frames before + round(0.25×24)=6");
+  eq(slots[3]?.tSec, 2.25, "the global second spans scenes (2.0 + 0.25)");
+  eq(graphicsEventList(doc, 24), graphicsEventList(doc, 24), "same input → identical list");
+  const docNoEvents = mustValidate(gDoc([gScene("s1", [gEl("a", "headline")], { durationMs: 2000 })]), "plain doc");
+  eq(graphicsEventList(docNoEvents, 24).length, 0, "a doc with no events projects to [] — shape-stable, never undefined");
+});
+
+// ---------------------------------------------------------------------------
 // G1.2 — frame truth (Part B): frameAt is the ONE source of motion truth.
 // Pins: determinism (sweep hash over a fixed doc), the fixed composition
 // order (emphasis > exit > enter — applied last), element state never
