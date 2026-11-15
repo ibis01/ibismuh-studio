@@ -17818,6 +17818,115 @@ await test("S125 the preflight wall — the DELIVERED arithmetic is the truth (R
   ok(emptyThrew.includes("no slots"), "an empty slot list is a caller bug, refused loudly");
 });
 
+// ---------------------------------------------------------------------------
+// S125 (K1) — the planner (rig-director: one classifier, two consumers —
+// the compile-only law) and the renderer contract (rig-render: the encode
+// args + the cache hash) (design record §2/§5).
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S125 the planner + the renderer contract");
+
+import { planRigTimeline } from "../src/lib/tubeforge/characters/rig-director";
+import { rigClipHash, rigEncodeArgs } from "../src/lib/tubeforge/characters/rig-render";
+
+await test("S125 the planner is deterministic and compile-only — byte-identical timelines, speech rides", () => {
+  const narration = "Imagine a world of ideas. Then the water flows to the sea. This is the crucial point!";
+  const input = { narration, rig: RIG_DOC, durationMs: 6000, anchors: null };
+  const a = planRigTimeline(input);
+  const b = planRigTimeline(input);
+  eq(JSON.stringify(a), JSON.stringify(b), "byte-identical compile");
+  ok(a.speech.segments.length > 0, "the mouth schedule rides the plan");
+  ok(a.timeline.rows.length > 0 && a.timeline.rows.length <= RIG_BUDGETS.timelineRows, "rows land inside the compile wall");
+  for (const row of a.timeline.rows) {
+    ok(row.tMs >= 0 && row.tMs <= 6000, "rows sit on the scene clock");
+    ok(row.poseId === null || RIG_POSES.has(row.poseId), "rows reference sheet poses only (unknown → rest is the applier's rule, the planner never emits it)");
+  }
+});
+
+await test("S125 the gesture table — setup welcomes, action points (alternating arms), support rests", () => {
+  const doc = mustValidateDoc(
+    rigDocInput({
+      poses: [
+        { id: "welcoming", name: "Welcome", joints: { "arm-l": { rotateDeg: -120 } } },
+        { id: "arm-r-point", name: "Point", joints: { "arm-r": { rotateDeg: 120 } } },
+        { id: "arm-l-point", name: "Point left", joints: { "arm-l": { rotateDeg: 120 } } },
+      ],
+    }),
+    ART,
+    "gesture fixture"
+  );
+  const setupOnly = planRigTimeline({ narration: "Imagine a tiny workshop.", rig: doc, durationMs: 2000, anchors: null });
+  eq(setupOnly.timeline.rows.map((r) => r.poseId), ["welcoming", null], "setup → welcoming (the first candidate on the sheet)");
+
+  const actions = planRigTimeline({
+    narration: "The pump pushes water. Then the valve turns. Then the tank fills up.",
+    rig: doc,
+    durationMs: 9000,
+    anchors: null,
+  });
+  const poseRows = actions.timeline.rows.filter((r) => r.poseId !== null);
+  ok(poseRows.length >= 2, "action sentences gesture");
+  eq(poseRows[0].poseId, "arm-r-point", "action parity 0 → arm-r-point");
+  eq(poseRows[1].poseId, "arm-l-point", "action parity 1 → arm-l-point (deterministic alternation)");
+
+  const support = planRigTimeline({ narration: "The machine hums quietly. A quiet unremarkable sentence.", rig: doc, durationMs: 4000, anchors: null });
+  const supportPoses = support.timeline.rows.filter((r) => r.poseId !== null);
+  eq(supportPoses.length, 1, "only the opening setup gestures — support rests");
+  eq(supportPoses[0].poseId, "welcoming", "the opener's gesture is the only one");
+
+  const noSheet = planRigTimeline({ narration: "Imagine a tiny workshop.", rig: RIG_DOC, durationMs: 2000, anchors: null });
+  ok(noSheet.timeline.rows.every((r) => r.poseId !== "welcoming"), "absent poses degrade (the sheet has arm-l-raise → that wins)");
+});
+
+await test("S125 gesture rows sit INSIDE their sentence windows; the compile wall caps rows", () => {
+  const longNarration = Array.from({ length: 20 }, (_, i) => `Then the machine ${["pushes", "turns", "moves"][i % 3]} the part forward.`).join(" ");
+  const plan = planRigTimeline({ narration: longNarration, rig: RIG_DOC, durationMs: 40_000, anchors: null });
+  ok(plan.timeline.rows.length <= RIG_BUDGETS.timelineRows, `the wall holds (${plan.timeline.rows.length} rows)`);
+  for (let i = 1; i < plan.timeline.rows.length; i++) {
+    ok(plan.timeline.rows[i].tMs >= plan.timeline.rows[i - 1].tMs, "rows are time-ascending");
+  }
+  const silent = planRigTimeline({ narration: "", rig: RIG_DOC, durationMs: 2000, anchors: null });
+  eq(silent.timeline.rows.length, 0, "no narration → no gestures");
+  eq(silent.speech.segments.length, 0, "no narration → no mouth beats");
+});
+
+await test("S125 the renderer's encode args — video-only, -t bounded (the arg list IS the contract)", () => {
+  const args = rigEncodeArgs({ framesDir: "/t/rig-frames", fps: 30, durSec: 3.033, sceneFile: "/t/rig-scene.mp4" });
+  ok(args.includes("-framerate") && args.includes("30"), "the rate rides");
+  ok(args.includes("-t") && args.includes("3.033"), "the delivered seconds bound the stream");
+  ok(!args.includes("anullsrc") && !args.some((a) => a.includes("1:a")) && args.filter((a) => a === "-map").length === 1, "video-only — no audio inputs, no silent fill (the segment owns the mix)");
+  ok(args.includes("libx264") && args.some((a) => a.includes("yuv420p")), "the house encode law rides");
+});
+
+await test("S125 the clip hash — deterministic, sensitive to every render input", () => {
+  const baseArgs = {
+    rig: RIG_DOC,
+    art: ART,
+    timeline: { durationMs: 3000, rows: [{ tMs: 500, poseId: "arm-l-raise" as const }] },
+    speech: { segments: [], speaking: false },
+    slot: { sceneIndex: 3, durationMs: 3000 },
+    opts: { outDir: "/t", canvas: { width: 1920, height: 1080 }, fps: 30 },
+  };
+  const a = rigClipHash(baseArgs);
+  eq(rigClipHash({ ...baseArgs }), a, "equal inputs → equal hash");
+  ok(rigClipHash({ ...baseArgs, slot: { sceneIndex: 3, durationMs: 3100 } }) !== a, "a duration change re-renders");
+  ok(
+    rigClipHash({
+      ...baseArgs,
+      rig: mustValidateDoc(
+        rigDocInput({ poses: [...(rigDocInput().poses as unknown[]), { id: "extra", name: "E", joints: { torso: { rotateDeg: 4 } } }] }),
+        ART,
+        "hash fixture"
+      ),
+    }) !== a,
+    "an edited rig re-renders (the cache never lies)"
+  );
+  ok(
+    rigClipHash({ ...baseArgs, speech: { segments: [{ startMs: 0, endMs: 100, variant: "open" as const }], speaking: true } }) !== a,
+    "a speech change re-renders"
+  );
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
