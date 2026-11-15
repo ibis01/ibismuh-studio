@@ -15950,6 +15950,166 @@ await test("S129 the tween fold is deterministic — the tweened sweep is byte-i
 });
 
 // ---------------------------------------------------------------------------
+// S130 (PAE-2) — the scene camera directive: the ONE world→screen function
+// for the 2D adapter, on the scene-local clock, through the existing
+// applier. Pins: validator class split, the cameraKeysMax wall, the zoom
+// domain [1, 4] (the world→screen law — no void), the pan domain vs the
+// board, time-sanity refusal, cameraAt clamp/ease math, frame-state
+// presence only when directed, composer wrapper presence/absence
+// (byte-identity), payload serialization, applier transform pin, sweep
+// determinism.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S130 (PAE-2) the scene camera");
+
+function gCamKey(tMs: number, zoom: number, tx: number, ty: number, ease?: string): Record<string, unknown> {
+  return ease !== undefined ? { tMs, zoom, tx, ty, ease } : { tMs, zoom, tx, ty };
+}
+
+await test("S130 a camera'd doc round-trips byte-identical (strict write, declared order)", () => {
+  const raw = gDoc([gScene("s1", [gEl("h1", "headline")], {
+    durationMs: 3000,
+    camera: [gCamKey(0, 1, 0, 0), gCamKey(1000, 2, 100, -50, "ease-in-out"), gCamKey(2000, 1.5, 0, 0)],
+  })]);
+  const doc = mustValidate(raw, "the camera'd doc");
+  eq(doc.scenes[0]?.camera?.length, 3, "all three keys kept");
+  eq(doc.scenes[0]?.camera?.[1]?.ease, "ease-in-out", "the destination key's ease kept");
+  const json1 = writeGraphicsDoc(doc);
+  const doc2 = mustParse(json1, "the written camera'd doc");
+  eq(writeGraphicsDoc(doc2), json1, "write→parse→write is byte-identical");
+});
+
+await test("S130 the cameraKeysMax wall — excess keys warn-drop with the wall name", () => {
+  const keys = Array.from({ length: 17 }, (_, i) => gCamKey(i * 10, 1, 0, 0));
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 3000, camera: keys })]));
+  ok(r.doc !== null, "the doc survives");
+  ok(r.warnings.some((w) => w.includes("cameraKeysMax wall (16)")), `the wall name is cited: ${r.warnings.join(" | ")}`);
+  eq(r.doc?.scenes[0]?.camera?.length, 16, "the first sixteen keys kept");
+});
+
+await test("S130 junk camera keys warn-drop with their reasons; an all-junk camera parses to absent", () => {
+  // Distinct ascending tMs per key — the ascend check fires before the
+  // domain checks, so each reason needs its own slot on the clock.
+  const camera = [
+    gCamKey(100, 0.5, 0, 0), // zoom < 1 — the void
+    gCamKey(200, 9, 0, 0), // zoom > 4
+    gCamKey(300, 1, 3000, 0), // pan leaves the board
+    gCamKey(400, 1, 0, 2000), // pan leaves the board
+    gCamKey(500, 1, 0, 0, "zigzag"), // junk ease
+    gCamKey(600, 1, 0, 0), // kept — the ascend baseline
+    gCamKey(600, 1, 0, 0), // non-ascending (600 ≤ 600)
+    { tMs: 800 }, // missing fields — non-finite
+    "not-an-object", // junk shape
+  ];
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 3000, camera })]));
+  ok(r.doc !== null, "the doc survives every junk key");
+  ok(r.warnings.some((w) => w.includes("zoom 0.5 leaves the [1, 4] domain")), "low zoom cited");
+  ok(r.warnings.some((w) => w.includes("zoom 9 leaves the [1, 4] domain")), "high zoom cited");
+  ok(r.warnings.some((w) => w.includes("pan (3000, 0) leaves the ±1920/±1080 board domain")), "x pan cited");
+  ok(r.warnings.some((w) => w.includes("pan (0, 2000) leaves the ±1920/±1080 board domain")), "y pan cited");
+  ok(r.warnings.some((w) => w.includes("is not a Stage-S curve")), "junk ease cited");
+  ok(r.warnings.some((w) => w.includes("strictly ascend")), "non-ascending cited");
+  ok(r.warnings.some((w) => w.includes("a field is non-finite")), "missing fields cited");
+  eq(r.doc?.scenes[0]?.camera?.length, 1, "exactly the ascend baseline key survives");
+  eq(r.doc?.scenes[0]?.camera?.[0]?.zoom, 1, "the survivor is the legal baseline key");
+});
+
+await test("S130 camera time-sanity — a key past the scene clock REFUSES (the motions-loop law)", () => {
+  const r = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")], {
+    durationMs: 3000,
+    camera: [gCamKey(0, 1, 0, 0), gCamKey(3100, 2, 0, 0)],
+  })]));
+  const errors = mustReject(r, "the past-the-clock camera key");
+  ok(errors.some((e) => e.includes("a camera keyframe sits at 3100ms, past the scene clock (3000ms)")), errors.join(" | "));
+});
+
+await test("S130 cameraAt — clamped holds, linear glide, the destination key's ease", async () => {
+  const { cameraAt } = await import("../src/lib/tubeforge/graphics/camera");
+  const keys = [
+    { tMs: 0, zoom: 1, tx: 0, ty: 0 },
+    { tMs: 1000, zoom: 2, tx: 100, ty: -50, ease: "ease-out" as const },
+    { tMs: 2000, zoom: 1, tx: 0, ty: 0 },
+  ];
+  const pre = cameraAt(keys, -100);
+  ok(pre.zoom === 1 && pre.tx === 0 && pre.ty === 0, "pre-first-key holds");
+  const mid = cameraAt(keys, 500);
+  ok(Math.abs(mid.zoom - (1 + 0.875)) < 1e-9, `the ease-out segment: ${mid.zoom} ≈ 1.875`);
+  ok(Math.abs(mid.tx - 87.5) < 1e-9 && Math.abs(mid.ty - (-43.75)) < 1e-9, `the eased pan: ${mid.tx}, ${mid.ty}`);
+  const mid2 = cameraAt(keys, 1500);
+  ok(Math.abs(mid2.zoom - 1.5) < 1e-9 && mid2.tx === 50 && mid2.ty === -25, "the linear segment (no ease on the third key)");
+  const post = cameraAt(keys, 3000);
+  ok(post.zoom === 1 && post.tx === 0 && post.ty === 0, "post-last-key holds");
+  const detA = JSON.stringify(cameraAt(keys, 777));
+  const detB = JSON.stringify(cameraAt(keys, 777));
+  eq(detA, detB, "same input → byte-identical state");
+});
+
+await test("S130 frameAt carries the camera only when the scene directs it — camera-less frames unchanged", () => {
+  const camDoc = mustValidate(gDoc([
+    gScene("s1", [gEl("h1", "headline")], { durationMs: 2000, camera: [gCamKey(0, 1, 0, 0), gCamKey(1000, 2, 0, 0)] }),
+    gScene("s2", [gEl("b", "bullet")], { durationMs: 2000 }),
+  ]), "camera doc");
+  const inScene = frameAt(camDoc, 500);
+  ok(inScene.camera !== undefined && inScene.camera.zoom === 1.5, `scene 1 carries the camera: ${JSON.stringify(inScene.camera)}`);
+  const nextScene = frameAt(camDoc, 2500);
+  ok(nextScene.camera === undefined, "scene 2 (no camera) carries none");
+  const plain = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2000 })]), "plain doc");
+  ok(!graphicsFramePayload(frameAt(plain, 500)).includes("camera"), "a camera-less payload never carries the field (byte-identity)");
+});
+
+await test("S130 the composer wraps scene content in #gcam only when a camera exists (additive seam)", async () => {
+  const { composeGraphicsScene } = await import("../src/lib/tubeforge/graphics/compose");
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], {
+    durationMs: 2000,
+    camera: [gCamKey(0, 1, 0, 0), gCamKey(1000, 2, 100, 0)],
+  })]), "camera doc");
+  const withCam = composeGraphicsScene(doc.scenes[0], doc);
+  ok(withCam.html.includes('<g id="gcam">'), "the wrapper group is in the page");
+  const plain = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2000 })]), "plain doc");
+  const without = composeGraphicsScene(plain.scenes[0], plain);
+  ok(!without.html.includes('id="gcam"'), "no wrapper without a camera — the pre-S130 compose byte-identical");
+  ok(without.html.includes('id="ge-h1"'), "the element group is still emitted");
+});
+
+await test("S130 graphicsFramePayload serializes the camera state; the applier builds the board-center transform", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], {
+    durationMs: 2000,
+    camera: [gCamKey(0, 1, 0, 0), gCamKey(1000, 2, 100, -50)],
+  })]), "camera doc");
+  const payload = JSON.parse(graphicsFramePayload(frameAt(doc, 500))) as { camera?: { zoom: number; tx: number; ty: number } };
+  ok(payload.camera !== undefined && payload.camera.zoom === 1.5 && payload.camera.tx === 50 && payload.camera.ty === -25,
+    `the payload carries the world→screen inputs: ${JSON.stringify(payload.camera)}`);
+  // The applier is a JS string — pin its camera block: the transform is
+  // built from the board's own attributes about the center, one place.
+  ok(APPLY_GRAPHICS_FRAME_FN.includes("payload.camera"), "the applier reads the camera");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('document.getElementById("gcam")'), "the applier targets the wrapper group");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('board.getAttribute("width")'), "the applier reads board dims as attributes (never layout)");
+});
+
+await test("S130 the camera'd sweep is deterministic — byte-identical across two passes", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", { enter: { kind: "rise", durationMs: 400, delayMs: 0, ease: "ease-out" } }),
+    gEl("sh", "subhead", { enter: { kind: "fade", durationMs: 300, delayMs: 300, ease: "linear" } }),
+  ], { durationMs: 3000, camera: [gCamKey(0, 1.2, -40, 0), gCamKey(1200, 2.5, 0, -30, "ease-in-out"), gCamKey(2800, 1, 0, 0)] })]));
+  const a = g2Sweep(doc, 50, 3000);
+  const b = g2Sweep(doc, 50, 3000);
+  ok(a.every((f, i) => f === b[i]) && a.every((f) => f.includes("camera")), "every frame carries the camera and repeats byte-identically");
+});
+
+await test("S130 the tween + camera directives coexist on one scene (the PAE stack)", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h1", "headline", {
+      enter: { kind: "fade", durationMs: 200, delayMs: 0, ease: "linear" },
+      tweens: [{ delayMs: 200, durationMs: 800, channels: [twChannel("rotateDeg", [{ tMs: 0, value: 0 }, { tMs: 800, value: 12 }])] }],
+    }),
+  ], { durationMs: 2000, camera: [gCamKey(0, 1, 0, 0), gCamKey(2000, 2, 0, 0)] })]));
+  const f = frameAt(doc, 600); // mid-window for BOTH directives
+  ok(f.camera !== undefined && f.camera.zoom === 1.3, `the camera rides: ${JSON.stringify(f.camera)}`);
+  const el = g2ElById(f, "h1");
+  eq(el.rotateDeg, 6, "the tween rides (12 × 0.5 mid-window)");
+});
+
+// ---------------------------------------------------------------------------
 // G1.2 — frame truth (Part B): frameAt is the ONE source of motion truth.
 // Pins: determinism (sweep hash over a fixed doc), the fixed composition
 // order (emphasis > exit > enter — applied last), element state never

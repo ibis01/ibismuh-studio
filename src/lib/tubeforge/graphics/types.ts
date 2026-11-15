@@ -150,6 +150,40 @@ export interface ElementTween {
   channels: TweenChannelTrack[];
 }
 
+// ---------------------------------------------------------------------------
+// S130 (PAE-2) — the scene camera directive: the ONE world→screen function.
+//
+// The 3D adapter has carried camera keyframes since S94 (Scene3DCameraKeyframe
+// → cameraAt); the 2D composer had no camera at all — the gap the opuscar
+// study named ("one world → screen function; never hand-type screen
+// coordinates"). The graphics camera closes it with the SAME vocabulary:
+// scene-local keyframes {tMs, zoom, tx, ty} evaluated by a clamped,
+// destination-eased cameraAt — the anim substrate's laws, the S94 shape —
+// and rendered through the EXISTING applier (one #gcam wrapper group, an
+// additive seam: a camera-less scene composes byte-identically). zoom is
+// pinned to [1, CAMERA_BOUNDS.zoomMax] — zooming OUT would reveal the void
+// outside the board, so the world→screen law forbids it by construction.
+// ---------------------------------------------------------------------------
+
+/** One camera keyframe: scene-local time, the zoom factor and the pan
+ *  offsets (scene units) the board holds there, the ease of the segment
+ *  ARRIVING at it (absent ⇒ linear — the destination-key convention). */
+export interface GraphicsCameraKeyframe {
+  tMs: number;
+  zoom: number;
+  tx: number;
+  ty: number;
+  ease?: GraphicsEase;
+}
+
+/** S130 camera bounds — zoom ≥ 1 is the world→screen law (the board never
+ *  shrinks into void); the cap keeps a frame from collapsing to a point.
+ *  Names cited in drop reasons; values are receipts to tune. */
+export const CAMERA_BOUNDS = {
+  zoomMin: 1,
+  zoomMax: 4,
+} as const;
+
 export const GRAPHICS_ELEMENT_KINDS = [
   "headline", "subhead", "bullet", "counter", "bar", "barChart",
   "icon", "callout", "shape", "group", "sprite",
@@ -363,6 +397,10 @@ export interface GraphicsScene {
    *  with a warning under the tolerant-parse law (never an error, never a
    *  default). The render pipeline never reads it. */
   routing?: GraphicsRoutingHints;
+  /** S130 — the scene camera (optional, decoration-class parse,
+   *  time-sanity error-class like every motion). Absent ⇒ the frame is the
+   *  placed board, byte-identical to the pre-S130 compose. */
+  camera?: GraphicsCameraKeyframe[];
   elements: GraphicsElement[];
 }
 
@@ -433,6 +471,9 @@ export const GRAPHICS_BUDGETS = {
   /** S129 — max keyframes per tween channel track. A longer curve is a
    *  design-doc slice (the easing table's law, mirrored). */
   tweenKeysPerChannelMax: 16,
+  /** S130 — max keyframes per scene camera. A longer camera path is a
+   *  design-doc slice. */
+  cameraKeysMax: 16,
 } as const;
 
 /** Borrowed readable-ink wall (the whiteboard's WB_STROKE_WIDTH_MAX
@@ -482,7 +523,7 @@ const ELEMENT_KEYS = new Set([
 ]);
 
 const DOC_KEYS = new Set(["version", "title", "width", "height", "fps", "scenes"]);
-const SCENE_KEYS = new Set(["id", "narration", "durationMs", "background", "routing", "elements"]);
+const SCENE_KEYS = new Set(["id", "narration", "durationMs", "background", "routing", "camera", "elements"]);
 
 const ROUTING_KEYS = new Set(["suggestedEngine", "confidence", "reason"]);
 
@@ -810,6 +851,92 @@ function parseTweens(
     out.push({ delayMs, durationMs, channels });
   }
   return out.length > 0 ? out : null;
+}
+
+// ---------------------------------------------------------------------------
+// S130 — the scene camera parser. Same class split as the tweens: junk
+// keys warn-drop (decoration), time-sanity refuses (planner bug). The pan
+// domain rides the board the doc declares (|tx| ≤ width, |ty| ≤ height —
+// the validator KNOWS the doc's surface, so a pan that leaves the board is
+// dropped at admission, never at render).
+// ---------------------------------------------------------------------------
+
+const CAMERA_KEY_KEYS = new Set(["tMs", "zoom", "tx", "ty", "ease"]);
+
+function parseCamera(
+  raw: unknown,
+  where: string,
+  docWidth: number,
+  docHeight: number,
+  sceneMs: number,
+  warnings: string[],
+  errors: string[],
+): GraphicsCameraKeyframe[] | null {
+  if (raw === undefined) return null;
+  if (!Array.isArray(raw) || raw.length === 0) {
+    warnings.push(`${where}: camera dropped — not a non-empty keyframe array`);
+    return null;
+  }
+  let list = raw;
+  if (list.length > GRAPHICS_BUDGETS.cameraKeysMax) {
+    warnings.push(
+      `${where}: camera dropped ${list.length - GRAPHICS_BUDGETS.cameraKeysMax} keys past the cameraKeysMax wall (${GRAPHICS_BUDGETS.cameraKeysMax})`,
+    );
+    list = list.slice(0, GRAPHICS_BUDGETS.cameraKeysMax);
+  }
+  const keys: GraphicsCameraKeyframe[] = [];
+  let prev = -Infinity;
+  for (const kRaw of list) {
+    if (!isObj(kRaw)) {
+      warnings.push(`${where}: a camera keyframe dropped — not an object`);
+      continue;
+    }
+    warnUnknownKeys(kRaw, CAMERA_KEY_KEYS, where, warnings);
+    const tMs = num(kRaw.tMs);
+    const zoom = num(kRaw.zoom);
+    const tx = num(kRaw.tx);
+    const ty = num(kRaw.ty);
+    if (tMs === null || zoom === null || tx === null || ty === null) {
+      warnings.push(`${where}: a camera keyframe dropped — a field is non-finite`);
+      continue;
+    }
+    if (tMs > sceneMs) {
+      errors.push(
+        `${where}: a camera keyframe sits at ${String(tMs)}ms, past the scene clock (${sceneMs}ms)`,
+      );
+      return null;
+    }
+    if (tMs < 0 || tMs <= prev) {
+      warnings.push(
+        `${where}: a camera keyframe dropped — keys must be ≥ 0 and strictly ascend (${String(tMs)}ms after ${String(prev)}ms)`,
+      );
+      continue;
+    }
+    prev = tMs;
+    if (zoom < CAMERA_BOUNDS.zoomMin || zoom > CAMERA_BOUNDS.zoomMax) {
+      warnings.push(
+        `${where}: a camera keyframe dropped — zoom ${String(zoom)} leaves the [${CAMERA_BOUNDS.zoomMin}, ${CAMERA_BOUNDS.zoomMax}] domain (zoom < 1 would reveal the void outside the board)`,
+      );
+      continue;
+    }
+    if (Math.abs(tx) > docWidth || Math.abs(ty) > docHeight) {
+      warnings.push(
+        `${where}: a camera keyframe dropped — pan (${String(tx)}, ${String(ty)}) leaves the ±${docWidth}/±${docHeight} board domain`,
+      );
+      continue;
+    }
+    let ease: GraphicsEase | undefined;
+    if (kRaw.ease !== undefined) {
+      const easeStr = str(kRaw.ease);
+      if (easeStr === null || !isEaseName(easeStr)) {
+        warnings.push(`${where}: a camera keyframe dropped — its ease "${String(kRaw.ease)}" is not a Stage-S curve`);
+        continue;
+      }
+      ease = easeStr;
+    }
+    keys.push(ease !== undefined ? { tMs, zoom, tx, ty, ease } : { tMs, zoom, tx, ty });
+  }
+  return keys.length > 0 ? keys : null;
 }
 
 // --- per-kind payload parsers: shape violations are ERRORS (a payload
@@ -1260,6 +1387,8 @@ function parseScene(
   index: number,
   warnings: string[],
   errors: string[],
+  docWidth: number,
+  docHeight: number,
 ): GraphicsScene | null {
   const sceneNo = `scene #${index + 1}`;
   if (!isObj(raw)) { errors.push(`${sceneNo}: unreadable — not an object`); return null; }
@@ -1304,6 +1433,10 @@ function parseScene(
   // The scene clock: explicit > the house 2.6-wps estimate (ONE clock
   // model — timing.ts, never re-implemented).
   const sceneMs = explicitMs !== null && explicitMs > 0 ? explicitMs : estimateNarrationMs(narration);
+  // S130 — the scene camera (decoration-class parse, error-class time
+  // sanity — the class split is the parser's block comment).
+  const camera = parseCamera(raw.camera, where, docWidth, docHeight, sceneMs, warnings, errors);
+  if (errors.length > 0) return null;
   const elements: GraphicsElement[] = [];
   const ids = new Set<string>();
   for (const elRaw of raw.elements) {
@@ -1362,6 +1495,7 @@ function parseScene(
   const scene: GraphicsScene = { id, narration, background, elements };
   if (explicitMs !== null && explicitMs > 0) scene.durationMs = explicitMs;
   if (routing !== null) scene.routing = routing;
+  if (camera !== null) scene.camera = camera;
   return scene;
 }
 
@@ -1470,7 +1604,7 @@ function parseDoc(raw: unknown, warnings: string[], errors: string[]): GraphicsD
   const sceneIds = new Set<string>();
   let explicitTotalMs = 0;
   for (let i = 0; i < raw.scenes.length; i++) {
-    const scene = parseScene(raw.scenes[i], i, warnings, errors);
+    const scene = parseScene(raw.scenes[i], i, warnings, errors, width, height);
     if (errors.length > 0) return null;
     if (scene === null) continue;
     if (sceneIds.has(scene.id)) {
@@ -1556,6 +1690,15 @@ function serializeTweens(tweens: ElementTween[]): Rec[] {
       keys: c.keys.map(serializeTweenKeyframe),
     })),
   }));
+}
+
+/** S130 — strict camera write: exactly the declared fields, declared
+ *  order — the camera block round-trips byte-stable like everything else
+ *  on the scene. */
+function serializeCameraKey(k: GraphicsCameraKeyframe): Rec {
+  const out: Rec = { tMs: k.tMs, zoom: k.zoom, tx: k.tx, ty: k.ty };
+  if (k.ease !== undefined) out.ease = k.ease;
+  return out;
 }
 
 /** Strict advisory write (D2): exactly the declared hint fields, declared
@@ -1677,6 +1820,9 @@ export function writeGraphicsDoc(doc: GraphicsDoc): string {
       const out: Rec = { id: s.id, narration: s.narration };
       if (s.durationMs !== undefined) out.durationMs = s.durationMs;
       out.background = s.background;
+      // S130 — the camera sits with the scene-level design fields, before
+      // the advisory routing block — declared order, byte-stable.
+      if (s.camera !== undefined) out.camera = s.camera.map(serializeCameraKey);
       // (D2) advisory block sits between the scene-level design fields and
       // the element list — declared order, byte-stable like the rest.
       if (s.routing !== undefined) out.routing = serializeRouting(s.routing);

@@ -67,6 +67,7 @@ import { frameCountOf } from "../anim/clock";
 import { evalEase } from "../anim/easing";
 import { evalAt } from "../anim/keyframe";
 import { estimateNarrationMs } from "../whiteboard/timing";
+import { cameraAt, type GraphicsCameraState } from "./camera";
 import type { ElementMotion, ElementTween, GraphicsDoc, GraphicsElement } from "./types";
 
 /** The v1 motion semantics — ONE source, cited by the pins and the design
@@ -126,6 +127,10 @@ export interface GraphicsFrameState {
   sceneId: string;
   /** the scene-local clock (ms into THIS scene) — what the composer renders against. */
   sceneTMs: number;
+  /** S130 — the scene camera's world→screen state, present ONLY when the
+   *  active scene carries a camera directive (absence keeps every
+   *  camera-less payload byte-identical — the additive-seam law). */
+  camera?: GraphicsCameraState;
   /** the active scene's elements in doc order, each at its frame state. */
   elements: GraphicsElementFrame[];
 }
@@ -303,23 +308,30 @@ export function frameAt(doc: GraphicsDoc, tMs: number): GraphicsFrameState {
   if (last === undefined) throw new Error("frameAt: the doc has no scenes — pass a validated GraphicsDoc");
   const total = last.endMs;
   const t = tMs < 0 ? 0 : tMs > total ? total : tMs;
-  let active: SceneClock = last;
+  let active: SceneClock | undefined;
   for (const clock of clocks) {
     if (t < clock.endMs) {
       active = clock;
       break;
     }
   }
+  if (active === undefined) active = last;
+  const sceneT = t - active.startMs;
+  // S130 — the camera resolves on the SCENE-LOCAL clock (the R-6 law: one
+  // scene resolution, one scene-local evaluation, one function call apart).
   return {
     sceneId: active.scene.id,
-    sceneTMs: t - active.startMs,
+    sceneTMs: sceneT,
+    ...(active.scene.camera !== undefined
+      ? { camera: cameraAt(active.scene.camera, sceneT) }
+      : {}),
     // R-6 (the S123 multi-scene pin): element motions are SCENE-LOCAL (the
     // validator's time-sanity law bounds every motion span by its own
     // scene's clock), so they evaluate against the scene-local clock —
     // passing the global doc time here made every scene after the first
     // skip its entrances (the motion windows clamped complete). The
     // single-scene suite could not see it; the multi-scene pin does.
-    elements: active.scene.elements.map((el) => elementFrame(el, t - active.startMs)),
+    elements: active.scene.elements.map((el) => elementFrame(el, sceneT)),
   };
 }
 

@@ -638,7 +638,7 @@ text{font-family:Arial,Helvetica,sans-serif}
 </style></head><body>
 <svg id="board" width="${doc.width}" height="${doc.height}" viewBox="0 0 ${doc.width} ${doc.height}" xmlns="http://www.w3.org/2000/svg">
 <rect x="0" y="0" width="${doc.width}" height="${doc.height}" fill="${scene.background}"/>
-${parts.join("\n")}
+${scene.camera !== undefined ? `<g id="gcam">${parts.join("\n")}</g>` : parts.join("\n")}
 </svg></body></html>`;
   return { html, missingAssets: [...(ctx.missingAssets ?? new Set<string>())].sort() };
 }
@@ -653,6 +653,7 @@ export function graphicsFramePayload(frame: GraphicsFrameState): string {
   return JSON.stringify({
     sceneId: frame.sceneId,
     sceneTMs: frame.sceneTMs,
+    ...(frame.camera !== undefined ? { camera: frame.camera } : {}),
     elements: frame.elements.map((e) => ({
       id: e.id,
       opacity: e.opacity,
@@ -746,6 +747,23 @@ export const APPLY_GRAPHICS_FRAME_FN = `(payloadJson) => {
       for (const img of g.querySelectorAll(":scope > image[data-frame]")) {
         img.setAttribute("display", Number(img.getAttribute("data-frame")) === el.frameIndex ? "" : "none");
       }
+    }
+  }
+  // S130 — the camera: one world→screen transform about the board's
+  // center, read as ATTRIBUTES (never layout — the applier's idempotency
+  // law holds). Absolute set; absent camera leaves the group untouched.
+  if (payload.camera) {
+    const gc = document.getElementById("gcam");
+    if (gc) {
+      const board = document.getElementById("board");
+      const cx = Number(board.getAttribute("width")) / 2;
+      const cy = Number(board.getAttribute("height")) / 2;
+      gc.setAttribute(
+        "transform",
+        "translate(" + cx + " " + cy + ") scale(" + payload.camera.zoom + ")" +
+        " translate(" + (-cx) + " " + (-cy) + ")" +
+        " translate(" + payload.camera.tx + " " + payload.camera.ty + ")"
+      );
     }
   }
   return true;
