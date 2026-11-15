@@ -543,14 +543,30 @@ export function seedMusicLibrary(
         // Row exists but file vanished (fresh clone / partial cleanup) → re-synthesize.
         if (!fs.existsSync(trackAbsolutePath(existing))) {
           const made = await synthesizeOriginal(def);
-          await db.musicTrack.update({ where: { id: existing.id }, data: { ...made, isActive: true } });
+          await db.musicTrack.update({
+            where: { id: existing.id },
+            data: {
+              filePath: made.filePath,
+              durationSec: made.durationSec,
+              fileSizeBytes: made.bytes, // mapped, never spread raw — `bytes` is not a schema field
+              isActive: true,
+            },
+          });
           created += 1;
         } else skipped += 1;
         continue;
       }
       if (existing && force) {
         const made = await synthesizeOriginal(def);
-        await db.musicTrack.update({ where: { id: existing.id }, data: { ...made, isActive: true } });
+        await db.musicTrack.update({
+          where: { id: existing.id },
+          data: {
+            filePath: made.filePath,
+            durationSec: made.durationSec,
+            fileSizeBytes: made.bytes, // mapped, never spread raw — `bytes` is not a schema field
+            isActive: true,
+          },
+        });
         created += 1;
         continue;
       }
@@ -838,6 +854,30 @@ export async function resolveMusicForVideo(
   }
   if (!track) return null; // render falls back to the inline niche drone
 
+  // THE FILE EXISTENCE WALL — a resolved ROW with a dead FILE is not a
+  // resolvable track. ffmpeg consumers hand trackAbsolutePath() straight to
+  // an -i flag; a vanished bed (fresh clone, cleaned scratch dir, moved
+  // repo) used to surface mid-render as a raw "Error opening input file
+  // ...<slug>.flac: No such file or directory". Heal what can be healed (the
+  // original beds are pure synthesis — re-synthesize in place), fall
+  // through to the next candidate when it can't, and return null when
+  // nothing usable remains (the documented drone fallback).
+  const healed = await healTrackFile(track);
+  if (healed) {
+    track = healed;
+  } else {
+    // Unhealable (an upload's file is gone, or the synth failed) — walk to
+    // the auto pick ONCE; nothing usable returns null, and the render falls
+    // back to the inline niche drone (the documented lane).
+    const fallback = await autoPickTrack(video.niche, video.audioDuration, mood);
+    const healedFallback =
+      fallback && fallback.id !== track.id ? await healTrackFile(fallback) : null;
+    if (!healedFallback) return null;
+    const deadName = track.name;
+    track = healedFallback;
+    why = '"' + deadName + '" file missing -> ' + (mood !== "auto" ? mood + " mood" : "auto mood-match") + ' "' + track.name + '"';
+  }
+
   return {
     track,
     gain: sliderToGain(video.musicVolume ?? settings.volume),
@@ -846,6 +886,51 @@ export async function resolveMusicForVideo(
     duckIntensity,
     why,
   };
+}
+
+/** The file-existence seam for one resolved row: a track whose FILE is on
+ *  disk returns as-is; a vanished ORIGINAL bed is re-synthesized from its
+ *  library def (the seed's repair lane, usable outside the seed's one-shot
+ *  memo); anything else (an uploaded file gone forever, a failed synth)
+ *  returns null — the caller decides the fallback. PURE boundary, no
+ *  candidate walk here. */
+async function healTrackFile(track: MusicTrack): Promise<MusicTrack | null> {
+  const abs = trackAbsolutePath(track);
+  if (fs.existsSync(abs)) return track;
+  musicLog.warn("resolved music track's file is missing — attempting heal", {
+    trackId: track.id,
+    name: track.name,
+    isOriginal: track.isOriginal,
+    path: abs,
+  });
+  if (!track.isOriginal) return null; // an upload's source file is unhealable
+  const def = ORIGINAL_LIBRARY.find((d) => d.name === track.name);
+  if (!def) return null;
+  try {
+    const made = await synthesizeOriginal(def);
+    const updated = await db.musicTrack.update({
+      where: { id: track.id },
+      data: {
+        filePath: made.filePath,
+        durationSec: made.durationSec,
+        fileSizeBytes: made.bytes, // the schema field — never spread `bytes` raw
+        isActive: true,
+      },
+    });
+    musicLog.info("re-synthesized the missing music bed in place", {
+      trackId: track.id,
+      name: track.name,
+      filePath: made.filePath,
+    });
+    return updated;
+  } catch (err) {
+    musicLog.error("the music bed heal failed", {
+      trackId: track.id,
+      name: track.name,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
 }
 
 const clampFade = (v: number) => (Number.isFinite(v) ? Math.min(8, Math.max(0.5, v)) : 1.5);

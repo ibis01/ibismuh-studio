@@ -20625,6 +20625,44 @@ await test("S136 the PATCH concurrency gate fires BEFORE the sweep (the route's 
   ok(editor.includes("expectedSceneVersion"), "the scene editor sends expectedSceneVersion (the 409 gate is reachable from the product)");
 });
 
+await test("S138 the music bed resolution never hands ffmpeg a dead file — the heal-or-fallback wall (source pins)", async () => {
+  // The user-facing incident: a render died with ffmpeg's "Error opening
+  // input file ...<slug>.flac: No such file or directory" because
+  // resolveMusicForVideo returned a ROW whose FILE had vanished (fresh
+  // clone, cleaned scratch dir, moved repo) — the redactor rendered the
+  // path as "/<token>.flac" in the dialog, hiding the root cause. The
+  // seed's vanish-repair lane ALSO carried a Prisma bug: data: { ...made }
+  // spreads `bytes`, which is not a schema field — Unknown argument, the
+  // repair 500s, files never heal. The wall now lives at the resolution
+  // boundary: verify, heal originals by re-synthesis, fall through to the
+  // auto pick, and only then return null (the documented drone fallback).
+  const src = await fsp.readFile("src/lib/tubeforge/music.ts", "utf8");
+  ok(
+    !src.includes("data: { ...made"),
+    "no seed/update lane spreads ...made raw into a Prisma data arg (the Unknown-argument bug is structurally banned)"
+  );
+  ok(
+    src.includes("fileSizeBytes: made.bytes"),
+    "every re-synthesis update maps bytes to the schema field fileSizeBytes"
+  );
+  ok(
+    src.includes("const healed = await healTrackFile(track);"),
+    "resolveMusicForVideo verifies the FILE before the track leaves the boundary"
+  );
+  ok(
+    src.includes("if (fs.existsSync(abs)) return track;"),
+    "an on-disk track passes through untouched (no synthesis churn for healthy rows)"
+  );
+  ok(
+    src.includes("if (!track.isOriginal) return null;"),
+    "an upload's vanished source file is unhealable — the wall says so, never invents one"
+  );
+  ok(
+    src.includes("const healedFallback ="),
+    "an unhealable pick falls through to the auto pick ONCE (the documented drone fallback stays the last resort)"
+  );
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
