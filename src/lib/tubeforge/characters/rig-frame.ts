@@ -94,7 +94,12 @@ export interface RigFrameState {
 /** One pose-timeline row: the pose held FROM tMs (compiled by the
  *  rig-director; compiled output only — the doc carries no timelines in v1,
  *  the compile-only law). `mouth` pins a gesture variant for the row's
- *  window (until the next row). */
+ *  window (until the next row).
+ *
+ *  K1-ext — `joints` (inline): an AUTHORED mocap row carries its own joint
+ *  state directly (the BVH adapter's output — authored DATA, senior to the
+ *  compiled gesture beats in the ladder). A row with joints overrides the
+ *  poseId channel; tweening lerps the inline states like sheet poses. */
 export interface RigPoseRow {
   tMs: number;
   /** The pose id (must exist on the sheet; `null` = rest). An unknown id
@@ -105,6 +110,8 @@ export interface RigPoseRow {
   ease?: EaseName;
   /** Gesture mouth override for this row's window (e.g. a smile). */
   mouth?: RigMouthSlot;
+  /** K1-ext — inline authored joints (mocap rows); they override poseId. */
+  joints?: Record<string, RigJointState>;
 }
 
 /** The compiled pose timeline for ONE scene (never persisted — beats are a
@@ -326,8 +333,15 @@ export function poseAt(
   }
   const row = rowIndex >= 0 ? rows[rowIndex] : null;
   const prevRow = rowIndex > 0 ? rows[rowIndex - 1] : null;
-  const prevPose = poseById(rig.poses, prevRow ? prevRow.poseId : null);
-  const targetPose = poseById(rig.poses, row ? row.poseId : null);
+  // K1-ext — inline authored joints override the pose channel (the mocap
+  // ladder's seniority: authored DATA > compiled beats > sheet poses). A
+  // synthetic pose carries the row's joints; pose resolution stays one call.
+  const targetPose: RigPose | null = row?.joints
+    ? { id: "__row__", name: "row", joints: row.joints }
+    : poseById(rig.poses, row ? row.poseId : null);
+  const prevPose: RigPose | null = prevRow?.joints
+    ? { id: "__row__", name: "row", joints: prevRow.joints }
+    : poseById(rig.poses, prevRow ? prevRow.poseId : null);
   const ease: EaseName = row?.ease && isEaseName(row.ease) ? row.ease : "ease-in-out";
   const u =
     row && tMs < row.tMs + POSE_TWEEN_MS

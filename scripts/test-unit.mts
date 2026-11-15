@@ -18243,6 +18243,156 @@ await test("S126 the lane wiring — the seven gates, the one-seam resolution, t
   ok(schema.includes("graphicsImports        GraphicsImport[]"), "the Video relation rides");
 });
 
+// ---------------------------------------------------------------------------
+// S125-ext (K1-ext) — the FreeMoCap sidecar adapter: the clean-room BVH
+// parser, the slot mapping, the authored-motion ladder seat (design:
+// docs/audits/external-six-repo-reception.md §2.6 — our parser, the
+// documented interchange format, no AGPL linkage).
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S125-ext the BVH sidecar (K1-ext)");
+
+import { buildMocapTimeline, mapJointToSlot, parseBvh } from "../src/lib/tubeforge/characters/bvh";
+
+const BVH_FIXTURE = `HIERARCHY
+ROOT Hips
+{
+  OFFSET 0 0 0
+  CHANNELS 6 Xposition Yposition Zposition Yrotation Xrotation Zrotation
+  JOINT Head
+  {
+    OFFSET 0 8 0
+    CHANNELS 3 Zrotation Xrotation Yrotation
+    End Site
+    {
+      OFFSET 0 6 0
+    }
+  }
+  JOINT LeftArm
+  {
+    OFFSET -5 4 0
+    CHANNELS 3 Zrotation Xrotation Yrotation
+  }
+  JOINT RightArm
+  {
+    OFFSET 5 4 0
+    CHANNELS 3 Zrotation Xrotation Yrotation
+  }
+  JOINT Tail
+  {
+    OFFSET 0 -2 0
+    CHANNELS 3 Xrotation Yrotation Zrotation
+  }
+}
+MOTION
+Frames: 6
+Frame Time: 0.0416667
+0 0 0 10 0 0 0 0 0 20 0 0 -20 0 0 0 0 0
+0 0 0 12 0 0 1 0 0 24 0 0 -24 0 0 2 0 0
+0 0 0 14 0 0 2 0 0 28 0 0 -28 0 0 4 0 0
+0 0 0 16 0 0 3 0 0 32 0 0 -32 0 0 6 0 0
+0 0 0 18 0 0 4 0 0 36 0 0 -36 0 0 8 0 0
+0 0 0 400 0 0 5 0 0 720 0 0 -720 0 0 10 0 0`;
+
+await test("S125-ext the BVH parser — the documented format, structure-strict, junk refuses", () => {
+  const r = parseBvh(BVH_FIXTURE);
+  ok(r.doc !== null, `the fixture parses: ${r.errors[0] ?? ""}`);
+  eq(r.doc?.joints.length, 5, "Hips + Head + LeftArm + RightArm + Tail");
+  eq(r.doc?.frames, 6, "the header's frame count rides");
+  approx(r.doc?.frameTimeMs ?? 0, 41.66667, 0.001, "the frame time converts to ms");
+  eq(r.doc?.joints[0]?.channels.length, 6, "the root carries 6 channels");
+  eq(r.doc?.joints[0]?.columnStart, 0, "the root owns columns 0..5");
+  eq(r.doc?.joints[2]?.columnStart, 9, "LeftArm starts after the root's 6 + Head's 3");
+  ok(r.doc?.motion[0] instanceof Float64Array, "the rows are numeric");
+  for (const junk of ["", "MOTION\nFrames: 1\nFrame Time: 0.01\n1", "HIERARCHY\nROOT Hips\n{\n CHANNELS 3 Xrotation Yrotation Zrotation\n}\nMOTION\nFrames: 2\nFrame Time: 0.01\n1 2 3"]) {
+    const j = parseBvh(junk);
+    ok(j.doc === null, "junk refuses");
+    ok(j.errors.length > 0, "the refusal names a reason");
+  }
+  const wideRow = BVH_FIXTURE.replace("0 0 0 10 0 0 0 0 0 20 0 0 -20 0 0 0 0 0", "0 0 0 10 0 0 0 0 0 20 0 0 -20 0 0 0 0");
+  const wide = parseBvh(wideRow);
+  ok(wide.doc === null && wide.errors[0].includes("values, the hierarchy declared"), "a row-width mismatch refuses");
+});
+
+await test("S125-ext the slot mapping — the ONE name table, unknown joints skip", () => {
+  eq(mapJointToSlot("Hips"), "torso", "Hips → torso");
+  eq(mapJointToSlot("LeftArm"), "arm-l", "LeftArm → arm-l");
+  eq(mapJointToSlot("RightArm"), "arm-r", "RightArm → arm-r");
+  eq(mapJointToSlot("Head"), "head", "Head → head");
+  eq(mapJointToSlot("Tail"), null, "an unmapped joint is honest about it");
+  eq(mapJointToSlot("left_forearm"), "forearm-l", "the separator-normalized alias rides");
+});
+
+await test("S125-ext the converter — deterministic, stride ≤ the compile wall, the band clamps, unmapped skips", () => {
+  const bvh = parseBvh(BVH_FIXTURE);
+  ok(bvh.doc !== null, "the fixture parses");
+  const slots = ["torso", "head", "arm-l", "arm-r"];
+  const a = buildMocapTimeline({ bvh: bvh.doc, rigSlots: slots, durationMs: 2000, fps: 24 });
+  const b = buildMocapTimeline({ bvh: bvh.doc, rigSlots: slots, durationMs: 2000, fps: 24 });
+  eq(JSON.stringify(a), JSON.stringify(b), "byte-identical conversion");
+  ok(a.timeline.rows.length > 0 && a.timeline.rows.length <= RIG_BUDGETS.timelineRows, `the compile wall holds (${a.timeline.rows.length} rows)`);
+  eq(a.mapped.sort(), ["arm-l", "arm-r", "head", "torso"], "the mapped slots ride");
+  ok(a.skipped.length === 0, "no skipped joints in this fixture (Tail maps to nothing and is not a rig slot)");
+  for (const row of a.timeline.rows) {
+    ok(row.tMs >= 0 && row.tMs <= 2000, "rows sit on the scene clock");
+    ok(row.joints !== undefined, "authored rows carry INLINE joints (the mocap ladder's data)");
+    for (const j of Object.values(row.joints ?? {})) {
+      ok(Math.abs(j.rotateDeg) <= 360, "the band clamps (the ±720 capture lands inside ±360)");
+    }
+  }
+  const last = a.timeline.rows[a.timeline.rows.length - 1];
+  eq(last?.joints?.["arm-l"]?.rotateDeg, 360, "the ±720 arm clamps to the band (the last frame's extreme)");
+  // A rig without some mapped slots skips honestly (the skip records
+  // joints whose slot maps but the rig lacks).
+  const narrow = buildMocapTimeline({ bvh: bvh.doc, rigSlots: ["torso"], durationMs: 2000, fps: 24 });
+  ok(narrow.timeline.rows.length > 0, "torso still maps (rows build)");
+  eq(narrow.skipped.sort(), ["Head", "LeftArm", "RightArm"], "the unmapped-for-this-rig joints are reported");
+  const propOnly = buildMocapTimeline({ bvh: bvh.doc, rigSlots: ["prop"], durationMs: 2000, fps: 24 });
+  eq(propOnly.timeline.rows.length, 0, "no slot overlap → no rows (the honest empty)");
+});
+
+await test("S125-ext the ladder seat — authored inline rows tween and outrank the pose channel", () => {
+  const timeline = {
+    durationMs: 2000,
+    rows: [
+      { tMs: 0, poseId: "arm-l-raise", joints: { torso: { rotateDeg: 0 } } },
+      { tMs: 1000, poseId: null, joints: { torso: { rotateDeg: 30 } } },
+    ],
+  };
+  const mid = poseAt(RIG_DOC, timeline, 1000 + POSE_TWEEN_MS / 2);
+  const torso = mid.parts.find((p) => p.id === "torso");
+  ok(torso, "the torso frame exists");
+  const rot = impliedRotation((torso as { matrix: Matrix6 }).matrix);
+  approx(rot, 15, 0.5, "inline rows tween between authored states (30° halves mid-tween)");
+  const settled = poseAt(RIG_DOC, timeline, 1000 + POSE_TWEEN_MS + 1);
+  const torso2 = settled.parts.find((p) => p.id === "torso");
+  approx(impliedRotation((torso2 as { matrix: Matrix6 }).matrix), 30, 0.01, "the authored state holds");
+  // The poseId channel is OVERRIDDEN by inline joints (a row carrying both
+  // uses its joints — authored DATA beats sheet references).
+  const conflict = {
+    durationMs: 2000,
+    rows: [{ tMs: 0, poseId: "arm-l-raise", joints: { torso: { rotateDeg: 0 } } }],
+  };
+  const f = poseAt(RIG_DOC, conflict, POSE_TWEEN_MS + 1);
+  const armL = f.parts.find((p) => p.id === "arm-l");
+  approx(impliedRotation((armL as { matrix: Matrix6 }).matrix), 0, 0.01, "the inline row wins over the poseId channel");
+});
+
+await test("S125-ext the sidecar wiring — the clean-room boundary, the route, the hook ladder (source pins)", async () => {
+  const route = await fsp.readFile("src/app/api/videos/[id]/character/mocap/route.ts", "utf8");
+  const hook = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  const bvhSrc = await fsp.readFile("src/lib/tubeforge/characters/bvh.ts", "utf8");
+  ok(bvhSrc.toLowerCase().includes("clean-room") && bvhSrc.includes("no linkage"), "the clean-room boundary is stated in the module");
+  ok(!/import\s+[^;]*freemocap/i.test(bvhSrc), "the module names the boundary, never imports it");
+  ok(!bvhSrc.includes("from \"freemocap\"") && !bvhSrc.includes("require('freemocap')"), "no FreeMoCap dependency, ever");
+  ok(route.includes("parseBvh"), "the route rides the clean-room parser");
+  ok(route.includes("scene-${sceneIndex}") || route.includes("`scene-${sceneIndex}`"), "the authored file keys by scene");
+  ok(route.includes("hostInScene"), "mocap rides cast scenes only (the continuity law)");
+  ok(hook.includes("character/mocap.json"), "the hook reads the authored-motion file");
+  ok(hook.includes("authoredTimeline"), "the ladder's authored rung rides the hook");
+  ok(hook.includes("authoredTimeline\n        ?"), "authored > compiled (the ladder order)");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

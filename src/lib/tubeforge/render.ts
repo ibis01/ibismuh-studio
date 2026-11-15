@@ -71,6 +71,7 @@ import {
 import { rigPlan } from "./character-rig";
 import { ensureRigClip } from "./characters/rig-render";
 import { planRigTimeline } from "./characters/rig-director";
+import { mouthSchedule as mouthScheduleFrom, type RigPoseTimeline } from "./characters/rig-frame";
 import { parseRigDoc, parseRigParts, type CharacterRigDoc, type RigPartArt } from "./characters/rig2d";
 import { sceneVoiceAnchors } from "./whiteboard/voice-anchors";
 import {
@@ -1030,12 +1031,28 @@ async function buildSegment(opts: {
         sceneDurationMs: sceneMs,
         asr: false,
       });
-      const rigPlanCompiled = planRigTimeline({
-        narration: scene.narration,
-        rig: opts.rig.rig,
-        durationMs: sceneMs,
-        anchors,
-      });
+      // K1-ext — the ladder's top rung: an AUTHORED mocap timeline (the
+      // BVH sidecar adapter's output, keyed scene-<n>) outranks the
+      // compiled gesture beats. Absent/corrupt → the compile stands (the
+      // byte-identical legacy path); the mouth schedule rides either way
+      // (a capture carries no speech — beat-sync stays the honest claim).
+      let authoredTimeline: RigPoseTimeline | null = null;
+      try {
+        const mocapBuf = await storage.get(`${opts.videoId}/character/mocap.json`);
+        const mocapBody = JSON.parse(mocapBuf.toString("utf8")) as Record<string, RigPoseTimeline>;
+        const authored = mocapBody[`scene-${scene.index}`];
+        if (authored && Array.isArray(authored.rows)) authoredTimeline = { durationMs: sceneMs, rows: authored.rows };
+      } catch {
+        authoredTimeline = null; // no capture — the compile owns the scene
+      }
+      const rigPlanCompiled = authoredTimeline
+        ? { timeline: authoredTimeline, speech: mouthScheduleFrom({ narration: scene.narration, anchors, durationMs: sceneMs }) }
+        : planRigTimeline({
+            narration: scene.narration,
+            rig: opts.rig.rig,
+            durationMs: sceneMs,
+            anchors,
+          });
       const [W, H] = OUTPUT_SIZES[aspect].out;
       const clip = await ensureRigClip(
         path.join(videoDir(opts.videoId), `scene-rig-${String(scene.index).padStart(2, "0")}.mp4`),
