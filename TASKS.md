@@ -1,0 +1,2411 @@
+# TubeForge — Stage 1 Task Backlog
+
+**Status:** Stage 1 audit complete; this is the implementation backlog.
+**Last updated:** 2026-11-01
+**Source:** `FOUNDATION_AUDIT.md` defects + `RISK_REGISTER.md` Stage 1 risks
+
+---
+
+## Execution status (updated 2026-11-01)
+
+All 19 tasks executed. Verification: `tsc --noEmit` clean · `eslint` 0 errors / 235 warnings (baseline) · 46 unit + regression tests pass · live dev-server smoke test green (202 create in 28 ms → scripted via background job; custom-script path 200; DELETE removes `uploads/<id>/`; security headers present; `params.n` → 400; research GET 404 shape correct).
+
+| Task | Status | Notes |
+|---|---|---|
+| T-1.1 restore scripts | ✅ Done | `scripts/backup.sh`, `scripts/auth-reset.mjs`, `scripts/package-local.sh` written, executable, backup tested against the live SQLite DB |
+| T-1.2 one package manager | ✅ Done | npm is PM of record; `bun.lock` deleted; `bun-types` → `@types/node` + `tsx`; test suite runs under Node (`scripts/test-unit.mts`); 46/46 pass |
+| T-1.3 fix `npm run setup` | ✅ Done | `setup` now delegates to the postinstall auto-detect logic; verified against SQLite |
+| T-1.4 ESLint rules | ✅ Done | Selected rules re-enabled at warn (235-warning baseline recorded); Next 16's `react-hooks/set-state-in-effect` warned with a note (17 pre-existing sites) |
+| T-1.5 CI | ✅ Done | `.github/workflows/ci.yml` — typecheck + lint + tests + Postgres schema compile on push/PR; optional Playwright job on PRs |
+| T-1.6 security headers | ✅ Done | CSP, nosniff, Referrer-Policy, Permissions-Policy, HSTS, COOP via `next.config.ts headers()`; verified live. XFO/frame-ancestors/COEP deliberately deferred to Stage 4a (preview-iframe caveat documented in the config) |
+| T-1.7 prisma migrate | ✅ Done | Baseline migration `prisma/migrations/000000000000_init/migration.sql` generated via `migrate diff` (266 lines) + `migration_lock.toml` |
+| T-1.8 setup race | ✅ Done | `TUBEFORGE_OWNER_TOKEN` gate in `POST /api/auth/setup`; documented in `.env.example` + SETUP.md |
+| T-1.9 jobbed script create | ✅ Done | `POST /api/videos` returns 202 in 28 ms (was 30 s+ blocking); `runScriptJob` wired; end-to-end verified — job ran, video landed `scripted` |
+| T-1.10 jobbed research/greenlight | ✅ Done* | Research: jobbed with new `research` JobKind + new `GET /api/research/[id]` poll endpoint + persisted scan errors; client polls. Greenlight: jobbed via `runScriptJob` with the radar brief + keyword union; client toast updated; detail dialog adopts the in-flight job. *Deviation: the character-bible route stays synchronous by design (~5-8 s, form-preview path has no entity id to job onto) — documented in the route; moves to the queue in Stage 3 |
+| T-1.11 zod validation | ✅ Done* | Full zod schemas on `PATCH channels/[id]`, `PATCH characters/[id]`, `PATCH schedule/[id]`; `PATCH videos/[id]` got length caps (description ≤5000, tags ≤500) with full zod conversion deferred to Stage 2 |
+| T-1.12 params.n validation | ✅ Done | zod `int().positive()` on storyboard/[n], slides/[n], stock/[n] (GET+POST); live-verified 400 on `abc` |
+| T-1.13 DELETE cleanup | ✅ Done | `DELETE /api/videos/[id]` removes `uploads/<id>/`; live-verified |
+| T-1.14 music seed off GET | ✅ Done | GET is a pure read returning `needsSeed`; the client seeds explicitly; live-verified |
+| T-1.15 strict mode + drift | ✅ Done | `reactStrictMode: true`; dead Tailwind v3 config left in place intentionally (v4 ignores it — deletion is cosmetic and deferred to avoid churn); VoiceProfile comment drift noted for the Stage 2 schema pass |
+| T-1.16 docs | ✅ Done | SETUP.md: studio access modes table, npm-only prerequisites, migrate deploy guidance; `.env.example` documents `TUBEFORGE_OWNER_TOKEN` |
+| T-1.17 Playwright | ✅ Done | Kept (it is a runtime dep for slides rendering, not dead weight); added `@playwright/test` + `playwright.config.ts` + `e2e/smoke.spec.ts` (3 tests incl. a security-header assertion) + `npm run test:e2e`; wired as an optional CI job |
+| T-1.18 docs in repo | ✅ Done | Already in place from the audit sprint |
+| T-1.19 SECURITY.md | ✅ Done | Already in place from the audit sprint |
+
+Risks closed this session: R-CRIT-3, R-HIGH-1, R-HIGH-2, R-HIGH-3, R-HIGH-11, R-HIGH-28 (partial), R-MED-1, R-MED-8, R-MED-9, R-MED-10, R-MED-11, R-MED-12, R-MED-14, R-MED-15, R-LOW-4, R-LOW-5, R-LOW-6, R-LOW-7 (+ partial R-HIGH-4 recorded as a documented deviation, R-LOW-1/R-LOW-2 deferred with rationale). Stage 2 closes the remaining CRITICAL pair (R-CRIT-1, R-CRIT-2).
+
+---
+
+## Stage 2 execution status (updated 2026-11-01)
+
+**R-CRIT-1 + R-CRIT-2 closed.** Verification: `tsc --noEmit` 0 errors · `eslint` 0 errors (242 warnings baseline) · 49/49 unit tests (3 new crypto tests) · **7/7 cross-tenant isolation e2e tests green** (`e2e/isolation.spec.ts` — two independent accounts: list/read/mutate/delete/settings/jobs isolation + default-deny 401s + server-side session revocation) · agent-browser golden path verified (UI registration → studio shell, no console errors).
+
+| Area | Status | Notes |
+|---|---|---|
+| Prisma schema (PG + SQLite) | ✅ | `User`, `Organization`, `Membership`, `Session`, `UserSetting`, `YouTubeAccount`, `ProviderCredential`, `LegacySetting`; `organizationId` + cascade + index on all 10 content models; `schema.sqlite.prisma` now GENERATED from `schema.prisma` (`scripts/sync-sqlite-schema.mjs`) — the mirror can never drift again |
+| Migration | ✅ | Postgres: `20261101000000_stage2_multiuser` (backfill via `DEFAULT 'default'` + `DROP DEFAULT`, `Setting`→`LegacySetting` RENAME, bootstrap org, partial unique owner index, `Membership_one_owner_per_org`). SQLite: `scripts/migrate-stage2.mjs` (3-phase, idempotent; wired into `setup:local` + `postinstall`) |
+| Claim flow | ✅ | First registrant on a legacy install must prove the OLD studio password (`POST /api/auth/register` + `legacyPassword`); `src/lib/tubeforge/claim.ts` migrates every LegacySetting row (yt* → YouTubeAccount w/ encrypted refresh token; ai.*/tts keys → ProviderCredential encrypted; everything else → UserSetting) and transfers all content from org `default` to the claimer's org |
+| Tenant guard | ✅ | `src/lib/tubeforge/tenant-db.ts`: Prisma `$extends` client injecting `organizationId` (reads/writes/creates/upserts) from the request context; `requireUser()`/`auth.enter()` (ALS) + `requireRole()`; ESLint rule `no-restricted-imports` blocks raw `@/lib/db` imports in `src/app/**` (auth bootstrap allow-listed) |
+| Auth | ✅ | register/login/logout/status/token/verify-email/reset-password; PBKDF2 (same hash format — legacy `auth.password` migrates verbatim); server-side `Session` rows (7-day, revocable — revocation verified by e2e); signed OAuth state tokens (scope `"state"`, never credentials) |
+| Default-deny middleware | ✅ | §6.3 model: public allow-list = the 6 auth endpoints + `/api/youtube/callback` (Google redirect); everything else 401s without a session; production fail-safe on missing `TUBEFORGE_AUTH_SECRET` |
+| Secrets at rest | ✅ | `crypto.ts` AES-256-GCM (`v1.` format, per-record IV) on ProviderCredential.apiKey + YouTubeAccount refresh/access tokens; unit tests pin roundtrip + tamper detection |
+| Per-user settings | ✅ | All 26 former `db.setting` access points migrated (llm/tts/budget/quality/music/stock/analytics/providers/​zai-config + settings/youtube routes); caches keyed per user; stock keys + provider keys → ProviderCredential |
+| Jobs | ✅ | Job rows carry `organizationId`/`userId`; boot recovery runs context-free (`withCtxNull`); job bodies inherit the launching request's tenant (ALS) |
+| GDPR | ✅ | `GET /api/account/export` (JSON bundle; secrets as presence markers), `POST /api/account/delete` (`confirm:"DELETE"` wipes org + sessions + uploads trees) |
+| Client | ✅ | `auth-gate.tsx` rewritten: register/sign-in modes, legacy-claim field on first registration, in-background email verification (console mode) |
+
+**Documented deviations (carry to Stage 3):**
+1. Email delivery is console-mode (`TUBEFORGE_EMAIL_MODE=console` default): verification/reset links are logged + returned in the response; SMTP adapter + production email is Stage 3.
+2. The bundled Z.ai SDK stays a PLATFORM-level credential (single `.z-ai-config` gateway); per-user zai rows migrate for owner continuity but per-user Z.ai isolation arrives with the Stage 3 provider abstraction. Non-zai provider keys are fully per-user + encrypted.
+3. `ytClientId`/`ytClientSecret` prefer env (`TUBEFORGE_YT_CLIENT_ID/SECRET`); the claiming owner's migrated rows serve as fallback (same exposure model as the old Setting rows — documented).
+4. Redis for session state / rate-limit buckets / login lockouts is deferred (in-memory + DB-backed Session rows survive restarts — the roadmap's D-20/D-21 goal is met by the Session table); Redis pacing for budget.ts lands in Stage 3.
+5. `Video`↔`YouTubeAccount` publish attribution relation deferred to Stage 6 (publish wiring); YouTubeAccount.channelId uses a `legacy` placeholder until reconnect for migrated connections.
+6. `LegacySetting` drop scheduled for Stage 3 (two-step removal kept data safe through the transition).
+
+---
+
+## Stage 3 task backlog (defined 2026-11-01 — executing now)
+
+### Execution status (updated 2026-11-01, part 2 — T-3.7 through T-3.12 complete)
+
+**All 12 Stage 3 tasks done.** Verification: `tsc --noEmit` 0 errors · `eslint` 0 errors (262-warning baseline) · **64/64 unit tests** (6 new storage + 2 new email) · **7/7 cross-tenant isolation e2e green** · 4/4 smoke e2e (incl. security headers) · live dev-server smoke: register 201 → `GET /api/account/usage` 200 with correct aggregates → video create 202 → DELETE 200 → 404 after · per-user Z.ai key PUT→GET roundtrip (encrypted at rest, masked readback) verified live.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-3.7 storage abstraction | ✅ Done | `src/lib/tubeforge/storage.ts`: key API (put/putFromPath/get/readStream/stat/delete/removePrefix/presign/materialize/withLocalFile/scratchDir). LocalDisk default (key = historical uploads layout — ZERO data migration); s3 driver is a zero-dep SigV4 signer over fetch (path-style, R2/MinIO compatible). Per-org quota counter (`StorageUsage` model, `TUBEFORGE_STORAGE_QUOTA_GB`, default 10 GiB, O(1) on put). All ~20 `UPLOAD_ROOT` call sites migrated (ai/render/shorts/story/serialize/verify/convert/captions/voice/voice-preview/stock/qc/music/queue-handlers + mp4/export/thumbnail/variants/voiceover/script/short/stock/music routes). `GET mp4` 302s to a presigned URL under s3 (D-24 closes the ROADMAP way). Asset presence in DTOs moved to DB flags (`Video.hasPreview` added) — the fs probes lied under s3 and cost a stat per row. |
+| T-3.8 UsageRecord | ✅ Done | `aiCall()` meters every AI call (capability, provider+model from the user's config, latency, ok) — fire-and-forget, never breaks a pipeline; token/cost columns are wired for provider-level reporting. `GET /api/account/usage?days=N` aggregates per capability + daily sparkline + storage footprint. |
+| T-3.9 SMTP email | ✅ Done | `src/lib/tubeforge/email.ts`: console default (link logged + returned) / smtp via env — a zero-dependency ESMTP client (EHLO/STARTTLS/implicit-TLS-465/AUTH LOGIN/dot-stuffing, 15s step timeouts, header-injection guard). register + reset-password routes deliver through it; smtp responses never echo the link. Closes Stage 2 deviation 1. |
+| T-3.10 per-user Z.ai | ✅ Done | `src/lib/tubeforge/zai-client.ts`: the acting user's zai ProviderCredential (AES-256-GCM) wins — capability-preferred, any-capability fallback — else the platform client. The SDK's file-only config surface is handled with a per-(user,key-hash) client cache + GLOBAL MUTEX around the write→create critical section. `saveCapability` now stores zai keys (the Stage 2 "platform-level only" carve-out is gone); the Settings UI gained the optional per-account Z.ai key field; caches invalidate on save. Closes Stage 2 deviation 2. |
+| T-3.11 LegacySetting close-out | ✅ Done | Model removed from the schema (table now UNMANAGED — prisma neither creates nor drops it); claim.ts reads via raw SQL (tolerates the table's absence on fresh installs) and DROPs the table once every row is migrated. The migrate-stage2 RENAME path is untouched so unclaimed legacy installs still upgrade safely. Closes Stage 2 deviation 6. |
+| T-3.12 deploy pipeline | ✅ Done | `Dockerfile` (node:20-slim + ffmpeg/tini, one image → web/worker roles, non-root, healthcheck) · `docker-compose.yml` (postgres + web + worker, `prisma migrate deploy` on web start, `--scale worker=N`, shared uploads volume) · `fly.toml` (web/worker process groups, checks, sizing) · SETUP.md §7 production matrix (Compose / Fly / Vercel+worker hybrid, storage local-vs-S3 table, email modes, ops quick reference). |
+
+**Regressions caught & fixed by the final sweep** (the async migration of `serializeVideo`/`serializeScenes` and the media readers): the GET /api/videos list emitted `[{}]` (unawaited Promises serialize to `{}`), and two `promoteVariant` try/catch blocks could not see async throws. All call sites awaited / Promise.all'd; the 7/7 isolation suite re-verified green. tsc cannot catch this class (NextResponse.json accepts any) — noted for future async-ification work: grep call sites, then run the e2e list assertions.
+
+**Known scope notes (honest):**
+1. UsageRecord tokens/cost stay 0 until providers report usage in their responses (chat completions expose `usage`; tts/image do not) — the metering spine (per-call rows, latency, success, provider attribution) is what Stage 4's billing pivots on.
+2. The s3 driver is unit-tested for key hygiene + local parity; live S3 roundtrips need a bucket (CI job with MinIO is a natural Stage 4 addition). SigV4 signing follows the AWS spec; presigned URLs cap at the S3 7-day maximum.
+3. SMTP delivery is protocol-tested against the spec; a live relay check belongs to first production bring-up.
+4. Per-user Z.ai client cache is in-process (max 64 users/process, evicted wholesale) — fine at current scale, revisit with Redis in Stage 5 if needed.
+
+**Sandbox constraint noted up front:** this environment has ffmpeg + network but **no Redis and no Docker**. Stage 3's Redis-backed items are therefore built against a **DB-backed durable queue** (same semantics: claims, retries, backoff, cross-process cancellation, per-org caps — implemented with atomic `UPDATE ... WHERE status='pending'` claims that work on SQLite *and* Postgres). The `QueueDriver` seam stays one interface wide so a BullMQ/Redis driver can be dropped in when infrastructure is provisioned. S3/storage, SMTP and deploy-pipeline tasks ship as code-complete drivers + docs that activate purely via env vars.
+
+### Execution status — Stage 3 close-out (updated 2026-11-01, part 3 — durable resume for EVERY kind)
+
+The "backlog continues next session" item from part 2 is done: every JobKind the routes actually start now has a DB-derivable handler, so a process crash resumes the stage instead of marking it "interrupted". Verification: `tsc --noEmit` 0 errors · `eslint` 0 errors (257-warning baseline, −5) · **66/66 unit tests** (2 new queue units) · **queue integration test PASS** (three phases: registry completeness, payload roundtrip incl. corrupt-payload degradation, real-worker restart recovery incl. per-scene dispatch + honest interruption) · **11/11 Playwright e2e** (7 isolation + 4 smoke) · live smoke: register → custom-script create → voiceover URL-mode job → durable payload confirmed in the Job row → readable failure surfaced → guards intact → DELETE.
+
+| Change | Notes |
+|---|---|
+| `Job.payload` column | New TEXT column (migration `20261101070000_stage3c_job_payload`, Postgres + SQLite mirror + `db push`). Routes store their request-scoped options at enqueue; the crash-recovery handler re-runs the job with the SAME choices. Plain TEXT (not Json) so both providers behave identically. |
+| `startJob(entityId, kind, fn, { payload })` | Optional 4th arg, backward compatible — the 22 existing call sites kept working; the routes that HAVE request options now pass them. |
+| `video-jobs.ts` (new) | 11 extracted job bodies: voiceover (TTS + custom url/upload), storyboard (full), scene (re-roll/AI-edit), render (mode/subtitles/music/sceneLimit), short, convert, verify, comments, thumbnail, variants, slide. Route closures and the crash handler call the SAME function — one implementation, two entry points, no drift. Uploaded voice bytes are staged into object storage BEFORE enqueue (a request buffer cannot survive a restart; a storage key can) and cleaned up after ingest. |
+| `character-jobs.ts` (new) | portrait + poses job bodies, derived entirely from the character row. |
+| Per-scene stock fix | A crashed per-scene stock job (`entityId "<videoId>#scene<N>"`) used to resume as a SILENT NO-OP (the handler passed the composite id to `runStockRefresh`, whose findUnique came back null). New `runStockSceneJob` + entityId dispatch — caught by a regression probe in the queue test. |
+| `queue.ts` | `JobHandler` now receives `(entityId, payload)`; payload parsed once at claim (corrupt JSON degrades to null, never kills the job); `setClaiming()` for test/drain control; `voiceover`/`variants`/`poses` capped at 1 attempt (multi-call AI stages whose calls already retry internally — same rationale as `script`). |
+| `upload` stays unregistered | The ONLY kind without a handler — YouTube publishing wiring is Stage 6 and nothing enqueues it today; a crashed row interrupts honestly (pinned by test). |
+
+### Execution order (dependency-sorted)
+
+| Task | Objective | Dependencies |
+|---|---|---|
+| T-3.1 | This backlog | — |
+| T-3.2 | Structured JSON logging (`log.ts`, pino-format lines, zero-dep) | — |
+| T-3.3 | Cross-platform zombie reaper (D-10 — kill the Linux-only `/proc` dependency) | — |
+| T-3.4 | Per-capability provider timeout matrix (D-09 — replace the flat 5-min timeout; fix `youtube.ts` direct-fetch bypasses) | — |
+| T-3.5 | Durable job queue: `Job` schema columns + claim loop + retries w/ backoff + DB-persisted cancellation + per-org render caps + boot re-enqueue for DB-derivable kinds + standalone worker entry (`npm run worker`) | T-3.2 |
+| T-3.6 | Streaming media delivery (D-23/D-24 — `mp4` route streams from disk w/ Range in constant memory; `export` zip composed per-file instead of whole-folder buffers) | — |
+| T-3.7 | Storage abstraction (`storage.ts`): key-based API (`put/get/stat/delete/readStream/presign`), LocalDisk driver (default) + S3 driver (env-gated), quotas on `put`; migrate the ~20 `UPLOAD_ROOT` call sites | T-3.6 |
+| T-3.8 | `UsageRecord` cost tracking: every `aiCall` recorded per-user/per-capability; `GET /api/account/usage` aggregate | T-3.5 |
+| T-3.9 | SMTP email adapter (`email.ts` drivers: console default, smtp via env) — closes Stage 2 deviation 1 | — |
+| T-3.10 | Per-user Z.ai provider isolation (provider abstraction resolves the acting user's credential) — closes Stage 2 deviation 2 | T-3.4 |
+| T-3.11 | `LegacySetting` lifecycle close-out — closes Stage 2 deviation 6 | — |
+| T-3.12 | Deploy pipeline: Dockerfile (standalone), docker-compose (app+worker+PG), `fly.toml`, SETUP.md production matrix | T-3.5 |
+
+**Completion gate (roadmap):** a video job survives an application restart, resumes safely where possible, and its assets reach the correct user. ✅ CLOSED — see "Stage 3 close-out" below (every kind the routes start is now resumable).
+
+---
+
+## Stage 4a task backlog (defined 2026-11-01 — executing now)
+
+**Scope:** premium UX for the core 5 surfaces (Dashboard, Project creation, Script editor, Storyboard, Scene editor) + the design-system foundation the roadmap requires (tokens, keyboard model, loading/error states, responsive). Survey finding that shapes the plan: *the data layer is ahead of the UI* — per-video YouTube stats, published/failed counts, QC reports and per-scene stock data all exist in DTOs but are not surfaced; and the detail dialog (2,643 lines, 3 overloaded tabs) is where script/storyboard/scene work actually happens.
+
+**Carry-in defect (found during survey):** two raw-`fs` media paths in `src/app/api/videos/[id]/route.ts` (script-artifact invalidation in PATCH, media-tree cleanup in DELETE) bypass the T-3.7 storage abstraction — under the s3 driver they silently no-op (DELETE leaks the whole `<id>/` prefix, quota never decremented). `storage.removePrefix()` was built for exactly this and never wired.
+
+| Task | Objective | Dependencies |
+|---|---|---|
+| T-4.0 | Migrate the two raw-`fs` sites in `PATCH/DELETE /api/videos/[id]` to `storage.remove()`/`removePrefix()` (driver-correct, quota-decrementing) | — |
+| T-4.1 | Design-system foundation: semantic tokens + utility classes in `globals.css`; shared primitives (`Kbd`, `Sparkline`, `TrendDelta`…); `useHotkeys` + ⌘K command palette + `?` shortcut sheet; store palette state | — |
+| T-4.2 | Dashboard redesign: performance KPI row (views/likes/comments + 7-day delta, from new `GET /api/stats` aggregates over VideoStat), published/failed surfaced, quick-start actions, continue-where-you-left-off, clickable recent projects + activity rows, richer chart | T-4.1 |
+| T-4.3 | Project creation → guided brief: 4-step wizard (Concept → Format → Voice & art → Destination & launch) with per-step validation, localStorage draft autosave + restore, review summary; production line untouched | T-4.1 |
+| T-4.4 | Script editor as a real tab in the detail dialog (both formats): classic = editable script w/ autosave + undo/redo + word count/est duration + preserve-artifacts option; story = per-scene narration/caption editing (needs `narration` on `PATCH /api/videos/[id]/scenes` w/ script-equivalent invalidation), timing, narrative-structure strip, emotional-progression map, ASR accuracy panel | T-4.1 |
+| T-4.5 | Storyboard polish: density toggle (grid ↔ filmstrip), explicit per-scene status chips (art ready / re-rolling / stock / slide), timing bars, keep every existing action | T-4.1 |
+| T-4.6 | Scene editor upgrade: narration + caption fields, before/after compare for AI edits, in-dialog regeneration progress (poll inside the dialog instead of closing it) | T-4.4 |
+| T-4.7 | Cross-cutting sweep: responsive (390px) verification, WCAG AA contrast on new surfaces, loading/error/empty states, e2e additions, docs | all |
+
+**Documented deviations (up front):**
+1. **Fact-check side panel with source URLs is deferred.** `ResearchIdea` carries no source URLs (LLM-synthesized radar: title/angle/keywords/volume/competition/score) and `Video` has no research linkage — there is no source data to link out to. The Script tab ships the **ASR accuracy panel** (existing `verify.ts` report) as its accuracy surface instead; real citation-backed fact-checking needs research-with-sources (Stage 5+ server work).
+2. **Drag-reorder / add-delete scene stays in Stage 6** (roadmap puts the scene timeline there); 4a polishes layout, status and per-scene controls.
+3. **Per-scene voice re-synthesis stays in Stage 6** (roadmap: "re-synthesizes only that scene's voiceover"); 4a's narration edit invalidates stale voiceover via the existing full-run semantics and the UI says so.
+4. **MDX-style markup** is not introduced; the script editor is structured per-scene text (the product's scripts are plain narration + scene metadata, not rich docs).
+
+**Completion gate (roadmap):** Dashboard, Project creation, Script editor, Storyboard, Scene editor feel like an established professional creative product (SUS ≥ 75 with 5 internal users — not measurable in this sandbox; verified instead by live browser review + e2e assertions).
+
+### Execution status (updated 2026-11-01, part 4 — Stage 4a complete)
+
+**All 8 tasks done.** Verification: `tsc --noEmit` 0 errors · `eslint` 0 errors (262-warning baseline) · **67/67 unit tests** (+1 storage list) · **14/14 Playwright e2e** (7 isolation + 4 smoke + **3 new premium-ux**: ⌘K palette filter+navigate, wizard gating+draft roundtrip, Script-tab autosave write-through) · live agent-browser pass at 1440px and 390px (dashboard / wizard / dialog: no horizontal overflow, mobile nav sheet intact) with a seeded story video exercising the Script tab end-to-end (narration edit persisted; stale-voiceover invalidation flipped hasVoiceover/hasVideo).
+
+| Task | Status | Notes |
+|---|---|---|
+| T-4.0 storage migration finish | ✅ Done | Found during survey: the script-invalidating PATCH and DELETE in `videos/[id]` were raw `fs` with PRE-T-3.7 file names (render.mp4, scene-N-clip.*) — silently no-op under s3, wrong files locally; `invalidateRenderedArtifacts`/`invalidateSlidePngs`, the whole characters module (portrait/poses read/write/list), brand-logo GET/POST/DELETE, `clearStock` and the voiceover-job stale-render wipe were all raw fs too. All migrated behind a new `storage.list(prefix)` primitive (local recursive readdir + s3 ListObjectsV2 w/ continuation tokens); DELETE uses `removePrefix` (quota-decrementing). |
+| T-4.1 design system | ✅ Done | `--tf-*` semantic tokens (AA text hierarchy, hairlines, surfaces, status, motion) + utilities (`.tf-card/-hover/.tf-kicker/.tf-num/.tf-focusable/.tf-scroll/.tf-fade-x/.tf-kbd`); shared primitives `Kbd/Dot/Sparkline/TrendDelta/SkeletonRows/compactNumber`; `useHotkeys` (typing-target suppression, React-compiler-safe ref updates); ⌘K command palette (actions + 9 views + recent videos w/ status badges, ↑↓/↵ navigation, group headers) + `?` shortcut sheet + top-bar Search trigger. |
+| T-4.2 dashboard | ✅ Done | `GET /api/stats` gains a `performance` block over VideoStat snapshots (views/likes/comments totals, **stable-cohort 7-day delta** — a freshly-synced back catalog can't fake growth —, 7-point cumulative series, syncedVideos). Dashboard: quick-start hero (Generate/Research CTAs + one-tap topic chips on a fresh install), Published KPI (+failed sub-line), performance strip (sparkline + TrendDelta), Continue-where-you-left-off, clickable Recent Projects grid (thumb/status/duration/views), activity rows drill into their video, chart aria-label + hover titles, Failed pipeline segment. |
+| T-4.3 guided brief | ✅ Done | Left card → 4-step wizard (Concept → Format → Voice & art → Launch) with clickable step rail, per-step gating, Back/Next, "Your brief" review chips on the launch step, series batch in Destination; localStorage draft autosave (debounced, never mid-run, cleared once the video exists) + amber restore banner + Discard; production line untouched. |
+| T-4.4 Script tab | ✅ Done | Dialog tabs: story = Package\|Script\|Storyboard\|Video (Script default before artifacts), classic = Package\|Script. Story: narrative-structure strip (hook/context/escalation/payoff + rehook pivots, click-to-jump) + emotional-progression map + `SceneScriptCard`s (autosaving narration+caption, per-scene words/est-seconds, structure/mood badges). Classic: autosaving editor + ⌘Z chunk-undo (25 deep) + "typo fix only" preserve toggle. ASR accuracy check moved here. Server: `narration` on `PATCH /scenes` with script-equivalent invalidation + `{invalidated}` response. **Hooks-order regression caught live and fixed** (new hooks must sit above the dialog's early return). |
+| T-4.5 storyboard polish | ✅ Done | Grid ↔ filmstrip density toggle (snap-scroll + edge fade); explicit status chips (Painting…/Slide/Stock·source/Art ready/Awaiting art); per-scene ≈s + share-of-spoken bar; header ≈ total spoken; every existing action preserved. |
+| T-4.6 Scene Studio | ✅ Done | Narration + caption editors ride the existing Save (invalidated-voiceover toast via the T-4.4 contract); re-roll/AI-edit/upload keep the dialog open with an in-place "Repainting…" overlay (local 3s poll) and a uniform Before/After compare over the art. |
+| T-4.7 cross-cutting | ✅ Done | 3 new e2e tests (above); 390px responsive sweep (dashboard/wizard/dialog: no overflow); AA-checked tokens power every new surface; `bun.lock` drift re-deleted + gitignored (T-1.2 hygiene). Deviations 1–4 stand as documented. |
+
+**Known scope notes (honest):**
+1. The narration invalidation semantics are whole-voiceover (Stage 6 adds per-scene re-synthesis); the UI says so at every narration edit.
+2. `sceneEstimate`'s 156-wpm model is an estimate — the TTS render remains the timing source of truth (the QC gate checks real duration).
+3. The premium-ux e2e suite covers the classic Script-tab path (deterministic, no AI); the story scene-card path was verified live with a seeded script (`scripts/seed-story-scene.mjs`) because story seeding needs DB access the API deliberately doesn't expose.
+
+---
+
+## Stage 4b task backlog (defined 2026-11-01 — executing now)
+
+**Scope:** premium UX for the remaining 5 surfaces (Research workspace, Character management, Voice studio, Render management, Analytics) on top of the Stage 4a design system. Survey finding: **voices are the most fragmented surface** — the catalog is scattered across three picker sites plus a per-video dialog tab, and there is no Voice view at all; **render management** lives inside a 3,206-line dialog with a plain-list QC report and a bare "Export" link, while the cross-video queue is a static Settings panel; **research and analytics** are solid but one panel short of the roadmap (niche pulse / niche trends); **characters** have the studio but no readiness or cast-usage surfacing.
+
+| Task | Objective | Dependencies |
+|---|---|---|
+| T-4.8 | Research workspace: idea toolbar (sort by viral score / volume / length; competition filter), session insight header (best score, avg, competition split), "Niche pulse" panel aggregating recent scans (ideas per niche, avg score, top keywords), scan history 10→25; every existing action (scan / poll / delete / greenlight / classic-script) preserved | — |
+| T-4.9 | Character management: roster cards gain an identity-readiness strip (portrait / poses / anchor); CharacterStudio gains a "Cast in" section (recent videos casting the character, server-provided, click-through to the library dialog); voice assignment keeps the inline ▶ preview; every existing action preserved | — |
+| T-4.10 | Voice studio (**NEW VIEW** + sidebar / palette / store wiring): one catalog grid — built-in studio voices + cloned profiles with audition playback everywhere; the clone form (upload / URL, name, sample text) moves from the per-video dialog to the studio (the dialog keeps a deep-link); clone delete + re-audition; "where it's used" hints | — |
+| T-4.11 | Pronunciation controls: per-user word→say-as map (`UserSetting voice.pronunciations`), applied server-side at TTS synthesis time (classic script, per-scene story, studio preview) with a live test row in the Voice Studio; map validated (≤100 entries, sane characters) | T-4.10 |
+| T-4.12 | Render management: the QC report becomes a grouped scorecard (video / audio / captions, three-state chips); export gains a contents summary of the bundle; the Settings "Background Jobs" panel becomes a live queue (auto-refresh while jobs run, kind filter, cancel for running jobs, honest interrupted/failed states) | — |
+| T-4.13 | Analytics: `niches` block in `AnalyticsOverviewDTO` (per-niche views / engagement / video count, server aggregate) + a "Niche trends" card; the per-video table gains client-side sort (views / engagement / delta); every existing stat and action preserved | — |
+| T-4.14 | Cross-cutting sweep: 390px responsive verification across the 5 surfaces, WCAG AA on new panels, e2e additions (voice catalog + pronunciation roundtrip; research toolbar; analytics niche block), docs, TASKS.md + worklog close-out | all |
+
+**Documented deviations (up front):**
+1. **Continuity checks (VLM character-consistency scoring) stay in Stage 5** (roadmap module C). Stage 4b ships the character *surface* (readiness strip + cast usage); the VLM comparison is a server capability that does not exist yet.
+2. **Pronunciation is a global per-user map** applied at synthesis time; per-scene pacing ("voice timing", roadmap Stage 5 E) is out of scope here.
+3. **Render "queue"** — the durable DB queue already exists (Stage 3); T-4.12 upgrades its *presentation* (live panel, cancel, filters), not the queue machinery.
+4. **Niche trends** are aggregates over the user's own videos and scans — there is no external trend API to cite; research-side trends are the Topic Radar "niche pulse" over recent scan history.
+
+**Completion gate (roadmap):** all 10 surfaces redesigned under one design system, mobile responsive (SUS ≥ 75 with 5 internal users — not measurable in this sandbox; verified by live browser review + e2e assertions instead).
+
+### Execution status (updated 2026-11-01, part 5 — Stage 4b complete)
+
+**All 7 tasks done, plus one CRITICAL pre-existing regression found by the sweep and fixed live.** Verification: `tsc --noEmit` 0 errors · `eslint` 0 errors (266-warning baseline) · **70/70 unit** (+3: two pronunciation, one tenant-db scope pin) · **19/19 Playwright e2e** (7 isolation + **1 NEW previously-unscoped-models isolation** + 4 smoke + 3 premium-4a + **4 NEW premium-4b**) · live agent-browser pass at 1440px and 390px across all five surfaces with seeded data (`scripts/seed-4b.mjs` — two research sessions at mixed competition levels, three published videos × two snapshot days across two niches, one cast character with assigned videos).
+
+| Task | Status | Notes |
+|---|---|---|
+| T-4.8 research workspace | ✅ Done | Idea toolbar (sort: viral/volume/length; competition filter with counts), session insight chips (Best + title, Avg, competition split), "Niche pulse" left-rail card (ideas + avg viral score per niche, recurring keywords counted once per scan), scan history 10→25 (API cap raised; list capped at 8 with an "+N older" note). Live-verified: filter → 2 cards, insights + pulse render, no 390px overflow. |
+| T-4.9 character management | ✅ Done | `CharacterDTO.recentVideos` (≤4, newest first); the list route computes them in ONE grouped query (≤4 per character), single-character routes via `recentVideosFor()` scoped by the character's own organizationId. Roster cards gained an identity-readiness strip (Portrait / n-of-3 poses / Bible); the studio gained a "Cast in" section (thumb, title, status chip, click-through → library detail dialog, "+N earlier" note). Live-verified end-to-end including the click-through (h1 flips to "Video Library"). |
+| T-4.10 voice studio | ✅ Done | **NEW VIEW** (store ViewId + sidebar + command palette + VIEW_META wired): one catalog grid — studio voices + clones with ▶ auditions (provider previews via the shared preview cache; clones with cached clone-time previews), "where it's used" chips (default narrator star + characters cast on the voice), one-click "Set default narrator" (PUT /api/settings). The clone form (upload **or direct link**, name, sample text) moved here from the per-video dialog; the dialog's clone tab gained a deep-link. Clone library rows: instant cached audition + delete. |
+| T-4.11 pronunciation | ✅ Done | `pronounce.ts`: per-user word→say-as map on `UserSetting voice.pronunciations`, applied at the ONE TTS choke point (`ttsSynthesize`) so every flow inherits it — classic script, per-scene story, clones, ▶ previews. Longest-match-first, word-boundary, case-insensitive; 30s TTL cache with write-invalidation; fail-open (a settings hiccup never breaks synthesis). Dedicated GET/PUT route (≤100 entries, control chars rejected, case-insensitive dedupe). The studio's Pronunciation card: chip list, add form, and a live test row (preview route accepts a one-off `text`). 2 unit tests (one test-fixture bug caught: numeric from/to is COERCED, only structural garbage drops). |
+| T-4.12 render management | ✅ Done | QC report → grouped scorecard (Video / Audio / Sync, per-group clean-or-flagged chips, unknown checks fall into "Other"); the Video tab gained an Export bundle panel (present/absent chips per artifact + Download ZIP); Settings "Background Jobs" → live queue: auto-refresh every 4s while anything runs, kind filter chips with counts, running rows show progress label/bar, per-row cooperative Cancel (with stopping… state), cancelled/queued status chips (cancelled previously fell through to "Done"), KIND_META gaps filled (script/research/short/slide had generic icons). |
+| T-4.13 analytics | ✅ Done | `niches` block server-side (per-niche views/likes/comments/engagement/videos over tracked videos) + "Niche trends" card with share bars; per-video table sort (views / engagement / last-sync growth) via a header select; `sortedRows` memo — **hooks-order regression caught LIVE and fixed** (the memo initially sat below the early returns; the exact class the Stage 4a worklog warned about). |
+| T-4.14 sweep | ✅ Done | 4 new premium-ux e2e + 1 new isolation e2e; 390px sweep across all five surfaces (research/cast/voice/dialog fit as-built; **two real overflows found and fixed**: the analytics grid lacked `[&>*]:min-w-0` so tracks blew past 390px, and two Settings provider selects had fixed/content widths — pre-existing, now `max-w-full`); the seeded live pass verified every data-bearing panel. |
+
+**The critical find (pre-existing, Stage 2): `tenant-db` never scoped five models.** The Stage 2 `ORG_SCOPED_MODELS` set carried camelCase entries (`researchSession`, `scheduleSlot`, `videoStat`, `voiceProfile`, `musicTrack`) while the `$allOperations` hook lowercases the Prisma model name at lookup — so those five models silently ran UNSCOPED through the tenant guard: any signed-in user's `GET /api/research` returned every other tenant's sessions (the same held for schedule slots, stats snapshots, voice clones and music tracks wherever they query through tenant-db). It surfaced live during the T-4.14 sweep: a fresh e2e account's Topic Radar rendered the live-pass account's seeded scans; a curl probe confirmed the server returned cross-org rows. The isolation battery never caught it because it only LISTED models with single-word lowercase names. Fix: the set is lowercase-normalized at construction (`tenant-db.ts`, with a regression comment); pinned by a new unit test AND a new isolation e2e (`research sessions stay tenant-scoped` — a 202 shell row is a real cross-tenant probe even without AI keys). Re-verified: a fresh account now gets `{"sessions":[]}`.
+
+**Known scope notes (honest):**
+1. The ▶ audition / pronunciation test row need a working TTS provider key; in this sandbox (ambient Z.ai credential 401s) they render but were not exercised live — the preview route's custom-text path is typechecked and the map application is unit-pinned instead.
+2. Deviations 1–4 from the backlog stand as documented (VLM continuity stays Stage 5; pronunciation is global per-user, not per-scene; the queue machinery is Stage 3's, only its presentation changed; niche trends are own-data aggregates).
+3. `scripts/seed-4b.mjs` is a local-only harness like `seed-story-scene.mjs` (never shipped); it targets the newest organization by design.
+
+---
+
+## Stage 5 task backlog (defined 2026-11-01 — executing now)
+
+**Scope:** the AI Director and cinematic quality — ROADMAP modules A–E on the "AI suggests, human approves" doctrine. Module B (shot plan + approval gate) and the VLM continuity check landed with T-5.1; this pass completed the remaining modules: the plan-aware pacing gate, director-driven visual selection (module D), audio production (module E: pacing / ambience / cues / music mood / ducking), the World library + appearance editing + outfit weaving (module C), and research-with-sources + the fact-check surface (module A, the debt Stage 4b explicitly deferred here).
+
+| Task | Objective | Dependencies |
+|---|---|---|
+| T-5.1 | Director's brain + continuity core: plan schema, LLM pass, approval gate, VLM check, render hook, DirectorCard, jobs + route | — (done 2026-11-01) |
+| T-5.2 | Restore the CI workflow lost to the history rewrite (T-1.5 contract) | — |
+| T-5.3 | QC static-shots pacing gate: fail on 3+ consecutive unmotivated static shots in an APPROVED plan | T-5.1 |
+| T-5.4 | Director-driven visual selection: per-scene motion override, i2v/stock suggestion badges, regenerate-with-constraint | T-5.1 |
+| T-5.5 | Audio production (module E): per-scene narration pacing, synthesized ambient beds, boundary cues, music mood from the emotional progression, ducking intensity | T-5.1 |
+| T-5.6 | World library + cast looks (module C): Location/Prop models + CRUD, appearance editing UI, outfit + set-piece prompt weaving | T-5.1 |
+| T-5.7 | Research-with-sources (module A): web-search grounding, source snapshots, reference-material prompts, Script tab fact-check panel | — |
+| T-5.8 | Stage 5 close-out: TASKS.md + worklog, final gate, push | all |
+
+### Execution status (updated 2026-11-01, part 6 — Stage 5 complete)
+
+**All 8 tasks done.** Verification (final gate): `tsc --noEmit` 0 errors · `eslint` 0 errors (baseline warnings only) · **76/76 unit** (+3 across T-5.3/5.5/5.7) · **19/19 Playwright e2e** · live smokes: 6/6 director (T-5.1), 17/17 world (T-5.6), 6/6 sources (T-5.7), plus a live ffmpeg integration of the 3-input segment graph (voice + cue + bed). LLM/VLM/TTS/search paths typechecked and unit-pinned but not exercised live in this sandbox (ambient credential 401s — the same honest limit as Stage 4b).
+
+| Task | Status | Notes |
+|---|---|---|
+| T-5.2 CI restore | ✅ Done | `.github/workflows/ci.yml` recreated to the T-1.5 contract (check job: typecheck+lint+unit+pg-schema validate on push/PR; e2e job PR-only with Playwright + dummy secrets). **Deviation:** the file sits on disk but is NOT pushed — the provided GitHub PAT lacks `workflow` scope and GitHub rejects any push that creates/updates workflow files with it. One `git push` with a workflow-scoped token ships it (tracked as the only unpushed commit). |
+| T-5.3 pacing gate | ✅ Done | `planStaticRuns`: runs of 3+ consecutive static-camera shots with no motivation channel (motion off + no i2v + no stock), longest first; index gaps and shot-less scenes break runs; render-mode blanket exemptions (animated/stock). The qc `static-shots` check now fails deterministically on a flat APPROVED plan before any pixel is measured; runRenderJob passes the approved plan + exemptions. |
+| T-5.4 visual selection | ✅ Done | `getApprovedMotionMap` → per-scene motion override in the Ken Burns/stock-fallback path (smart = defer; slides keep deck plans; i2v exempt). DirectorCard chips carry i2v/stock/motion badges beside the human's render-mode + stock-stage decisions. Continuity rows gained **Fix…** — constraint input pre-filled with the VLM's diagnosis, riding the storyboard route's AI-edit mode (the module-D "regenerate scene 14 with a red jacket" loop). |
+| T-5.5 audio production | ✅ Done | Plan vocabularies (PACINGS/AMBIENCE_KINDS/SFX_HINTS + plan-level musicMood/ducking); `ambience.ts` — 7 synthesized beds (room/city/rain/wind/waves/crowd/nature), 60s loudnorm-tailed renders measured within ~4 dB of each other; `sceneAudio()` owns inputs+graph together (voice + 40ms cue @0.35 + looped bed @0.22; Settings-Sound silences every synthesized extra); pacing factors (±12%) at voiceover synthesis; music mood + ducking slot into the resolvers under manual per-video overrides. Legacy T-5.1 plans parse with audio defaults. |
+| T-5.6 World library | ✅ Done | `Location` + `Prop` models (migration 20261101123000, org-scoped + pinned in ORG_SCOPED_MODELS before any row existed); CRUD routes with soft-delete; the director pass sees the library and tags scenes with exact names (≤3); `getApprovedWorldClause` weaves descriptions into scene prompts; `getApprovedAppearanceClause` closes the T-5.1 outfit gap; Scene Studio "Cast look in this scene" editing via PUT /appearance. 17-check smoke: CRUD, validation, cross-tenant 404s, soft-delete. |
+| T-5.7 research sources | ✅ Done | `llmWebSearch` (SDK web_search, metered "search" service, fail-open); one grounding search per radar scan; `matchSourcesToIdeas` (keyword-overlap, ≤3/idea, unit-pinned); greenlight + create snapshot sources onto `Video.researchSources` (http(s)-only, ≤6); reference-material prompt block; Script tab Sources panel. The Stage 4b deferred debt is paid. |
+| T-5.8 close-out | ✅ Done | This section + worklog; final gate re-run clean; push to origin. |
+
+**Completion gate (audit-adjusted) — met:**
+1. *Flags scene inconsistencies and offers one-click regeneration* — VLM continuity (T-5.1) + Repaint + Fix…-with-constraint (T-5.4).
+2. *Visuals match the narration* — per-scene ASR verification (`verify.ts`) continues to work; the continuity clauses (outfit + set pieces) make the match stronger.
+3. *Deliberate cinematic rhythm* — the plan-aware `static-shots` QC check fails 3+ consecutive unmotivated static shots (T-5.3), measured plans only.
+4. *Character consistency score ≥ 80%* — the VLM check scores every cast scene 0–100 and the one-click loop drives them above the bar (mechanism + loop; live ≥80% needs a working VLM key, not exercisable in this sandbox).
+
+**Known scope notes (honest):**
+1. **SVG maps / illustrative inserts (module D) are deferred** — the one roadmap line item not built. Rationale: keynote slides + stock b-roll cover the insert use-cases today; standalone SVG map generation is a full feature (design system, rendering, geography data) with the weakest payoff per week of the module. It moves to Stage 6+ candidate territory.
+2. All LLM/VLM/TTS/search paths (director pass, continuity check, pacing, grounding) are typechecked and unit-pinned at their pure layers, but not exercised live here (ambient credential 401s). The smoke scripts cover the API surfaces that do not need AI keys.
+3. The per-user Z.ai client cache stays in-process (Stage 3 note) — Redis revisited only if multi-instance workers ship.
+4. ci.yml awaits a workflow-scoped token (see T-5.2) — the only unpushed commit on an otherwise fully synced main.
+
+---
+
+## How to read this document
+
+Every task has:
+
+- **Task ID** — `T-<stage>.<seq>` (e.g. `T-1.1` is the first task of Stage 1)
+- **Objective** — what the task accomplishes
+- **Files / modules affected** — what to edit
+- **Dependencies** — what must be done first
+- **Acceptance criteria** — how we know it's done
+- **Rollback strategy** — how to undo if it goes wrong
+- **Risk IDs closed** — which `RISK_REGISTER.md` entries this task closes
+
+Tasks are ordered by dependency, not by ID. Do them in order.
+
+---
+
+## T-1.1 — Restore missing scripts
+
+**Objective:** Restore the three scripts that `package.json` references but the audit found missing from the shipped tree.
+
+**Files / modules affected:**
+- `scripts/backup.sh` — new file
+- `scripts/auth-reset.mjs` — new file
+- `scripts/package-local.sh` — new file (referenced in `SECURITY.md:31`)
+
+**Dependencies:** none
+
+**Acceptance criteria:**
+- `npm run backup` writes a hot-copy of the SQLite DB + `uploads/` manifest into `backups/tubeforge-<timestamp>/` (or no-ops with a clear message on Postgres — for Postgres the script should document `pg_dump` as the alternative).
+- `npm run auth:reset` removes `db/auth.lock` and sets `Setting "auth.enabled" = "false"` (matches `forceLockOff` in `src/lib/tubeforge/auth.ts:69`). Supports `--purge` flag to also delete `Setting "auth.password"`.
+- `scripts/package-local.sh` packages the project for local distribution; explicitly excludes `db/custom.db`, `uploads/`, `.env`, `.z-ai-config`.
+- All three scripts have executable permission (`chmod +x`).
+- `SETUP.md` and `SECURITY.md` references to these scripts still match.
+
+**Rollback strategy:** delete the three files; remove their `package.json` entries. The audit (D-12) confirmed the scripts are currently absent, so restoring them can only improve state.
+
+**Risk IDs closed:** R-MED-9
+
+---
+
+## T-1.2 — Pick one package manager
+
+**Objective:** Eliminate the dual `bun.lock` + `package-lock.json` ambiguity. Document the chosen PM as the only supported one.
+
+**Files / modules affected:**
+- `package.json` — update `test` script and `check` script
+- `package-lock.json` or `bun.lock` — delete the loser
+- `SETUP.md` — update prerequisite section
+- `.gitignore` — confirm the loser is not re-introduced
+
+**Recommended choice:** npm (because `SETUP.md` already documents it; bun is undocumented as a prerequisite).
+
+**If npm is chosen:**
+- Migrate `scripts/test-unit.ts` from `bun scripts/test-unit.ts` to `node --import tsx scripts/test-unit.ts` (or `vitest run`). The custom harness in `test-unit.ts` can stay; only the runner changes.
+- Update `package.json:22` `"test": "node --import tsx scripts/test-unit.ts"`.
+- Update `package.json:23` `"check": "npm run typecheck && npm run lint && npm run test"`.
+- Remove `bun-types` from `devDependencies`.
+- Delete `bun.lock`.
+- Document in `SETUP.md` that Node 20+ is the only prerequisite.
+
+**If bun is chosen (alternative):**
+- Update `SETUP.md` to document bun as a prerequisite.
+- Delete `package-lock.json`.
+- Migrate all `npm install` / `npm run` references in `SETUP.md` to `bun install` / `bun run`.
+
+**Dependencies:** none
+
+**Acceptance criteria:**
+- Only one lockfile exists in the repo root.
+- `SETUP.md` documents exactly one PM.
+- `npm install && npm test && npm run check` all work end-to-end on a fresh clone.
+- CI (T-1.5) runs against the chosen PM.
+
+**Rollback strategy:** restore the deleted lockfile and revert `package.json` scripts.
+
+**Risk IDs closed:** R-MED-10, R-LOW-7
+
+---
+
+## T-1.3 — Fix `npm run setup` for SQLite local dev
+
+**Objective:** Make `npm run setup` work for both SQLite local dev and Postgres prod, or remove the ambiguous script.
+
+**Files / modules affected:**
+- `package.json:14` — `setup` script
+
+**Recommended fix:** Remove the `setup` script entirely. Document `setup:local` as the only command for local SQLite. Document `prisma db push` (with `DATABASE_URL` set to Postgres) as the production command. The audit found that `setup:local` already does the right thing; the bare `setup` is only valid for Postgres and breaks for the default SQLite path.
+
+**Alternative:** Make `setup` auto-detect the URL protocol (like `postinstall.mjs` already does) and dispatch to `setup:local` for SQLite or `prisma db push` for Postgres.
+
+**Dependencies:** none
+
+**Acceptance criteria:**
+- `npm run setup` (or `npm run setup:local` if the script is removed) works on a fresh clone with `DATABASE_URL=file:...`.
+- `SETUP.md` is updated to match.
+- The bare `setup` script does not throw `Provider sqlite does not match datasource provider postgresql`.
+
+**Rollback strategy:** restore the original `setup` script.
+
+**Risk IDs closed:** R-MED-8
+
+---
+
+## T-1.4 — Re-enable ESLint rules
+
+**Objective:** Make `npm run lint` actually catch issues. Today it reports ~0 errors regardless of code quality.
+
+**Files / modules affected:**
+- `eslint.config.mjs:10-45` — turn rules back on at `warn` level
+
+**Rules to re-enable (at `warn` level for the first pass; tighten to `error` after the first sprint):**
+
+```js
+"@typescript-eslint/no-explicit-any": "warn",
+"@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+"@typescript-eslint/no-non-null-assertion": "warn",
+"react-hooks/exhaustive-deps": "warn",
+"no-console": ["warn", { "allow": ["warn", "error", "info"] }],
+"no-debugger": "warn",
+"no-unreachable": "warn",
+"prefer-const": "warn",
+```
+
+Leave these off (intentional for this project):
+- `@next/next/no-img-element` — the app uses `<img>` deliberately for streamed media URLs.
+- `react-compiler/react-compiler` — opt-in feature, not stable enough yet.
+
+**Dependencies:** none
+
+**Acceptance criteria:**
+- `npm run lint` reports the existing `any` types and unused vars (count > 0).
+- The first run produces a baseline count; track in a comment at the top of `eslint.config.mjs`.
+- No new lint errors introduced by this task (only `warn` level).
+
+**Rollback strategy:** revert `eslint.config.mjs` to the all-off state.
+
+**Risk IDs closed:** R-MED-11
+
+---
+
+## T-1.5 — Add CI
+
+**Objective:** Run `typecheck`, `lint`, and `test` on every commit and PR.
+
+**Files / modules affected:**
+- `.github/workflows/ci.yml` — new file (creates `.github/workflows/` directory)
+
+**Workflow:**
+
+```yaml
+name: CI
+on:
+  push:
+    branches: [main, stage-*]
+  pull_request:
+    branches: [main]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npx prisma migrate status
+        env:
+          DATABASE_URL: file:./db/ci.db
+```
+
+**Notes:**
+- `npm ci` requires `package-lock.json` to be the lockfile of record (T-1.2).
+- The workflow runs against SQLite (no Postgres service needed).
+- `prisma migrate status` will fail until T-1.7 creates the first migration; mark it `continue-on-error: true` for the first sprint.
+
+**Dependencies:** T-1.2 (PM chosen), T-1.4 (lint rules re-enabled)
+
+**Acceptance criteria:**
+- A commit that breaks `typecheck` or `lint` fails CI.
+- A commit that breaks `test` fails CI.
+- The workflow file is valid YAML and runs on push to `main` and to `stage-*` branches.
+
+**Rollback strategy:** delete `.github/workflows/ci.yml`. CI runs are independent of the build.
+
+**Risk IDs closed:** R-HIGH-11
+
+---
+
+## T-1.6 — Add security headers
+
+**Objective:** Set the standard security headers via `next.config.ts` `headers()`.
+
+**Files / modules affected:**
+- `next.config.ts` — add a `headers()` async function returning the standard set
+
+**Headers to set:**
+
+```ts
+const securityHeaders = [
+  { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self';" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), interest-cohort=()" },
+  { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+  { key: "Cross-Origin-Embedder-Policy", value: "require-corp" },
+];
+```
+
+**Notes:**
+- The CSP is permissive on `script-src` (`'unsafe-inline' 'unsafe-eval'`) because Next.js 16 needs it for inline scripts; tighten in Stage 4a with nonces.
+- `img-src` and `media-src` allow `https:` because of provider-hosted media URLs.
+- HSTS is included; assume the edge (Vercel or Cloudflare) also enforces it.
+
+**Dependencies:** none
+
+**Acceptance criteria:**
+- `curl -I http://localhost:3000/` returns all 8 headers.
+- The studio still works (no CSP breakages; if any, add the specific origin to the relevant directive with a comment explaining why).
+
+**Rollback strategy:** remove the `headers()` function from `next.config.ts`.
+
+**Risk IDs closed:** R-MED-12
+
+---
+
+## T-1.7 — Adopt `prisma migrate`
+
+**Objective:** Create a `prisma/migrations/` directory and the first migration from the current schema.
+
+**Files / modules affected:**
+- `prisma/migrations/` — new directory (created by `prisma migrate dev`)
+- `prisma/schema.prisma` — unchanged (the migration is generated FROM this file)
+- `package.json` — confirm `db:migrate` script is correct
+- `SETUP.md` — document `prisma migrate dev` for local changes and `prisma migrate deploy` for prod
+
+**Steps:**
+
+1. Run `npx prisma migrate dev --name init --schema prisma/schema.prisma` against a fresh Postgres database (e.g. a local Docker Postgres or a free Neon dev instance). This generates `prisma/migrations/<timestamp>_init/migration.sql`.
+2. Commit the migration directory.
+3. Document in `SETUP.md` that future schema changes go through `prisma migrate dev --name <change>` and prod uses `prisma migrate deploy`.
+4. Remove the dual `schema.sqlite.prisma` mirror in favor of a dockerized Postgres for local dev, OR document the SQLite mirror as test-only and not subject to migrations.
+
+**Note on the SQLite mirror:** if the team wants to keep SQLite for fast local dev, the SQLite path continues to use `prisma db push --schema prisma/schema.sqlite.prisma` (no migration history for SQLite; acceptable for local dev where data loss is fine). The Postgres path uses migrations. The `VoiceProfile` comment drift (R-LOW-1) is fixed in T-1.16.
+
+**Dependencies:** T-1.5 (CI will run `prisma migrate status`)
+
+**Acceptance criteria:**
+- `prisma/migrations/` directory exists with at least one migration.
+- `npx prisma migrate status` reports "Database schema is up to date" against a fresh Postgres DB after `npx prisma migrate deploy`.
+- `SETUP.md` documents both `prisma migrate dev` (local) and `prisma migrate deploy` (prod).
+- CI `prisma migrate status` step passes (against a SQLite DB; SQLite doesn't support migrations, so this step should be `continue-on-error: true` for now or skipped for SQLite).
+
+**Rollback strategy:** delete `prisma/migrations/`. The schema files are unchanged.
+
+**Risk IDs closed:** R-HIGH-10
+
+---
+
+## T-1.8 — Eliminate first-come setup race
+
+**Objective:** Require a `TUBEFORGE_OWNER_TOKEN` env var so the first `POST /api/auth/setup` call must present it. Eliminates the race where a fresh install can be claimed by the first caller.
+
+**Files / modules affected:**
+- `src/app/api/auth/setup/route.ts` — add a token check at the top
+- `SETUP.md` — document the new env var
+- `SECURITY.md` — document the new env var
+
+**Implementation:**
+
+```ts
+// src/app/api/auth/setup/route.ts
+import { getAuthSecret } from "@/lib/tubeforge/auth-token";
+
+export async function POST(req: Request) {
+  const secret = getAuthSecret();
+  if (!secret) {
+    return Response.json({ error: "TUBEFORGE_AUTH_SECRET is missing from .env" }, { status: 500 });
+  }
+
+  // NEW: require the owner token for the first-come claim
+  const ownerToken = process.env.TUBEFORGE_OWNER_TOKEN;
+  if (ownerToken) {
+    const provided = req.headers.get("x-owner-token");
+    if (provided !== ownerToken) {
+      return Response.json({ error: "Owner token required for first-time setup" }, { status: 403 });
+    }
+  }
+
+  // ... existing setup logic
+}
+```
+
+**Notes:**
+- If `TUBEFORGE_OWNER_TOKEN` is not set, the route behaves as before (first-come claim). This preserves the dev sandbox behavior.
+- For production deploys, `TUBEFORGE_OWNER_TOKEN` is set once; the owner presents it via the setup UI's "Owner token" field; the UI sends it as `x-owner-token` header.
+- Stage 2 replaces the whole flow with `POST /api/auth/register` + email verification.
+
+**Dependencies:** none
+
+**Acceptance criteria:**
+- `POST /api/auth/setup` with no `TUBEFORGE_OWNER_TOKEN` env behaves as before (dev mode).
+- `POST /api/auth/setup` with `TUBEFORGE_OWNER_TOKEN` set: missing/wrong `x-owner-token` header → 403.
+- `POST /api/auth/setup` with correct `x-owner-token` header → setup proceeds as before.
+- `SETUP.md` and `SECURITY.md` document the new env var.
+
+**Rollback strategy:** remove the token check from `setup/route.ts`.
+
+**Risk IDs closed:** R-CRIT-3
+
+---
+
+## T-1.9 — Wire `runScriptJob` into `POST /api/videos`
+
+**Objective:** Stop blocking the HTTP request through a multi-minute LLM call. Use the existing `runScriptJob` worker body (currently dead code) via `startJob`.
+
+**Files / modules affected:**
+- `src/app/api/videos/route.ts:247,298` — replace the synchronous `generateSceneScriptPackage` / `generateScriptPackage` calls with `startJob(video.id, "script", () => runScriptJob(video.id))`
+- `src/lib/tubeforge/script-job.ts` — confirm `runScriptJob` works as the worker body; update if needed
+- `src/lib/tubeforge/poll.ts` — confirm `pollScript` polls the new job correctly (it already does — `batch/route.ts:156` uses the same pattern)
+
+**Implementation pattern (mirror `batch/route.ts:156`):**
+
+```ts
+// src/app/api/videos/route.ts POST handler
+// ... create the Video row ...
+
+if (format === "story") {
+  await startJob(video.id, "script", () => runScriptJob(video.id));
+} else {
+  await startJob(video.id, "script", () => runScriptJob(video.id)); // runScriptJob handles classic format too
+}
+
+return Response.json({ id: video.id, status: "scripting" }, { status: 202 });
+```
+
+**Note:** the route must return 202 immediately, not wait for the script to finish. The client polls `GET /api/videos/[id]` (or `GET /api/jobs?entityId=<id>&kind=script`) for progress.
+
+**Dependencies:** none (this is a code change, no DB migration)
+
+**Acceptance criteria:**
+- `POST /api/videos` returns 202 within 1 second (not 30+ seconds).
+- The script job appears in `GET /api/jobs?entityId=<id>&kind=script` with `status: "running"`.
+- The client polling loop (`pollScript`) succeeds and the Video row gets `scripted` status when done.
+- The custom-script path (`route.ts:212-244`) still skips AI and writes the script directly.
+
+**Rollback strategy:** revert `route.ts` to the synchronous call. `runScriptJob` stays as dead code (as today).
+
+**Risk IDs closed:** R-HIGH-1, R-LOW-4
+
+---
+
+## T-1.10 — Job the synchronous research/greenlight/bible routes
+
+**Objective:** Same as T-1.9, for the other three synchronous-in-request LLM routes.
+
+**Files / modules affected:**
+- `src/app/api/research/route.ts:38` — wrap `generateTopicResearch` in `startJob(session.id, "research", …)`
+- `src/app/api/research/[id]/greenlight/route.ts:127,141` — wrap `generateSceneScriptPackage` / `generateScriptPackage` in `startJob(video.id, "script", () => runScriptJob(video.id))`
+- `src/app/api/characters/bible/route.ts:13` — wrap the LLM call in `startJob(characterId, "bible", …)`
+
+**Notes:**
+- These routes need a new `Job.kind` value for research and bible. Add `"research"` and `"bible"` to the `KINDS` whitelist in `src/lib/tubeforge/jobs.ts` and `src/app/api/jobs/cancel/route.ts:27`.
+- The research route creates a `ResearchSession` row first, then starts the job; the job body calls `generateTopicResearch` and updates the session row.
+- The greenlight route creates a `Video` row first, then starts a script job (same as T-1.9).
+- The bible route is per-character; the job body updates the `Character` row.
+
+**Dependencies:** T-1.9 (same pattern)
+
+**Acceptance criteria:**
+- All three routes return 202 within 1 second.
+- The corresponding jobs appear in `GET /api/jobs`.
+- The client UI (research view, greenlight flow, character bible dialog) polls and reflects the running state.
+
+**Rollback strategy:** revert each route to the synchronous call.
+
+**Risk IDs closed:** R-HIGH-2, R-HIGH-3, R-HIGH-4
+
+---
+
+## T-1.11 — Add `zod` to the highest-risk mutating routes
+
+**Objective:** Replace hand-rolled validation with `zod` schemas on the four routes with the thinnest validation.
+
+**Files / modules affected:**
+- `src/app/api/channels/[id]/route.ts` (PATCH) — add `zod` schema for name/niche/description with length caps
+- `src/app/api/characters/[id]/route.ts` (PATCH) — add `zod` schema for role/personality/appearance with length caps matching the POST path
+- `src/app/api/schedule/[id]/route.ts` (PATCH) — add `zod` schema for title (length cap), timeOfDay (regex), slotDate (parseDay)
+- `src/app/api/videos/[id]/route.ts` (PATCH) — add `zod` schema for title (≤120), description (≤5000), tags (≤500), status (enum)
+
+**Pattern:**
+
+```ts
+import { z } from "zod";
+
+const PatchChannelSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  niche: z.string().trim().min(1).max(80).optional(),
+  description: z.string().trim().max(500).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export async function PATCH(req: Request, { params }: { params: { id: string } }) {
+  const body = await req.json().catch(() => ({}));
+  const parsed = PatchChannelSchema.safeParse(body);
+  if (!parsed.success) {
+    return Response.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+  // ... use parsed.data
+}
+```
+
+**Note:** `zod` is already in `package.json:92` (`"zod": "^4.0.2"`) — no install needed.
+
+**Dependencies:** none
+
+**Acceptance criteria:**
+- All four PATCH routes return 400 with a `zod` error shape for invalid input.
+- All four PATCH routes accept the same valid input as before (no behavior change for valid input).
+- The existing tests (if any) still pass.
+
+**Rollback strategy:** revert each route to the hand-rolled validation.
+
+**Risk IDs closed:** R-HIGH-28 (partial; Stage 2 finishes the rest)
+
+---
+
+## T-1.12 — Validate `params.n` as positive integer
+
+**Objective:** Stop accepting `NaN` for `params.n` in the storyboard / slides / stock routes.
+
+**Files / modules affected:**
+- `src/app/api/videos/[id]/storyboard/[n]/route.ts` — `z.coerce.number().int().positive()` for `n`
+- `src/app/api/videos/[id]/slides/[n]/route.ts` — same
+- `src/app/api/videos/[id]/stock/[n]/route.ts` — same
+
+**Implementation:**
+
+```ts
+import { z } from "zod";
+
+const ParamsSchema = z.object({
+  id: z.string().min(1),
+  n: z.coerce.number().int().positive(),
+});
+
+export async function GET(req: Request, { params }: { params: { id: string; n: string } }) {
+  const parsed = ParamsSchema.safeParse(params);
+  if (!parsed.success) {
+    return Response.json({ error: "Invalid scene index" }, { status: 400 });
+  }
+  const { id, n } = parsed.data;
+  // ... existing logic
+}
+```
+
+**Dependencies:** none
+
+**Acceptance criteria:**
+- `GET /api/videos/abc/storyboard/0` returns 400 (was: returned 404 or wrong file).
+- `GET /api/videos/abc/storyboard/1` returns 200 with the scene image (unchanged behavior for valid input).
+- `GET /api/videos/abc/storyboard/NaN` returns 400 (was: tried to read `scene-NaN.png`).
+
+**Rollback strategy:** revert to `Number(n)`.
+
+**Risk IDs closed:** R-MED-15
+
+---
+
+## T-1.13 — Fix `DELETE /api/videos/[id]` orphan gap
+
+**Objective:** Clean up `uploads/<id>/` on video delete.
+
+**Files / modules affected:**
+- `src/app/api/videos/[id]/route.ts:207` (DELETE handler) — add `rmSync` recursive after the Prisma delete
+
+**Implementation:**
+
+```ts
+import { rmSync } from "node:fs";
+import path from "node:path";
+import { UPLOAD_ROOT } from "@/lib/tubeforge/ai";
+
+export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
+  const video = await db.video.findUnique({ where: { id: params.id } });
+  if (!video) return Response.json({ error: "Not found" }, { status: 404 });
+
+  await db.video.delete({ where: { id: params.id } });
+
+  // NEW: clean up the upload directory
+  try {
+    rmSync(path.join(UPLOAD_ROOT, params.id), { recursive: true, force: true });
+  } catch {
+    // best-effort; log the error
+  }
+
+  return Response.json({ ok: true });
+}
+```
+
+**Notes:**
+- Use `force: true` so it doesn't throw if the directory doesn't exist.
+- Stage 3 replaces this with `storage.delete(videoId)`.
+
+**Dependencies:** none
+
+**Acceptance criteria:**
+- After `DELETE /api/videos/abc`, `uploads/abc/` does not exist on disk.
+- The Prisma row is gone (unchanged behavior).
+- Deleting a non-existent video still returns 404 (unchanged behavior).
+
+**Rollback strategy:** remove the `rmSync` call.
+
+**Risk IDs closed:** R-MED-1
+
+---
+
+## T-1.14 — Move `GET /api/music` side-effect to a `POST`
+
+**Objective:** Stop having a GET route that seeds the music library as a side effect.
+
+**Files / modules affected:**
+- `src/app/api/music/route.ts` — `GET` returns the library only (no seeding). Add a new `POST /api/music/seed` route that does the seeding.
+- `src/components/tubeforge/views/library-view.tsx` (or wherever the music panel is) — call `POST /api/music/seed` on first load if the library is empty.
+
+**Implementation:**
+
+```ts
+// src/app/api/music/route.ts
+export async function GET() {
+  const tracks = await db.musicTrack.findMany({ where: { isActive: true } });
+  return Response.json({ tracks, needsSeed: tracks.length === 0 });
+}
+
+// src/app/api/music/seed/route.ts (new file)
+export async function POST() {
+  // ... existing seedMusicLibrary logic ...
+  return Response.json({ ok: true, seeded: count });
+}
+```
+
+**Notes:**
+- The UI checks `needsSeed` from the GET response; if true, prompts the user (or auto-calls `POST /api/music/seed`).
+- This preserves the first-run UX without the side-effecting GET.
+
+**Dependencies:** none
+
+**Acceptance criteria:**
+- `GET /api/music` returns 200 with the track list (or empty list) and does NOT write to disk.
+- `POST /api/music/seed` seeds the library and returns the count.
+- The UI handles the `needsSeed: true` case by calling the seed route.
+
+**Rollback strategy:** revert to the side-effecting GET.
+
+**Risk IDs closed:** R-MED-14
+
+---
+
+## T-1.15 — Set `reactStrictMode: true` and clean up drift
+
+**Objective:** Restore the React dev-mode check and clean up minor drift.
+
+**Files / modules affected:**
+- `next.config.ts:8` — set `reactStrictMode: true`
+- `tailwind.config.ts` — either delete (v4 doesn't need it) or wire via `@config` in `globals.css` and update the `content` globs to include `./src/**`
+- `prisma/schema.sqlite.prisma:194-198` — sync the `VoiceProfile` comment from `schema.prisma` (cosmetic)
+
+**Recommended:** delete `tailwind.config.ts`. Tailwind v4 uses CSS-based config via `@import "tailwindcss"` + `@theme inline` in `src/app/globals.css` (already in place per audit). The v3 config is dead drift.
+
+**Dependencies:** none
+
+**Acceptance criteria:**
+- `reactStrictMode: true` in `next.config.ts`.
+- `tailwind.config.ts` is deleted (or wired correctly if the team prefers to keep it).
+- All Tailwind classes still work (no visual regression).
+- `schema.sqlite.prisma` `VoiceProfile` comment matches `schema.prisma`.
+
+**Rollback strategy:** restore `reactStrictMode: false`, restore `tailwind.config.ts`.
+
+**Risk IDs closed:** R-LOW-1, R-LOW-2, R-LOW-5
+
+---
+
+## T-1.16 — Document `TUBEFORGE_AUTH_SECRET` requirement
+
+**Objective:** Make the local-dev default explicit in `SETUP.md` and `SECURITY.md`.
+
+**Files / modules affected:**
+- `SETUP.md` — add a "Local dev (open studio)" vs. "Production (locked studio)" section
+- `SECURITY.md` — clarify the opt-in model and the production fail-safe
+
+**Content to add to `SETUP.md`:**
+
+```md
+## Studio access modes
+
+- **Local dev (default):** the studio is OPEN. `TUBEFORGE_AUTH_SECRET` is absent from `.env`. No login required. Suitable for localhost development only.
+- **Production (locked):** the studio is LOCKED. `TUBEFORGE_AUTH_SECRET` is set in `.env` (32+ hex chars). `TUBEFORGE_REQUIRE_LOCK=1` is set. The first-time setup requires `TUBEFORGE_OWNER_TOKEN` to claim the owner password. Every `/api/*` request requires a signed session cookie or Bearer token.
+```
+
+**Dependencies:** T-1.8 (the owner token doc)
+
+**Acceptance criteria:**
+- `SETUP.md` has a "Studio access modes" section.
+- `SECURITY.md` references `TUBEFORGE_OWNER_TOKEN`.
+- A new dev reading `SETUP.md` understands the difference between local dev and production without reading the source.
+
+**Rollback strategy:** revert the docs.
+
+**Risk IDs closed:** R-LOW-3
+
+---
+
+## T-1.17 — Wire Playwright E2E tests or remove the dependency
+
+**Objective:** Either wire Playwright (installed at `1.57.0`) into a real `e2e/` directory, or remove it from `package.json` to reduce dead dependencies.
+
+**Files / modules affected (if wiring):**
+- `playwright.config.ts` — new file
+- `e2e/` directory — new directory
+- `e2e/smoke.spec.ts` — one smoke test (visit `/`, take a screenshot, assert the sidebar renders)
+- `.github/workflows/ci.yml` — add a Playwright job
+- `package.json` — add `"test:e2e": "playwright test"` script
+
+**Files / modules affected (if removing):**
+- `package.json:74` — remove `"playwright": "1.57.0"`
+- `package-lock.json` (or `bun.lock`) — update
+
+**Recommended:** wire it. E2E tests will be valuable in Stage 7 (cross-tenant isolation, mobile responsiveness, concurrent user workloads). One smoke test now sets up the harness.
+
+**Dependencies:** T-1.5 (CI)
+
+**Acceptance criteria (if wiring):**
+- `npx playwright test` runs the smoke test and passes.
+- `playwright.config.ts` sets the baseURL to `http://localhost:3000` and starts the dev server before tests.
+- CI runs `npm run test:e2e` on PRs to `main`.
+
+**Acceptance criteria (if removing):**
+- `npm install` no longer installs Playwright.
+- `package.json` is one line shorter.
+
+**Rollback strategy:** restore `playwright: 1.57.0` to dependencies.
+
+**Risk IDs closed:** R-LOW-6
+
+---
+
+## T-1.18 — Document the architecture in-repo
+
+**Objective:** Place the audit deliverables in the TubeForge repo root so they live with the code.
+
+**Files / modules affected:**
+- `/home/z/my-project/MASTER_PLAN.md` — copy from `download/tubeforge-stage1/`
+- `/home/z/my-project/ARCHITECTURE.md` — copy from `download/tubeforge-stage1/`
+- `/home/z/my-project/ROADMAP.md` — copy from `download/tubeforge-stage1/`
+- `/home/z/my-project/TASKS.md` — this file
+- `/home/z/my-project/RISK_REGISTER.md` — copy from `download/tubeforge-stage1/`
+- `/home/z/my-project/FOUNDATION_AUDIT.md` — copy from `download/tubeforge-stage1/`
+- `/home/z/my-project/SECURITY.md` — append the audit findings section (T-1.19)
+
+**Notes:**
+- The existing `SECURITY.md` is accurate and stays as-is.
+- The existing `SETUP.md` is updated by T-1.16.
+- The existing `worklog.md` is the dev log; not modified.
+
+**Dependencies:** all other T-1.x tasks complete
+
+**Acceptance criteria:**
+- All 6 docs exist in the repo root.
+- A new dev can clone the repo and read `MASTER_PLAN.md` → `ARCHITECTURE.md` → `ROADMAP.md` → `TASKS.md` → `RISK_REGISTER.md` → `FOUNDATION_AUDIT.md` and understand the project state.
+
+**Rollback strategy:** delete the copied docs from the repo root. The `download/` copies remain as the user-facing deliverable.
+
+**Risk IDs closed:** none (this is documentation, not a fix)
+
+---
+
+## T-1.19 — Update `SECURITY.md` with the audit findings section
+
+**Objective:** Append a new section to `SECURITY.md` summarizing the audit's security-relevant findings and pointing to `RISK_REGISTER.md` and `FOUNDATION_AUDIT.md` for full detail.
+
+**Files / modules affected:**
+- `/home/z/my-project/SECURITY.md` — append a new section "## 2026-11 Foundation Audit findings"
+
+**Content to append:**
+
+```md
+## 2026-11 Foundation Audit findings
+
+A full security audit was run as part of Stage 1 of the product development plan. Findings:
+
+- **1 CRITICAL:** first-come race on `POST /api/auth/setup` (mitigated in this stage by the new `TUBEFORGE_OWNER_TOKEN` env var — see §"Daily-use security checklist" above).
+- **3 CRITICAL multi-tenant blockers:** no `userId`/`tenantId` on any Prisma model; `Setting` table is singleton per key; one YouTube OAuth grant per install. These are addressed in Stage 2 (multi-user SaaS architecture).
+- **28 HIGH findings:** synchronous heavy work in-request, dead scaffolding for the YouTube publish stage, missing timeout/retry on YouTube fetch calls, zero `zod` use across 110 endpoints, no `prisma/migrations/` directory, no CI. Most are addressed in Stage 1; the rest in Stage 3.
+- **15 MEDIUM findings:** orphan cleanup gap, in-memory security state (login lockouts, rate limits), memory-bound media streaming, missing security headers, build/packaging inconsistencies, cross-platform compatibility, side-effecting GET, path parameter validation.
+- **7 LOW findings:** cosmetic drift, missing docs, dead config.
+
+Full detail: `FOUNDATION_AUDIT.md` (audit report) and `RISK_REGISTER.md` (prioritized risks with stages to fix).
+
+The next major security milestone is Stage 2: cross-tenant isolation tests in CI from Stage 2 onward (not as a Stage 7 QA item).
+```
+
+**Dependencies:** T-1.18
+
+**Acceptance criteria:**
+- `SECURITY.md` has the new section.
+- The existing sections (What this pass locked down, Daily-use security checklist, Backups) are unchanged.
+
+**Rollback strategy:** remove the appended section.
+
+**Risk IDs closed:** none (this is documentation, not a fix)
+
+---
+
+## Stage 1 completion checklist
+
+After all 19 tasks are done, verify:
+
+- [ ] `npm install && npm run setup:local && npm run dev` works on a fresh clone (T-1.3).
+- [ ] `npm test` runs (T-1.2).
+- [ ] `npm run lint` reports real issues (T-1.4).
+- [ ] `npm run typecheck` passes (always has; no change).
+- [ ] CI runs all three on every commit (T-1.5).
+- [ ] `prisma migrate dev` produces a real migration (T-1.7).
+- [ ] `next.config.ts` sets security headers (T-1.6).
+- [ ] `POST /api/auth/setup` requires `TUBEFORGE_OWNER_TOKEN` (T-1.8).
+- [ ] `POST /api/videos` enqueues a script job (T-1.9).
+- [ ] `POST /api/research`, `POST /api/research/[id]/greenlight`, `POST /api/characters/bible` all enqueue jobs (T-1.10).
+- [ ] The 4 thinnest PATCH routes use `zod` (T-1.11).
+- [ ] `params.n` is validated as positive integer (T-1.12).
+- [ ] `DELETE /api/videos/[id]` cleans up `uploads/<id>/` (T-1.13).
+- [ ] `GET /api/music` does not side-effect; `POST /api/music/seed` does (T-1.14).
+- [ ] `reactStrictMode: true`; `tailwind.config.ts` deleted or wired; `VoiceProfile` comment synced (T-1.15).
+- [ ] `SETUP.md` documents studio access modes (T-1.16).
+- [ ] Playwright wired or removed (T-1.17).
+- [ ] All 6 docs exist in the repo root (T-1.18).
+- [ ] `SECURITY.md` has the audit findings section (T-1.19).
+
+**Risks closed by Stage 1 (25 of 55):**
+
+R-CRIT-3, R-HIGH-1, R-HIGH-2, R-HIGH-3, R-HIGH-4, R-HIGH-9 (partial), R-HIGH-10, R-HIGH-11, R-HIGH-14, R-HIGH-28 (partial), R-MED-1, R-MED-8, R-MED-9, R-MED-10, R-MED-11, R-MED-12, R-MED-14, R-MED-15, R-LOW-1, R-LOW-2, R-LOW-3, R-LOW-4, R-LOW-5, R-LOW-6, R-LOW-7.
+
+**Remaining after Stage 1 (30 of 55):**
+
+R-CRIT-1, R-CRIT-2 (Stage 2), R-HIGH-5, R-HIGH-6, R-HIGH-7, R-HIGH-8, R-HIGH-9 (rest), R-HIGH-12, R-HIGH-13, R-HIGH-15, R-HIGH-16, R-HIGH-17, R-HIGH-18, R-HIGH-19, R-HIGH-20, R-HIGH-21, R-HIGH-22, R-HIGH-23, R-HIGH-24, R-HIGH-25, R-HIGH-26, R-HIGH-27, R-HIGH-28 (rest) (Stages 2-3), R-MED-2, R-MED-3, R-MED-4, R-MED-5, R-MED-6, R-MED-7, R-MED-13 (Stages 2-3), R-X-1, R-X-2, R-X-3, R-X-4, R-X-5 (cross-cutting; Stages 3, 5, 7).
+
+Stage 2 starts immediately after Stage 1 completion.
+
+---
+
+## Stage 6 — Editing, rendering & publishing — task list
+
+**Status:** ✅ COMPLETE — all 11 tasks closed.
+**Last updated:** 2026-11-02
+**Source:** `ROADMAP.md` §Stage 6 + `FOUNDATION_AUDIT.md` defects D-06, D-07 (dead `uploadToYouTube` scaffolding) + the audit's "no separate QC re-run endpoint" gap.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-6.1 Scene Assembly endpoint | ✅ Done | `POST /api/videos/[id]/assemble` (+ GET / PUT / DELETE) — pure `timeline.ts` builds the preview from scenes + shotList + audio settings; per-scene start/end/transition/audio/caption/shot; persists to `Video.timeline`; roundtrip unit-pinned |
+| T-6.2 Separate QC endpoint | ✅ Done | `POST /api/videos/[id]/qc` (+ GET) — new `runQcJob` body re-runs the 12-check battery against the existing final.mp4 without re-rendering; registered `"qc"` job kind + durable recovery |
+| T-6.3 YouTube publish route | ✅ Done | `POST /api/videos/[id]/publish` (+ GET) — new `runUploadJob` body wires the dead `uploadToYouTube` (D-06, D-07); `"upload"` job kind now registered (was the only unregistered kind); persists `Video.youtubeUrl` + `publishedAt` + `status:"published"` on success; `invalid_grant` → reconnect (handled inside getAccessToken) |
+| T-6.4 Per-user OAuth account picker | ✅ Already exists (Stage 2) | `YouTubeAccount` model + OAuth flow + `/api/youtube/connect` + `/api/youtube/status` pre-date Stage 6; the publish route re-checks `isConnected()` and rejects with 400 if no channel |
+| T-6.5 Title/description generation (LLM) | ✅ Done | `POST /api/videos/[id]/publish/suggest` — new `publish-suggest.ts` module asks the LLM to draft `{title, description, tags}` from script + niche + tone + per-scene captions; 4 tone styles (clickbait / descriptive / question / curiosity); output clamped to YouTube API limits; same "AI suggests + human approves" doctrine as Stage 5 |
+| T-6.6 Scheduled publishing (publishAt) | ✅ Done | `uploadToYouTube` accepts ISO `publishAt`; publish job threads `opts.publishAt` through; YouTube only honors it when `privacyStatus === "private"` (caller's responsibility) |
+| T-6.7 Caption burn-in + SRT/VTT export | ✅ Done | New `subtitle-export.ts` (`srtToVtt` + `looksLikeSrt`); `GET /api/videos/[id]/captions?format=srt\|vtt` serves both formats; PATCH `/api/videos/[id]` accepts `aspectRatio` / `frameRate` / `burnCaptions` |
+| T-6.8 Aspect-ratio + frame-rate consumption | ✅ Done | motion.ts `Aspect` + `OUTPUT_SIZES` gained `1:1` (2160×2160 work / 1080×1080 out); qc.ts `QcAspect` + `ASPECT_TARGET` gained `1:1`; render.ts `RenderOptions` accepts `aspectRatio` + `frameRate`; `buildSegment` threads `aspect`/`fps` into ffmpeg `-r`/`-framerate`; the `FPS = 30` constant becomes a default. RenderJobOptions gains aspectRatio + frameRate; runRenderJob resolves per-render override > per-project default > 30 fps / 16:9. Slides mode always 9:16. Per-project `burnCaptions` becomes the default for subtitles; per-render override still wins. Live smoke: 12/12 aspect × fps combinations pass (1:1, 16:9@24, 16:9@60, 9:16) |
+| T-6.9 Editing Studio UI | ✅ Done | `src/components/tubeforge/editing-studio.tsx` (~430 lines, self-contained) — uses `@dnd-kit/sortable` (already in deps). Mounted at the top of the Video tab in `video-detail-dialog.tsx` when `isStory && scenes.length > 0`. Features per the ROADMAP §6 list: scene timeline, drag-and-drop ordering (PointerSensor + KeyboardSensor), per-scene trimming (number input [0.5, 300]s, `recomputeTimes` cascades), audio levels (per-scene voice/music/sfx/ambient sliders 0..1), transition previews (in/out labels per scene), undo/redo (bounded 50-entry history stack with Reset). Auto-loads GET /assemble; Save PUTs; Re-assemble POSTs; the existing render button's POST honors saved trims via T-6.10. |
+| T-6.10 Render job consumes the assembled timeline | ✅ Done | RenderOptions gains `sceneDurationsSec?: number[]`; renderVideo computes WAV durations as default, prefers the timeline's per-scene durationSec when it sits inside [MIN_SEG_SEC, 3× measured narration]. RenderJobOptions + parseRenderPayload + the render route's `ignoreTimeline` body flag wire the full pipeline. Safety: a single bad/missing duration falls back to WAV durations for ALL scenes (a half-overridden timeline would produce a broken render) |
+| T-6.11 Stage 6 sweep + close-out | ✅ Done | Worklog + TASKS.md updated; final gate below. (Live YouTube upload smoke still pending a connected channel — the publish path is structurally identical to the other 13 job bodies and is typecheck-verified.) |
+
+### Stage 6 complete (2026-11-02)
+
+All 11 Stage 6 tasks are closed. The publish loop is end-to-end functional: LLM suggest → publishAt → uploadToYouTube → `Video.youtubeUrl` + `publishedAt` written. The two ROADMAP §6 endpoints that didn't exist (`/assemble`, `/qc`) now exist; the third (`/publish`) wires the audit's dead `uploadToYouTube` (D-06, D-07). The render pipeline honors per-project `aspectRatio` (16:9 / 9:16 / 1:1) + `frameRate` (24 / 30 / 60) + `burnCaptions` defaults, and consumes the assembled timeline's per-scene trims. Captions export serves SRT + VTT. The Editing Studio UI lets the user edit the timeline (drag-drop reorder + per-scene trims + audio levels + undo/redo) and Save it before the render commits the trims to disk — closing the Stage 6 completion gate ("edit, render, review, export and publish without leaving TubeForge").
+
+**Final gate for Stage 6:** tsc 0 · eslint 0 errors / 275 warnings · **81/81 unit** (76 baseline + 5 new: 3 timeline + 1 captions + 1 timeline-render-shape) · live aspect smoke 12/12 · live route smoke 401×5 on the new endpoints · dev-server boots clean with the Editing Studio mounted. Push status: 6 Stage 6 commits pushed cleanly to origin/main across the sprint (`3114d58` → `53dd362`); no workflow file in any diff. The T-1.5 ci.yml still requires a workflow-scoped PAT to push — pending.
+
+---
+
+## Stage 7 — Quality assurance & commercial launch — task list
+
+**Status:** ✅ COMPLETE — all code-side tasks closed.
+**Last updated:** 2026-11-02
+**Source:** `ROADMAP.md` §Stage 7 + `MASTER_PLAN.md` §8 launch metrics.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-7.1 Full production pipeline e2e | ✅ Done | `e2e/pipeline.spec.ts` — 3 tests covering the deterministic subset (auth → create → patch → Stage 6 surfaces → export → GDPR → logout + wrong-password rejection + cross-tenant denial across qc/publish/assemble/suggest) |
+| T-7.2 Backup + restore roundtrip test | ✅ Done | `scripts/test-backup.mts` — runs `npm run backup` + verifies row counts (videos/users/orgs) match; falls back to `fs.copyFileSync` when sqlite3 CLI missing; skips Postgres |
+| T-7.3 Mobile responsiveness sweep e2e | ✅ Done | `e2e/mobile-sweep.spec.ts` — 4 tests at 390px (iPhone 12/13/14): no horizontal overflow, detail dialog fits the Editing Studio card, publish/assemble auth gates viewport-independent |
+| T-7.4 Load test scaffold | ✅ Done | `scripts/load-test.js` (k6) — 20 VUs ramp 30s + hold 1m + ramp down 30s; thresholds < 2% error rate + p95 < 500ms; tests register → create → GET video → auth/status → logout |
+| T-7.5 Stripe billing scaffolding | ✅ Done | New Prisma models Plan / Subscription / CreditGrant / CreditLedger (migration `20261102010000_stage7_billing`). New `billing.ts`: resolveUserPlan (Starter default — fresh installs never seed rows), recordCreditSpend, sumAICallSpends, planSupportsResolution, hasCredits, handleStripeEvent, verifyStripeSignature (Web Crypto HMAC). Two routes: `POST /api/billing/webhook` (PUBLIC, signature is the auth) + `GET /api/billing/plan` (auth-required, returns plan + balance). Stripe Checkout / Portal wiring is a follow-up. |
+| T-7.6 Worker failure recovery | ✅ Already covered | `scripts/test-queue.mts` Phase B (worker process restart recovery) covers the durable-resume contract; the Stage 6 additions (`qc`, `upload`) are registered in `queue-handlers.ts` so they get the same path; the `resumableKinds` contract test pins this. No new test needed. |
+| T-7.7 Stage 7 close-out | ✅ Done | This entry + the worklog. |
+
+### Stage 7 progress (2026-11-02)
+
+All code-side Stage 7 tasks are closed. The test scaffolding + the billing foundation + the load test scaffold are in place. The remaining ROADMAP §7 launch items are operational, not code:
+
+- **Live beta with real users** — needs a deployed environment, not a dev sandbox.
+- **YouTube integration smoke against a real test channel** — needs a connected YouTube account (the publish path is structurally identical to the other 13 job bodies; typecheck-verified).
+- **Stripe Checkout / Customer Portal wiring** — the foundation + the webhook are in place; the checkout routes are a follow-up (the webhook handles `checkout.session.completed` already).
+- **The actual k6 run against staging** — `scripts/load-test.js` is ready to run; needs k6 installed + a staging URL.
+
+**Final gate for Stage 7 (code side):** tsc 0 · eslint 0 errors / 283 warnings · **86/86 unit** · backup test ALL GREEN · pipeline + mobile-sweep e2e specs typecheck-verified · Stages 1→7 all closed at the code level. Push status: 2 Stage 7 commits pushed cleanly to origin/main; no workflow file in any diff.
+
+## Stage 7.1 — Billing integrity & security — task list
+
+**Source:** the pre-launch billing review (five production blockers + two hardening asks). **Gate:** no commercial feature ships until every defect below is closed AND pinned by a regression test.
+
+| Task | Status | Notes |
+|---|---|---|
+| B-1 Webhook auth fail-closed | ✅ Done | `POST /api/billing/webhook`: with the secret set, a missing `stripe-signature` header is now a **401** (was: silently skipped verification) and a bad signature stays 401. With the secret unset the endpoint accepts NOTHING — 401 in dev, 500 under `NODE_ENV=production`. The only unsigned path is the explicit `TUBEFORGE_ALLOW_UNSIGNED_WEBHOOKS=1` dev opt-in (refused in production regardless). `verifyStripeSignature` gained a 300s timestamp replay window + constant-time compare. |
+| B-2 Canonical credit units | ✅ Done | ONE ledger unit: the **microCredit** (1 UI credit = 1,000 micro, `MICROS_PER_CREDIT`). `CreditGrant.grantedCredits` renamed → `grantedMicroCredits` (migration `20261102020000_stage71_billing_integrity`), grants converted from the plan's UI-credit allowance at grant time, balances converted back only at the display edge (`microToCredits`). The exact regression — a full Creator allowance failing the 50,000-micro render pre-check — is pinned in both suites. |
+| B-3 Ledger↔subscription linkage | ✅ Done | Spends auto-attach the user's active subscriptionId (`recordCreditSpend`/`spendCredits` resolve it internally — callers can no longer write null-linked rows by omission). Balance math is **user-scoped** (grants + ledger filtered by userId directly, never via the subscription relation), so legacy null-linked rows still count and nothing spent can resurrect. Canceled subscriptions collect no new linked rows. |
+| B-4 Subscription status enforcement | ✅ Done | `subscriptionAccess(status)`: active/trialing → `full`, past_due → `grace` (paid plan continues while dunning runs; plan card shows a payment-failed banner), canceled/unpaid/incomplete/incomplete_expired/paused/**unknown** → `none` → resolver falls back to Starter (fail-closed on new Stripe statuses). Enforcement tier in `spendCredits` follows the access decision, not the stored plan row. Every status is tested. |
+| B-5 Idempotent invoice grants | ✅ Done | Two layers: (1) `ProcessedWebhookEvent` records every handled Stripe event id BEFORE the handler runs (create-then-handle; a failed handler frees the id so Stripe's retry re-runs it); (2) `CreditGrant.stripeInvoiceId` is `@unique` and `invoice.paid` upserts on it, so the same invoice under a different event id still grants exactly once. A paid invoice also re-activates a non-canceled subscription (renewal clears past_due, period end tracks Stripe). |
+| B-6 Concurrent-spend / overspend protection | ✅ Done | New `spendCredits()` — the enforcement primitive: a transactional check-and-spend that re-reads the balance INSIDE the transaction (in-process promise-chain queue + SQLite `BEGIN IMMEDIATE` file lock / Postgres Serializable with P2034+busy retry). AI-call metering (`budget.ts`) now goes through it; rejected spends leave no ledger row. Render actuals stay `recordCreditSpend` (accounting truth — the cost already happened; enforcement is the render route's pre-gate). 10 parallel spends of 30,000 micro against a 100,000-micro grant → exactly 3 recorded, 7 rejected, balance ≥ 0. |
+| B-7 Billing lifecycle tests | ✅ Done | New `scripts/test-billing.mts` (`npm run test:billing`, wired into `npm run check`) — **21 tests** against the real DB + the REAL route handler in-process: full webhook auth matrix (8), canonical units, grant idempotency ×2 (same event id; same invoice/different event), linkage ×2, the 7-status matrix + renewal-after-past_due, canceled-sub spend behavior, the concurrency probe, and the **lifecycle phase (#7)**: checkout via the signed route, payment-failure → grace, cancellation → Starter with the record kept, refund semantics (unknown `charge.refunded` acked safely; credit refunds via the negative `refund` ledger row), and the full 6-step event-driven chain checkout → grant → failure → recovery grant → cancel → late-invoice-no-grant. Unit suite gained 3 more (status map, unit conversions, signature tamper/stale/malformed). |
+| B-6b Canceled-subscription grant guard | ✅ Done | **Caught by the B-7 lifecycle test.** The `invoice.paid` handler guarded re-activation against `canceled` but wrote the CreditGrant unconditionally — a late or replayed invoice for a canceled subscription minted credits onto the account, and the user-scoped balance would hand those orphaned credits to the user's NEXT subscription (credit resurrection across subscriptions). Fix: `invoice.paid` refuses the grant (and the re-activation) when the subscription is `canceled`; genuine recovery payments (`past_due`/`unpaid`) still grant AND re-activate. Pinned by lifecycle chain step 6. |
+| B-8 Docs + env contract | ✅ Done | `.env.example` documents the fail-closed webhook + the dev opt-in. Migration `20261102020000_stage71_billing_integrity` carries the Postgres DDL; the SQLite mirror was regenerated and pushed (dev grant rows reset — pre-production data, the next `invoice.paid` re-grants in the correct unit). |
+
+### Stage 7.1 progress (2026-11-02)
+
+All five production blockers are fixed and pinned — plus B-6b, a sixth defect the lifecycle test caught (canceled-subscription grant resurrection). **Final gate for Stage 7.1:** tsc 0 · eslint 0 errors / 295 warnings · **90/90 unit** · **21/21 billing integration** · schema pushed to the dev DB (both providers) · Postgres migration written.
+
+Not yet established (operational, unchanged from Stage 7): real Stripe test-mode Checkout + webhook lifecycle against Stripe itself, staging k6 run, live beta. **The exposed GitHub PAT still needs rotation** — outside the repo's reach.
+
+## Stage 7.2 — Billing period accuracy & AI spend reservation — task list
+
+**Source:** the follow-up repository review (2026-11-02) — Stage 7.1's five blockers verified fixed in source, two NEW billing defects found. **Gate:** unchanged — both defects closed AND pinned before paid plans are exposed.
+
+| Task | Status | Notes |
+|---|---|---|
+| B-9 Monthly credit-period accounting (review Problem A) | ✅ Done | `resolveUserPlan` and `spendCredits` subtracted the user's **all-time** ledger from the **current period's** grants — month 2's balance came out as `grant2 − (month-1 + month-2 spending)` (the review's exact table: 10,000 renewed grant showed 1,000). Fix: one shared `computePeriodBalance()` (used by the resolver, `spendCredits`, and the new reservation primitives) — grants covering `now` define the window; only ledger rows with `createdAt ≥ windowStart` count. **Rollover rule (explicit): credits do NOT roll over** — each period starts fresh; a refund benefits the period it is RECORDED in. Between periods (no covering grant) the balance is 0 — fail-closed, never negative, never a stale leftover. Pinned by 4 new integration tests (consecutive periods, webhook-driven renewal, refund-in-new-period, no-rollover blocking). |
+| B-10 Pre-call AI credit reservation (review Problem B) | ✅ Done | `aiCall` ran the provider FIRST; `spendCredits` afterwards could only refuse to RECORD an unaffordable call that had already executed. Fix: reservation pattern at the ONE choke point (`budget.ts aiCall`, which every AI call site uses): ① `reserveCredits()` — transactional balance check + a positive `hold` ledger row for the estimated cost, BEFORE the provider runs; ② execute; ③ `settleCreditHold()` — exactly ONE settlement row per hold (`adjustment` = actual − estimate on success, `hold_release` = full refund on failure/timeouts). The settlement row's `reconcilesId` is **UNIQUE** (`CreditLedger` migration `20261102030000_stage72_credit_reservations`), so the double-deduct the review warned about is impossible at the database level. Semantics: enforcement is FAIL-CLOSED (a paid call never runs on an unverifiable balance — `CreditBlockedError` before `fn`); failed calls now RELEASE (net 0) instead of charging; starter/free tier stays unmetered (documented overdraft design, post-call accounting). Render flow unchanged per the review: the render pre-gate (`hasCredits(RENDER_ESTIMATE_MICRO)`) + post-render per-second accounting — renders never hold, so no double-deduct. |
+| B-11 Reservation test matrix | ✅ Done | Billing integration suite 21 → **36 tests**. New: hold counts against the balance immediately; settle-at-estimate zero marker; settle actual < estimate refunds the delta; actual > estimate charges it; failed call releases (net 0 via `sumAICallSpends`); **double settle rejected** (`already_settled`, exactly one settlement row, balance reflects only the first); insufficient balance blocks with no rows; 10 parallel reservations against one grant → exactly 3 held; starter + canceled users never reserve; and **3 END-TO-END `aiCall` tests through the real budget path** with an emulated tenant ctx: blocked → the provider function verifiably NEVER runs (no UsageRecord, no ledger rows), success → hold settled + usage linked, provider timeout → hold released + balance restored. Unit suite 91 → **93** (kinds vocabulary 6 → 9, `reservationEnforcement` fail-closed for unknown tiers, `CreditBlockedError` facts). `sumAICallSpends` now sums the AI-spend family (`ai_call`, `hold`, `adjustment`, `hold_release`) so a failed call nets to 0. |
+| B-12 Known limitation (documented, deliberate) | ✅ Accepted | A hard process crash mid-call leaves an unsettled `hold` that keeps counting — fail-closed (the balance errs conservatively, the platform never loses money). An operator sweep releasing stale holds (kind `hold`, no settlement row) is a follow-up, not a correctness defect. Also unchanged: per-call cost ESTIMATES remain placeholders until provider-level token metering lands — the reservation shape does not change when real costs arrive (`actualMicro` is already a parameter). |
+
+### Stage 7.2 progress (2026-11-02)
+
+Both review defects are fixed and pinned. **Final gate for Stage 7.2:** tsc 0 · eslint 0 errors / 310 warnings · **93/93 unit** · **36/36 billing integration** · schema + SQLite mirror synced and pushed to the dev DB · Postgres migration `20261102030000_stage72_credit_reservations` written.
+
+Still outstanding before commercial launch (operational): real Stripe test-mode Checkout + webhook lifecycle, staging k6, live beta. The render pre-gate estimate (50,000 micro) predates per-call reservation — once real token costs land, tune it against the sum of a typical render's internal calls (a render whose internal calls exceed the pre-gate estimate can now fail mid-render instead of over-running the balance).
+
+### Whole-program summary (Stages 1 → 7)
+
+| Stage | Status | Commits |
+|---|---|---|
+| 1 — Baseline, security, code stabilization | ✅ Done (Stage 1 close-out) | T-1.1 → T-1.19 |
+| 2 — Multi-user SaaS architecture | ✅ Done (Stage 2 close-out) | isolation.spec.ts 7/7 green |
+| 3 — Production infrastructure | ✅ Done (Stage 3 close-out) | storage abstraction + UsageRecord + SMTP + per-user Z.ai + LegacySetting drop + deploy pipeline + durable resume for every job kind |
+| 4a — Premium UX core 5 surfaces | ✅ Done (T-4.7) | design system + dashboard + wizard + script tab + storyboard + scene studio |
+| 4b — Premium UX remaining 5 surfaces | ✅ Done (T-4.14) | research + cast + voice studio + pronunciation + render management + analytics |
+| 5 — AI Director & film quality | ✅ Done (T-5.8 close-out) | shot plan + approval gate + VLM continuity + pacing gate + audio production + World library + research sources |
+| 6 — Editing, rendering & publishing | ✅ Done (T-6.11) | assembly + QC re-run + YouTube publish + LLM suggest + publishAt + VTT + aspect/frame-rate + Editing Studio UI + timeline consumption |
+| 7 — Quality assurance & commercial launch | ✅ Done (T-7.7 — code side) | pipeline e2e + backup test + mobile sweep + k6 + Stripe billing scaffold + reconciliation tests |
+
+All 33 weeks of the ROADMAP are covered at the code level. The commercial-launch items (real beta, real YouTube, real Stripe Checkout, real k6 staging run) are operational follow-ups against a deployed environment.
+
+---
+
+## S-series index (S1 → S32) — the studio era — added 2026-11-05 (S33)
+
+`ROADMAP.md` and this file freeze at Stage 7.2 (2026-11-02) while the
+repository moved ~30 stages ahead, documented only in commit subjects and
+evidence scripts. This index closes that drift (improvement roadmap §5.3):
+stage, headline commit, one-line intent, and the evidence pair that
+re-verifies it. Supporting commits within a stage are parenthesized.
+
+| Stage | Commit | Intent | Evidence |
+|---|---|---|---|
+| S1 | `32ea155` | Restorable studio smoke + fixture restore tooling | `studio-smoke.mjs` · `studio-restore.mjs` · `inspect-fixtures.mts` |
+| S2 | `7d30aa3` (+`57828c0`, `34b3f96`, `32da782`) | Per-boundary transition engine; the render consumes the timeline doc; inspector honesty flip | `s2-automation-probe.mts` · `s2-render-evidence.mts` |
+| S3 | `612530b` (+`41b71e0`, `38706a2`, `ab6f727`, `68ddc23`, `74ca9af`) | Creative fields: chroma key, corner-logo PIP, export presets; transcript editing; autosave; AI assist | `s3-unit-probe.mts` |
+| S4 | `8f9e9c2` (+`7037eb7`, `94697b0`) | Art actions in the scene inspector (magic-byte format guard) | `s4-unit-probe.mts` |
+| S5 | `9fa91e8` | The sound stage: per-scene cue + ambience bed | `s5-unit-probe.mts` · `s5-route-e2e.mjs` |
+| S6 | `c02091d` | The words' face: caption styles the render burns | `s6-unit-probe.mts` |
+| S7 | `57ab980` (+`2243cba`) | The score: the music pick the render lays under; the bed's-one-truth audit | `s7-unit-probe.mts` · `s7-route-e2e.mjs` |
+| S8 | `3ddf94a` | The voice: the narrator pick re-reads the pipeline | `s8-unit-probe.mts` · `s8-route-e2e.mjs` |
+| S9 | `87b4940` | The poster: the scene the studio picks, the cover depicts | `s9-unit-probe.mts` |
+| S10 | `5e7b288` | The short: the moment the studio picks, the cut frames | `s10-unit-probe.mts` · `s10-route-e2e.mjs` |
+| S11 | `1b5a303` | The pace: the tempo the studio picks, the read re-derives | `s11-unit-probe.mts` · `s11-route-e2e.mjs` |
+| S12 | `c09b061` | The look: the style the studio picks, the cover wears | `s12-unit-probe.mts` · `s12-route-e2e.mjs` |
+| S13 | `788ad0d` | The frame: the aspect shape the studio picks, the render draws | `s13-unit-probe.mts` · `s13-route-e2e.mjs` |
+| S14 | `04ccfe9` | The delivery: the grade the studio picks, the render encodes at | `s14-unit-probe.mts` · `s14-route-e2e.mjs` |
+| S15 | `842df70` | The motion: the camera and the seam the studio picks, the render draws | `s15-unit-probe.mts` · `s15-route-e2e.mjs` |
+| S16 | `dece0dd` | The account: the password the studio rotates, the sessions fall in line | `s16-unit-probe.mts` · `s16-route-e2e.mjs` (+`s16-owner-reseed.mts`) |
+| S17 | `0c1b6fc` | The ship: the real publish flow replaces the fossil; the QC gate gets its caller | `s17-unit-probe.mts` · `s17-route-e2e.mjs` |
+| S18 | `5e13f76` | The recovery: the login screen's forgotten half (reset + fresh door) | `s18-unit-probe.mts` · `s18-route-e2e.mjs` (+`s18-login-wipe.mts`) |
+| S19 | `d2099f8` | The quiet door: the fresh install stops screaming in its own log | `s19-quiet-door.mjs` |
+| S20 | `b9d205f` | The keyring: the 90-day bearer finally answers to its owner (API-token registry migration) | `s20-unit-probe.mts` · `s20-route-e2e.mjs` |
+| S21 | `27945c5` | The confirmed address: the verification link lands, the promise gets a route | `s21-unit-probe.mts` · `s21-route-e2e.mjs` |
+| S22 | `1c1a515` | The world gets a door: the World library's surface; the end-state law closes its leaks | `s22-unit-probe.mts` · `s22-route-e2e.mjs` |
+| S23 | `b73c15e` | The account surface: the usage dashboard gets its dashboard; the GDPR pair gets a front door | `s23-unit-probe.mts` · `s23-route-e2e.mjs` |
+| S24 | `9d82cf1` | The money door: Stripe checkout + customer portal; the plan card stops being read-only | `s24-unit-probe.mts` · `s24-route-e2e.mjs` |
+| S25 | `a987379` | The excavation: the dead voice-engine pair gets buried; the day-one PWA gets wired | `s25-unit-probe.mts` · `s25-route-e2e.mjs` |
+| S26 | `8b3ca48` | The e2e suites that never ran finally run — and they leave nothing behind | `e2e/*.spec.ts` (5 suites) |
+| S27 | `42f0253` | The $5 door: real token metering, versioned pricing, the hard experiment ceiling | `s27-unit-probe.mts` · `s27-route-e2e.mjs` |
+| S28 | `28cd69c` | The door the preview couldn't open (session-cookie fix) | `s28-unit-probe.mts` · `s28-route-e2e.mjs` |
+| S29 | `e67b0b0` | The chain's pure invariants: parseScenes hand-off, scene file naming, export-ZIP laws, parseSrt | `s29-unit-probe.mts` · `s29-route-e2e.mjs` |
+| S30 | `18ba0af` | The wire-up: the front door stops eating the preview's mutations; the SDK proves it live | `s30-unit-probe.mts` · `s30-route-e2e.mjs` |
+| S31 | `d48d255` | The world rule: every storyboard frame must belong to the video's story | `s31-unit-probe.mts` |
+| S32 | `0491934` | The $5 door's durable ledger, fail-closed boot, and pricing provenance | `s32-unit-probe.mts` · `s32-route-e2e.mjs` · `s32-durability-check.mjs` |
+
+Adjacent hardening commits outside the stage numbering: the creative layer
+(`e0c4450` grade/titles/camera keys, `add0350` voice-lane speed/fades/waveforms),
+the missing AuthGate keystore (`f0155ca`), the Director provider
+reconciliation (`4d71d76`), the owner's password-recovery script (`24845a5`,
+`s13-owner-password-reset.mts`), and the Scene Studio upload-route restore
+(`b64c47a`).
+
+---
+
+## S33+ backlog — the improvement roadmap (2026-11-05)
+
+Source: the improvement roadmap assessment of the S32 snapshot (fresh
+inspection at commit `0491934`, 2026-11-05). Full narrative in
+`download/TubeForge_Improvement_Roadmap.docx` (delivery copy); this is the
+executable ledger. The verdict it reached: **feature-complete for a paid
+launch, operations-incomplete** — the remaining work is release engineering
+and operations, not product redesign.
+
+### Priority 0 — security & launch blockers (Sprint 1)
+
+| Item | Status | Notes |
+|---|---|---|
+| P0-1 Rotate the exposed GitHub PAT; enable secret-scanning push protection | ✅ settings ON · PAT 🟡 rotate again | Secret scanning + push protection + Dependabot security updates enabled via the settings API on 2026-11-05. The S33 push used a fresh workflow-scoped PAT — which itself transited chat, so rotate it after use (standing rule, worklog). |
+| P0-2 CI: e2e job runs on push to main (was PR-only — never fired, zero PRs in history) | ✅ S33 · live | `.github/workflows/ci.yml`. First on-main run 41979158390 caught runner-image drift (ubuntu-latest → 26.04; Playwright 1.57 cannot install browsers there) → `918a1c7` pins ubuntu-24.04; run 41980112353 fully green — the first complete e2e on main ever. |
+| P0-3 CI: gitleaks secret scan on every push/PR | ✅ S33 · live | `.github/workflows/ci.yml` `secrets` job — green on the full 240+-commit history (runs 41979158390 / 41980112353). |
+| P0-4 README.md (the public front door) | ✅ S33 | Positioning, quickstart, tests, repo tour, docs index, deployment story |
+| P0-5 LICENSE decision | ⏳ owner decision | Proprietary / dual / open core — business decision; without a file, all rights reserved (documented in README) |
+| P0-6 One deployment topology + staging environment | ✅ decision landed (S33) → provisioning ⏳ | `DEPLOYMENT.md`: Fly (web+worker) + Neon + R2; `vercel.json` demoted to preview-only. Staging spec included; provisioning needs accounts. |
+| P0-7 Observability: Sentry (or GlitchTip) via `instrumentation.ts`, pino structured logs with request ids, external uptime monitor | ⏳ S34 candidate | Code-side wiring is in-repo work; the accounts are owner actions. |
+| P0-8 Production Postgres backups | ✅ S33 (tooling) → scheduling ⏳ | `scripts/backup-postgres.sh` (verified dump + checksum + off-box upload + retention) + `docs/runbooks/backup-restore.md` (nightly cron + quarterly restore drill). First drill pending staging. |
+
+### Priority 1 — engineering quality & CI depth (Sprint 2)
+
+| Item | Status | Notes |
+|---|---|---|
+| P1-1 Billing suite in CI (deterministic seed inside the job) | ⏳ | `scripts/test-billing.mts` header documents the seeding requirement |
+| P1-2 Nightly CI job: Playwright + the durable s-series route probes | ⏳ | The per-stage probes currently run on demand only |
+| P1-3 `next build` in CI (7 GB runners can build; the 4 GB sandbox cannot) | ⏳ | Catches build-only failures before the platform |
+| P1-4 Warning burn-down (0 errors / ~295+) — structured logger first (deletes the largest class), then react-hooks in high-exposure views | ⏳ | Rides P0-7 |
+| P1-5 Coverage baseline (c8) on the money paths: billing / spend / render | ⏳ | |
+| P1-6 Stateful rate limiting + login lockout (Postgres sliding window; the in-process Map wipes on every deploy) | ✅ S46 · scoped | The credential-failure lockout (login + change-password current-proof) is DB-backed: one `AuthAttempt` row per failure, a TRUE 10-min sliding window counted in SQL — durable across deploys, shared across every web/worker instance, and it closes the fixed-window straddle hole (4+4 failures across a border never tripped the old counter). auth.ts's dead duplicate (same `__tfAuthLimit` key, zero importers — a drift hazard) deleted. The middleware per-IP read/write tier stays in-memory BY DESIGN: middleware is architecture-banned from the DB (src/middleware.ts), and its 600/90 tiers are coarse shedding, not security state — per-instance limits still shed. Register/reset keep the middleware tier only (a DB window there gifts attackers an account-creation DoS against NAT'd legit users; revisit on evidence of signup abuse). |
+| P1-7 Release engineering: tag v0.1.0 at staging cutover, v0.9.0 at beta, v1.0.0 at paid launch; GitHub Releases cut from worklog entries; Dependabot weekly | 🟡 started | Dependabot SECURITY updates ON (2026-11-05) — 18 alerts surfaced (11H/4M/3L: python-multipart ×7, sharp ×3, js-yaml ×4, deepmerge-ts, minimatch, prismjs). Weekly version-bump PRs still need `.github/dependabot.yml`; tags at the milestones above. |
+
+### Priority 2 — product growth & monetization (Sprint 3)
+
+| Item | Status | Notes |
+|---|---|---|
+| P2-1 (S34) Close the spend-gate estimator: chars-per-3 token estimate → real metering where the provider returns usage; flip `PRICING_STATUS` off provisional once proven against real invoices | 🟡 S34 estimator closed · pricing source-reconciled · invoice proof pending | Script-aware input floors (CJK 1.5 tok/char — the old chars/3 under-reserved a CJK pass 4.5x), per-hold usage slices (no stale cross-dispatch reads, multi-attempt sums), legacy gpt-4.1/gpt-4o rows REMOVED (cited source 404, OpenAI page no longer lists them — legacy ids price at the conservative flagship fallback). OpenAI pricing page re-fetched 2026-11-06: all 10 current rows matched exactly. `PRICING_STATUS` stays provisional until the first real invoices reconcile the ledger — then a one-word flip. |
+| P2-2 Unit-economics report from the existing ledger (cost per rendered video by niche/length/voice/aspect, joined against plan revenue) | ⏳ | Data already accumulating in SpendReservation + UsageRecord |
+| P2-3 Onboarding instrumentation (register → first script → storyboard → render → export) + template gallery (documentary / shorts / explainer) | ⏳ | Master plan's 15-minute first-video metric |
+| P2-4 Email deliverability (SPF/DKIM/DMARC, transactional provider if needed) + terms & privacy pages (Stripe live-mode requirement) | ⏳ | |
+| P2-5 Voice-server queueing: visible position, per-user concurrency cap, GPU host when queue depth says so | ⏳ | |
+| P2-6 Beta cohort (5–10 users) with SUS scoring (target ≥ 75) + mobile re-check on real devices | ⏳ | Stage 4 gate never run against real users |
+
+### S33 record (2026-11-05)
+
+Sprint 1 kickoff — the in-repo half of Priority 0: CI e2e-on-main + gitleaks
+(P0-2, P0-3), README (P0-4), DEPLOYMENT.md topology decision (P0-6),
+backup-postgres.sh + restore-drill runbook (P0-8), and this S-series index +
+S33+ backlog (P1-doc-drift). Final gate in the worklog. The owner-action
+items (PAT rotation, push protection, LICENSE, account provisioning) are
+flagged above and in the delivery message.
+
+Roll-out (same day, worklog "S33 roll-out"): pushed as `9ee7d4e` after a clean
+full-history secret scan; the gate's first fire caught ubuntu-latest's move to
+26.04 (Playwright 1.57 cannot install browsers there) → `918a1c7` pins
+ubuntu-24.04 → run `41980112353` fully green (first complete e2e on main
+ever). Push protection + secret scanning + Dependabot security updates ON;
+18 dependency alerts surfaced for burn-down.
+
+### Queue-contract drift fix (2026-11-05, post-S33)
+
+The Stage 7.2-era queue-contract gap had NOT been absorbed upstream — a fresh
+S33 re-clone showed `resumableKinds()` still listing 18 of 20 kinds (director +
+continuity missing since Stage 5) with the unit test mirroring the same stale
+list, and test-queue.mts (not in CI) still asserting "upload" was unregistered
+two stages after Stage 6 registered it. Production crash recovery was never
+wrong (it checks the live handler registry); the tests pinning it were. Fix:
+`resumableKinds()` is now DERIVED from the registry (cannot drift), the unit
+test pins all 20 kinds exhaustively, test-queue Phase B probes the no-handler
+branch with a synthetic "legacy-probe" kind, and the jobs.ts STAGE_LABEL /
+recovery-surface omissions of the Stage 5 kinds are closed. Gate: tsc 0 ·
+146/146 unit · queue PASS · 40/40 billing. Full narrative in the worklog
+("Queue-contract drift fix").
+
+### S34 record (2026-11-06)
+
+The spend-gate estimator close-out (roadmap P2-1 / S32's deferred Gap C).
+Script-aware input floors fix the estimate≥actual law for non-Latin text
+(chars/3 under-reserved CJK ~4.5x); per-hold usage slices fix the settle
+path's stale cross-dispatch reads and partial multi-attempt sums; the
+pricing registry was reconciled against the live OpenAI page (all 10
+current rows exact, retrievedAt 2026-11-06) and the unverifiable legacy
+gpt-4.1/gpt-4o rows were removed (dead source → legacy ids price at the
+flagship fallback — over-reserve only). `PRICING_STATUS` stays
+"provisional" until the owner reconciles the first real invoices against
+the SpendReservation ledger. Full narrative + gate results in the worklog
+("S34"). New probe: `scripts/s34-unit-probe.mts`; +6 unit tests.
+
+### S35 record (2026-11-06)
+
+Universal Scene Liveliness — the owner-audit's next product milestone, landed
+as the loop-closure the motion architecture was already shaped for: the
+approved Director plan's per-scene `needsI2V` flag (written by the pass,
+approved by the human, trusted by the QC pacing gate as a motion channel) was
+never consumed by the default render mode. Now one PURE selector
+(`src/lib/tubeforge/liveliness.ts`) derives each scene's execution channel —
+slides deck / matched stock / i2v (subject-real motion, $5-gate-metered) /
+Ken Burns — with explicit human edits (camera keys, stills contract, motion
+overrides) staying senior and every decision carrying a human-readable reason
+(`RenderResult.liveliness`). The i2v motion prompt now speaks the FULL
+Director camera vocabulary (crane-up, handheld, drone, dolly-in — the old
+five-id map degraded them all to generic drift) plus per-scene-kind SUBJECT
+motion clauses. Honest degradation everywhere: no provider, failed clip or
+missing stock falls back to Ken Burns with a visible progress note, and the
+render never breaks on the Director. Known corner documented in the worklog:
+needsI2V + stills contract renders still (lens-a exempts, lens-b catches).
+Full narrative + gate results in the worklog ("S35"). New probe:
+`scripts/s35-unit-probe.mts`; +7 unit tests.
+
+### S36 record (2026-11-06)
+
+Render QC lenses — flicker, stutter and continuity, the three defect classes
+the 12-check battery could not see, now checks 11-13 of `runQcReport` (NEW
+`src/lib/tubeforge/render-qc.ts`; pure cores + thin ffmpeg shells). Flicker:
+8 Hz luma sampling, one contiguous pumping episode = one ledger event
+(alternation is the signature — crossfades are monotone ramps, single flashes
+are one pair, neither flags). Stutter: packet-pts pacing — duplicated
+presentation frames ≥8 and timestamp gaps, presentation order restored
+through B-frame decode-order wiggle. Cut alignment: the render's own
+transition-offset math builds the expectation (hard cuts must appear, blend
+windows explain nearby detections, single-scene renders flag ANY cut) and
+rides RenderResult.expectedCuts so it cannot disagree with what the stitcher
+consumed; the QC re-run rebuilds it from the doc (doc-less → honest
+"unmeasured"). Thresholds live-calibrated against real ffmpeg 7.1.5
+synthetics (2.5 Hz pumping, a 3.0 s hard cut, a 59-duplicate stutter stream,
+an explained xfade); two parser bugs caught in the process. Scorecard Video
+group carries the three new chips. Spend law untouched (local ffmpeg, $0);
+no new JobKind. Full narrative + gate results in the worklog ("S36"). New
+probe: `scripts/s36-unit-probe.mts` (38 checks); +5 unit tests.
+
+### External-audit response record (2026-11-05 UTC)
+
+The fresh read-only external audit confirmed S36/S35/S34 in the repo and
+left a P0 pair; both closed this session, plus the two hardening items the
+audit implied.
+
+1. **S36 CI verified** — run 42109038621 (push, attempt 1, conclusion
+   success): Typecheck·Lint·Unit, E2E (Playwright) and gitleaks all green.
+   The audit's "no associated runs" was an endpoint artifact — Actions
+   results surface under check-runs, not the commit-status endpoint (which
+   only carries Vercel contexts).
+2. **Pricing provenance de-confused** — the "future-dated" 2026-11-06
+   stamps were Asia/Shanghai calendar dates of fetches that landed
+   2026-11-05 UTC (S34 commit 1e24911, authored 2026-11-05T19:20:00Z,
+   independently bounds them — second offense after the S27 flag, so the
+   wire itself is now documented). Every stamp in spend.ts is a UTC
+   date/instant anchored to the commit; PRICING_STATUS stays "provisional"
+   and paid testing stays OFF, as the audit asked.
+3. **Override controls made observable** — new `spendOverrides()` export +
+   once-per-process stderr announcement at the admitDispatch choke point:
+   a lifted TUBEFORGE_SPEND_GATE or forced TUBEFORGE_PRICING_VERIFIED can
+   no longer operate silently.
+4. **test:queue joined the CI check job** — the Stage-3 resume contract
+   (real worker restart) is now CI-proven on every push instead of
+   commit-reported, answering the audit's "commit-reported results are
+   not independently confirmed".
+
+Roadmap candidates recorded from the audit (not started here): five-genre
+visual benchmark (BLOCKED on paid-dispatch activation — needs pricing
+verification + operator go), QC enforcement policy (which of checks 1-13
+must block export), S35 fallback/override combination audit, 18
+dependency-alert triage.
+
+### S37 record (2026-11-05 UTC)
+
+Z SDK video wiring — the owner's "wire the z sdk to it so we can preview
+it": the render pipeline's i2v path has spoken to the Z.ai SDK since Stage
+4 (render.ts's ensureSceneClip), but the provider adapter's `zaiVideo` was
+a STUB that threw ("handled in the pipeline, not here") — so the settings
+Test button and every `imageToVideo` caller with provider "zai" could
+never exercise the default provider. NEW
+`src/lib/tubeforge/providers/zai-video-core.ts`: the submit → poll →
+download core as a STRUCTURAL client shape (SDK-free, fake-driven tests —
+the S36 "pure cores behind thin shells" pattern), live-calibrated against
+the real gateway (cogvideox-3, 5s 1080p, ~2.8 min → 4.9 MB h264). Both
+callers now share it: `providers/video.ts` zaiVideo (stub → real) and
+`render.ts` ensureSceneClip (inline loop → core; keeps its clip cache,
+10s×60 window, aiCall retry). URL fallbacks (video_result[0].url →
+video_url → url → video), empty-download guard, honest errors everywhere.
+LIVE-VERIFIED end-to-end in the running app: story video → script (12
+scenes) → director plan + approve → storyboard (12 SDK image gens) → TTS
+voiceover (12 wavs) → animated scene-1 render — the i2v clip came back
+through the wired core (5.1s h264) and the stitched preview PLAYED in the
+video dialog (real wave motion, not Ken Burns). Known issues found during
+the live run (pre-existing, NOT fixed here): a director-plan re-run can
+fail parsing the LLM's JSON (first attempt had succeeded and its plan
+persists); a render job killed mid-flight and re-run by boot recovery
+fails with "No tenant context (runRenderJob)" (the recovery re-enqueue
+loses the tenant scope for render bodies); preview renders do not persist
+a qcReport. Spend law untouched: zai gateway calls are ungated ($0),
+PRICING_STATUS stays provisional. No new JobKind. New probe coverage: +3
+unit tests on the core (happy path + body shape, five failure paths, URL
+fallback keys). Gate: tsc 0 · eslint 0 errors · 168/168 unit (+3) ·
+s36 probe 38/38 · queue PASS · 40/40 billing.
+
+### S38 record (2026-11-06 UTC)
+
+CSRF unblocks the z SDK preview — the deployed preview's "AI Script +
+Metadata failed / Cross-origin request rejected" was the same wire-up
+problem S30 fixed at the env-config level (proxy rewrites Host, Origin
+mismatch → 403), but the chat-bot preview platform serves every
+deployment at `preview-<id>.space-z.ai` and operators cannot provision
+`TUBEFORGE_ALLOWED_ORIGINS` on it. S37 wired the i2v core but the
+preview's first POST died at the CSRF door before the SDK was ever
+reached. S38 lands a built-in default trust: `origin-trust.ts` now
+matches the regex `^preview-[a-z0-9][a-z0-9-]*\.space-z\.ai$`
+unconditionally (precedence: operator allow-list first, then this
+default, then X-Forwarded-Host, then request Host). The pattern is
+deliberately tight — literal `preview-` prefix + literal `.space-z.ai`
+suffix, anchored — so the bare domain, unrelated subdomains, hyphen
+lookalikes, suffix-in-path attackers, and deeper attacker hosts all
+still reject. Cookie SameSite is the first CSRF line of defense; this is
+the second, scoped to Z.ai's own preview platform. Operator allow-list
+still wins (a stricter operator cannot be silently bypassed). Probe
+coverage: +14 cases in scripts/s30-unit-probe.mts (headline pass with
+empty env, screenshot URL passes, allow-list precedence over default,
+exact-host precedence, six lookalike rejections, default beats
+forwarded-host and Host fallback when both fire, case-insensitive, path
+doesn't break host extraction); C.1/C.2 hostnames swapped off the
+preview pattern so they still exercise the forwarded-host path. Gate:
+tsc 0 · eslint 0 errors · 168/168 unit · s30 probe 41/41 (+14) ·
+s36 probe 38/38 · queue PASS · 40/40 billing.
+
+### S39 record (2026-11-06 UTC)
+
+Tenant-context durability — fixes the S37 live finding "a render job killed
+mid-flight and re-run by boot recovery fails with 'No tenant context
+(runRenderJob)'". Root cause (reproduced in isolation, then fixed): the
+tenant AsyncLocalStorage was MODULE-LEVEL in tenant.ts, and `next dev`
+compiles per-route server bundles — the module exists as several copies
+with disjoint ALS instances. The enqueueing route entered its copy's scope
+(auth.enter()), the executing queue tick (the instrumentation graph, or a
+route's kick that lost the shared `ticking` race) wrapped the closure or
+handler in ITS copy, and the job body's assertCtx read a third — null.
+This also explains why the happy path worked pre-restart (the route's own
+synchronous kickQueue usually claimed the job on the matching copy) while
+the recovered re-run died. Fix: the ALS is now keyed on globalThis
+(__tfTenantAls) — ONE instance per process across every compiled copy,
+HMR reload included, the same dedupe pattern __tfJobs / __tfQueue /
+__tfCancel already use. cancel.ts was audited: already globalThis-backed.
+Verification: (1) a dual-identity import probe (tenant.ts + tenant.ts?bundle=…)
+showed disjoint scopes pre-fix and one shared scope post-fix; (2) the
+mechanism is pinned forever as a unit test (test-unit.mts "S39 tenant ALS:
+module-graph duplication shares one storage" — ctx visible across copies,
+null shared, assertCtx-on-B inside withCtx-on-A, fail-closed parity); (3)
+test-queue.mts phase B gained a stale RENDER row recovery probe — the
+recovered job must fail at the storyboard gate ("Generate the storyboard
+first"), NEVER at "No tenant context", executed by the worker, attempts
+counted. The other two S37 live findings stay backlog: director-plan re-run
+JSON parse variance (parseJsonLoose already used; residual LLM output
+variance), preview renders write no qcReport. Gate: tsc 0 · eslint 0
+errors · 169/169 unit (+1) · queue PASS (+5 assertions) · s36 probe 38/38
+· s30 probe 41/41 · billing 40/40.
+
+### S40 record (2026-11-06 UTC)
+
+QC enforcement policy — closes the audit's roadmap candidate "which of checks
+1-13 must block export". Through S39 the battery's report was advisory (the
+render never failed because of QC; the badge asked a human to inspect, and
+nothing enforced that inspection). S40 keeps measurement and enforcement
+separate but makes the SHIP deliberate. Design: a pure, versioned policy
+matrix (qc-policy.ts) classifies every check id the battery can emit —
+BLOCK (9: playable, duration, black-frames, frozen-frames, aspect, dead-air,
+flicker, stutter, cut-alignment — the file is broken, misrepresents the
+script, or carries visible/audible structural damage) vs REPORT (6:
+loudness, true-peak, loudness-range, tail-fade, static-shots, captions —
+polish and editorial judgment, each with a one-line rationale the UI shows).
+Fail-closed rules: an unmeasured BLOCKING check blocks (a lens that never ran
+cannot certify); a zero-checks report blocks; an UNKNOWN check id blocks
+until classified (new lenses can't inherit advisory by silence); no standing
+report on a rendered video blocks (fix = one Re-run QC click); junk
+TUBEFORGE_QC_ENFORCEMENT values fail closed to enforce ("report" — exact,
+case-sensitive — restores the pre-S40 advisory behavior, documented in
+.env.example). The human escape hatch is the audited override: POST
+/api/videos/[id]/export with a 3-500-char note stamps
+qcOverrideAt/qcOverrideNote/qcOverrideForCheckedAt on the video row (new
+migration 20261106000000_s40_qc_enforcement, additive nullable columns) plus
+a warn-level activity entry; the acceptance is anchored to the report's
+checkedAt, so a re-render or QC re-run lands a new report and the gate re-arms
+automatically — new evidence always supersedes a human's acceptance of old
+evidence. There is nothing to accept when no report stands (409: re-run QC
+first). Enforcement surfaces: GET /export (409 + blockers + override
+instructions when held; a valid override also writes a QC OVERRIDE line into
+the bundle's upload-metadata.txt so the acceptance travels with the
+artifact), POST /publish (same gate before enqueue — one acceptance unlocks
+both ships for exactly this report), and the video DTO now carries a
+server-computed qcGate verdict (serialize.ts → QcGateDTO) that the detail
+dialog renders as a Ship-gate card: hold state, each blocker with its policy
+rationale, Re-run QC / Ship anyway… actions, and the override note when
+standing; both Export buttons and the publish panel respect the gate. Render
+and QC-re-run activity messages now name a hold the moment measurement
+lands. parseQcReport moved to qc-policy.ts as the single report parser
+(serialize reuses it — badge and gate can never disagree). Verification:
+unit 169 → 174 (matrix coverage pinned against the battery's emission set,
+the fail-closed decision table, override staleness, report-mode env
+behavior, parser tolerance); new scripts/s40-unit-probe.mts 102/102
+(exhaustive per-id partition — every one of the 15 ids failing and
+unmeasured alone blocks exactly per its severity; maximal cases; the
+staleness matrix; injected-env switch; parser edges). Gate: tsc 0 · eslint 0
+errors · 174/174 unit (+5) · queue PASS · s36 38/38 · s30 41/41 · s40 probe
+102/102 · billing 40/40 · e2e 26/26.
+
+## S41 (2026-11-06 UTC) — the dialog that ate its own frame
+
+**Report:** the video-detail card "not rendering well" — thumbnail a giant
+cropped sliver, voice select truncated mid-word at the right edge, a third
+export preset chip cut past the border ("R…"), Ken Burns / Keynote card
+text clipped mid-sentence, nested scrollbars.
+
+**Root cause (two stacked layout bugs, mechanically pinned by
+`scripts/s41-visual-probe.mts`):**
+
+1. **The grid blowout.** `ui/dialog.tsx`'s DialogContent base is a bare
+   `grid` — a single AUTO track, which sizes to the widest item's
+   min-content. The Timeline Studio picker row (`ml-auto flex
+   items-center gap-1`, nowrap) had accumulated one fixed-width select
+   group per stage — S6 captions, S7 music, S8 voice, S9 poster ×2 +
+   image + regenerate, S10 short, S13 frame + fps, S14 grade + burn,
+   S15 motion + transition — until its nowrap min-content measured
+   **3,113px**. The auto track followed: `gridTemplateColumns: 3194.56px`
+   against a **510px** visible frame. Every grid item stretched with it
+   (the thumbnail `img.w-full` rendered 3,195px wide → aspect-video
+   ≈ 1,797px tall → the "giant cropped photo" that pushed the real
+   content off-screen), every card laid out at track width and clipped at
+   the frame, and only 2 of 6 preset chips stayed inside.
+
+2. **The width that never was.** The dialog asked for `max-w-2xl`
+   (672px) but rendered at **510px**: the base also carried
+   `sm:max-w-lg`, and tailwind-merge keeps `sm:`-prefixed max-width as a
+   SEPARATE variant group — the override silently lost on every viewport
+   ≥ 640px. Same for scene-editor (`max-w-2xl`) and cast-view's second
+   dialog (`max-w-3xl`); every wide-dialog intent in the app was capped
+   at 512px.
+
+**Fix:** (a) the picker row and each of its nine groups now
+`flex-wrap` — groups flow onto as many rows as the width demands (7 rows
+at the restored 672px frame, nothing overflows); (b) DialogContent base
+gains `grid-cols-1` (= `repeat(1, minmax(0, 1fr))`) so the track is
+capped at the container width — a wide child can only overflow its own
+box, never stretch the dialog again; (c) the base drops `sm:max-w-lg`
+(callers own the desktop cap; `ui/command.tsx`'s confirm wrapper
+restates its own 512px), so `max-w-2xl` finally means 672px — mobile
+keeps the `calc(100%-2rem)` gutter.
+
+**Verification:** new `scripts/s41-visual-probe.mts` (Playwright, local
+dev server + minted session) measures the live dialog: before — track
+3194.56px / scrollWidth 3195 vs clientWidth 510, toolbar one 3,113px
+nowrap row, hero img 3,195px, 2/6 presets visible; after — track 670px =
+clientWidth, zero horizontal overflow, toolbar wrapped (588px content
+width), hero 670px, 6/6 presets inside; plus a 375px mobile leg (373 =
+373, no overflow) and before/after screenshots. Gate: tsc 0 · eslint 0
+errors (touched files 8 warnings before = 8 after) · 174/174 unit ·
+queue PASS · s36 38/38 · s30 41/41 · s40 probe 102/102 · billing 40/40.
+
+## S42 (2026-11-06 UTC) — the upload that looked like a no-op
+
+**Symptom:** replacing a scene's storyboard image with an uploaded
+artwork in the Scene Studio appeared to do nothing — the dialog kept
+showing the previous take.
+
+**Root cause:** the scene-art route serves a STABLE URL
+(`/api/videos/<id>/storyboard/<n>`) under `Cache-Control: private,
+max-age=3600`, and `serializeScenes` emitted that bare URL to every
+`<img>`. Upload/re-roll/AI-edit rewrite the bytes behind the same
+path, so after a replacement the src string is unchanged and the
+browser serves the cached first take for up to an hour. (The slides
+PNG route already used `no-cache`; timeline-studio/cast-view already
+appended manual `?v=` params — scene art was the unprotected family.)
+
+**Fix:** version-stamped URLs + revalidation. `serializeScenes` now
+stats the art through the storage seam and stamps the DTO URL with
+`?v=<mtime-ms>-<size>` (`sceneArtVersion`, exported) — the URL rotates
+the moment new art lands, so max-age caches exactly one take. The
+route adds a content-hash ETag with `If-None-Match` → 304.
+create-view's library strip renders the DTO URL instead of a
+hand-built one; timeline-studio's preview pool entries carry their URL
+and reload on rotation; scene-editor's upload/AI-edit save text edits
+first (the re-roll contract) so the re-seed that follows a rotated URL
+never reverts unsaved keystrokes.
+
+**Verification:** `scripts/test-unit.mts` — two new S42 tests: the
+pure token contract (URL-safe, rotates on mtime or size, NaN clock
+degrades to `0-<size>`) and a storage-backed `serializeScenes`
+round-trip proving the stamp rotates when art is replaced (the bug)
+and returns to null when removed. Gate: tsc 0 · eslint 0 errors ·
+176/176 unit (174 + 2 new).
+
+## S43 (2026-11-06 UTC) — the boom, the caption that wouldn't stick, and the iPhone photo
+
+**Symptoms (field report, rendered b.mp4):** unwanted sound at the video
+start and at scene transitions; storyboard caption edits appeared to only
+take effect through the voice; HEIC (iPhone) art uploads rejected.
+
+**Root causes:** (1) the sfx.ts synthesized boom (scene 1) and sting (every
+rehook) cues are ON by default — the sub-bass scan of the user's file shows
+the scene-1 boom as the loudest 25-120 Hz event of the entire 243s video,
+12 dB above the floor, with sting clusters every ~9-10s after; (2) the Scene
+Studio's Caption field writes the row, but the smart-caption render honored
+only the timeline DOC's caption — a snapshot of the row at assembly time —
+so caption edits never rendered while narration edits (which re-voice) were
+the only ones that visibly worked; (3) sniffImageFormat rejected HEIF and
+stock ffmpeg ships without libheif.
+
+**Fix:** SFX default OFF (Settings → Sound still enables; per-scene doc
+picker unaffected). Caption contract centralized in
+`captionOverridesFor()`: doc caption > row caption with the new
+`captionUser` flag (set by the Scene Studio PATCH, which also writes
+through to the aligned doc and invalidates ONLY rendered artifacts — the
+voiceover survives) > word-synced narration chunks; assembleTimeline seeds
+doc captions only from captionUser rows. HEIC: ftyp-brand sniff (heic/heix/
+hevc/heim/heis/mif1/msf1) + WASM libheif decode (heic-convert, lazy
+import, ambient d.ts) feeding the same 1344x768 cover-crop; real committed
+fixture pins decode → crop end-to-end.
+
+**Verification:** 5 new unit tests (HEIF sniff incl. refusing MP4 brands,
+real-fixture decode+crop, the override chain, the captionUser round-trip,
+the doc seeding) + the assembleTimeline caption test re-pinned to the new
+contract. Gate: tsc 0 · eslint 0 errors · 181/181 unit · s4 probe ALL PASS
+· s5 probe ALL PASS.
+
+## S44 (2026-11-06 UTC) — bring your own bed, where the track is picked
+
+**Symptom:** users could upload their own licensed background track only
+via Settings → Background Music — not where a video's track is picked.
+
+**Fix:** the upload dialog is extracted into a shared `MusicUploadDialog`
+(license metadata form unchanged); the per-video MusicPickerCard gains a
+"My own" button that uploads AND pins the new track to the video
+immediately. settings-music.tsx deduped onto the shared component.
+
+**Verification:** tsc 0 · eslint 0 errors · unit suite 181/181 (UI-only).
+
+## S45 (2026-11-06 UTC) — the re-run that died at parse, and the report the preview never wrote
+
+Closes the two S37/S39 live findings that stayed backlog: director-plan
+re-runs failing on LLM JSON variance, and preview renders persisting no
+qcReport.
+
+1. **The parse lived outside the retry** — all 15 `parseJsonLoose` sites
+   parsed after `aiCall` returned, so one malformed response failed the
+   job with no re-ask; the parser's greedy `/\{[\s\S]*\}/` fallback also
+   swallowed the object whenever trailing prose contained a brace, and
+   its fallback parse was unguarded (raw SyntaxError). Now: a strategy
+   ladder in `parseJsonLoose` (fences/noise strip → direct → repaired
+   [trailing commas, curly quotes] → string-aware balanced scan →
+   repaired scan → readable error), a new `aiCallJson()` that parses and
+   shape-validates INSIDE the retried closure, and the two
+   proven-exposure sites (director pass, script package) migrated onto
+   it. Fake-driven unit tests pin the composition: variance costs a
+   FRESH ask, not the job.
+2. **Preview evidence, scoped** — `qcForPreview()` runs the battery
+   against preview.mp4 with preview-honest expectations (no narration-sync,
+   no captions; every artifact-local lens runs), the report carries
+   `scope: "preview"`, the pure `previewQcPatch()` pins the persistence
+   invariant (preview evidence persists only while no full render stands;
+   a crashed battery clears the field), and `applyQcPolicy` fail-closes:
+   a preview-scoped report is not standing evidence for the export gate.
+   The scorecard header labels scoped reports; the activity line carries
+   the verdict.
+
+Gate: tsc 0 · eslint 0 errors (670 warnings = baseline) · 191/191 unit
+(+10) · queue PASS · billing 40/40 · s30 41/41 · s36 38/38 · s40 102/102
+· s34/s4/s5 ALL PASS · s35 17/17. Full narrative in the worklog ("S45").
+
+## S46 (2026-11-07 UTC) — the lockout that forgot every deploy
+
+Closes roadmap P1-6: the login lockout lived in a process-local Map, so
+every deploy/restart forgave all attackers mid-lockout, and the
+multi-instance Fly topology (P0-6's landed decision) gave each instance
+its own idea of "too many attempts" — an attacker could trip 4 failures
+on instance A, then 4 more on instance B, forever.
+
+1. **One row per failure, the window counted in SQL.** New `AuthAttempt`
+   table (id, key, at + composite index): `recordLoginFailure` inserts a
+   row (independent inserts cannot lose counts — the old counter's
+   read-modify-write could race), `checkLoginAllowed` reads the in-window
+   rows and applies the ONE pure law `loginWindowDecision()` (5 failures
+   per rolling 10 min; unlock when the oldest ages out; Retry-After
+   floors at 1s). The law is UNCHANGED for the burst case (5 rapid
+   failures → ~10-min lock) but is now a TRUE sliding window: the old
+   fixed-window counter could be straddled (4 at T−9:54 + 4 seconds
+   later = 8 failures in 10 min, never tripped — unit-pinned as the
+   "straddle hole"). Success clears the key. Failures older than the
+   window are pruned opportunistically (they can never affect a
+   decision). Surfaces: /api/auth/login + /api/auth/change-password's
+   current-password proof (the same law, as since S16).
+2. **Fail OPEN, loudly.** The throttle is a damper, not an auth control —
+   a broken table (e.g. a deploy that skipped the migration) degrades to
+   no-lockout with a once-per-process stderr announcement
+   (the spendOverrides observability pattern), never a 500 on sign-in.
+   Silent fail-open is the one refused outcome.
+3. **The dead duplicate died.** auth.ts carried a byte-identical lockout
+   sharing the same `__tfAuthLimit` globalThis key that NOTHING imported
+   — a drift hazard (import the wrong copy, throttle nothing). Removed;
+   tenant.ts's in-memory version removed; the one law is
+   `auth-throttle.ts`.
+4. **Scoped deliberately.** The middleware per-IP read/write tier stays
+   in-memory (middleware is architecture-banned from the DB; its tiers
+   are coarse shedding). Register/reset get no DB window: it would gift
+   attackers an account-creation DoS against NAT'd legit users; the
+   middleware tier covers volume abuse. Revisit on evidence.
+
+Verification: +3 unit tests (the law, the boundary/stale semantics, the
+straddle closure); s16 probe layer 2 rewritten as the REAL-DB proof —
+the failures are rows visible through a SECOND PrismaClient (state a
+restart keeps), the opportunistic prune drops only out-of-window rows,
+another key's prune leaves the locked window untouched, probe residue
+cleaned. Gate: tsc 0 · eslint 0 errors (670 warnings = exact baseline) ·
+194/194 unit (+3) · s16 probe ALL PASS · queue PASS · billing 40/40 ·
+s30 route e2e ALL PASS (live server) · e2e 26/26. Migration
+20261107000000_s46_auth_attempt (Postgres chain; SQLite via db push).
+Full narrative in the worklog ("S46").
+
+---
+
+## S47 — Production Integrity and Acceptance (opened 2026-11-06 UTC)
+
+**Source:** the external repository audit ("Fresh Repository Check",
+8.7/10, 2026-11-06) and its five next actions. Feature sprints are ON
+HOLD until this ledger closes. Tranche 1 executed 2026-11-06.
+
+| Workstream | Status | Notes |
+|---|---|---|
+| T-47.1 shared spend admission | ✅ Done | `spend.ts`: the S32 boot-once snapshot is GONE — every paid admit runs READ-check-RESERVE inside ONE `$transaction` (Serializable on Postgres so the DB itself serializes concurrent instances; P2034 loser retries once; SQLite single-writer as-is) against `SpendReservation`. UUID hold ids (no cross-instance PK collisions). `bootFailed` is fail-closed WITH self-heal (refuse one dispatch, clear, next admit re-tries the read — the S32 latch never retried, contradicting its own error contract). ctx-null holds (probes) tracked in `localOnly` so the per-admit DB re-sync cannot wipe them, and counted explicitly in the in-transaction projection. |
+| T-47.2 probe seeding modernized | ✅ Done | s27/s32 seeded by POKING the in-process mirror — valid only under boot-once semantics (S32's own precedent: S32 rewrote S27's ctx seeding). `resetGate` now wipes `SpendReservation` and seeds settled ROWS — the only seeding that proves anything about a DB-decision gate. s32 §1 had a PRE-EXISTING failure on main (retrievedAt expected 2026-11-06; the source stamps the UTC day 2026-11-05 per its own provenance convention) — the audit's "commit-reported results are not independently executed", found in the wild. |
+| T-47.3 CI evidence | ✅ Verified | Authenticated GitHub API: 87 Actions runs exist. S45 CI = success. **S46's run (30281a8): gitleaks PASS, `Typecheck · Lint · Unit` CANCELLED mid-run, E2E skipped — 30281a8 has NO green CI.** The audit tranche independently reproduced the local evidence (tsc 0 · 194/194 unit · s27/s32/s34 probes ALL PASS); the S47 push re-runs CI on the reconciled tree and its run is the green reference. The audit's "could not retrieve" = unauthenticated API rate limit, not missing CI. |
+| T-47.4 date discrepancy | ✅ Resolved | S46 commit 30281a8 authored/committed **2026-11-06T20:12:40Z** (= 04:12 Nov 7 Asia/Shanghai — the worklog header took the local day). Worklog header corrected to 2026-11-06 UTC; the audit's Nov 6 dating was right. |
+| T-47.5 lint programme | ✅ Baseline | Exact S46 baseline frozen: **0 errors / 670 warnings / 402 files** — no-console 370, no-non-null-assertion 160, no-unused-vars 69, set-state-in-effect 33, no-unused-expressions 11, exhaustive-deps 9, no-explicit-any 7, misc 11. `docs/baselines/s47-lint-baseline-2026-11-06.txt` carries the census + the reduction order (errors stay 0, warnings never rise). |
+| T-47.6 docs reconciliation | ✅ Done | README status → S46 + foundation proofs; **ARCHITECTURE.md §1 rewritten from source** (31 models, 18 migrations, tenancy via `tenant-db.ts`, default-deny auth, DB queue, storage abstraction, S47 shared gate, §1.7 shared-state table); §2 marked as Stage-1 history with remaining deltas in §1.8; ROADMAP.md status header refreshed. |
+| T-47.7 director acceptance benchmark | ✅ Done | `scripts/s47-director-benchmark.mts` + `docs/baselines/s47-director-benchmark-2026-11-06.txt`. §A: 9/9 malformed-JSON corpus cases recovered (fences/BOM/curly-quotes/trailing commas/prose/trailing junk + the NEW classes the live run caught: unquoted scalar values like `"lens":100mm`, missing closers, over-close tails), 2/2 must-fail cases fail honestly. §A2: the S45 retry closure proved with the REAL aiCall loop. §B: 12/12 full-coverage schema-valid plans across 6 genres (5 profiles + narrative control, 2 runs each), 6/6 scene-1 paints with independent VLM re-scores 7–9/10, mean director latency 10.8 s. **Two production fixes landed from the evidence:** `parseJsonLoose` grew a string-aware structural-repair rung (quotes unquoted scalars BEFORE the balanced scan, appends missing closers, drops unmatched trailing closers; bails on mid-string truncation and mismatched closers — pinned by 3 new unit tests, 197/197), and `runDirectorPass` validate now requires the plan to cover EVERY seeded scene (the benchmark caught a lossy 1-of-3 plan sailing through the old ≥1-scene check). **Finding for S48:** the platform default `glm-4.5-flash` failed the narrative RE-RUN 3/3 (prose, scene-less object) — director-grade model selection / prompt hardening is an S48 Director decision; the benchmark pins glm-4.6 (s27 §6 precedent). |
+| T-47.8 visual continuity acceptance | ✅ Done | `scripts/s47-continuity-benchmark.mts` + `docs/baselines/s47-continuity-benchmark-2026-11-06.txt`. Full production path on the fixed Nova anchor: portrait (CogView) → approved narrative plan (glm-4.6) → 3 identity-locked scene paints (portrait-seeded imageEdit) → production VLM continuity check. **Recorded baseline: 88/100 overall, 3/3 scenes “consistent” (85/88/92)** — the checker honestly flagged that the PORTRAIT renders older than the stated late-20s anchor while cross-scene identity held (exactly the signal a baseline exists to capture; an S48 character-bible prompt fix candidate). The run also exercised the quality gate's designed 429 fail-open. Thresholds + human-review protocol remain S54 decisions — no claim is made here. |
+| T-47.9 dependency alerts triage | ✅ Done | `docs/audits/s47-dependency-triage.md`. Dependabot's 18 (11H/4M/3L) reconciled against `npm audit`'s 17 (5H/12M) — per-advisory vs per-package enumeration, same advisory DB. **Actions:** `sharp` ^0.34.5 → ^0.35.5 (the ONE runtime-reachable advisory — libvips CVEs on provider-returned bytes, `image.ts:572`), and TWO dead-weight dependencies removed (`@mdxeditor/editor`, `react-syntax-highlighter` — zero references repo-wide). Post-fix: **11 advisories, all dev/build chain (prisma config chain, eslint toolchain), zero runtime**. Re-run cadence: every sprint close with the lint census. |
+| T-47.10 CI concurrency audit | ✅ Done | Root-caused via the authenticated jobs API: run #81's `Typecheck · Lint · Unit` died inside the **"Install ffmpeg" apt step, which stalled the FULL 20 minutes** (20:18:49Z → 20:38:52Z) and was killed by the job's own `timeout-minutes: 20` — which GitHub records as conclusion "cancelled"; E2E skipped via `needs: check`. The S47 push (run #82, 20:56:44Z) arrived 18 min AFTER the cancellation — **the concurrency group was exonerated**. Two `ci.yml` fixes: (1) `cancel-in-progress` now PR-only (a main push always earns complete CI evidence — the group WOULD have eaten evidence on a faster follow-up push); (2) `timeout-minutes: 5` on both ffmpeg steps so an apt stall fails fast and visibly instead of eating the job budget. |
+
+Verification (tranche 1): tsc 0 · eslint 0 errors / 670 warnings
+(unchanged baseline) · **194/194 unit** · **s27 ALL CHECKS PASS · s32 ALL
+PASS · s34 ALL PASS** against the shared gate · `SpendReservation` empty
+after probe teardowns.
+
+Verification (tranche 2, S47 close): tsc 0 · eslint 0 errors / 671 warnings
+— **stash A/B verified this sprint's changes add ZERO warnings** (671 with
+and without them). The +1 vs the frozen 670 is environmental, not new code:
+one `no-unused-vars` (`scripts/test-unit.mts:4030` "fetchFn") that counts in
+this sandbox at S47 HEAD but did not in the baseline's environment; the
+next census freezes whatever this environment reproduces · **197/197 unit**
+(3 new S47 parser tests) · **s47 director benchmark ALL CHECKS PASS · s47
+continuity benchmark ALL CHECKS PASS** · sharp 0.35.5 smoke-tested ·
+`npm audit`: 11 remaining, all dev-chain. **The S47 ledger is closed; the
+feature roadmap un-holds.**
+
+## S48 — Cinematic AI Director (opened 2026-11-07 UTC)
+
+Sprint goal: the 19-field cinematic Director — shot schema v2, engine-verbatim
+camera vocabulary, per-shot focal + speed, director-grade model selection.
+Design contract: `docs/design/s48-s49-schema.md` (joint with S49 — the ONE
+migration both sprints need belongs to S49; S48 ships zero DB changes).
+
+| Task | Status | Notes |
+|---|---|---|
+| T-48.1 shot schema v2 (19 fields) | ✅ Done | `DirectorShot` 7 → 19 fields: + subject, subjectAction, cameraHeight (5 vocab), angle (4), depthOfField (3), lighting, colorGrade, focal (9 motion tokens), moveSpeed (3), transitionOut (cut/fade), purpose (6), notes. Optional on the interface (v1 plans / fixtures / human edits), ALWAYS filled by `parsePlan` with documented defaults; the LLM-facing JSON schema demands all 19. `version: 1\|2` is provenance only — the parsed in-memory shape is uniformly complete, no consumer branches on it. |
+| T-48.2 engine-verbatim camera vocabulary | ✅ Done | v2 `CAMERA_MOVES` = the engine's move set (static, zoom-in, zoom-out, pan-left/right, tilt-up/down, diag-tl, diag-br, punch-in). `CAMERA_TO_MOVE` carries identity rows for every v2 id (static→hold, punch-in→punch — the only 1:1 renames, documented). Legacy verbs (push-in, dolly-in, handheld, crane-up, drone) stay parseable via the v1-compat rows so persisted plans render byte-identical. Cinematic language Ken Burns can't honor moved to the prompt fields + i2v prompt. |
+| T-48.3 per-shot focal + moveSpeed execution | ✅ Done | `buildSceneShots` resolves shot.focal via new `motion.ts focalFromToken` and moveSpeed via `MOVE_SPEED_FACTOR` (0.7/1/1.35); `render.ts resolveShotInputs` → `GraphShotInput.focal/speed` → `multiShotSceneGraph` applies `shotIntensity` (clamped ≤ the 30 knob ceiling). Absent values = scene heuristic + video intensity, exactly as before. |
+| T-48.4 director-grade model selection | ✅ Done | `DIRECTOR_MODEL_HINT = "glm-4.6"` (the S47 benchmark finding) rides the new `llmChat(body, { modelHint })`; `resolveChatModel` pins operator pick > hint > gateway default — pure, unit-tested. The pass's plan persists `version: 2`. |
+| T-48.5 profiles on the v2 vocabulary | ✅ Done | All 7 profiles' `cameras` lists + overlay texts speak v2 ids; the podcast frenetic-camera validation flags diag-tl/diag-br/punch-in. |
+| T-48.6 deferred field on record | ✅ Done | `transitionOut: "fade"` executes with S50's per-shot xfade (the design doc names it the ONE deliberate deferral); "cut" is the default and today's behavior. |
+| T-48.7 compatibility contract | ✅ Done | 9 new unit tests (206/206): v1 plans parse with verbs verbatim + version 1; v2 verbs execute identity/renames; parsed v2 shot carries exactly 19 keys; the pacing gate survives the schema (fast moveSpeed ≠ an excuse for static cameras); shotPrompt weaves the v2 clauses and stays byte-compatible for v1-shaped shots; the golden user-prompt camera line updated deliberately. |
+
+Verification: tsc 0 · eslint 0 errors / **671 warnings — this sprint adds
+ZERO** (first draft's 12 non-null assertions refactored to narrowing guards
+before commit) · **206/206 unit** (197 + 9 S48). No DB changes; no provider
+changes; v1 plans render byte-identically.
+
+## S49 — Islamic Visual Protection (opened 2026-11-07 UTC)
+
+Sprint goal: the layered restricted-subject system — no facial/bodily depiction
+of the Prophet Muhammad ﷺ, his family, the Ten Companions, the Quranic
+prophets, the angels, or God, enforced system-wide and VERIFIED before export.
+Design contract: `docs/design/s48-s49-schema.md` §3 (the joint schema — the ONE
+migration both sprints needed: `Video.contentPolicy`).
+
+| Task | Status | Notes |
+|---|---|---|
+| T-49.1 the policy module | ✅ Done | `src/lib/tubeforge/restricted-subjects.ts`: `ContentPolicyId` (standard \| islamic-history), the registry (the Prophet ﷺ with transliterations + honorifics + the definite reference; the Ten Promised Paradise; the family; the Quranic prophets; angels; God; collectives), a compiled word-boundary detector (longest-alias-first; POSSESSIVES EXCLUDE — "the Prophet's mosque" names an artifact/place, and the system's own alternative-composition library leans on those), the alternative-composition clause library (12 person-free deterministically-picked substitutions), `sanitizePromptForPolicy` (sentence REPLACE, never delete + the hard negative clause; `appendNegative:false` for metadata fields), `policyVisualRules`/`policySystemOverlay`, and `runRestrictedVisualScan` (8 evenly-sampled frames → VLM judge; NEVER throws — failure reports "unmeasured"). |
+| T-49.2 the schema | ✅ Done | `Video.contentPolicy String?` (null = standard) in schema.prisma + the generated sqlite mirror; migration `20261107000000_s49_content_policy`. Set at create (validated snap in POST /api/videos); enforcement ALWAYS reads the column, never the profile. |
+| T-49.3 L1 compose | ✅ Done | `generateSceneScriptPackage` takes `contentPolicy`: policy rules appended to the VISUAL RULES, the "prefer faces/human-presence" visual-field rule INVERTED in policy mode, and `verifyScenePlan` gains audit rule 8 (rewrite non-compliant visuals). Wired through script-job.ts + the script + batch routes. |
+| T-49.4 L2 direct | ✅ Done | `directorSystemPrompt(profile, contentPolicy)` stacks the policy overlay on the profile voice; the parsed plan's shot imagePrompt/subject are sanitized BEFORE persist, substitutions ANNOUNCED via a warn-level activity row ("review before approving"); the plan carries `contentPolicy` provenance (parsePlan passthrough). |
+| T-49.5 L3 paint | ✅ Done | `generateSceneImage` + `ensureShotImages` sanitize the composed prompt (standard = byte-identical to pre-S49) with a visible console warn naming the substituted entries; `ImageRequest.negativePrompt` rides stability/fal/replicate/ideogram/recraft (ignored by z.ai/openai/pollinations — the positive-prompt clause carries the policy everywhere, so no provider is protected only by the negative field). |
+| T-49.6 L4+L5 verify + gate | ✅ Done | video-jobs runs `runRestrictedVisualScan` on final.mp4 at BOTH QC sites (post-render + QC re-run) under the policy; `runQcReport`/`qcForVideo` emit the `restricted-visual` check when the scan ran (absent under standard = pre-S49 behavior); `qc-policy.ts` classifies it **block** (policy version `s49-v1`; QC_BLOCKING_COUNT 9→10 — the deliberate-act test updated). Fail-closed: fail OR unmeasured holds export/publish; the audited human override remains the escape hatch. |
+| T-49.7 islamic-history profile | ✅ Done | The 8th production profile (documentary-style voice carrying the compose-around doctrine; v2 camera vocabulary; slow-pacing validation advisory). PROFILE_IDS + catalog sync pinned both ways. The S52 UI picker will default the POLICY on; runtime stays decoupled (enforcement reads the column). |
+| T-49.8 compatibility | ✅ Done | Standard policy = identity everywhere (sanitize is byte-for-byte; no scan; no check emitted; no prompt changes). 10 new unit tests (216/216) pin: the detector tiers + word boundaries + possessives, substitution/negative/identity, the QC emission + fail-closed gate table, the unmeasured-scan contract (real ffmpeg failure path), the 8th profile, and the two deliberate pin updates (profile count 7→8, blocking 9→10). |
+
+Verification: tsc 0 · eslint 0 errors / **669 warnings (below the 671 sandbox
+baseline — this sprint adds zero, net −2)** · **216/216 unit** (197 + 9 S48 +
+10 S49) · queue restart-recovery PASS · **live probes ALL CHECKS PASS**:
+`s49-policy-probe.mts` (real L1 script pass 8/8 compliant visuals → L2 v2 plan
+25/25 19-field shots, contentPolicy stamped, hard contract held → L3 real
+CogView paint 172 KB through the sanitized prompt; the S48 model hint rode the
+gateway default) and `s49-l2-visibility-probe.mts` (deliberately noncompliant
+seeded visuals → the overlay steered the model fully compliant, the policy
+outcome row always visible, the human stays the approval gate). Baselines:
+`docs/baselines/s49-policy-probe-2026-11-07.txt`. The S54 seven-genre
+benchmark owns full-render L4/L5 + genre-level scoring.
+
+## S50 — the Motion Engine (opened 2026-11-07 UTC)
+
+Sprint goal: execute the S48 deferred field (`transitionOut: "fade"`), close the v2
+vocabulary gap in the generative path, carry the content policy into video
+generation, and kill the i2v "groundhog day" rewind. Scope note: aspect-aware
+i2v generation was deliberately DEFERRED — the storyboard seeds are 16:9-only
+today (`story.ts` hardcodes 1344x768), so a 9:16 clip from a 16:9 seed is
+geometrically dishonest; it lands with aspect-aware storyboards, not here.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-50.1 per-shot hand-offs execute | ✅ Done | `multiShotSceneGraph` honors `GraphShotInput.transitionOut`: "fade" pairs blend through an **xfade chain**, cut pairs keep hard concat (mixed joins compose). The frame-budget law survives BY CONSTRUCTION: an xfade overlaps its duration, so the trim budget is extended by exactly the fade total (recapped against the fitted allocation; any debt is repaid from the largest shots) — output frames === round(dur·fps) EXACTLY, the audio never drifts. `SHOT_FADE_SEC = 0.4` capped at 1/4 of the shorter adjacent shot; the LAST shot's hand-off is ignored (scene boundaries belong to transitionIn). No fades anywhere → the single hard concat, byte-identical to pre-S50. `buildSceneShots` + `resolveShotInputs` carry the field end to end. |
+| T-50.2 the v2 vocabulary in the generative path | ✅ Done | `I2V_CAMERA_PHRASES` now covers every v2 engine verb (diag-tl, diag-br, punch-in — previously degraded to generic drift, the same split-brain S48 killed for Ken Burns). `i2vMotionPrompt`: shot 0's `moveSpeed` colors the camera phrase (slow/fast prefixes), and shot 0's `subjectAction` — the director's specific motion ask — REPLACES the generic per-kind subject clause when present. |
+| T-50.3 the policy rides video generation | ✅ Done | `ensureSceneClip` sanitizes the i2v motion prompt under `Video.contentPolicy` (the S49 L3 gap in the VIDEO path: the storyboard image was sanitized, the motion prompt that animates it was not). Identity under the standard policy. |
+| T-50.4 the palindrome loop | ✅ Done | `ensureSceneLoop`: scenes longer than the generated clip loop a PALINDROME (forward + reverse, `PALINDROME_LOOP_GRAPH` in motion.ts) instead of the raw forward loop's visible rewind every clip-length seconds. Turning points duplicate one frame (33 ms @ 30 fps — imperceptible). Cached beside the clip; probe/palindrome failure never fails the render (raw loop = the pre-S50 behavior). |
+| T-50.5 compatibility + tests | ✅ Done | 5 new tests (221/221): the xfade chain offline (offset math, budget invariant, mixed joins, last-shot fade ignored, legacy byte-identity), a REAL-ffmpeg fade render (exact duration + a blended frame inside the fade window), the i2v prompt table/prompt contracts, the execution pass-through, and a REAL-ffmpeg palindrome test (exact frame-index extraction: the turning pair is the same frame — MAD re-encode-noise-only — vs the raw loop's last→first jump). |
+
+Verification: tsc 0 · eslint 0 errors / **669 warnings (below the 671 baseline;
+this sprint adds zero)** · **221/221 unit** (216 + 5 S50, two of them real
+ffmpeg) · queue restart-recovery PASS. The live i2v path (generation cost)
+belongs to the S54 seven-genre benchmark; S50's deliverables are the graph/prompt
+contracts, pinned above.
+
+## S51 — the Visual Continuity Engine (opened 2026-11-07 UTC)
+
+Sprint goal: land the reference-images seam the audit flagged as dead schema —
+`Character.referenceImages` had a reader (runContinuityCheck) but NO writer;
+`Location.referenceImages` / `Prop.referenceImages` had neither — and answer
+the S47 continuity benchmark's portrait-age finding (anchor says late-20s,
+CogView freehand paints 50s-60s, and the portrait-seeded edit propagates the
+drift to every scene). No schema change: the columns shipped in
+`20261101110000_stage5_director` and have been waiting since.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-51.1 cast reference writers | ✅ Done | `src/lib/tubeforge/references.ts` (shared seam) + `image-upload.ts` (the S43 sniff/HEIC decode moved DOWN out of story.ts so the seam can't cycle) + `reference-routes.ts` (ONE handler factory — cap, key validation, activity rows — so the three families can't drift) + 6 thin route files. Keys `characters|locations|props/<id>/ref-<n>.png`, oldest-first JSON arrays, caps 6/4/4; world `[id]` DELETEs now `removePrefix` (the orphan-file gap). `serializeCharacter` + the world list routes surface `referenceCount`/`referenceUrls`. |
+| T-51.2 references ride identity + the portrait-age fix | ✅ Done | `buildPortraitPrompt` (pure, unit-pinned): anchor LEADS (primacy — the S47 prompt led with the NAME), apparent-age fidelity clause mid-prompt, anchor ECHO before the close (recency). `generateCharacterPortrait` derives from the NEWEST user reference via imageEdit when refs exist (T2I fallback byte-identical when absent). `runPortraitJob` passes the column through. |
+| T-51.3 world reference writers + the set-piece seed | ✅ Done | Same seam for Location/Prop + `getApprovedLocationRefKey` (director-plan, plan-order wins, newest = array tail, props deliberately excluded) + `generateSceneImage` seeds NON-host scene edits with the location's newest ref under an approved plan (cast likeness > set-piece likeness; single fail-through law). No plan / no refs / edit-capable provider absent → byte-identical pre-S51 behavior. |
+| T-51.4 the live re-measurement | ✅ Done | `scripts/s51-continuity-benchmark.mts`, live on the Z.ai metered path. **Leg A (the S47 audition re-run, byte-identical anchor): the portrait-age finding DISSOLVED — zero age issues** (S47: 3/3 scenes flagged "appears 50s-60s"); overall 85/100 (78/85/93) vs S47's 88; the residual is a NEW recorded observation: hair hue drifts warm/golden under warm scene lighting vs the anchor's silver. **Leg B: reference-seeded portrait — VLM same_person=true, apparent_age="late-20s" (stated window), confidence 82.** **Leg C: location-seeded scene — VLM same_place=true, confidence 88** ("matching red lantern canopy, stall layout, signage, wet reflective pavement"). The run's 1 "failed" check was the script's own unanchored regex matching g(old)en-blonde — a false positive, fixed (word-bounded) post-run; the recorded issues prove no age flag. Baseline: `docs/baselines/s51-continuity-benchmark-2026-11-07.txt`. |
+| T-51.5 UI | ✅ Done | Cast Studio: Reference-photos panel (upload + thumbnails + hover-remove, cap-aware). World view: per-card thumbnail strip + Add-photo label (lazy lists only for carriers). |
+| T-51.6 tests + compatibility | ✅ Done | 6 new tests (227/227): parse fail-open, lowest-free pigeonhole cap (50-churn loop), traversal guard, REAL-ffmpeg normalization (2000→1024x512 downscale, 400x300 no-upscale, garbage/oversize throws, storage round-trip + cleanup), portrait prompt contract, the plan-order selection law. **Bonus fix: the S50 palindrome test's `gradients` fixture is seed-random and flaked on this sprint's 2nd run — replaced with a deterministic testsrc2 linear pan (3/3 stable runs).** |
+
+## S52 — the themed production profiles surface (opened 2026-11-07 UTC)
+
+Sprint goal: give the 8 production profiles (M1's API-only surface, waiting
+since Stage 5) their UI — the profile picker the islamic-history profile has
+been waiting for. Three laws carried over from the design docs: the picker's
+ids are the SAME keys `resolveProfile` snaps against (dropdown and engine can
+never disagree); the profile's validation notes surface in the approval card
+BEFORE the human approves (§3 guardrails: "no silent creative decisions" —
+the M1 TODO this sprint closes); and the content policy NEVER derives from
+the profile at runtime — the `Video.contentPolicy` column is the one truth
+(docs/design/s48-s49-schema.md §3.2), so the picker's "default the POLICY on"
+is a one-click explicit human action, activity-logged, never a side effect.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-52.1 the picker catalog + wire shape | ✅ Done | `ProductionProfile.blurb` (one-line creator-facing description, all 8 profiles) + `profilePickerList()` (pure: id/label/blurb in catalog order) + `planProfileNotes(plan)` (pure: the authoring profile's live validation, the seam the GET route calls). GET `/api/videos/[id]/director` now also serves `profiles`, `contentPolicy`, `profileNotes` — the card renders entirely from the response, so the client bundle stays lean and the catalog is always the server's truth. |
+| T-52.2 the policy PATCH gate | ✅ Done | PATCH `/api/videos/[id]` accepts `contentPolicy` under the S12/S13/S14 catalog-gate law: a PRESENT but illegal value dies with a readable 400 (foreign ids, type confusion); `null` clears to standard; a friendly `"standard"` normalizes to null (the column's domain stays `null \| "islamic-history"`); an absent key stays untouched. The flip is activity-logged (warn, either direction) BEFORE the write lands — "deliberate human choice" is auditable. Existing artifacts are never silently wiped; the QC restricted-visual gate re-verifies on the next render. |
+| T-52.3 the DirectorCard surface | ✅ Done | Profile `<Select>` (8 entries, label + blurb, default = the plan's authoring profile, or islamic-history when the video is protected) rides every "Suggest direction"/"Re-run pass" as the POST body's `profile`. The plan block shows the authoring-profile badge (non-narrative), and the profile's validation notes render as an amber advisory list above the approve buttons. islamic-history pairing: picking the profile with protection off surfaces the amber advisory + one-click "Enable protection" (PATCH → column → every enforcement layer); protection on shows the teal badge and a two-step "Turn protection off…" confirm. |
+| T-52.4 tests + compatibility | ✅ Done | 2 new tests (229/229): the picker wire contract (8 entries, unique ids, order === catalog order, narrative leads, blurbs 20–100 chars, islamic-history names the pairing) and `planProfileNotes` (advertisement open+close rules fire on a non-compliant fixture, dissolve on a compliant one; narrative and legacy no-profile plans carry zero notes). No schema change; no e2e surface touched (the director card has no e2e selectors to break). |
+
+Verification: tsc 0 · eslint 0 errors / **669 warnings (the S50/S51 level,
+zero net)** · **229/229 unit** (227 + 2 S52) · queue restart-recovery PASS.
+The 8-profile live generation benchmark belongs to S54 (seven genres); S52's
+deliverables are the surface contracts, pinned above.
+
+## S53 — the advanced visual QC matrix (opened 2026-11-07 UTC)
+
+Sprint goal: give the battery the two VLM-judged visual lenses the cinematic
+transformation promised — and land the threshold the S51 benchmark's residual
+finding inherited. The S51 benchmark closed with "hair hue drifts warm/golden
+under warm scene lighting against the anchor's silver — a color-under-lighting
+drift, not identity drift, and S54's threshold work inherits it": that finding
+now has a check, a floor, and a judge that tells lighting from identity.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-53.1 the visual QC seam | ✅ Done | `src/lib/tubeforge/visual-qc.ts`: `sampleFramesEvenly` (even ffmpeg sampling → in-memory base64 payloads, read BEFORE temp cleanup — no TOCTOU window; never-throws, [] = probe dead), `runSubjectContinuityScan` (VLM judge over the recurring subject's identity-defining features, anchor + name in the user prompt), `runTextArtifactScan` (VLM judge over gibberish pseudo-text/garbled signage/watermarks). Both follow the S49 L4 laws verbatim: STRICT-JSON judge at temperature 0, `parseJsonLoose` recovery, any failure → "unmeasured", NEVER a throw, NEVER a silent pass. |
+| T-53.2 subject-continuity (the S51 threshold) | ✅ Done | `SUBJECT_CONSISTENCY_FLOOR = 70` + the pure `subjectVerdictFromJudge` law: pass ⟺ judge `consistent` ∧ score ≥ floor; the LIGHTING IS NOT IDENTITY clause leads the judge's prompt (hue shift under scene light reads in `notes`, never flips the verdict); b-roll frames without the subject are ignored; frames-free verdicts stand at the judge's own contract. Emitted only when the video has cast + identity anchor (caller owns applicability). REPORT severity — repaint-or-accept is the operator's call. |
+| T-53.3 text-artifacts | ✅ Done | The AI-imagery classic: gibberish lettering, pseudo-text on signs/screens, melted typography, watermarks. The caption-exclusion law rides the judge's prompt (this production burns captions on purpose — a lens that flagged them would cry wolf on every video). Runs on EVERY final render + QC re-run. REPORT severity until calibration evidence justifies a flip (a deliberate, versioned act). |
+| T-53.4 battery + gate wiring | ✅ Done | `runQcReport`/`qcForVideo` take `subjectScan`/`textScan` (same ride-the-report law as `restrictedScan`: emitted when and only when the caller ran the scan, counted toward `passed`). Both job paths (render + QC re-run) run textScan always, subjectScan for cast+anchor, sharing one materialized final.mp4. Matrix: 2 new REPORT rows, `QC_POLICY_VERSION` → **s53-v1**, blocking count stays 10 (pinned). Scorecard groups both ids under "Video". |
+| T-53.5 tests + compatibility | ✅ Done | 6 new tests (235/235): the threshold law (floor edges, clamps, judge-obeyed inconsistency, garbage → unmeasured), the two judges' prompt laws, a REAL-ffmpeg sampling test (4 frames from a 4s file, base64 JPEG payloads, NaN-duration clamp, dead file → []), the battery emission law (absent → not emitted; pass/fail/unmeasured ride; fail keeps the report unclean), and the gate law (both lenses advise, never hold; advisories carry rationales). The S40 matrix pin updated to the 18-id emission set — 10 block / 8 report, a deliberate act. |
+
+Verification: tsc 0 · eslint 0 errors / **669 warnings (zero net)** · **235/235
+unit** (229 + 6 S53, one real ffmpeg) · queue restart-recovery PASS. The live
+VLM calibration (do the judges agree with the S51 benchmark's findings at the
+70 floor?) belongs to S54's seven-genre benchmark, which now exercises the
+full matrix per genre.
+
+## S54 — the seven-genre benchmark (opened 2026-11-07 UTC)
+
+Sprint goal: the closing measurement of the Cinematic Video Quality
+Transformation — the S47 baseline's own mandate ("thresholds are set at S54
+with human review on record"). Two legs: §A the eight-profile director
+contract (the S47 six seeds verbatim + podcast + islamic-history, 2 runs
+each), §B the full 18-check matrix live on a real render of the S51 anchor
+case (the subject-continuity floor's calibration datapoint).
+
+| Task | Status | Notes |
+|---|---|---|
+| T-54.1 the benchmark harness | ✅ Done | `scripts/s54-genre-benchmark.mts`, the S47/S51 probe tradition extended: §A per run pins schema-valid + profile stamp + the 19-field contract, records v2 richness / camera-vocabulary drift / profile findings / latency; §B renders the S51 anchor case through the REAL renderVideo (ffmpeg-synthesized narration WAVs) and runs the S53 lenses + battery. **Chunk-resilient by necessity**: the first one-shot run was reaped silently 7 min in (teardown never reached) — the harness now runs per-leg/per-profile chunks (`S54_LEG`/`S54_PROFILES`), persists state per profile (replace semantics, a killed chunk loses nothing), retries gateway 429s with 75s cool-downs, and a final `S54_LEG=report` assembles the baseline with an honest coverage stamp. |
+| T-54.2 §A measured (6/8 profiles) | ✅ Done | 12 runs, ALL green: 100% schema-valid, 100% profile-stamped, 100% 19-field complete. **Camera drift 0/69 shots** across every narrowed profile — the S48 verbatim law holds live. v2 richness 58–79% (the LLM actively directs with the new fields). Profile advisories fire as designed (advertisement 2/run on the open+CTA rules, social 1/run on shot discipline). Latency 8–17s/pass. |
+| T-54.3 §A remaining (podcast, islamic-history) + §B | ✅ Done (2026-11-08 00:43 +08) | The Z.ai metered gateway had begun hard-429ing ~06:05 UTC (single minimal calls rejected; ~35 min of cool-downs did not clear it — today's cumulative benchmark traffic: the S47/S51 runs + this session's 12 passes). NOT claimed, NOT fabricated — the baseline carries the coverage stamp. **Root cause measured 2026-11-07 (follow-up session): the binding constraint is the POOL-WIDE 300/day rolling gateway budget shared across sandboxes** — raw headers showed `remaining-daily: 0` while this user still had 133, in saturated steady state with the reset marker always ≈ now+1s (a race at the published reset epochs lost 20/20). No retry cadence clears a pool other tenants keep saturated. Full evidence + probe-hygiene law + runbook: `docs/audits/s54-gateway-quota-forensics.md`. Landed 2026-11-08 00:43 +08 (16:43 UTC 11-07) when the pool finally de-saturated — probe status=200, poolRemaining=299, the runbook's ≥20 launch condition met on the first look; one probe, no racing. **podcast** 2 runs — 11 shots, camDrift 0/11, findings 0, mean 9.3 s/pass, v2 richness 63–68%; **islamic-history** 2 runs — 13 shots, camDrift 0/13, findings 0, mean 16.5 s/pass, v2 richness 65–68%. §A now **8/8 profiles · 16 runs, all green** (100% schema-valid · profile-stamped · 19-field complete); camera drift **0/93 shots** total — the S48 verbatim law holds live across all eight. **§B the full matrix on a real render** (S51 anchor, kenburns 1080p, 3 scenes; 14.6 s, 3,610,773 bytes): **14/16 pass** — loudness −16.0 LUFS · TP −14.4 dBTP · LRA 1.5 LU · tail-fade −91.0 dB · 8 frames clean of text artifacts · subject-continuity **90/100 vs the 70 floor** (the calibration datapoint; the S51 pre-render checker scored the same anchor 85/100 — floor stays 70 pending human review). The 2 fails recorded, not hidden: frozen-frames (3 frozen runs) and cut-alignment (2 unexpected, 0 missing) — calibration evidence for the human severity review. State twin: 16 §A rows + full §B leg, oweA=oweB=False. |
+| T-54.4 the baseline record | ✅ Done | `docs/baselines/s54-genre-benchmark-2026-11-07.txt` — coverage 6/8 stamped (re-stamped **8/8** with the full §B section when the owed legs landed — see T-54.3), per-run table, per-profile aggregates, threshold statement WITH evidence (director contract held as law; camera vocabulary measured at zero drift; the 70 floor and REPORT severities marked for human review). |
+
+Verification: all 8 profiles' 16 runs ALL PASS (recorded above); §B 14/16
+with the two measured fails (frozen-frames, cut-alignment) carried as
+calibration evidence for the human review. tsc 0 · eslint 0 errors/669
+warnings · 235/235 unit · queue PASS (unchanged this sprint — S54 adds the
+harness + baseline only, no production code).
+
+## Follow-up (2026-11-07, S54 session) — the 10-alert dependency burn-down
+
+| Task | Status | Notes |
+|---|---|---|
+| T-D.1 python-multipart ×8 (4H/1M/3L) | ✅ Done | `preview/preview-app/requirements.txt` 0.0.17 → **0.0.31** (satisfies every advisory: multipart DoS classes, arbitrary-file-write-under-non-default-config, quadratic querystring, RFC 2231 smuggling). LIVE smoke on the real app: health 200, authenticated multipart `/clone` 200 (file stored + size verified), no-key 401, wrong content-type 400 — the parser upgrade changes no request behavior. The `/clone` user-upload surface made this a REAL fix, not a pin-churn. |
+| T-D.2 deepmerge-ts (H, transitive via @prisma/config) | ✅ Done | Forced to **8.0.0** via `npm overrides` (S47 had accepted it pending a Prisma minor). Consumer verified: the Prisma config layer (version, schema load, env load, binaryTarget, sqlite-schema validate) runs clean on 8.0.0. |
+| T-D.3 minimatch ≥7 <11 (M, dev-only via @typescript-eslint) | ✅ Done | **Scoped override** on `@typescript-eslint/typescript-estree` → minimatch 11.0.1; eslint's own minimatch@^3.1.5 untouched (a global override would break the v3 API consumers). Full lint pass unchanged: 0 errors / 669 warnings. |
+| T-D.4 gate | ✅ Done | tsc 0 · eslint 0 errors/669 warnings · 235/235 unit · queue PASS · full record in `docs/audits/s47-dependency-triage.md` (2026-11-07 section). Dependabot closes the 10 on its next `main` scan. |
+
+## S55 — cinematic quality and Islamic safety assurance (opened 2026-11-08 UTC, owner-approved)
+
+Sprint goal (the owner audit's directive, post-S54): close the two measured
+§B rendering failures and prove the Islamic-history protection on FINAL
+output. No new feature sprint — quality closure first. CI on `77cad6f`
+independently verified this time (run 42393750230: Typecheck·Lint·Unit +
+gitleaks + E2E all green via the REST API, closing the audit's §6 gap; the
+empty lookup was the short-SHA filter).
+
+| Task | Status | Notes |
+|---|---|---|
+| T-55.1 frozen-frames forensics | ✅ Done | `docs/audits/s55-render-forensics.md` — BOTH frozen runs are the Director's own declared `static` shots (z=1 holds), executed faithfully: 0.00–2.70 s (scene 1 opener, 2.8 s) and 9.90–11.73 s (scene 3 opener, 3.5 s, head-trimmed by the blend-in, tail ending exactly at the hold→zoom flip). freezedetect d=0.50 finds the SAME two runs and nothing else — no hidden sub-second freezes, no ease-plateau regressions; the cos-ease plateaus stay well under 1 s. A vocabulary/law conflict, not a renderer defect: the camera vocabulary legitimately contains `static` while the frozen-frames law demands motion everywhere. §B's "3 runs" = same class on that day's plan. |
+| T-55.2 cut-alignment forensics | ✅ Done | Same note — ALL lens-detected "unexpected" cuts are the render's own INTRA-SCENE shot flips, matched to centiseconds by the fitted allocation: 2.70/6.77/11.73 s detected vs 2.70/6.78/11.76 s fitted (Δ ≤ 0.03 s); the 4th flip (13.25 s) sits under the 0.40 scene threshold (visible at 0.20). Root cause: `expectedCutsForTimeline` books scene seams only — the M2 shot graph's hard-concat/fade joins (frame-exact in `multiShotSceneGraph`) never reach `ExpectedCuts`. Lens right, render right, expectation incomplete. Instrument bugs found + fixed en route (one-per-line freezedetect parse; fitted vs raw flip math) — recorded in the audit note. |
+| T-55.3 the fixes, evidence-directed | ✅ Done (2026-11-08) | (a) **cut-alignment**: the render→QC contract books the shot graph — `allocateShotFrames` extracted VERBATIM from `multiShotSceneGraph`; `shotGraphJoins` walks the same accumulator; `buildSegment.onShotJoins` records what actually executed; `expectedCutsForTimeline(durations, boundary, joins)` merges them onto the blended clock. ONE recorded deviation from the staged design — flips book as WINDOWS, not cuts: the verification plan's five flips produced only two 0.40-threshold detections (the other three sit 0.20–0.40, the 13.25 s class), so a must-appear booking would keep failing the lens on faithful renders; scene seams keep the must-appear side, strays anywhere else still flag. (b) **frozen/static — owner option (ii)**: `STATIC_AMBIENT_DRIFT = 0.03`; declared statics execute z 1.00→1.03 focal-anchored with the standard eased progress, while the user's stillness contract (intensity < 1) keeps the TRUE hold byte-identical. (c) **the §B-anchor re-render through the fixed path (fresh plan WITH two declared statics — the drift exercised on real content): frozen-frames PASS (0 runs at n=0.004:d=1.00) · cut-alignment PASS (0 unexpected, 0 missing) · the other 12 structural checks green** (−16.0 LUFS · TP −14.4 dBTP · LRA 1.5 LU · tail-fade −91.0 dB); d=0.50 view shows one 0.63 s head run — under the lens floor, recorded as margin. Evidence: `docs/audits/s55-fix-verification-data.json` (commit `1d79f99`). Known limitation on record: the QC re-run path rebuilds scene-seam-only expectations (joins are render-time state — same class as its unstored blackWindows). Gates: tsc 0 · eslint 0 errors/672 warnings (zero net) · **240/240 unit** (+5 S55, incl. the real-ffmpeg drift differential: drifted static clean, TRUE hold still flags). |
+| T-55.4 Islamic dense-frame QC | ✅ Done (2026-11-08) | The audit's core safety point, closed at the source: the S49 L4 scan sampled 8 frames evenly (a 60s render carried a **7.50s mean judged gap** — a 1.5s flash slipped through ~80% of the time). `runRestrictedVisualScan` (same signature, both call sites ride as-is) now runs a three-stage funnel, fail-closed at every seam: (1) **dense grid** — one frame per 0.50s (2 fps), capped at 240 with honest disclosed coarsening (300s → 1.25s); (2) **face tripwire** — python3 + OpenCV haar cascades probed per scan: a face ≥1.5% of frame area forces itself + neighbors into the judge set (top 12 anchors); a missing detector DEGRADES resolution (noted in the detail), never the verdict — anonymous people stay allowed content, the VLM decides reverence; (3) **batched VLM judge** — ≤48 frames in batches of 8, global frame labels + timestamps, temp 0, first fail short-circuits, any unreadable batch → unmeasured (fail-closed), pass only when every batch measured clean. The check detail carries the honest coverage (`grid 120 @0.50s · tripwire 3 hit(s) → 9 forced (cv2 4.13.0) · judged 48 ≈1.25s apart · 6/6 batch(es)`). Evidence (zero gateway spend): `docs/audits/s55-islamic-dense-qc.md` + `s55-dense-qc-data.json` (commit `f3b98b5`) — false-positive control 0 hits on a 40-frame testsrc2 grid; positive control skimage's astronaut (real face, BSD sample) → exactly 1 hit, areaFrac 0.0363 (2.4× threshold); 60s class judged gap 7.50s → **1.25s** (6×), local grid 15×. Margins on record: haar sees faces (silhouettes/light-bodies ride the even grid); sub-interval flashes at the cap; the VLM end-to-end verdict is T-55.5's acceptance to run. Gates: tsc 0 · eslint 0 errors/672 warnings (zero net) · **244/244 unit** (+4: grid plan, exact-cap selection, batch verdict law, real-detector controls). |
+| T-55.5 Islamic export acceptance test | ✅ Done (2026-11-08) | The owner's 7-step protocol executed END-TO-END on the real production code (runDirectorPass → runStoryboardJob → runRenderJob → runSceneJob → runQcJob → applyQcPolicy) against a LOCAL stand-in gateway speaking the Z.ai SDK's wire format — **0 gateway quota, 0 paid dispatches, spend gate untouched** (provider "zai" is ungated by law; the stand-in's VLM verdicts are SCRIPTED and disclosed: the funnel is proven, the real model's judgment stays behind the spend gate). **57/57 checks** (`docs/audits/s55-acceptance-data.json` + `s55-islamic-export-acceptance.md`): (1) adversarial plan naming the Prophet ﷺ/Abu Bakr/Umar/Jibril in all 9 shots → L2 sanitized BEFORE persist + announced (warn row) + approved; (2) storyboard paints through the real job — every wire prompt L3-sanitized, negative clause riding, quality gate consulted, dHash dedupe satisfied (lesson on record: textureless gradient stand-ins false-trip the freeze lens — testsrc2 lineage is the honest basis); (3) full 15.6s 1080p MP4 — scene 3 needsI2V animated through the REAL i2v channel: S50 motion prompt sanitized on the wire, clip downloaded + cached, and the final render's scene-3 window carries the clip's pixel marker (proof the clip PLAYED, not a Ken Burns degrade); dense scan PASS with honest coverage (grid 29 @0.50s · tripwire 12 hits → 15 forced, cv2 4.13.0 · 29 judged · 4/4 batches), text-artifacts pass, all 8 structural lenses green (T-55.3's fix holds on a second independent plan), **gate OPEN**; the export standard: the exported final.mp4 tripwired locally — 12 real haar hits, all the anonymous traveler (allowed content; hit timestamps recorded); (4) scene re-roll sanitized on the wire + **the AI-edit GAP found and fixed**: editSceneImage embedded the raw user instruction in its dispatch prompt with NO policy pass (S49 L3 covered generateSceneImage + ensureShotImages, never the edit path) — the fix rides the same sanitizer (standard = pre-S55 bytes, unit-pinned), and the re-run's adversarial instruction was verified sanitized on the wire; regeneration invalidated the standing render (new evidence required); (5) violation verdict → scan FAILS on the first batch (short-circuit), frames named with timestamps, **gate BLOCKED** with restricted-visual as the blocker, activity announces EXPORT ON HOLD; (6) garbage verdict → QC re-run reads UNMEASURED (fail-closed) → **gate STILL BLOCKED**; (7) the standard holds: export open ONLY on the end-to-end-clean render. Gates: tsc 0 · eslint 0 errors (zero net) · **245/245 unit** (+1: the edit-path sanitize contract). |
+| T-55.6 human cinematic evaluation kit | ✅ Done (2026-11-08) | **8/8 per-profile anchor renders** through the REAL production path (runDirectorPass → approve → runStoryboardJob → runRenderJob, kenburns 1080p, 2 neutral scenes each ≈9.9s) via `scripts/s55-eval-kit.mts` (stand-in gateway, zero gateway spend — the T-55.5 disclosure applies), plans built FROM THE LIVE PROFILE CATALOG: narrowed camera/framing vocabularies cycled, pacing bias, transition bias, AND shot-density bias (sparse 2 / normal 3 / dense 4 shots per scene — flattening density was caught making two pairs byte-identical; honored, 7 distinct renders remain, podcast+islamic-history coincide on this content — a finding, not a flaw: their difference is the L2 overlay + imagery tier). Every anchor passed ALL structural lenses (manifest `docs/baselines/s55-eval-kit-manifest.json`: per-profile sha, cameras exercised, pacing, lens table, render time). The rubric — `docs/runbooks/s55-human-evaluation-kit.md` — six axes (motion realism, camera movement, lighting, composition, scene relevance, AV sync) with anchored 1–5 descriptors, a blind-scoring protocol, advisory reading rules (mean ≥ 3.5, no axis ≤ 2; defect findings feed the forensics-first loop), the tier-2 gateway protocol for the imagery axes, and the S54 pending item (the 70-floor recheck on the first gateway-anchored render) folded in. **Scoring stays human** — the harness produces anchors + manifest, never verdicts. Anchors copied for review outside the repo (sandbox download dir). Gates: tsc 0 · eslint 0 errors (zero net) · 245/245 unit (no new tests — the kit is a runbook + harness, nothing in src/ changed). |
+| T-55.7 production reliability record | ✅ Done (2026-11-08) | `docs/audits/s55-reliability-record.md` — CI evidence via the REST API with FULL 40-char SHA filtering (the §6 lesson): every S55 commit on main carries a green run (77cad6f→42393750230 · 4371a88→42407150904 · cb2095d→42411521065 · cbe90c2→42416989318 · a84c668→42421819059, verified before close); **Dependabot re-verified 0 open** at record time (the 2026-11-08 re-verification holds; triage-order rule unchanged); **the spend-gate law on record and untouched**: TUBEFORGE_SPEND_GATE enabled (no =0 anywhere in S55), PRICING_STATUS stays "provisional" (paid external dispatch still blocked with SpendPricingUnverifiedError, no forced verification), overrides observable (spendOverrides() both false at record time), zai + local-server classes ungated — the acceptance's own spend accounting reads gatewayQuotaSpent 0 / paidDispatches 0. Plus the stage's reliability ledger: 245/245 unit (+6 S55) · tsc 0 · eslint 0 errors/672 warnings zero net · both §B failure classes closed at source and re-verified on a second independent plan · the L3 edit-path gap closed · known limitations and standing human items carried forward explicitly (the rotation, the 70-floor recheck + tier-2 scoring on the kit's first gateway round). |
+
+Verification: forensic evidence `docs/audits/s55-render-forensics-data.json`
+(plan raw+parsed, shot tables, timeline, battery rows, freezes d=1.00/0.50,
+cuts 0.40/0.20, motion profile, correlations); the anchor render reproduced
+BOTH failure classes on an independent plan (fail 2 frozen / 3 unexpected;
+all other 14 checks green). **T-55.3 closed 2026-11-08 (commit `1d79f99`):
+the same anchor re-rendered through the fixed path reads frozen-frames PASS
+(0 runs) and cut-alignment PASS (0 unexpected, 0 missing) with the other 12
+structural checks green** — evidence `docs/audits/s55-fix-verification-data.json`.
+**T-55.4 closed 2026-11-08 (commit `f3b98b5`): the dense L4 validated both
+tripwire directions locally (0 false hits on a 40-frame grid; exactly 1 hit
+on a real face at 2.4× threshold) with the 60s-class judged gap 7.50s →
+1.25s** — evidence `docs/audits/s55-islamic-dense-qc.md` +
+`s55-dense-qc-data.json`.
+**T-55.5 closed 2026-11-08: the owner's 7-step Islamic export acceptance
+58/58 on the real production path against a disclosed local stand-in
+(zero gateway quota, zero paid dispatches)** — evidence
+`docs/audits/s55-islamic-export-acceptance.md` + `s55-acceptance-data.json`;
+one production fix landed evidence-directed (the editSceneImage L3 gap).
+**T-55.6 closed 2026-11-08: 8/8 per-profile anchor renders (all structural
+lenses green, manifest on record) + the six-axis rubric with the blind
+scoring protocol; scoring stays human** — evidence
+`docs/runbooks/s55-human-evaluation-kit.md` +
+`docs/baselines/s55-eval-kit-manifest.json`.
+**T-55.7 closed 2026-11-08: the reliability record — CI green on every S55
+commit (full-SHA REST verification), Dependabot 0 open re-verified, the
+spend-gate law untouched and observable** — evidence
+`docs/audits/s55-reliability-record.md`.
+
+**S55 CLOSED 2026-11-08 (UTC)** — the sprint goal met on both halves: the
+two measured §B rendering failures closed at the source and re-verified on
+independent plans (T-55.1→T-55.3), and the Islamic-history protection proven
+end-to-end on final output — dense inspection, regeneration + i2v paths,
+violation-blocks-export, unmeasured-blocks-export (T-55.4/T-55.5), with the
+human evaluation kit (T-55.6) and the reliability record (T-55.7) closing
+the stage. Gates at close: tsc 0 · eslint 0 errors/672 warnings (zero net)
+· 245/245 unit. Carried forward, explicitly: the first REAL-gateway render
+re-runs the T-55.5 protocol verbatim (the stand-in disclosure's margin);
+the 70-floor recheck + tier-2 imagery scoring ride the kit's first gateway
+round; the QC re-run's doc-less cut-alignment limitation stands as recorded
+in T-55.3.
+
+## S56 — release engineering: the CI that builds, bills, and measures (opened 2026-11-08 UTC, owner-approved)
+
+Sprint goal: close the S33+ backlog's **Priority 1** in-repo items — the CI
+gaps and measurement baselines the improvement roadmap called out at the S32
+snapshot and never lost: `next build` in CI (P1-3), the billing suite in CI
+with deterministic self-seeding (P1-1), the nightly job with the durable
+route probes (P1-2), the coverage baseline on the money paths (P1-5),
+Dependabot weekly version bumps (P1-7), and the first warning burn-down
+tranche (P1-4). All owner-action items (Sentry accounts, LICENSE, staging
+provisioning) stay out of scope by design.
+
+Pre-verified in the recovered sandbox before the stage opened: `next build`
+is GREEN here (Turbopack, exit 0, TS clean, 57/57 pages, 4 disclosed
+warnings — the P1-3 "the 4 GB sandbox cannot build" note was stale, now
+corrected on record); the billing suite reads **40/40 on a fresh
+postinstall-bootstrapped SQLite DB** (it self-seeds via unique MARK fixtures
+and cleans up — the CI note in ci.yml was the only blocker).
+
+| Task | Status | Notes |
+|---|---|---|
+| T-56.1 the build job (P1-3) | ✅ Done (2026-11-08) | `build` job in ci.yml: `npm run build` (Turbopack `next build` + the standalone `cp` assembly) on every push/PR, ubuntu-24.04, 15-min cap, parallel with `check`. Pre-proven in-sandbox TWICE — with the local `.env` and with NO env at all (CI parity: exit 0, TS clean, 57/57 static pages) — so the job's first run had a green local twin. The 4 Turbopack warnings are documented IN the job (edge-runtime `process.pid` in instrumentation.ts — runtime-guarded by the `NEXT_RUNTIME !== "nodejs"` return; dynamic-fs tracing in stock/export routes): warnings only, exit 0, "do not fix by breaking the runtime guard". The stale P1-3 premise ("7 GB runners can build; the 4 GB sandbox cannot") is corrected on record: this sandbox builds in ~17s compile / ~35s total. |
+| T-56.2 the billing suite joins CI (P1-1) | ✅ Done (2026-11-08) | `npm run test:billing` added to the check job after unit + queue — the ci.yml "not part of CI yet" note retired. The suite was ALREADY deterministic: unique `MARK` fixtures (time-based), self-created users/plans/subscriptions, full cleanup; it just needed the bootstrapped SQLite DB that `npm ci` postinstall already provides (the same DB test:queue rides). Proven locally in the EXACT CI order (typecheck → lint → 245/245 unit → queue PASS → billing 40/40) on one DB — no queue→billing interaction. The money path (webhook fail-closed, canonical credit units, ledger linkage, status rules, idempotent grants, concurrent-spend safety) is now CI-proven on every push. |
+| T-56.3 Dependabot weekly version bumps (P1-7) | ✅ Done (2026-11-08) | `.github/dependabot.yml`: npm + github-actions ecosystems, weekly Monday 06:00 UTC (ahead of the nightly so a bad bump fails visibly the same day), minor+patch GROUPED, majors individual, queue limits 5/3 (solo-owned repo, reviewable), nothing auto-merges — every bump PR rides the full CI gate including the new build job. Security alerts + security updates were already ON since S33; this closes the second half of the Dependabot rule. |
+| T-56.4 coverage baseline on the money paths (P1-5) | ✅ Done (2026-11-08) | `scripts/test-coverage.mjs` + `npm run test:coverage` + a parallel `coverage` job in ci.yml: the REAL unit + billing + queue suites under Node's V8 coverage, accumulated across runs by c8 (`--clean=false`), `--include` scoped to the nine money-path modules. **First full measurement: 56.30% aggregate lines** (4541/8065; the first published 53.63% was under-collected by a mistyped c8 flag — corrected same-day, see below) — audiomix 100 · billing 94.6 · qc-policy 100 · qc 83.6 · spend 75.9, with render / video-jobs recorded as the HONEST GAP (those layers are exercised by the route probes and e2e, not these suites — the baseline doc says so explicitly, and names the render-under-coverage suite as the next step if the floor proves too coarse). **Floor enforced at 50% aggregate lines** via c8 `--check-coverage`: unit dying costs ~25 pp, billing ~13 pp, queue ~5 pp — normal churn sits under the 3.63 pp margin. Baseline frozen: `docs/baselines/s56-coverage-baseline-2026-11-08.txt`. c8 v12 (bcoe) devDependency. **Correction (a0aea54's CI taught it)**: the harness originally passed `--tmp-directory` — not a c8 flag (the real one is `--temp-directory`); the local run silently under-collected (53.63%) while the CI run failed outright (ENOENT on the default temp dir, run 42461224577). Fixed + re-measured: 56.30%, floor 50 unchanged, margin now 6.3 pp. |
+| T-56.5 the nightly battery (P1-2) | ✅ Done (2026-11-08) | `nightly.yml` (02:30 UTC + dispatch) + `scripts/run-route-battery.mjs` — **19 durable route probes on the schedule**: 18 against an enforce-mode PRODUCTION server, s29 against a report-mode one (its export contract predates the S40 gate; the documented operator advisory mode is the honest way to keep testing the packaging law). The runner is self-contained: builds once, boots `npm run start` per phase (NOT `next dev` — Turbopack's ~2 GB RSS plus a 1080p render pushed the 4 GB sandbox cgroup past the OOM line, silent kills, three runs of evidence; the standalone server is a fraction of that AND tests what ships), raised middleware tiers + `AuthAttempt` clearing between probes (both shared-localhost-IP realities, disclosed in the header; the tiers and the S46 lockout stay unit-proven), an interrupted-run janitor (orgs slugged `*-e2e-*`, users emailed `*-e2e-*` — a killed probe's fixtures otherwise poison later baselines), a real readiness gate (3×200 + 10 s settle — one 200 is not readiness), `waitUntilDown` between phases (the OOM overlap), per-probe caps with overrides (s29: 900 s), and Next's process-title rename handled in the kill patterns (`next-server (vX)` survives a `standalone/server.js` pkill — observed as a phase-2 EADDRINUSE). **Sandbox proof, piecewise** (the reaper kills detached runner trees at ~7–10 min, so the full "all" leg runs on CI only): phase 1 **18/18 ALL PASS** in sequence against the production server, phase 2 **s29 ALL PASS (exit 0)** — with the janitor + clearing + tiers applied exactly as the runner applies them. En-route probe hardening (evidence-directed): s29's `pollVideo` now aborts each poll fetch at 30 s and retries (a server stall during the heavy render used to wedge the poller until undici's 300 s `UND_ERR_HEADERS_TIMEOUT` killed the probe), its render budget 300 s → 600 s (cold renders legitimately exceed 300 s), and `call()` gained a default 120 s abort. Excluded, on demand only, reasons recorded in the runner header: s27/s32 (pricing-verified daemon + mid-suite restarts), s28/s30 (cookie/origin env overrides). The nightly also runs the full Playwright e2e (P1-2's other half). |
+| T-56.6 warning burn-down tranche 1 (P1-4) | ✅ Done (2026-11-08) | **The trivial class is ZERO and FROZEN**: no-unused-vars 72→0 · prefer-const 3→0 (+2 the new T-56.5 runner itself contributed) · no-useless-escape 5→0 — ~82 sites across 45 files, each handled per-site (unused imports removed, dead locals deleted — including `outstandingMicro()`'s dead standalone twin in spend.ts and the dead `_login` helper in the pipeline spec — unused params underscore-prefixed or dropped, `IdeaCard`'s dead `sessionId` prop removed end-to-end, `actionTypes` renamed with its typeof-reference, optional catch binding where the error object was the unused thing). The three rules are now **ERRORS** in eslint.config.mjs (`caughtErrors: "none"` + the `^_` patterns stay allowed) — the class cannot grow back without failing CI. Gates after the tranche: **tsc 0 · eslint 0 errors/602 warnings (672→602) · 245/245 unit · 40/40 billing**. Census re-recorded: `docs/baselines/s56-lint-census-2026-11-08.txt` (the remaining programme: no-console 381 rides the structured logger P0-7; non-null-assertion 159; react-hooks 42). |
+| T-56.7 reliability record + stage close | ✅ Done (2026-11-08) | `docs/audits/s56-reliability-record.md` — CI evidence via full-SHA REST for every S56 commit (a4efe16→42447728691 · 4cb46fe→42462954735 · the c8-flag failures on a0aea54/9490a84 honestly recorded with their fix story); **the nightly battery proven GREEN on CI**: closing run 42465915313 — battery **17/17** + full e2e, after the split-brain-database fix (job-level absolute `DATABASE_URL` + per-run secrets) that the first run's 6/19 forced, reproduced in-sandbox under CI parity before the fix; **Dependabot both halves live** — 0 open security alerts (the minimatch GHSA-g3hv-75wg-m249 re-opening closed at the source by an npm override, coverage re-verified on it) and the weekly bumps already filed 8 PRs riding the gate (the typescript-7 major informatively red — merge decisions stay human); **the spend-gate law untouched and observable** (no `=0`, no forced verification, zero gateway spend this stage). Ledger: 245/245 unit · tsc 0 · eslint 0 errors/602 warnings · billing 40/40 in CI · coverage 56.30% floored at 50 in CI · build job green · 17-probe nightly + e2e green. |
+
+Verification (the stage's evidence chain): the **build job** proven green in-sandbox before wiring (exit 0 with and without `.env`, 57/57 pages) and green on CI from its first run (42447728691); the **billing suite** 40/40 in the exact CI order on one DB; the **coverage baseline** measured on the real suites (56.30% after the CI-taught c8-flag correction, floor 50 enforced — first green CI run 42462954735); the **nightly battery** self-contained (production-server two-phase design, janitor, throttle-clearing, readiness gates) with its full journey on record — 6/19 (split-brain DB) → 17/19 (gateway TTS) → **17/17 GREEN on the closing run 42465915313**, the DB fix reproduced in-sandbox under CI parity before landing; the **warning tranche** zeroed and frozen as errors; **Dependabot** both halves live with 8 PRs already riding the gate. Evidence: `docs/audits/s56-reliability-record.md` + `docs/baselines/s56-coverage-baseline-2026-11-08.txt` + `docs/baselines/s56-lint-census-2026-11-08.txt`.
+
+**S56 CLOSED 2026-11-08 (UTC)** — the sprint goal met: the S33+ backlog's Priority 1 closed in-repo (P1-1 billing-in-CI, P1-2 nightly battery, P1-3 build job, P1-4 first warning tranche, P1-5 coverage baseline, P1-7 Dependabot bumps), with the CI failures along the way honestly recorded and each fix evidence-directed (the c8 flag, the split-brain database, the gateway-TTS curation). Gates at close: tsc 0 · eslint 0 errors/602 warnings · 245/245 unit · CI 5 jobs green on the closing commits · nightly 17/17 + e2e green. Carried forward, explicitly: the structured logger tranche (no-console 381, P0-7's in-repo half); the remaining warning tranches; the render-under-coverage suite if the floor proves coarse; Dependabot PR triage (8 open, human merge decisions); the standing PAT rotation.
+
+## S57 — observability: the structured logger's in-repo half (opened 2026-11-08 UTC, owner-directed "Next")
+
+Sprint goal: close P0-7's in-repo half — structured logs WITH REQUEST IDS on
+the running app. The reconnaissance that set the scope: the Stage-3 logger
+(`src/lib/tubeforge/log.ts`) already exists — zero-dep pino-format JSON lines,
+secret-redacting, child-capable, with a `consoleBridge` nobody ever migrated
+onto — and the S56 census's 381 no-console warnings are **~378 scripts/e2e
+CLI sites** (operator-facing output by design) plus only 3 in src/. The REAL
+production debt was invisible to the census: the rule's `allow:` list
+permitted `console.warn/error/info`, and **83 such sites across 29 src/
+files** bypass the structured logger entirely. So the tranche is: migrate
+src/ wholesale onto the logger, add the request-id binding P0-7 names, and
+freeze the class. Sentry/GlitchTip account wiring stays OUT (owner action,
+undecided vendor) — the record's own split.
+
+Pre-verified in the recovered sandbox before the stage opened (the reclaim
+ate `work/` again — third time): repo re-cloned at `9da54b4`; tsc 0 · eslint
+**0 errors/603 warnings** (the census's 602 + 1: `a90017b`'s battery FAIL
+diagnostics added a script-side console.site after the census was recorded)
+· 245/245 unit · 40/40 billing; CI on the closing commit reads green via the
+live workflow badge ("CI — passing"; the REST API is IP-rate-limited this
+session, verified by badge instead — method disclosed). One defect found in
+the close itself and fixed in this commit: `9da54b4` left a stray duplicate
+T-56.7 row at the file's end, detached from its table — deleted.
+
+Landing constraint, on record up front: the reclaim also ate the working
+`.env`, so the GitHub PAT is gone from this side — and it was due rotation
+anyway (standing rule since S33; it transited chat twice). **S57 executes
+and verifies locally; the push, CI verification, and the stage close ride
+the owner's rotated PAT.** A git bundle ships alongside the report so
+nothing is lost to a fourth reclaim.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-57.1 request-id propagation | ✅ Done (2026-11-08) | middleware stamps a FRESH `x-request-id` (crypto.randomUUID — ours, never the client's: inbound ids are untrusted input, always overwritten) on every /api/* request, forwards it to the route handler via `NextResponse.next({ request: { headers } })`, and echoes it on EVERY response through one `respond()` helper — 429/503/401/403 included. `requestLog(request, { mod })` in log.ts binds it as `req` (children inherit); the six route files that log adopted it (auth register/reset/verify, youtube callback, billing webhook — batch's helper has no request in scope and rides a plain module child, disclosed). VERIFIED END-TO-END on the real production standalone server: 200 and 401 responses both carry fresh per-request ids (two curls, two distinct UUIDs), and the boot's structured lines flow (level-30 init on stdout, level-50 tick errors with serialized stacks on stderr). |
+| T-57.2 the src/ console migration | ✅ Done (2026-11-08) | **87 raw sites across 31 src/ files migrated** onto `log.child({ mod })` — the census's allow-list hid 83 warn/error/info sites from the warning count; they bypassed the logger entirely. The `[module]` string prefixes became bindings (budget/story/jobs/billing/render/stock/voice-clone/spend/quality/youtube/llm/character-jobs/auth-throttle/shots/script-job/convert/claim/music/email-adjacent/providers ×4/middleware/instrumentation + six routes); interpolated values became structured fields ({ jobId, service, holdId, scene, attempts, … }). log.ts gained the **portable sink** (`writeLine`: Node std streams when present, the SAME JSON line via console in edge/browser bundles — one logging law everywhere, middleware keeps its no-node:* constraint). En-route catches: instrumentation's boot-failure catch now loads the logger DEFENSIVELY (the original `const { log }` was try-scoped — a naive migration would have crashed the very path that reports boot failure), with the raw console as the disclosed last resort; the recon's "mangled [music]/[http] prefixes" finding was a tooling RENDERING artifact, not a repo defect (hexdump-proven, count-check caught it). Four owned exceptions keep console with reasoned inline disables: log.ts (the fallback sink IS the logger), email.ts (console delivery mode — the logger would redact the signed link the dev must copy), pwa.tsx (client bundle), instrumentation.ts (last-resort boot line). |
+| T-57.3 the freeze | ✅ Done (2026-11-08) | `no-console` is now a **bare error** (the empty-allow form is rejected by the rule's schema — the config comment records the correction) repo-wide for app code; **scripts/** and e2e/** scoped OFF** with the CLI-harness disclosure in the config (522 operator-facing console sites stay console by design — the harness carve-out, not churn). **no-console: 382→0**; census re-recorded: `docs/baselines/s57-lint-census-2026-11-08.txt` (0 errors · 221 warnings; the remaining programme: non-null-assertion 159, set-state-in-effect 33, unused-expressions 11, exhaustive-deps 9, any 7). The multi-line disable-comment lesson on record: `eslint-disable-next-line` binds to the literal next line — prose goes ABOVE, the directive ALONE on the line before the code (the misplaced forms read as unused directives while the code still errored). |
+| T-57.4 unit tests | ✅ Done (2026-11-08) | **247/247 unit (+2 S57)** in the house style (stdout/stderr capture, dynamic import, env-level control): (1) requestLog binds the stamped id as `req` (children inherit; no header → no field; oversized inbound id >128 dropped — requestIdFrom agrees); (2) the portable sink falls back to console with the SAME pino-format JSON (info→console.log, error→console.error, level values preserved) when the process streams are absent — proven by redefining the stdout/stderr properties and restoring their original descriptors. The "no console left in src/" law is NOT duplicated as a test — the eslint error rule IS the enforcement and it runs in CI on every push; a grep-style test would only re-implement the linter worse. Test-taught fix: level-40 lines go to STDERR — a stdout-only capture missed the warn lines (the suite's own first failure, fixed by capturing both streams like the Stage-3 precedent). |
+| T-57.5 reliability record + honest status | ✅ Done (2026-11-08) | `docs/audits/s57-reliability-record.md` — the stage's evidence chain with the landing constraint stated up front: **executed and verified locally; NOT pushed, NOT CI-verified** (the reclaim ate .env with the PAT, which was due rotation anyway — standing rule since S33). Local gates at close: tsc 0 · eslint **0 errors/221 warnings** (603→221) · **247/247 unit** (+2) · billing 40/40 · queue PASS · `next build` exit 0 with the SAME four documented Turbopack warnings (no new ones) · the standalone-server request-id flow proven live (200+401, fresh ids). The push + CI runs + the stage's official CLOSE ride the owner's rotated PAT; a git bundle ships in the delivery so a fourth reclaim loses nothing. |
+
+Stage status (2026-11-08, end of session): **all five tasks executed and
+locally verified; the stage is NOT closed** — the close requires the pushed
+commits' CI evidence (the project's own law: full-SHA REST verification per
+commit), and this session has no push credentials (the reclaim ate .env;
+the PAT was due rotation anyway). What IS verified: tsc 0 · eslint
+0 errors/221 warnings (no-console 382→0, frozen at error, census
+re-recorded) · 247/247 unit (+2) · billing 40/40 · queue PASS · build exit 0
+with the same four documented warnings · the request-id flow proven live on
+the standalone production server (fresh UUID on 200 AND 401 responses).
+The moment a rotated PAT lands: push `e2e7c1e..` (or apply the bundle),
+watch the CI run, record it, and close S57 with the reliability record's
+pending line struck.
+
+**S57 CLOSED (2026-11-08, the landing session)** — the rotated PAT landed
+`9da54b4..34ec87a` (S57+S58 as one fast-forward, after a FOURTH reclaim —
+the deepest yet, which the delivery bundle survived exactly as designed:
+fresh public clone at `9da54b4`, `git fetch` the bundle, fast-forward,
+push via a one-shot credential helper; the token touched no file, config,
+or commit). CI run 42480528396 on head `34ec87a`: **all jobs green** —
+Typecheck · Lint · Unit, Secret scan (gitleaks), Production build,
+Money-path coverage, E2E (Playwright). Recorded in the reliability
+record's CI-evidence table; the stage closes on it.
+
+## S58 — correctness hardening: the non-null-assertion class (opened 2026-11-08 UTC, owner-directed "Next")
+
+Sprint goal: warning burn-down tranche 2 — the S56 close's carried-forward
+programme, in its stated order. The target: the **159 `!` non-null
+assertions** the S57 census recorded. The class is the riskiest of the
+remaining programme: a `!` is "I know better than the type system", and
+every wrong one is a runtime TypeError — on the money path (billing),
+the render path, or a user's screen.
+
+The reconnaissance that set the shape: **43 sites in src/ (22 files)** —
+12 `providerMeta(...)!` registry lookups across the provider adapters,
+7 Map.get/index sites riding proven invariants, the billing routes'
+gate lookups, render's pip closure, script-analysis's LLM-shape reads,
+and 4 React components where narrowing was bypassed; **116 sites in
+scripts/ (15 files)** — test fixtures and probe bindings (test-unit 49,
+test-billing 19, probes 47, evidence 1). Unlike S57's no-console, there
+is NO by-design carve-out for tests: T-56.6's trivial tranche migrated
+scripts/ sites too and froze repo-wide, so this tranche does the same —
+every `!` goes, by guard, restructure, named-invariant helper, or
+fail-fast lookup — and the rule is promoted to a bare error.
+
+Pre-verified in the recovered sandbox before the stage opened (at
+`75503b2`, clean tree): tsc 0 · eslint **0 errors/221 warnings** with
+**non-null-assertion exactly 159** (the census number, no drift) ·
+247/247 unit · 40/40 billing · queue PASS. Remote state verified
+PAT-less (`git ls-remote`): `main` still at `9da54b4` — S57's two
+commits remain unlanded; S58 stacks on top locally and rides the same
+delivery bundle.
+
+Landing constraint (unchanged from S57, on record up front): the reclaim
+ate `.env` with the GitHub PAT (due rotation anyway — standing rule
+since S33). **S58 executes and verifies locally; the push, CI runs, and
+stage close ride the owner's rotated PAT**, landing together with S57's
+commits in one bundle (`e2e7c1e..HEAD`).
+
+| Task | Status | Notes |
+|---|---|---|
+| T-58.1 the src/ tranche (43 sites, 22 files) | ✅ Done (2026-11-08) | provider registry: `providerMetaRequired` (fail-fast lookup) replaces 12 adapter `!`s; `must()` named-invariant helper (src/lib/tubeforge/must.ts) for the 3 provable map/find sites; restructures where total code is cleaner (render's pip closure + get-once shot-input loop with identical input order, assemble's permutation `flatMap`+`?? []`, export's in-loop guard, voice's match-once, zip's `splice(0)` drain); billing routes get real guards — **portal's `stripeGate().secret!` was a genuine latent bug** (undefined into the Stripe Authorization header when the key was missing; now the same operator-facing 503 checkout returns), checkout captures its price id; React narrows honestly (dialog's `currentVideo` const + qc IIFE capture, voice-view's `profile != null` alias, attention-panel's endpoint guard, settings-view's `?.` behind its guard); script-analysis merges `?? []` and reads the verdict its early return already narrowed. |
+| T-58.2 the scripts/ tranche (116 sites, 15 files) | ✅ Done (2026-11-08) | **The discovery: the harness's `ok()` is `asserts cond`, so most of the 68 test-suite `!`s were vestigial** — `ok(x !== null)` above already narrows; verified empirically (incl. the closure-capture case) before relying on it, then dropped. The rest gained per-file `req()` helpers in the house style — a null fixture fails as `missing: <name>` instead of a TypeError at the deref. The probes' `spendState` globals, token/row bindings, s21's triple-`!` URL chain (now `??`-total), s55's scene lookup (imports `must`) all carry their invariants by name; m2-evidence restructured get-once, mirroring render.ts. The S57 lesson applied: the recon's `CAMERA_TO_MOVEove]` / `const a, hc]` lines were the known tooling rendering artifact — byte-verified by Read before editing; source was normal. |
+| T-58.3 the freeze + census | ✅ Done (2026-11-08) | `no-non-null-assertion` promoted warn → **error** repo-wide, no carve-outs (tests get `req()`, not exemptions). **En-route catch with real teeth: the config declared `prefer-const` and `no-useless-escape` twice** — "error" early, "warn" in the later General-JavaScript section; JS object literals keep the last key, so the T-56.6 freeze had been silently demoted to warn-only (a new violation would NOT have failed CI). Deduped, both stay error, the catch documented in the config comment. Census re-recorded: `docs/baselines/s58-lint-census-2026-11-08.txt` (0 errors · 62 warnings; remaining programme: set-state-in-effect 33, unused-expressions 11, exhaustive-deps 9, any 7, two singles). |
+| T-58.4 the gates | ✅ Done (2026-11-08) | tsc 0 · eslint **0 errors/62 warnings** (221→62; the 159 non-null warnings gone exactly) · **247/247 unit** · billing 40/40 · queue PASS · **the 11 migrated probes all PASS (304 checks)** · coverage **56.33% lines** (baseline 56.30, floor 50 holds) · `next build` exit 0, 57/57 pages, the SAME four documented Turbopack warnings. |
+| T-58.5 reliability record | ✅ Done (2026-11-08) | `docs/audits/s58-reliability-record.md` — the evidence chain with the landing constraint restated (executed and verified locally on top of 75503b2; remote main confirmed still at 9da54b4 by PAT-less `git ls-remote`), the tranche's five honest moves, the four en-route catches (the neutered T-56.6 freeze is the one that matters), the full gate table, and the spend-gate law untouched. |
+
+Stage status (2026-11-08, end of session): **all five tasks executed and
+locally verified; the stage is NOT closed** — same law as S57: the close
+requires the pushed commits' CI evidence, and this session has no push
+credentials (the reclaim ate .env; the PAT was due rotation anyway). What IS
+verified: tsc 0 · eslint **0 errors/62 warnings** (no-non-null-assertion
+159→0, frozen at error with no carve-outs) · **247/247 unit** · billing
+40/40 · queue PASS · the 11 migrated probes all PASS (304 checks) ·
+coverage 56.33% (floor 50 holds) · build exit 0 with the same four
+documented warnings · **one genuine latent bug fixed en route** (portal's
+undefined Stripe secret) and **one broken fence mended** (the duplicate
+config keys that had silently demoted the T-56.6 freeze to warn-only).
+The moment a rotated PAT lands: push `e2e7c1e..HEAD` (S57+S58 together),
+watch the CI runs, record them in both stages' reliability records, and
+close both.
+
+**S58 CLOSED (2026-11-08, the landing session)** — landed with S57 in the
+same fast-forward (`9da54b4..34ec87a`); CI run 42480528396 on the head:
+all jobs green (the one head run covers both stages' trees cumulatively —
+the S56 multi-commit-push convention, recorded in both reliability
+records). The landing PAT transited chat once — rotate before the next
+landing.
+
+## S59 — react-hooks correctness: set-state-in-effect 33 + exhaustive-deps 9 (opened 2026-11-08 UTC, owner-directed "Next")
+
+Sprint goal: warning burn-down tranche 3 — the recorded programme's next
+entry. The target: the S58 census's **42 react-hooks sites** — 33
+`set-state-in-effect` + 9 `exhaustive-deps` — across **21 files** (20
+src/ components + 1 hook; all client-side React). This class is the
+subtlest of the programme: the failure modes are cascading renders,
+stale closures, and "fix the lint, break the UX". Every fix must
+preserve observable behavior — verified not just by the suites but by a
+LIVE preview battery on the affected views (the S58 preview
+infrastructure: standalone build + daemonize + agent-browser).
+
+The reconnaissance found three honest families, not 42 one-offs:
+
+- **Family A — the sync-setState-first load** (13 sites): `load()` /
+  `refresh()` / `loadTokens()` / `loadTimeline()` called from an effect
+  whose BODY starts with a synchronous setState (`setUsageLoading(true)`
+  and kin) BEFORE the first await/then. The honest fix: the busy flag
+  becomes DERIVED state ("does the data belong to the current key?" —
+  `loadedDays !== usageDays` pattern), the loader's synchronous prefix
+  stops setting state, and every setState lands after the await where
+  the rule (correctly) allows it. Manual-refresh buttons bump the same
+  key via event handlers — legal setState — so the busy UX is identical.
+- **Family B — the prop→state mirror** (~10 sites): `setAccent(value.accent)`,
+  `setVisual(scene.visual)`, `setPickedVoice(...)`, `setC(initial)`,
+  `setScriptDraft(scene.narration)` — re-seed local editable state when
+  a prop changes. The React-documented replacement: **adjust state
+  during render** (guarded `if (seed !== value) { setSeed(...); setX(...) }`)
+  — same trigger condition, same final state, one FEWER paint (the
+  effect version always showed one stale frame).
+- **Family C — reset-on-change** (~8 sites): `setDeleteArmed(false)` /
+  `setVoiceArmed(false)` / `setPaceArmed(false)` / `setActive(0)` /
+  `setQuery("")` / `setVariants([])` / `setScriptApproved(false)` /
+  `setDraftRestored(false)` / `setPickVideo(...)` — transient state
+  cleared when a target/key changes. Same render-time-adjust idiom, or
+  a move into the open/close EVENT handler where the trigger is a
+  toggle (query-on-close, dialog resets).
+- **Family D — deps completion** (9 sites): missing `toast` (a stable
+  store action — include it, free), missing `scene`/`video`/`active`/
+  `startStock` (read each; select the specific fields or include the
+  object where the selector already narrows it), and the one COMPLEX
+  dep expression (`useAppStore((s) => s.refreshKey)` inline in the
+  array) extracted to a variable so it can be statically checked.
+- **Family E — vendored/infra** (2 sites): `use-mobile` rewritten onto
+  `useSyncExternalStore` (the canonical form — no effect at all); the
+  shadcn carousel's initial `onSelect(api)` sync call restructured onto
+  the event subscription path.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-59.1 Family A — the 13 sync-first loads | ✅ Done (2026-11-08) | Await-first IIFE wraps (the rule's boundary established empirically first: it does not model awaits inside called functions; an await-first IIFE wrapping the call is clean — probe files linted then deleted, method disclosed). account-card instead got DERIVED busy (loadedDays !== usageDays — the loader's sync prefix sets no state at all). attention-panel's effect owns an inlined alive-guarded tick; auth-gate split probeStatus/applyStatus so the mount effect awaits first while submit keeps refresh().
+| T-59.2 Family B — the prop→state mirrors | ✅ Done (2026-11-08) | Render-time adjusts (React's documented guarded seed compare — same triggers, same final state, one fewer paint): brand-kit (videoId+accent), scene-editor (nine fields, index+imageUrl+open), cast-view (reference), timeline's scriptDraft (index+narration), vdd's ~25-setter re-seed block (video id — the census's single flagged line was one-per-effect; the rest surfaced and were fixed), create-view's analysis reset + draft-banner retirement.
+| T-59.3 Family C — the resets | ✅ Done (2026-11-08) | command-palette (open + query resets), timeline's delete/voice/pace disarm (their picks), vdd's variants clear, create-view's draftRestored. calendar's schedule command: render-time adjust for the React sets + a store-write-only effect for the consume.
+| T-59.4 Family D+E — deps + vendored | ✅ Done (2026-11-08) | toast (module-constant) added at three sites; attention-panel's complex dep extracted; research-view's active removed via functional update; create-view's startStock added; vdd's fetch battery keeps [video?.id] under the stage's ONE reasoned inline disable (unstable inline onChanged prop — completing would storm; disclosed in the record). use-mobile rewritten onto useSyncExternalStore; carousel's initial canScroll sync moved to a render-time adjust keyed on the api identity.
+| T-59.5 the freeze + census | ✅ Done (2026-11-08) | Both rules promoted to error, no carve-outs. Census: docs/baselines/s59-lint-census-2026-11-08.txt — 0 errors · 20 warnings (62→20: unused-expressions 11, any 7, two singles).
+| T-59.6 the gates + live battery | ✅ Done (2026-11-08) | tsc 0 · eslint 0/20 · 247/247 unit · billing 40/40 · queue PASS · build exit 0 (57/57, same four warnings). LIVE battery: register through the restructured gate, nine views walked, Settings cards with live data (derived-busy proven), create-view draft save→reload→restore (the applyDraft fold), palette open/filter/close, mobile breakpoint both ways — ZERO page/console errors. Honest limit: vdd/timeline/scene-editor deep paths not live-exercised (no videos locally; CI E2E covers on landing).
+| T-59.7 reliability record | ✅ Done (2026-11-08) | docs/audits/s59-reliability-record.md — the rule-boundary probes, the five moves, the one owned disable, the gate table + live battery, the landing constraint (rotated PAT — the S57+S58 one transited chat once), the spend-gate law untouched.
+
+Landing constraint (declared up front, the standing law): S59 executes
+and verifies locally on top of `39721de`; the push, the CI runs, and the
+stage close ride a **rotated** PAT (the current one landed S57+S58 and
+transited chat once already — rotation was the recorded instruction). A
+bundle ships in the delivery so the sixth reclaim loses nothing.
+
+Stage status (2026-11-08, closed on CI evidence): **CLOSED** — pushed alone
+on the rotated PAT as `39721de..62b3656`; CI run **42485325793** green on
+the head: attempt 1 carried ONE E2E failure (voice studio pronunciation
+roundtrip — 15s toBeVisible timeout, 25/26), triaged as a CI dev-server
+flake, not a regression: the failing path contains no S59-touched code (a
+pure event-handler add flow; voice-view's whole diff is the inert
+await-first IIFE wrap), the dev-server compile noise is equally present in
+the GREEN S58 run (338× there, 320× here, 332× in the green attempt 2),
+10/10 local reproductions passed under the CI-identical `npm run dev`
+webServer, and the same-commit `rerun-failed-jobs` came back 26/26 with
+all five jobs green. Full post-mortem with evidence:
+docs/audits/s59-reliability-record.md. Local verification stands as
+recorded above (tsc 0 · eslint 0/20 frozen · 247/247 unit · billing 40/40
+· queue PASS · build exit 0 · live battery zero errors). The landing PAT
+transited chat once — rotation is the recorded instruction at this close
+too.
+
+## S60 — production incident: the Vercel dashboard 500s (opened + executed 2026-11-08 UTC, owner-directed "SOLVE")
+
+The owner reported the deployed app (tubeforge-ibismuh.vercel.app) showing
+"Could not load dashboard — The stats service did not respond." The live
+triage (a registered probe account + the public /api/diag fingerprint)
+found the real shape within minutes: /api/stats was NEVER the failure —
+/api/videos (and every full-select Video route) returned empty-bodied 500s
+because the deployed Postgres schema is wedged mid-migration-chain, while
+narrow-select routes (stats, characters, settings, voices) kept working.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-60.1 live triage | ✅ Done (2026-11-08) | Blast radius mapped: /api/videos + /api/videos/stats + /api/account/usage → 500; stats/characters/settings/voices/auth → 200. /api/diag (public, the earlier Vercel-500 incident's tool) fingerprinted the DB: migrations init→stage72 finished, auth_setting ~90 rolled-back failed rows (one per deploy since 2026-11-02), s20/s32/s40/s46/s49 never attempted. |
+| T-60.2 root cause on a real Postgres | ✅ Done (2026-11-08) | Reproduced 1:1 on a local embedded Postgres 17 (scripts/pgtest): chain applied through stage72 → `migrate deploy` fails at auth_setting with 42P07 "relation Setting_pkey already exists". Mechanism: Postgres's ALTER TABLE RENAME (stage2's Setting→LegacySetting) renames the table but NOT its PK constraint — the orphaned Setting_pkey survives on LegacySetting and collides with auth_setting's CREATE TABLE Setting. Deterministic on EVERY Postgres DB that walked the chain; the non-fatal postinstall catch hid it; each deploy's failed-row recovery retried and re-failed forever. s40/s49's Video columns (qcOverrideAt, contentPolicy) therefore never landed → every full-select Video query P2022s → empty-body 500 → the dashboard's blind Promise.all r.json() rejected → the owner's error card. |
+| T-60.3 the migration self-heal | ✅ Done (2026-11-08) | scripts/migrate-stage2.mjs: (a) pgRepairSettingPkeySurvivor — renames the surviving constraint to LegacySetting_pkey when the wedge fingerprint is present (idempotent, guarded); (b) BASELINE_SENTINELS extended through s49 (it had silently stopped at stage72), with unlessColumn disambiguation so init-era Setting (WITH updatedAt) can never baseline the tail; (c) pgFingerprint reads Setting's columns. Unit tests extended: init-era regression guard, auth_setting-era, s40-era, modern-era. |
+| T-60.4 the usage route's Postgres bugs | ✅ Done (2026-11-08) | /api/account/usage's daily-sparkline raw SQL was SQLite-only: unquoted camelCase identifiers (Postgres folds to lowercase → 42703) AND `ok = 0` (a type error on Postgres booleans). Fixed: all identifiers quoted, predicate `NOT "ok"` — verified on BOTH providers (PG: old fails 42703 / new ok; SQLite: suites green). |
+| T-60.5 the dashboard's blind Promise.all | ✅ Done (2026-11-08) | dashboard-view: the two loads now degrade independently (per-fetch ok + JSON-parse guard). A failing /api/videos can no longer blank the dashboard as a STATS failure — the error card now means stats specifically failed. |
+| T-60.6 the reproduction battery | ✅ Done (2026-11-08) | On the stale PG repro (the exact production shape): dev server + browser — /api/videos 500 IN SESSION and the dashboard rendered FULLY anyway (resilience fix proven under fire; screenshot tf-s60-dashboard-resilient.png); /api/account/usage 200 (the fixed SQL). Then the AUTHENTIC deploy path (DATABASE_URL=pg node scripts/postinstall.mjs): repair fired, failed row resolved, all six pending migrations applied, "No pending migrations", videos/usage/stats all 200, dashboard fully rendered (tf-s60-dashboard-healed.png). |
+| T-60.7 the gates | ✅ Done (2026-11-08) | tsc 0 · eslint 0 errors/20 warnings (census unchanged — the S60 diff added zero) · unit 247/247 (incl. the new sentinel cases) · billing 40/40 · queue PASS · build exit 0 (57/57, same four warnings) · E2E 26/26. |
+| T-60.8 record + delivery | ✅ Done (2026-11-08) | docs/audits/s60-production-incident-record.md; S60-DELIVERY.md + bundle in the delivery. |
+
+Landing constraint (the standing law): S60 executes and verifies locally on
+top of `5c7912d` (the S59 close, current remote main). The push, CI, and
+stage close ride a ROTATED PAT — the S59 landing token transited chat once.
+The deployed database HEALS ITSELF on the first deploy of this fix
+(postinstall runs the repair + recovery + deploy); a manual-instant path is
+documented in the delivery for the owner.
+
+Owner-side findings surfaced by the incident (not code): the Vercel
+deployment runs without TUBEFORGE_ENCRYPTION_KEY (diag: encryptionKey false
+— provider-credential encryption and the security card need it); /api/diag
+is still public (close it once this incident is confirmed healed);
+DEPLOYMENT.md's doctrine stands — Vercel is a preview surface, Fly+Neon is
+the deployment of record; whichever runs, the DB needs the migration chain,
+and this fix makes that self-healing.
+
+**CLOSED — landed, healed, and verified end to end (2026-11-08 ~14:45
+UTC).** Pushed `5c7912d..5c42929` to origin main. CI run 42491043698 on
+the head SHA: all five jobs green on the FIRST attempt (Production build ·
+Typecheck · Lint · Unit · Secret scan · Money-path coverage · E2E). The
+Vercel auto-deploy's postinstall healed the production database within
+~4 minutes of the push — /api/diag: public tables 29→33 (Setting, ApiToken,
+SpendReservation, AuthAttempt created) and finished rows present for all six
+wedge-era migrations (auth_setting, s20, s32, s40, s46, s49). The
+authenticated production probe (the owner's exact failure path): register
+201 → /api/stats 200 (full payload) → /api/videos?limit=6 200 (the P2022
+empty-body 500 is gone) → /api/account/usage 200 (the fixed SQL live on
+production Postgres) → front-door delete 200 → the dead session 401s. The
+probe account performed reads only and was deleted through its own front
+door. Landing hygiene deviation, recorded plainly: the owner re-sent the
+SAME S59 token (its second chat transit) as the landing green light —
+rotate it before S61, without fail.
+
+## S61 — PostgreSQL reliability lane + production security closure (opened + executed 2026-11-08 UTC, owner-directed: the 2026-11-08 external audit)
+
+The owner's fresh audit (8 November) confirmed S60 closed on CI evidence
+and ranked the follow-ups. S61 executes every code-side P0 and builds the
+lane whose absence the audit calls the CI blind spot that let the S60
+incident through: "every CI surface runs SQLite; the Postgres path had zero
+automated coverage."
+
+| Task | Status | Notes |
+|---|---|---|
+| T-61.1 close the public /api/diag exposure | ✅ Done (2026-11-08) | Removed from the middleware's PUBLIC_API set (S60's owner checklist + the route's own header both called for it once the heal was confirmed — it was, ~4 min after the S60 deploy). The route itself stays for AUTHENTICATED incident triage. Verified live on the rebuilt sandbox preview: /api/diag → 401 "Authentication required"; /api/auth/status still public 200. |
+| T-61.2 encryption-key watchlight | ✅ Done (2026-11-08) | instrumentation register() logs a loud, remediation-exact warning when NODE_ENV=production boots with TUBEFORGE_ENCRYPTION_KEY missing/short (the S60 record's owner-side finding #1 — the key IS absent on Vercel). Never fatal (the hook's fault-tolerance law). The actual env set + credential re-store remain OWNER actions (Vercel dashboard). |
+| T-61.3 the PostgreSQL CI lane | ✅ Done (2026-11-08) | ci.yml gains the `postgres` job (services: postgres:17): DATABASE_URL set before `npm ci` so postinstall picks prisma/schema.prisma, TWO authentic postinstall passes (clean chain wedges at auth_setting → self-heal), then `scripts/pg-ci-verify.mts` asserts: _prisma_migrations managed · every one of the 18 chain migrations finished · nothing stuck · Setting_pkey on Setting + LegacySetting_pkey on LegacySetting · no surviving Setting_pkey on LegacySetting · Video.qcOverrideAt + Video.contentPolicy exist (the P2022 columns) · the REAL usage sparkline SQL (now shared, T-61.4) runs on PG with seeded boolean roundtrip (NOT "ok", the 42883 fix) · full-select Video create+read (the P2022 query shape). |
+| T-61.4 single-source the sparkline SQL | ✅ Done (2026-11-08) | Extracted the daily-usage sparkline from the route into src/lib/tubeforge/usage-sql.ts (dailyUsageSparkline) — the route and the CI probe call ONE function, so CI verifies the exact production SQL; drift is structurally impossible. The S60 portability law is documented at the single source. |
+| T-61.5 virgin-database deploy bug — found by the new lane's own local drill | ✅ Done (2026-11-08) | Reproducing the CI job locally (embedded Postgres) caught a REAL latent bug: pgRepairMissingInitTables (b8ec16f, built for PARTIAL legacy schemas) ran on a VIRGIN database first — creating VoiceProfile with no _prisma_migrations — so `migrate deploy` refused forever with P3005 ("The database schema is not empty"): a brand-new Postgres deployment could NEVER migrate. Fix: virgin (zero public tables) → deploy directly, no repairs; PLUS the in-run heal — the clean chain wedges at auth_setting MID-deploy (the survivor constraint only exists after stage2 runs), so postgresMigrate now catches the wedge fingerprint, repairs, resolves the stuck row, and redeploys ONCE. Verified end-to-end on embedded PG: one postinstall pass → wedge (P3018/42P07) → repair → all 18 migrations applied → 27/27 battery assertions → second postinstall a clean no-op. Fresh deployments now self-heal within a single build (S60's story took two). |
+| T-61.6 gates | ✅ Done (2026-11-08) | tsc 0 · eslint 0/20 (census unchanged) · unit 247/247 · billing 40/40 · queue 39/39 exit 0 (one first-run ✗ was the live preview server's claim loop winning a race on the shared dev DB — environment interference, clean on rerun) · build 57/57 (the same four documented warnings) · the embedded-PG drill above. |
+| T-61.7 landing + CI evidence | ✅ Done (2026-11-08) | The rotated PAT arrived; S61 landed as 3938ed0 (implementation) + 5571b86 (workflow-parse fix, T-61.8). GREEN run 42496779198 — 6/6 jobs (secrets · check · build · coverage · postgres · e2e); the postgres job reproduced the S60 incident IN CI: clean chain → P3018/42P07 at auth_setting → mid-deploy self-heal → 18/18 applied → 27/27 battery assertions held. |
+| T-61.8 the parse failure the lane's first push caught | ✅ Done (2026-11-08) | First push (run 42496675498 on 3938ed0) completed as failure with ZERO jobs: the new postgres step name contained an unquoted ": " ("postinstall: generate") — YAML reads colon+space as a nested mapping, so GitHub could not parse ci.yml. Local gates never parse workflow files, so only the CI event itself could surface it. Fixed by quoting the step name (5571b86); pyyaml validates all six jobs locally before every workflow push from here on. |
+
+S61 CLOSED on CI evidence (2026-11-08): run 42496779198, 6/6 jobs green on
+5571b86. The audit's code-side P0s are all landed; the blind spot that let
+the S60 incident ship is now a permanent CI job.
+
+Owner actions outstanding (restated): set TUBEFORGE_ENCRYPTION_KEY on the
+Vercel deployment and re-store any saved credentials (the S61 watchlight
+warns until then). The GitHub PAT WAS rotated (2026-11-08) but arrived via
+chat — one transit against the record's zero-transit standard; rotate it
+again at the next natural milestone and deliver it out-of-band.
+
+## S62 — proving real video quality: the 8-profile i2v validation lane (opened + executed 2026-11-08 UTC, owner-directed "s62")
+
+The 2026-11-08 audit's verdict after the engineering stages: the next
+milestone should be PROVEN real video quality, not more engineering. The
+audit's P1: raise render/video-job coverage, validate real image-to-video
+output, blind visual scoring "across all 7 production profiles". Reconciled
+at open time: the catalog has been EIGHT profiles since S49
+(islamic-history joined) — the lane scores all eight.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-62.1 the validation harness | ✅ Done (2026-11-08) | scripts/s62-i2v-validation.mts — per profile, the ENTIRE production chain runs for real against the live gateway: director pass with the profile's own overlay + vocabularies (glm-4.6 hint, temp 0.6, parsePlan under aiCallJson retry, 2/2 scene coverage) → shot 0 scene art through the REAL image path (1344x768, S49 policy sanitize with appendNegative) → the REAL plan-aware motion prompt (i2vMotionPrompt, sanitized like render.ts) driving real CogVideoX via zaiVideoViaClient with ensureSceneClip's exact options (5s · 30fps · 1920x1080 · poll 10s×60 · one retry) → ffprobe + runQcReport + frames at 1.0/2.5/4.0s. Resumable manifest in validation/s62/ (gitignored binaries; manifest + report committed). The video capability is pinned to zai via the SAME override mechanism the Settings Test button uses — a fresh sandbox DB ships it unconfigured (registry default "fal"), while production's ensureSceneClip hard-requires zai. |
+| T-62.2 real i2v across all eight profiles | ✅ Done (2026-11-08) | 8/8 GREEN — narrative · documentary · explainer · advertisement · animation · podcast · social · islamic-history, every one the full real chain (glm-4.6 director pass → real t2i art → real CogVideoX 1080p → QC). Aggregate: 45.9 MB of clip evidence, ~44 min of gateway video time, every clip's clip-local QC lenses clean (black/frozen/aspect/static/flicker/stutter/dead-air). Two live advisory fires on REAL plans — advertisement ("must close on a CTA") and social ("hook must be ≤ 2s — runs 2.8s") — the profile validation layer demonstrably works. Gateway reality: back-to-back i2v submissions meet the 429 shared cool-down (45s); the lane's retry patience was calibrated (3 × 80s backoff) — production renders are naturally spaced by render work and never saw this. |
+| T-62.3 blind visual scoring | ✅ Done (2026-11-08) | 8 clips × 3 frames through a seeded shuffle (A–H, key withheld during scoring — validation/s62/blind-key.json), one real vision call per pool letter, generic rubric only. Field means: motion 3.00 · artifact-load 3.75 · temporal coherence 4.50 · composition 4.38 · OVERALL 3.25/5. Unmasked leaders: advertisement, narrative, podcast, documentary (4/5). The motion under-read concentrates exactly where the doctrine is static (explainer diagram, social face close-up, islamic-history reverent slow zoom) — the honest improvement lever for a later stage. Hard policy lens PASS: the islamic-history frames show library/manuscripts with no figures, no faces. scores.json committed. |
+| T-62.4 render/video-job coverage raise | ✅ Done (2026-11-08) | The i2vMotionPrompt contract joined the house suite — 4 tests: speed-prefix coloring + subjectAction priority + the I2V tail; planScene-null fallback to the scene's legacy camera; the FULL S48 engine camera vocabulary pinned phrase-for-phrase (no silent junk fallback); only slow/fast modulate (normal/undefined leave the phrase bare). Suite: 247 → 251. One test-side case bug found and fixed during bring-up (case-sensitive includes vs cap()). |
+
+Raw-clip QC classification (for the record): the playable check demands
+H.264 + AAC — a raw CogVideoX clip is video-only by construction (audio is
+muxed at the audiomix stage), so playable:fail on a RAW clip is a category
+mismatch, not a defect. The lane therefore reads the clip-local visual
+lenses as binding and marks audio-bearing checks unmeasured-by-design.
+
+S62 CLOSED on CI evidence (2026-11-08): run 42505390870, 6/6 jobs green on
+e3798f7 (check · coverage · postgres · build · gitleaks · e2e — the unit
+suite at 251 under both check and coverage). All eight profiles validated
+REAL end-to-end, blind-scored, and the motion-prompt contract pinned in
+the suite. The audit's P1 is executed: real image-to-video output is no
+longer assumed — it is measured. Carry-forward P2: subject-motion vigor
+on static doctrines (see the record's findings).
+
+## S63 — subject-motion vigor: repair what the blind scoring measured (opened 2026-11-09 UTC, owner-directed "next")
+
+S62's carry-forward P2, executed as its own stage. The receipt-level
+diagnosis sharpened the finding: the per-kind motion doctrine was never
+scored low — it was DELETED. 7/8 real director subjectActions were poses
+("stationary at top position"), and subjectAction replaced the clause
+outright; the camera phrases baked tempo words that the moveSpeed prefix
+then contradicted ("Quick, energetic slow cinematic zoom in" on social's
+real clip). Record: docs/audits/s63-motion-vigor-record.md.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-63.1 the tempo law | ✅ Done (2026-11-09) | I2V_CAMERA_PHRASES is tempo-neutral (zoom-in/zoom-out/pull-out/drone lose "slow", punch-in loses "fast", diag-tl/br lose "gentle"); tempo belongs exclusively to the moveSpeed prefix. fast+zoom-in now reads "Quick, energetic cinematic zoom in" — no self-contradicting composition is possible. |
+| T-63.2 the doctrine-always-rides law | ✅ Done (2026-11-09) | subjectAction LEADS (still senior) but the per-kind I2V_SUBJECT_MOTION clause ALWAYS follows — a pose can no longer delete the motion doctrine; the subject→visual run-on gets a real sentence boundary. The per-kind clause wording is untouched (detail texture, text legibility, reverence — no teaching to the test). |
+| T-63.3 re-measure, honestly attributed | ⏸ blocked on the gateway (2026-11-09, ~18:22–21:02 UTC and counting) — resumable | scripts/s63-motion-vigor.mts reuses every S62 plan + art VERBATIM (the only variable is the motion prompt) and re-runs real CogVideoX i2v + QC + frames for all eight profiles into validation/s63/; scripts/s63-blind-score.mts blind-scores under the S62 protocol (fresh seed) and unmasks a per-profile before/after. The laws landed + CI-green on 0c659b8 (run 42510992378, 6/6); the re-measure hit an account-wide gateway 429 (video AND llm — long-horizon quota, most plausibly S62's ~44 min of video exhausting a daily window; silence blocks and hour boundaries did not clear it). The stage stays OPEN until the measurement lands — see the record's §5 resumption protocol. |
+| T-63.4 contract re-pinned | ✅ Done (2026-11-09) | The S62 blocks that pinned the contradictory strings verbatim are revised; a tempo-law sweep test (no camera phrase may contain a tempo word) bars the collision from returning. |
+
+## S64 — the Whiteboard Engine, Phase 0 + P0 (opened 2026-11-09 UTC, owner-directed: the complete Whiteboard Animation development plan)
+
+The plan's own Next Actions, executed: audit the repository, freeze the
+architecture, implement the native SVG drawing prototype, benchmark the
+first 60-second video. The plan's §13 is explicit — do not build editors
+before proving the drawing engine. Zero gateway dependency: exactly the
+property the account-wide 429 outage demands while S63's re-measure
+sleeps. Record: docs/audits/s64-whiteboard-p0-record.md (§4 carries the
+execution addendum: a mid-stage sandbox recycle ate the UNCOMMITTED
+working tree — everything was restored from the session transcript and
+re-verified from zero; the receipt for the repo's own law that
+uncommitted stage work does not exist).
+
+| Task | Status | Notes |
+|---|---|---|
+| T-64.1 Phase 0 audit + architecture freeze | ✅ Done (2026-11-09) | Director untouched (the engine imports nothing from it); slides-mode branch identified as the render analog; Job model shape noted for the product-integration phase; rasterizer decision = Playwright chromium 1.57 (installed, full SVG fidelity, deterministic — no CSS animations, our math drives every frame); CI-lane law adopted (pure contracts in the unit suite, real-render evidence via the sandbox benchmark — the S62 split); house music system reused for the bed. |
+| T-64.2 svg.ts — sanitizer + path parser | ✅ Done (2026-11-09) | Security-pinned sanitizer (script/foreignObject/iframe/embed/object/image/use/animate subtrees, on* handlers quoted-or-bare, javascript:/data:/vbscript: hrefs, external url() → url(#none), DOCTYPE/ENTITY/prolog — 7 attack-fixture tests, plus the clean-markup byte-identical round-trip) + the full path grammar (M/L/H/V/C/S/Q/T/A/Z, implicit repeats degrade to L, arcs flattened per spec F.6) + arc-length/point/tangent math (semicircle/quarter ≈ π·r pins, S/T reflection equivalences). PURE. |
+| T-64.3 storyboard.ts — the engine schema | ✅ Done (2026-11-09) | WhiteboardProject/Scene/AnimationEvent (draw_path · write_text · reveal_color · move_object) / CameraEvent with house-style validation (null-on-invalid, reference integrity against the loaded library, clamps + defaults, malformed camera dropped-with-error, keyframes sorted). |
+| T-64.4 timing.ts — narration + draw scheduling + frame plan | ✅ Done (2026-11-09) | 2.6-wps estimate or measured VO durations; THE FILL LAW (weight-shared durations scale so the draw span ends exactly at duration − the 900ms hold — the first render's capped schedules finished 3–6s early and the static tails failed frozen-frames/static-shots); the frame plan is a pure deterministic function (pinned by a same-inputs-same-frames test); the pen follows the ACTIVE stroke along true path geometry, rests (wobbling) through lead-in/hold, and ENTERS fast (ease-out) at scene open; the permanent Lissajous camera drift (settle-swelled ×3 while the canvas is thin) rides under the keyframes. |
+| T-64.5 assets.ts — starter vector library | ✅ Done (2026-11-09) | 10 assets (the heart benchmark set + the drawing hand + generics + arrow-return); the spark core rebuilt from a `<circle>` into a stroke-only arc path (a non-extractable drawable skips the progressive reveal and pops in fully drawn); extraction regexes attribute-anchored (`\sd="…"` — the bare `/d="…"/` matched the tail of `id="…"` and extracted the id as path data, caught by the new unit contracts); the every-drawable-is-an-id-carrying-<path>/<text> invariant is unit-pinned. |
+| T-64.6 render.ts — chromium rasterizer + FFmpeg assembly | ✅ Done (2026-11-09) | chromium with ALL network routes aborted (security line 2) rasterizing per-frame state from OUR pure plan; page-registered id maps (window.__wbDraw/__wbText — the namespace seam: frame-plan keys are "::"-keyed while page ids are "--"-namespaced, and the original applier's bare getElementById(key) silently missed EVERY element); the paper-dots surface texture (a 99%-blank canvas measured mean \|Δluma\| 0.3–0.6 against the ~1.0 freezedetect floor — the texture gives the camera drift purchase on every pixel, and is canonical whiteboard craft); FFmpeg scene encode + concat + the house music bed with the solo-bed loudness law (no VO → bed at full −16 LUFS gain, not the ducked 0.16 — the ducked solo bed measured −32.1 LUFS). |
+| T-64.7 unit contracts | ✅ Done (2026-11-09) | 40 S64 contracts in the house suite (sanitizer 7 · grammar 11 · storyboard 7 · timing 10 · assets 3 · renderer 2). Suite 253 → 293, all green. Bring-up caught two real engine defects (the extractAsset regex; the Z-length pin was the test's own arithmetic) — receipts in the record §4. |
+| T-64.8 the 60-second benchmark | ✅ Done (2026-11-09) | 63.88s · 5 scenes · 1920×1080 · 24fps from scripts/s64-whiteboard-benchmark.mts; render 171s; QC: ALL LENSES PASS (playable · black-frames · frozen-frames · aspect · loudness · true-peak · loudness-range · dead-air · static-shots · flicker · stutter · tail-fade; cut-alignment honestly unmeasured — no timeline doc). The QC journey is the stage's spine: 16 frozen runs → 5 (fill law + resting pen + solo-bed gain) → 1 (drift + paper-dots texture + ease-out entry) → 0 (settle window 4.5s + darker dots). Pixel forensics: heart+labels 13.6% ink at t=20s, title/heart zones drawing at t=8s, dot-grid periodicity confirmed. Evidence: validation/s64/ (manifest + project.json committed; binaries gitignored). Narration timing is the honest 2.6-wps estimate — the gateway outage holds. |
+| T-64.9 landing + CI evidence | ✅ Done (2026-11-09) | `83aa7d3` pushed; run 42534021634 GREEN 6/6 (gitleaks · postgres · Typecheck/Lint/Unit · coverage · build · e2e) — unit suite 293 under both check and coverage lanes. Local gates on the exact tree first: tsc 0 · eslint 0 errors/20 warnings (census unchanged) · unit 293/293 · billing 40/40 · queue restart-recovery PASS · build ✓. |
+
+S64 CLOSED on CI evidence (2026-11-09): the native whiteboard engine —
+pure SVG geometry, deterministic frame plans, the path-following pen,
+keyframed camera under a permanent drift, the paper-dots surface —
+renders a 63.88s 1080p MP4 through chromium + FFmpeg with ZERO
+generation APIs, and the benchmark passes every applicable house QC
+lens. The plan's formal E0 deliverable (WHITEBOARD_ENGINE_AUDIT.md)
+lands in the follow-up docs commit; the next engineering milestone per
+the plan is E1 — the technical design doc that formalizes the
+product-integration phase (a `whiteboard-render` JobKind joining the
+20 registered kinds, the editor surface, the asset-library phase, and
+real-VO synchronization once the gateway clears).
+
+## S65 — Whiteboard E1: the technical design + engine budget hardening (opened 2026-11-09 UTC, owner-directed "Go")
+
+S64 closed with the E0 audit naming E1 as the next milestone:
+WHITEBOARD_ENGINE_DESIGN.md — the technical design that formalizes the
+product-integration phase (JobKind wiring, DB shape, API surface, editor
+views, upload hardening, the CI-lane decision) — plus the two cheap
+engine-side hardening pins the audit's §6 explicitly assigns to E1 (the
+id-charset law, the path/resource budgets). Product implementation still
+waits for owner review of the architecture (the plan's own law); E1 is
+the review artifact, not the implementation.
+
+Gateway note at open: the S63 outage is STILL ACTIVE — one fresh llm
+probe through the app's own stack returned 429 (same account-wide
+throttle, scripts/gateway-quota-probe.mts lands this stage as the
+resumption instrument). S63 stays parked; E1 is zero-gateway by design.
+
+| Task | Status | Notes |
+|---|---|---|
+| T-65.1 recon | ✅ Done (2026-11-09) | The integration surfaces read on the live tree: jobs.ts (20-kind union, dedupe keys, boot recovery), queue.ts (HEAVY_KINDS = render/short/convert, per-org cap, MAX_ATTEMPTS_BY_KIND), queue-handlers.ts (registerDefaultHandlers + the resumableKinds drift lesson), video-jobs.ts (runSlideJob composite-id pattern), Video model (JSON-doc precedent: scenes/shotList/verifyReport/commentsKit/qcReport), render.ts mode union (kenburns/animated/stock/slides), the 20+ /api/videos/[id]/<stage> routes, views/ + timeline-studio editor precedents, MONEY_PATHS coverage list. |
+| T-65.2 the id-charset law | ✅ Done (2026-11-09) | validWhiteboardId (`[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}`, minus `--`/`::`) enforced at BOTH layers: extractAsset excludes violating path/text ids from the drawable index (surfaced in a new `rejected` list with reasons), validateWhiteboardProject rejects explicit scene ids. Missing ids still default — P0 tolerance untouched for legal input. | Renderer DOM ids are `${assetId}--${pathId}`, frame-plan keys `assetId::pathId` — an id carrying either separator corrupts the namespace seam (E0 audit §6 risk 3). Pin `[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}` minus `--`/`::` at BOTH layers: extractAsset excludes violating path/text ids from the drawable index; validateWhiteboardProject rejects scene ids and referenced ids that violate it. |
+| T-65.3 the budgets | ✅ Done (2026-11-09) | countPathCommands (svg.ts) counts EXPANDED commands through the real grammar (implicit repeats count — parsePathData groups them, the flattener pays per group; bring-up caught the test's own letter-count arithmetic). WB_BUDGETS: 24 scenes · 64 placements · 256 events · 32 camera keys per scene · 120s explicit scene · 900s Σ explicit. estimateProjectFrames (timing.ts, PURE) + WB_RENDER_FRAME_BUDGET 25,920: renderWhiteboard probes VOs, runs the estimator, REFUSES over-budget BEFORE chromium launches, then the loop reuses the estimator's durations — budget and render cannot disagree. | Per-path command budget (512, parsed via the REAL grammar — parsePathData, so implicit repeats count); per-scene caps (placements 64, animations 256, camera keys 32); per-project caps (scenes 24, explicit durationMs ≤ 120s, Σ explicit ≤ 900s); the render pre-flight frame budget (25,920 frames = 18 min at 24fps) computed by a PURE estimator in timing.ts and enforced BEFORE chromium launches. |
+| T-65.4 unit contracts | ✅ Done (2026-11-09) | 9 S65 contracts (charset ×4, budgets ×5): the charset acceptance/rejection table, validator scene-id law + default path, extraction exclusions + reasons, starter-library cleanliness, expanded-command counting pinned directly + through the gate, per-scene caps at/over the wall, project caps at/over the wall, the estimator's duration priority + arithmetic, and renderWhiteboard refusing an over-budget project before playwright is even imported. Suite 293 → 302. | Attack fixtures for every budget + the charset; the estimator pinned. |
+| T-65.5 WHITEBOARD_ENGINE_DESIGN.md | ✅ Done (2026-11-09) | The E1 deliverable at repo root beside its E0 sibling: the doc-column decision (sixth of the house's JSON-doc family, LWW + advisory rev), the `whiteboard` 21st-kind wiring (heavy kind, default attempts, boot-recovery guard, `#wb<sceneId>` previews, the shared slides chromium deployment contract named honestly), the five-route API surface, the frame-plan editor seam (frameAt + APPLY_FRAME_FN — one motion implementation for editor and MP4), the E11 upload spec (byte cap → sniff → sanitize → budget → rasterize-before-trust → quota → provenance), the CI-lane decision (unit suite now, MONEY_PATHS via video-jobs.ts at E9), and the updated E-matrix. | The E1 deliverable proper: DB doc-column decision (Video.whiteboardProject JSON, the parsePlan precedent), the `whiteboard` JobKind wiring (heavy kind, handler registration, boot-recovery guard), the API surface (project GET/PUT, scaffold, render, scene preview, asset upload), the editor surface (frame-plan seam — one source of motion truth), upload hardening spec for E11, the CI-lane decision, and the updated E-milestone → stage mapping. |
+| T-65.6 record + delivery | ✅ Done (2026-11-09) | docs/audits/s65-whiteboard-e1-record.md (incl. the gateway probe at open — still 429 — and the benchmark regression proof: the 63.88s benchmark re-ran through the pre-flight path, ALL lenses pass, manifest diff = timestamps + renderMs only, zero rendered frames changed). | docs/audits/s65-whiteboard-e1-record.md. |
+| T-65.7 the gates | ✅ Done (2026-11-09) | tsc 0 · eslint 0 errors/20 warnings (census unchanged) · unit 302/302 · billing 40/40 · queue restart-recovery PASS · build exit 0. | Full battery on the exact tree: tsc · eslint · unit · billing · queue · build. |
+| T-65.8 landing + CI evidence | ✅ Done (2026-11-09) | `0f2eaaf` pushed (99a3c3a..0f2eaaf); run 42537062681 GREEN 6/6 on the head SHA: PostgreSQL integration · Money-path coverage · Production build · Typecheck/Lint/Unit · Secret scan · E2E. |
+
+S65 CLOSED on CI evidence (2026-11-09): run 42537062681, 6/6 jobs green
+on 0f2eaaf. The E1 deliverable is landed — WHITEBOARD_ENGINE_DESIGN.md
+submitted for owner review — and the E0 audit's §6 engine-side risks are
+closed in code (302/302 contracts, the 63.88s benchmark regression-proof
+through the new pre-flight). Product implementation (E9 Phase A: the
+scaffold route, the editor view loop, the `whiteboard` kind wired end to
+end) begins on owner review of the design, per the plan's sequencing law.
+
+Standing reminders, unchanged: the Vercel encryption key + credential
+re-store (S61 watchlight), the PAT re-rotation out-of-band at the next
+natural milestone, and S63's re-measure — probe first with
+scripts/gateway-quota-probe.mts; at stage-open it was STILL 429
+(account-wide).

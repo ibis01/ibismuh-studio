@@ -1,0 +1,70 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/tubeforge/tenant-db";
+import { requireUser } from "@/lib/tubeforge/tenant";
+import { generateCharacterBible, serializeCharacter, recentVideosFor } from "@/lib/tubeforge/characters";
+import { errorText } from "@/lib/tubeforge/redact";
+
+/**
+ * POST — GLM "character bible": expands a name + short concept into a full
+ * generation-ready profile. Synchronous (~5-8s) — safely under gateway timeout.
+ * Body: { name, concept, niche?, characterId? } — when characterId is given,
+ * the bible is applied to that character directly.
+ *
+ * Stage 1 note (task T-1.10 deviation, recorded in TASKS.md): this route
+ * stays synchronous on purpose. Its only caller is the new-character form
+ * preview (no entity id exists yet to job onto, and the caller needs the
+ * generated fields to fill form inputs). At ~5-8s it sits well under the
+ * gateway timeout; the Stage 3 queue migration will move it onto the worker
+ * with a synthetic run id once the client can poll a drafts endpoint.
+ */
+export async function POST(req: NextRequest) {
+  const auth = await requireUser(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  auth.enter(); // tenant scope: handler + spawned job closures
+
+  try {
+    const body = await req.json();
+    const name = String(body.name ?? "").trim();
+    if (!name)
+      return NextResponse.json({ error: "Name is required" }, { status: 400 });
+
+    const concept = String(body.concept ?? "").slice(0, 600);
+    const niche = body.niche ? String(body.niche) : undefined;
+
+    const bible = await generateCharacterBible({ name, concept, niche });
+
+    if (body.characterId) {
+      const character = await db.character.findUnique({
+        where: { id: String(body.characterId) },
+      });
+      if (!character)
+        return NextResponse.json({ error: "Character not found" }, { status: 404 });
+
+      const updated = await db.character.update({
+        where: { id: character.id },
+        data: {
+          role: bible.role || character.role,
+          personality: bible.personality || character.personality,
+          appearance: bible.appearance || character.appearance,
+          identityAnchor: bible.identityAnchor || character.identityAnchor,
+          voice: bible.voice || character.voice,
+          artStyle: bible.artStyle || character.artStyle,
+        },
+        include: { _count: { select: { videos: true } } },
+      });
+      return NextResponse.json({
+        bible,
+        character: await serializeCharacter(
+          updated,
+          updated._count.videos,
+          await recentVideosFor(updated.id, updated.organizationId)
+        ),
+      });
+    }
+
+    return NextResponse.json({ bible });
+  } catch (err) {
+    const message = errorText(err, "Bible generation failed");
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}

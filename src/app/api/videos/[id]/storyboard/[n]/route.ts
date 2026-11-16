@@ -1,0 +1,58 @@
+import { createHash } from "crypto";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { db } from "@/lib/tubeforge/tenant-db";
+import { requireUser } from "@/lib/tubeforge/tenant";
+import { readSceneImage } from "@/lib/tubeforge/story";
+
+type Ctx = { params: Promise<{ id: string; n: string }> };
+
+// Stage 1 (task T-1.12): `n` must be a positive integer — Number("2.5")/NaN
+// previously produced nonsense filenames like scene-NaN.png.
+const ParamsSchema = z.object({
+  id: z.string().min(1),
+  n: z.coerce.number().int().positive(),
+});
+
+/** GET — stream one storyboard scene image PNG. */
+export async function GET(req: NextRequest, ctx: Ctx) {
+  const auth = await requireUser(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  auth.enter(); // tenant scope: handler + spawned job closures
+
+  const parsed = ParamsSchema.safeParse(await ctx.params);
+  if (!parsed.success)
+    return NextResponse.json({ error: "Invalid scene index" }, { status: 400 });
+  const { id, n } = parsed.data;
+
+  // Scoped lookup FIRST — uploads/<id>/scene-NN.png is only streamed after
+  // the row is proven to belong to the caller's organization.
+  const video = await db.video.findUnique({ where: { id } });
+  if (!video)
+    return NextResponse.json({ error: "Video not found" }, { status: 404 });
+
+  const image = await readSceneImage(id, n);
+  if (!image)
+    return NextResponse.json({ error: "Scene image not found" }, { status: 404 });
+
+  // S42 — revalidation contract: the DTO stamps this URL with ?v=<mtime>-<size>
+  // (serializeScenes), so a fresh take means a fresh URL and the max-age below
+  // only ever caches ONE take. The ETag (content hash) additionally lets a
+  // stale copy revalidate cheaply — 304 instead of a full re-download.
+  const etag = `"s-${createHash("sha1").update(image).digest("hex").slice(0, 20)}"`;
+  if (req.headers.get("if-none-match") === etag)
+    return new NextResponse(null, {
+      status: 304,
+      headers: { ETag: etag, "Cache-Control": "private, max-age=3600" },
+    });
+
+  return new NextResponse(new Uint8Array(image), {
+    status: 200,
+    headers: {
+      "Content-Type": "image/png",
+      "Content-Length": String(image.length),
+      "Cache-Control": "private, max-age=3600",
+      ETag: etag,
+    },
+  });
+}

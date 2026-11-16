@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "skipLibCheck": true,
+    "strict": true,
+    "noImplicitAny": false, // the app tsconfig's law — standalone checks must not be stricter than the app
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "incremental": false,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@/*": ["../src/*"]
+    }
+  },
+  "include": ["./test-scene-revisions.mts", "../src/types/heic-convert.d.ts"]
+}

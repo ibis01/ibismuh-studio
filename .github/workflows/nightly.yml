@@ -1,0 +1,191 @@
+# TubeForge nightly battery (S56/T-56.5 — the S33+ backlog's P1-2).
+#
+# What runs every night (02:30 UTC, ahead of Monday's Dependabot wave so a
+# bad bump's failure is visible the same day it lands) and on demand:
+#
+#   battery — the durable s-series route probes (19), driven by
+#             scripts/run-route-battery.mjs against the PRODUCTION build
+#             (it builds once, then boots `npm run start` in two phases:
+#             enforce-mode for 18 probes, report-mode for s29's pre-S40
+#             export contract). The runner handles the shared-IP realities
+#             (raised middleware tiers, AuthAttempt clearing between probes,
+#             interrupted-run janitor) — all disclosed in its header.
+#   e2e     — the full Playwright suite, the same job CI runs on push.
+#
+# Why nightly at all: these probes were on-demand-only since the studio era;
+# drift in any of the 19 contracts (auth, lockout, account doors, publish
+# gates, exports, QC doors, uploads, worlds, settings, billing surfaces)
+# used to surface only when a human happened to re-run them.
+#
+# Sandbox note (recorded honestly): the runner is CHUNKED (S56_BATTERY_LEG)
+# because this development sandbox reaps long-running process trees; the
+# full "all" leg is proven piecewise in-sandbox (18/18 + s29 against the
+# production server) and runs whole on CI runners, which have no reaper.
+
+name: Nightly battery
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  battery:
+    name: Route-probe battery (17 probes, production server)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    # ABSOLUTE DATABASE_URL for the whole job — the lesson of the first
+    # nightly run (42462735659): with the postinstall .env's RELATIVE
+    # file:../db/custom.db, the standalone server (which chdirs to
+    # .next/standalone and loads the .env the build copies there) and the
+    # probe processes (repo-root cwd, their own Prisma client) resolve the
+    # relative path against DIFFERENT bases — the server wrote one SQLite
+    # file while the probes read another, and every org-resolution check
+    # failed (13 probes red on registers that actually succeeded). An
+    # absolute path gives every process in the job the SAME file — the
+    # exact pattern .env.example prescribes for standalone deployments.
+    env:
+      DATABASE_URL: file:${{ github.workspace }}/db/custom.db
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Provision per-run secrets
+        # With the job-level DATABASE_URL set, postinstall never writes its
+        # .env — so the signing + encryption secrets must come from here.
+        # Fresh per run (sessions/credentials never survive the runner).
+        run: |
+          echo "TUBEFORGE_AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "TUBEFORGE_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install ffmpeg (render pipeline — s11/s29 render for real)
+        # 2026-11-10: dpkg-lock wait + retry (see ci.yml's main job for the
+        # full receipt) — the boot-time unattended-upgrades race was stalling
+        # fresh runners past every in-apt timeout.
+        # 2026-11-11: 8 → 10 minutes (probe + bounded apt-daily wait headroom;
+        # full receipt: ci.yml main job step).
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          # 2026-11-11 (43051204925 attempts 1-3, 43060056294 attempt 4):
+          # azure.archive.ubuntu.com flapped for 60+ minutes — DNS failures,
+          # then per-index 000/404 flaps (noble answered 200 while
+          # noble-updates and noble-security failed in the same minute).
+          # The first fix — appending canonical as a second mirror — did
+          # NOT rescue attempt 4: apt's mirror method kept reporting azure
+          # for every index and burned 6 of the 8 step minutes on DNS
+          # timeouts, killing attempt 2 mid-flight. The failover is now
+          # PROBE-AND-SWAP: health-probe the four indexes apt update needs;
+          # ANY failure swaps the runner's mirror list wholesale to the
+          # canonical archive BEFORE apt runs — same Ubuntu packages, a
+          # different host, no dependence on apt's rotation semantics.
+          # Healthy days keep the fast azure mirror untouched. Distro
+          # ffmpeg stays the source of truth. Full receipt: ci.yml main job.
+          AZURE_OK=true
+          for DIST in noble noble-updates noble-backports noble-security; do
+            curl -fsS --retry 1 --max-time 8 -o /dev/null \
+              "http://azure.archive.ubuntu.com/ubuntu/dists/$DIST/InRelease" || AZURE_OK=false
+          done
+          if [ "$AZURE_OK" = false ]; then
+            echo "azure apt mirror unhealthy — swapping the runner to the canonical archive"
+            echo "http://archive.ubuntu.com/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          timeout 60 sudo systemd-run --property="After=apt-daily.service apt-daily-upgrade.service" --wait /bin/true 2>/dev/null || true
+          for ATTEMPT in 1 2; do
+            if sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 update -qq && \
+               sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 install -y -qq ffmpeg; then
+              ffmpeg -version | head -1
+              exit 0
+            fi
+            if [ "$ATTEMPT" -eq 1 ]; then
+              echo "apt attempt 1 failed — swapping to the canonical archive for attempt 2"
+              sudo sed -i "s|azure.archive.ubuntu.com|archive.ubuntu.com|g" /etc/apt/apt-mirrors.txt
+              sleep 45
+            fi
+          done
+          echo "apt failed twice"
+          exit 1
+
+      - name: Install dependencies (postinstall bootstraps SQLite + Prisma)
+        run: npm ci
+
+      - name: Battery (build + enforce phase + report phase)
+        run: node scripts/run-route-battery.mjs
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install ffmpeg (render pipeline)
+        # 2026-11-10: dpkg-lock wait + retry (see ci.yml's main job for the
+        # full receipt).
+        # 2026-11-11: 8 → 10 minutes (probe + bounded apt-daily wait headroom;
+        # full receipt: ci.yml main job step).
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          # 2026-11-11 (43051204925 attempts 1-3, 43060056294 attempt 4):
+          # azure.archive.ubuntu.com flapped for 60+ minutes — DNS failures,
+          # then per-index 000/404 flaps (noble answered 200 while
+          # noble-updates and noble-security failed in the same minute).
+          # The first fix — appending canonical as a second mirror — did
+          # NOT rescue attempt 4: apt's mirror method kept reporting azure
+          # for every index and burned 6 of the 8 step minutes on DNS
+          # timeouts, killing attempt 2 mid-flight. The failover is now
+          # PROBE-AND-SWAP: health-probe the four indexes apt update needs;
+          # ANY failure swaps the runner's mirror list wholesale to the
+          # canonical archive BEFORE apt runs — same Ubuntu packages, a
+          # different host, no dependence on apt's rotation semantics.
+          # Healthy days keep the fast azure mirror untouched. Distro
+          # ffmpeg stays the source of truth. Full receipt: ci.yml main job.
+          AZURE_OK=true
+          for DIST in noble noble-updates noble-backports noble-security; do
+            curl -fsS --retry 1 --max-time 8 -o /dev/null \
+              "http://azure.archive.ubuntu.com/ubuntu/dists/$DIST/InRelease" || AZURE_OK=false
+          done
+          if [ "$AZURE_OK" = false ]; then
+            echo "azure apt mirror unhealthy — swapping the runner to the canonical archive"
+            echo "http://archive.ubuntu.com/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
+          timeout 60 sudo systemd-run --property="After=apt-daily.service apt-daily-upgrade.service" --wait /bin/true 2>/dev/null || true
+          for ATTEMPT in 1 2; do
+            if sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 update -qq && \
+               sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Acquire::Retries=3 install -y -qq ffmpeg; then
+              ffmpeg -version | head -1
+              exit 0
+            fi
+            if [ "$ATTEMPT" -eq 1 ]; then
+              echo "apt attempt 1 failed — swapping to the canonical archive for attempt 2"
+              sudo sed -i "s|azure.archive.ubuntu.com|archive.ubuntu.com|g" /etc/apt/apt-mirrors.txt
+              sleep 45
+            fi
+          done
+          echo "apt failed twice"
+          exit 1
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E suite (boots its own dev server on :3000)
+        run: npm run test:e2e
+        env:
+          CI: true

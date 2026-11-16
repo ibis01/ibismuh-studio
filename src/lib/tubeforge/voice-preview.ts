@@ -1,0 +1,136 @@
+// Voice preview — let users HEAR a voice before committing to it.
+//
+// Generates (once) and caches a short WAV sample per
+// (provider, model, voice) so auditioning 7 voices costs 7 TTS calls
+// per provider/model FOREVER, not per click. Memory cache makes repeat
+// auditions instant; the disk cache (uploads/_voicepreviews) survives
+// dev-server restarts.
+
+import { createHash } from "crypto";
+import { mkdir, readFile, writeFile } from "fs/promises";
+import path from "path";
+import { getCapability } from "./providers/settings";
+import { sanitizeVoice, ttsSynthesize, voiceCatalog, isClonedVoiceId } from "./providers/tts";
+import { aiCall } from "./budget";
+import { listVoiceProfiles, cloneSynthesisAvailable, voiceProfileProvider } from "./voice-clone";
+
+export const VOICE_PREVIEW_TEXT =
+  "Hi! Quick voice preview. If you pick me, this is exactly how I'll narrate your next video — clear, confident, and easy to follow.";
+
+/** Self-hosted (Chatterbox on CPU) variant: synthesis runs ~7-10× slower than
+ *  realtime, so the default line (~7.5s audio ≈ 50-70s render) can outrun
+ *  edge-proxy response timeouts and the FIRST click reports Failed even though
+ *  the WAV lands in the server cache. A short line keeps the first click
+ *  inside the timeout; every click after that plays from cache anyway. */
+export const SELFHOST_PREVIEW_TEXT = "Hi! This is how I'll narrate your video.";
+import { scratchDir } from "./storage";
+
+// Storage seam (T-3.7): previews are short-lived system assets — scratch
+// workspace on both drivers, exempt from org quotas.
+const PREVIEW_DIR = scratchDir("_voicepreviews");
+const MEMORY_MAX = 32;
+
+const memoryCache = new Map<string, Buffer>();
+
+/** Cache key — everything that can change what the sample sounds like:
+ *  provider + endpoint + key fingerprint + model + voice (+ pace, S11 —
+ *  the cached default-line sample is per-speed). Switching any of them
+ *  regenerates instead of serving a stale sample. */
+function cacheKey(config: { provider: string; model: string; baseUrl?: string; apiKey?: string }, voice: string, speed = 1) {
+  const keyFp = config.apiKey ? createHash("sha1").update(config.apiKey).digest("hex").slice(0, 8) : "-";
+  const base = config.baseUrl?.trim() || "-";
+  const pace = Number.isFinite(speed) && speed > 0 ? speed : 1;
+  return `${config.provider}|${base}|${keyFp}|${config.model}|${voice}|${pace}`;
+}
+
+function diskPath(key: string) {
+  const hash = createHash("sha1").update(key).digest("hex");
+  return path.join(PREVIEW_DIR, `${hash}.wav`);
+}
+
+/** Audition-able catalog check: does the ACTIVE tts provider know this voice?
+ *  Cloned ids count as known when the profile still exists AND its owning
+ *  provider can actually speak it (the user's self-hosted server or the
+ *  operator's shared voice server for selfhost clones; a Zhipu key for zhipu
+ *  clones) — a deleted or unspeakable clone previews as unknown instead of
+ *  mysteriously falling back to the default voice. */
+export async function resolvePreviewVoice(voice: string) {
+  const config = await getCapability("tts");
+  const model = config.provider === "openai" ? config.model.trim() || "tts-1" : config.model.trim();
+  const catalog = voiceCatalog(config.provider, model);
+  let known = catalog.some((v) => v.id === voice);
+  if (!known && isClonedVoiceId(voice)) {
+    known = (await listVoiceProfiles()).some((c) => c.id === voice)
+      ? await cloneSynthesisAvailable(voice)
+      : false;
+  }
+  return {
+    config,
+    model,
+    known,
+    voice: known ? voice : sanitizeVoice(config.provider, voice, model),
+  };
+}
+
+/** Get (or synthesize+cache) the preview WAV for a voice of the ACTIVE provider.
+ *  `text` (T-4.11) runs a one-off synthesis with that exact line — used by the
+ *  Voice Studio's pronunciation test row; never cached, never written to disk.
+ *  `speed` (S11) is the pace audition — the studio's pacing control lets the
+ *  user HEAR the narrator at the staged tempo on their own opening line
+ *  before committing a full re-read. */
+export async function getVoicePreview(voice: string, text?: string, speed = 1): Promise<Buffer> {
+  const pace = Number.isFinite(speed) && speed > 0 ? speed : 1;
+  const custom = text?.trim().slice(0, 200);
+  if (custom) {
+    const { config, voice: safe } = await resolvePreviewVoice(voice);
+    return aiCall("tts", `voice-preview-test(${safe})`, () =>
+      ttsSynthesize({ input: custom, voice: safe, speed: pace }, config)
+    );
+  }
+
+  const { config, model, voice: safe } = await resolvePreviewVoice(voice);
+  const key = cacheKey({ ...config, model }, safe, pace);
+
+  const hot = memoryCache.get(key);
+  if (hot) return hot;
+
+  const disk = diskPath(key);
+  try {
+    const cached = await readFile(disk);
+    touchMemory(key, cached);
+    return cached;
+  } catch {
+    /* not on disk yet */
+  }
+
+  // Same budget/pacing/429 handling as every other TTS call in the pipeline —
+  // previews ride out rate-limit storms instead of erroring on the first
+  // click. Self-hosted synthesis (active provider OR a cloned selfhost voice)
+  // runs ~5-10× slower than realtime, so it gets the short line.
+  const cloneOwner = isClonedVoiceId(safe) ? await voiceProfileProvider(safe) : null;
+  const previewText =
+    config.provider === "selfhost" || cloneOwner === "selfhost"
+      ? SELFHOST_PREVIEW_TEXT
+      : VOICE_PREVIEW_TEXT;
+  const buffer = await aiCall("tts", `voice-preview(${safe})`, () =>
+    ttsSynthesize({ input: previewText, voice: safe, speed: pace }, config)
+  );
+
+  touchMemory(key, buffer);
+  try {
+    await mkdir(PREVIEW_DIR, { recursive: true });
+    await writeFile(disk, buffer);
+  } catch {
+    /* cache write is best-effort */
+  }
+  return buffer;
+}
+
+function touchMemory(key: string, buffer: Buffer) {
+  if (memoryCache.has(key)) memoryCache.delete(key);
+  memoryCache.set(key, buffer);
+  if (memoryCache.size > MEMORY_MAX) {
+    const oldest = memoryCache.keys().next().value as string;
+    memoryCache.delete(oldest);
+  }
+}

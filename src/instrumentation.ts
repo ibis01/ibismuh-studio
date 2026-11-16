@@ -1,0 +1,108 @@
+// Next.js server bootstrap hook (Stage 3, T-3.5).
+//
+// register() runs ONCE per server process start (dev + production, nodejs
+// runtime only). This is where the durable queue comes alive in the web
+// process: handlers registered, claim loop started. Import cycles are
+// avoided precisely because jobs.ts never imports the handler registry.
+//
+// FAULT TOLERANCE (the Vercel registration incident): register() must NEVER
+// reject. On serverless, ONE throwing import or init inside this hook kills
+// the whole function at cold start — every route in the deployment then
+// answers a bare 500 (observed live: register/login/status and even a
+// next/server-only diagnostic route all failed while middleware-originated
+// 401s kept working). The web process's job is serving requests; if the
+// queue cannot boot (missing env, read-only fs, untraced dynamic import…)
+// that must degrade the background jobs, not the entire app. The outcome is
+// recorded on globalThis so /api/diag can report it remotely.
+
+export async function register(): Promise<void> {
+  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+
+  const g = globalThis as typeof globalThis & {
+    __tfInstrumentation?: { ok: boolean; error?: string; at: string };
+  };
+
+  try {
+    const { registerDefaultHandlers } = await import("./lib/tubeforge/queue-handlers");
+    const { initQueue } = await import("./lib/tubeforge/queue");
+
+    registerDefaultHandlers();
+    initQueue("web"); // starts the claim loop (TUBEFORGE_NO_CLAIM=1 → enqueue-only)
+
+    // Release holds orphaned by dead processes (best-effort, never throws,
+    // timer is unref'd — see startStaleHoldSweeper).
+    const { startStaleHoldSweeper } = await import("./lib/tubeforge/billing");
+    startStaleHoldSweeper();
+
+    const { log } = await import("./lib/tubeforge/log");
+    log.info("queue initialized", {
+      role: "web",
+      noClaim: process.env.TUBEFORGE_NO_CLAIM === "1",
+      pid: process.pid,
+    });
+
+    // Operator's shared voice server (self-hosted/sandbox): make sure the
+    // Chatterbox server behind TUBEFORGE_SHARED_VOICE_URL is up. Fire-and-
+    // forget + never fatal — a missing voice server only degrades cloning.
+    // The watchdog restarts it if the OOM killer takes it down later.
+    if (process.env.TUBEFORGE_SPAWN_VOICE_SERVER === "1") {
+      try {
+        const { spawnSharedVoiceServer, startVoiceServerWatchdog } = await import(
+          "./lib/tubeforge/spawn-voice-server"
+        );
+        const result = await spawnSharedVoiceServer();
+        startVoiceServerWatchdog();
+        log.info("shared voice server", { ...result });
+      } catch (err) {
+        log.error(
+          "voice server spawn hook failed (app continues)",
+          { err: err instanceof Error ? err.message : String(err) },
+        );
+      }
+    }
+
+    g.__tfInstrumentation = { ok: true, at: new Date().toISOString() };
+
+    // S61 — the encryption-key watchlight (the S60 record's owner-side
+    // finding #1: the Vercel deployment ran without TUBEFORGE_ENCRYPTION_KEY,
+    // so provider-credential encryption and the security card fail closed at
+    // USE time — invisible until something tries to store or read a secret).
+    // Boot is the one guaranteed-loud moment: say it once, per process, with
+    // the exact remediation. Never fatal — see the header's fault-tolerance
+    // law.
+    if (
+      process.env.NODE_ENV === "production" &&
+      (process.env.TUBEFORGE_ENCRYPTION_KEY ?? "").length < 16
+    ) {
+      const encLog = (await import("./lib/tubeforge/log").catch(() => ({ log: null as null }))).log;
+      const message =
+        "TUBEFORGE_ENCRYPTION_KEY is missing or too short (<16 chars) — provider " +
+        "credentials cannot be encrypted or read (they fail closed). Fix: set a " +
+        "securely generated 32+ char key in the deployment's environment settings, " +
+        "then re-store any saved provider credentials.";
+      if (encLog) encLog.warn("encryption key missing — secrets at rest are unavailable", { err: message });
+      // eslint-disable-next-line no-console -- operator-facing boot warning
+      else console.warn("[instrumentation]", message);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const stackLines = ((err instanceof Error ? err.stack : "") ?? "")
+      .split("\n")
+      .slice(1, 4)
+      .join(" | ")
+      .slice(0, 300);
+    g.__tfInstrumentation = {
+      ok: false,
+      error: `${message} :: ${stackLines}`,
+      at: new Date().toISOString(),
+    };
+    // Loud but non-fatal — see the header comment. The logger loads
+    // defensively here TOO: this catch is the app's "why did boot degrade"
+    // line, so it must speak even when the failing import was the logger's
+    // own module — the raw console is the last-resort sink for exactly that.
+    const { log } = await import("./lib/tubeforge/log").catch(() => ({ log: null as null }));
+    if (log) log.error("queue boot FAILED (app continues without background jobs)", { err: message });
+    // eslint-disable-next-line no-console -- last-resort sink (logger module failed to load)
+    else console.error("[instrumentation] queue boot FAILED (app continues without background jobs):", message);
+  }
+}

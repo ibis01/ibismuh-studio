@@ -1,0 +1,41 @@
+# TubeForge — P0.6 smoke override (docs/production-readiness.md).
+#
+# NOT for production use — this file adapts the production topology for the
+# smoke run on top of docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.smoke.yml up -d --build
+#
+#   postgres  — the image is sourced from the ECR Public mirror by the smoke
+#               script (tagged locally as postgres:16-alpine) because Docker
+#               Hub DENIES anonymous pulls from GitHub's shared runner IPs
+#   web/worker— pinned to the DEDICATED-WORKER topology (TUBEFORGE_NO_CLAIM=1
+#               on web) so the queue assertions prove cross-process execution
+#               in the worker container; object storage is the MinIO HOST
+#               PROCESS the smoke script starts from dl.min.io (Docker
+#               Hub-free) — the containers talk S3 to it via host-gateway
+
+services:
+  web:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # The dedicated-worker topology: the web role enqueues only; the worker
+      # executes. The smoke's queue assertions are cross-process by design.
+      TUBEFORGE_NO_CLAIM: "1"
+      TUBEFORGE_STORAGE_DRIVER: s3
+      TUBEFORGE_S3_BUCKET: tubeforge
+      TUBEFORGE_S3_ENDPOINT: http://host.docker.internal:9000
+      TUBEFORGE_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      TUBEFORGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+
+  worker:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TUBEFORGE_STORAGE_DRIVER: s3
+      TUBEFORGE_S3_BUCKET: tubeforge
+      TUBEFORGE_S3_ENDPOINT: http://host.docker.internal:9000
+      TUBEFORGE_S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      TUBEFORGE_S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}

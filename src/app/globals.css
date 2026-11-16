@@ -43,80 +43,781 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-:root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
+/* TubeForge — forced dark premium theme (YouTube-inspired) */
+:root,
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --radius: 0.75rem;
+  --background: oklch(0.128 0.005 285.8);
+  --foreground: oklch(0.96 0.002 285.8);
+  --card: oklch(0.165 0.006 285.8);
+  --card-foreground: oklch(0.96 0.002 285.8);
+  --popover: oklch(0.17 0.006 285.8);
+  --popover-foreground: oklch(0.96 0.002 285.8);
+  --primary: oklch(0.628 0.258 29.23);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.22 0.006 285.8);
+  --secondary-foreground: oklch(0.96 0.002 285.8);
+  --muted: oklch(0.205 0.006 285.8);
+  --muted-foreground: oklch(0.68 0.008 285.8);
+  --accent: oklch(0.24 0.02 29.23);
+  --accent-foreground: oklch(0.96 0.002 285.8);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.628 0.258 29.23);
+  --chart-1: oklch(0.628 0.258 29.23);
+  --chart-2: oklch(0.7 0.15 55);
+  --chart-3: oklch(0.85 0.06 80);
+  --chart-4: oklch(0.55 0.2 12);
+  --chart-5: oklch(0.5 0.02 285.8);
+  --sidebar: oklch(0.145 0.005 285.8);
+  --sidebar-foreground: oklch(0.96 0.002 285.8);
+  --sidebar-primary: oklch(0.628 0.258 29.23);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.22 0.006 285.8);
+  --sidebar-accent-foreground: oklch(0.96 0.002 285.8);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.628 0.258 29.23);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    color-scheme: dark;
+  }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  /* Glassmorphism card */
+  .glass {
+    background: rgb(255 255 255 / 4%);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgb(255 255 255 / 8%);
+  }
+
+  .glass-strong {
+    background: rgb(22 22 27 / 78%);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgb(255 255 255 / 10%);
+  }
+
+  /* Red → orange brand gradient */
+  .text-gradient {
+    background: linear-gradient(135deg, #ff2d2d 0%, #ff5a1f 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .bg-brand-gradient {
+    background: linear-gradient(135deg, #ff2020 0%, #ff5a1f 100%);
+  }
+
+  .glow-red {
+    box-shadow:
+      0 0 24px rgb(255 30 30 / 25%),
+      0 4px 16px rgb(0 0 0 / 45%);
+  }
+
+  .glow-red-soft {
+    box-shadow: 0 0 14px rgb(255 45 45 / 18%);
+  }
+
+  /* Subtle grid backdrop */
+  .bg-grid {
+    background-image:
+      linear-gradient(rgb(255 255 255 / 2.5%) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(255 255 255 / 2.5%) 1px, transparent 1px);
+    background-size: 42px 42px;
+  }
+
+  .animate-pulse-dot {
+    animation: pulse-dot 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgb(255 45 45 / 55%);
+  }
+  50% {
+    opacity: 0.75;
+    box-shadow: 0 0 0 6px rgb(255 45 45 / 0%);
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 12%);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(255 60 60 / 35%);
+}
+
+.scroll-area-bar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 14%) transparent;
+}
+
+/* Audio player compact */
+audio {
+  width: 100%;
+  height: 40px;
+  border-radius: 10px;
+}
+audio::-webkit-media-controls-panel {
+  background: rgb(255 255 255 / 6%);
+}
+
+/* ============================================================
+   Transition preview stage (U1 polish)
+   Two real scene frames — A (cool mountain dawn, underneath)
+   and B (warm city golden hour) on top — animated through the
+   SAME 30–60% window of the cycle for every style family, so
+   the whole grid can rest PAUSED at the -45% midpoint (a
+   scannable "frozen mid-transition" catalog), run on hover,
+   and loop continuously when selected. Photographic frames
+   (generated once via the Z.ai API, served from /transitions/)
+   make the preview read like actual footage; the two palettes
+   stay hue-opposed so wipes, slides and dips stay legible at
+   tile size.
+   --tf-t (cycle seconds) is set inline per stage and scales with
+   the blend-length slider.
+   ============================================================ */
+.tf-tx {
+  --tf-t: 1.6s;
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #18181b; /* fallback while frames load */
+}
+.tf-tx-frame {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+/* Fallback plates — the components set an inline background-image from a
+   webpack-bundled copy of these photos (fingerprinted /_next/static/media
+   URL) which wins the cascade; these public/ paths only apply if the
+   inline style is absent. Both point at the same art. */
+.tf-tx-a {
+  background-image: url("/transitions/scene-a.jpg");
+}
+.tf-tx-b {
+  background-image: url("/transitions/scene-b.jpg");
+}
+.tf-tx-o {
+  opacity: 0;
+}
+.tf-o-black {
+  background: #000;
+}
+.tf-o-white {
+  background: #fff;
+}
+
+/* Shared animation contract: every animated frame runs the same
+   cycle — pause at -45% (mid-transition) unless running. */
+.tf-tx .tf-tx-a,
+.tf-tx .tf-tx-b,
+.tf-tx .tf-tx-o {
+  animation-duration: var(--tf-t);
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: both;
+  animation-play-state: paused;
+  animation-delay: calc(var(--tf-t) * -0.45);
+}
+/* Dip overlays rest a touch earlier so the tile shows the dip
+   RISING rather than sitting on the (opaque) plateau. */
+.tf-tx .tf-tx-o {
+  animation-delay: calc(var(--tf-t) * -0.37);
+}
+.tf-tx-run .tf-tx-a,
+.tf-tx-run .tf-tx-b,
+.tf-tx-run .tf-tx-o {
+  animation-play-state: running;
+  animation-delay: 0s;
+}
+.tf-tx-hover:hover .tf-tx-a,
+.tf-tx-hover:hover .tf-tx-b,
+.tf-tx-hover:hover .tf-tx-o {
+  animation-play-state: running;
+  animation-delay: 0s;
+}
+
+/* Family → keyframes wiring. The B frame carries the reveal; the
+   A frame animates only for hand-offs where it visibly moves
+   (blur melt, slides). */
+.tf-tx-fade .tf-tx-b {
+  animation-name: tf-kf-fade;
+}
+.tf-tx-dissolve .tf-tx-b {
+  animation-name: tf-kf-dissolve;
+}
+.tf-tx-hblur .tf-tx-b {
+  animation-name: tf-kf-hblur;
+}
+.tf-tx-hblur .tf-tx-a {
+  animation-name: tf-kf-hblur-a;
+}
+.tf-tx-fadeblack .tf-tx-b,
+.tf-tx-fadewhite .tf-tx-b {
+  animation-name: tf-kf-dip-b;
+}
+.tf-tx-fadeblack .tf-tx-o,
+.tf-tx-fadewhite .tf-tx-o {
+  animation-name: tf-kf-dip-o;
+}
+.tf-tx-wipeleft .tf-tx-b {
+  animation-name: tf-kf-wipeleft;
+}
+.tf-tx-wiperight .tf-tx-b {
+  animation-name: tf-kf-wiperight;
+}
+.tf-tx-smoothup .tf-tx-b {
+  animation-name: tf-kf-smoothup;
+}
+.tf-tx-smoothdown .tf-tx-b {
+  animation-name: tf-kf-smoothdown;
+}
+.tf-tx-circleopen .tf-tx-b {
+  animation-name: tf-kf-circleopen;
+}
+.tf-tx-slideleft .tf-tx-b {
+  animation-name: tf-kf-slideleft;
+}
+.tf-tx-slideleft .tf-tx-a {
+  animation-name: tf-kf-exit-left;
+}
+.tf-tx-slideright .tf-tx-b {
+  animation-name: tf-kf-slideright;
+}
+.tf-tx-slideright .tf-tx-a {
+  animation-name: tf-kf-exit-right;
+}
+.tf-tx-pixelize .tf-tx-b {
+  animation-name: tf-kf-pixelize;
+}
+/* Radial sweep: a registered percentage sweeps a conic mask. */
+@property --tf-sweep {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 50%;
+}
+.tf-tx-radial .tf-tx-b {
+  animation-name: tf-kf-radial;
+  -webkit-mask-image: conic-gradient(
+    from 0deg,
+    #000 var(--tf-sweep),
+    transparent 0
+  );
+  mask-image: conic-gradient(from 0deg, #000 var(--tf-sweep), transparent 0);
+}
+/* Cut: tiles show a static A|B split; only the running hero
+   snaps A→B. */
+.tf-tx-cut.tf-tx-run .tf-tx-b {
+  animation-name: tf-kf-cut;
+}
+.tf-tx-cut:not(.tf-tx-run) .tf-tx-b {
+  clip-path: inset(0 0 0 50%);
+}
+
+/* ============================================================
+   Ken Burns motion preview (mirrors src/lib/tubeforge/motion.ts)
+   One photographic frame animated the way the renderer actually
+   moves storyboard art: zooms scale from 1, pans ride a pre-zoom
+   so translated edges stay off-frame. The inline CSS vars map
+   the picker's live settings onto the animation:
+     --kb-zoom = intensity/100   (scale amplitude)
+     --kb-move = intensity/2 %   (translate amplitude, half the
+                                  zoom so edges never show)
+     --kb-ease = smooth easing or linear, matching the curve pick
+   ============================================================ */
+.tf-kb {
+  --tf-t: 4.5s;
+  --kb-zoom: 0.12;
+  --kb-move: 6%;
+  --kb-ease: cubic-bezier(0.45, 0, 0.25, 1);
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #18181b;
+}
+.tf-kb-frame {
+  position: absolute;
+  inset: 0;
+  /* Fallback plate — the component sets an inline background-image from a
+     webpack-bundled copy of the photo (fingerprinted /_next/static/media
+     URL) which wins the cascade; this public/ path is the safety net. */
+  background-image: url("/transitions/scene-a.jpg");
+  background-size: cover;
+  background-position: center;
+  animation-duration: var(--tf-t);
+  animation-iteration-count: infinite;
+  animation-timing-function: var(--kb-ease);
+  animation-fill-mode: both;
+}
+.tf-kb-static .tf-kb-frame {
+  animation: none;
+}
+.tf-kb-zoomin .tf-kb-frame {
+  animation-name: tf-kb-zoomin;
+}
+.tf-kb-zoompair .tf-kb-frame {
+  animation-name: tf-kb-zoompair;
+}
+.tf-kb-panlr .tf-kb-frame {
+  animation-name: tf-kb-panlr;
+}
+.tf-kb-panpair .tf-kb-frame {
+  animation-name: tf-kb-panpair;
+}
+.tf-kb-smart .tf-kb-frame {
+  animation-name: tf-kb-smart;
+}
+
+@keyframes tf-kb-zoomin {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(calc(1 + var(--kb-zoom)));
+  }
+}
+/* Zoom only + vary: zoom in, then settle back out — one full breath. */
+@keyframes tf-kb-zoompair {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(calc(1 + var(--kb-zoom)));
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+/* Pan only + vary: left sweep, then right sweep. */
+@keyframes tf-kb-panlr {
+  0% {
+    transform: scale(calc(1 + var(--kb-zoom)))
+      translateX(calc(var(--kb-move) * -1));
+  }
+  50% {
+    transform: scale(calc(1 + var(--kb-zoom))) translateX(0);
+  }
+  100% {
+    transform: scale(calc(1 + var(--kb-zoom)))
+      translateX(calc(var(--kb-move)));
+  }
+}
+/* Pan only, no vary: one direction, restart on loop. */
+@keyframes tf-kb-panpair {
+  from {
+    transform: scale(calc(1 + var(--kb-zoom)))
+      translateX(calc(var(--kb-move) * -1));
+  }
+  to {
+    transform: scale(calc(1 + var(--kb-zoom)))
+      translateX(calc(var(--kb-move)));
+  }
+}
+/* Smart Motion + vary: the scene-aware feel — zoom in, drift right,
+   pull back out, tilt up. Four beats, no two alike. */
+@keyframes tf-kb-smart {
+  0% {
+    transform: scale(1) translate(0, 0);
+  }
+  25% {
+    transform: scale(calc(1 + var(--kb-zoom))) translate(0, 0);
+  }
+  50% {
+    transform: scale(calc(1 + var(--kb-zoom)))
+      translateX(calc(var(--kb-move) * -1));
+  }
+  75% {
+    transform: scale(1) translateX(calc(var(--kb-move) * -1));
+  }
+  100% {
+    transform: scale(1) translate(0, 0);
+  }
+}
+
+@keyframes tf-kf-fade {
+  0%,
+  30% {
+    opacity: 0;
+  }
+  60%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes tf-kf-cut {
+  0%,
+  29.9% {
+    opacity: 0;
+  }
+  30%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes tf-kf-dissolve {
+  0%,
+  30% {
+    opacity: 0;
+    filter: blur(3px);
+  }
+  60%,
+  100% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+@keyframes tf-kf-hblur {
+  0%,
+  30% {
+    opacity: 0;
+    filter: blur(10px);
+  }
+  60%,
+  100% {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+@keyframes tf-kf-hblur-a {
+  0%,
+  30% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  60%,
+  100% {
+    opacity: 0;
+    filter: blur(10px);
+  }
+}
+/* B swaps in instantly at the dip plateau's midpoint. */
+@keyframes tf-kf-dip-b {
+  0%,
+  44.9% {
+    opacity: 0;
+  }
+  45.1%,
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes tf-kf-dip-o {
+  0%,
+  30% {
+    opacity: 0;
+  }
+  45% {
+    opacity: 1;
+  }
+  60%,
+  100% {
+    opacity: 0;
+  }
+}
+/* Wipes — B's reveal edge matches the catalog wording:
+   wipeleft = new scene revealed from the LEFT edge. */
+@keyframes tf-kf-wipeleft {
+  0%,
+  30% {
+    clip-path: inset(0 100% 0 0);
+  }
+  60%,
+  100% {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes tf-kf-wiperight {
+  0%,
+  30% {
+    clip-path: inset(0 0 0 100%);
+  }
+  60%,
+  100% {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes tf-kf-smoothup {
+  0%,
+  30% {
+    clip-path: inset(100% 0 0 0);
+  }
+  60%,
+  100% {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes tf-kf-smoothdown {
+  0%,
+  30% {
+    clip-path: inset(0 0 100% 0);
+  }
+  60%,
+  100% {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes tf-kf-circleopen {
+  0%,
+  30% {
+    clip-path: circle(0% at 50% 50%);
+  }
+  60%,
+  100% {
+    clip-path: circle(75% at 50% 50%);
+  }
+}
+/* slideleft = next scene slides in FROM the right (A exits left). */
+@keyframes tf-kf-slideleft {
+  0%,
+  30% {
+    transform: translateX(100%);
+  }
+  60%,
+  100% {
+    transform: translateX(0);
+  }
+}
+@keyframes tf-kf-exit-left {
+  0%,
+  30% {
+    transform: translateX(0);
+  }
+  60%,
+  100% {
+    transform: translateX(-100%);
+  }
+}
+@keyframes tf-kf-slideright {
+  0%,
+  30% {
+    transform: translateX(-100%);
+  }
+  60%,
+  100% {
+    transform: translateX(0);
+  }
+}
+@keyframes tf-kf-exit-right {
+  0%,
+  30% {
+    transform: translateX(0);
+  }
+  60%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+/* Pixel melt: chunky stepped scale-down reads as a mosaic
+   resolving into the next frame. */
+@keyframes tf-kf-pixelize {
+  0%,
+  30% {
+    opacity: 0;
+    transform: scale(4);
+  }
+  36% {
+    opacity: 0.55;
+    transform: scale(3);
+  }
+  42% {
+    transform: scale(2.25);
+  }
+  48% {
+    opacity: 0.8;
+    transform: scale(1.6);
+  }
+  54% {
+    transform: scale(1.25);
+  }
+  60%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes tf-kf-radial {
+  0%,
+  30% {
+    --tf-sweep: 0%;
+  }
+  60%,
+  100% {
+    --tf-sweep: 100%;
+  }
+}
+
+/* Music preview — equalizer bars on the playing control. */
+.tf-eq {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 11px;
+}
+.tf-eq > span {
+  width: 2px;
+  height: 30%;
+  background: currentColor;
+  border-radius: 1px;
+  animation: tf-kf-eq 0.9s ease-in-out infinite;
+}
+.tf-eq > span:nth-child(2) {
+  animation-delay: -0.3s;
+}
+.tf-eq > span:nth-child(3) {
+  animation-delay: -0.6s;
+}
+@keyframes tf-kf-eq {
+  0%,
+  100% {
+    height: 30%;
+  }
+  50% {
+    height: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tf-tx .tf-tx-a,
+  .tf-tx .tf-tx-b,
+  .tf-tx .tf-tx-o,
+  .tf-kb .tf-kb-frame,
+  .tf-eq > span {
+    animation-play-state: paused !important;
+  }
+}
+
+/* ==========================================================================
+   Stage 4a design system (T-4.1) — semantic tokens + shared utilities.
+   The app stays dark-only; these tokens give NEW surfaces a single source
+   of truth for text hierarchy, hairlines, status color and motion, instead
+   of the arbitrary-value sprawl the audit flagged (bg-white/3, text-[11px]…).
+   Text tones are AA-checked against the oklch(0.128) background.
+   ========================================================================== */
+
+:root {
+  /* Text hierarchy (all ≥ 4.5:1 on the dark background) */
+  --tf-text-1: rgb(255 255 255 / 96%); /* headings + values          */
+  --tf-text-2: rgb(255 255 255 / 74%); /* body / secondary           */
+  --tf-text-3: rgb(255 255 255 / 57%); /* captions / metadata (AA)   */
+
+  /* Hairlines + surfaces */
+  --tf-hairline: rgb(255 255 255 / 8%);
+  --tf-hairline-strong: rgb(255 255 255 / 15%);
+  --tf-surface-1: rgb(255 255 255 / 3%);
+  --tf-surface-2: rgb(255 255 255 / 5.5%);
+
+  /* Status (AA on dark) */
+  --tf-positive: #34d399;
+  --tf-warning: #fbbf24;
+  --tf-danger: #f87171;
+  --tf-info: #7dd3fc;
+
+  /* Motion */
+  --tf-dur-fast: 120ms;
+  --tf-dur: 200ms;
+  --tf-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+@layer utilities {
+  /* Standard elevated surface for cards/panels */
+  .tf-card {
+    background: var(--tf-surface-1);
+    border: 1px solid var(--tf-hairline);
+    border-radius: 0.75rem;
+  }
+
+  /* Interactive card — lifts on hover */
+  .tf-card-hover {
+    transition:
+      transform var(--tf-dur) var(--tf-ease),
+      border-color var(--tf-dur) var(--tf-ease),
+      background var(--tf-dur) var(--tf-ease);
+  }
+  .tf-card-hover:hover {
+    transform: translateY(-2px);
+    border-color: var(--tf-hairline-strong);
+    background: var(--tf-surface-2);
+  }
+
+  /* Small uppercase section label */
+  .tf-kicker {
+    font-size: 11px;
+    line-height: 1.2;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--tf-text-3);
+    font-weight: 600;
+  }
+
+  /* Aligned numerals for KPI grids + timing bars */
+  .tf-num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* One focus style everywhere — visible ring, never suppressed */
+  .tf-focusable:focus-visible {
+    outline: 2px solid rgb(255 92 60 / 80%);
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+  }
+
+  /* Horizontal filmstrip scroller */
+  .tf-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 255 255 / 16%) transparent;
+    scroll-snap-type: x proximity;
+  }
+  .tf-scroll > * {
+    scroll-snap-align: start;
+  }
+
+  /* Edge fade for overflowing filmstrips */
+  .tf-fade-x {
+    mask-image: linear-gradient(to right, transparent, black 16px, black calc(100% - 16px), transparent);
+  }
+
+  /* Shortcut hint chip */
+  .tf-kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4rem;
+    height: 1.4rem;
+    padding: 0 0.35rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--tf-hairline-strong);
+    border-bottom-width: 2px;
+    background: var(--tf-surface-2);
+    color: var(--tf-text-2);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
   }
 }

@@ -1,0 +1,15 @@
+# Python runtime artifacts — never commit these
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# downloaded model weights / cached audio
+data/
+*.wav
+*.pt
+*.safetensors
+
+.venv/
+hf-cache/
+server.log

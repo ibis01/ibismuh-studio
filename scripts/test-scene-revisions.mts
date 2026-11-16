@@ -1,0 +1,1440 @@
+// S112 — Scene-Level Editing & Repair, Stage 1: the revision foundation's
+// DB-backed exit criteria (the billing-battery pattern: real SQLite DB,
+// real lib calls, fixtures cleaned up on exit).
+//
+// The proposal's Stage 1 exit: "editing cannot overwrite another revision
+// or destroy approved work". Pinned here as executable law:
+//
+//   1. APPEND-ONLY   — a second edit leaves v1's bytes untouched; versions
+//                      are monotonic; the unique index rejects duplicates.
+//   2. FIRST TOUCH   — the pre-edit state lands as v1 (backfill, born
+//                      superseded), so even the first edit has a rollback
+//                      target.
+//   3. CONFLICT      — a stale expectedVersion throws RevisionConflict
+//                      carrying the current head; nothing is written.
+//   4. SURGICAL      — a one-scene edit of a three-scene video writes
+//                      exactly one revision (diff-driven history).
+//   5. ROLLBACK      — restores old content as a NEW revision; every prior
+//                      row survives (history is never erased).
+//   6. EPOCH         — a whole-script regen mints ids that were NEVER used
+//                      (current + retired), genesis rows for all scenes.
+//   7. APPROVED      — an approved head is never superseded by a newer
+//                      draft; approvedRevision() keeps resolving it.
+//   8. UNION SLICE   — a doc-side change (window/mix) records a revision
+//                      carrying the docScene half.
+//   9. ROLLBACK ARMS — no-history / no-target / already-current each refuse
+//                      with their own reason, writing nothing.
+//
+// Run: npm run test:scene-revisions   (needs the local SQLite DB; part of check)
+
+import fs from "node:fs";
+import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+import { PrismaClient } from "@prisma/client";
+import type { Video } from "@prisma/client";
+
+const _root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+const execFileAsync = promisify(execFile);
+const rawDb = new PrismaClient();
+
+import {
+  commitSceneChanges,
+  rollbackScene,
+  headRevision,
+  approvedRevision,
+  listRevisions,
+  RevisionConflict,
+  parseRevisionContent,
+  type SceneRevisionContent,
+} from "../src/lib/tubeforge/scene-revisions";
+import {
+  beginSceneArtifact,
+  finalizeSceneArtifact,
+  registerSceneArtifact,
+  accumulateArtifactCost,
+} from "../src/lib/tubeforge/scene-artifacts";
+import { planSceneInvalidation, sweepInvalidArtifacts } from "../src/lib/tubeforge/scene-deps";
+import { invalidateRenderedArtifacts } from "../src/lib/tubeforge/render";
+import * as storage from "../src/lib/tubeforge/storage";
+import { videoDir } from "../src/lib/tubeforge/ai";
+import { withCtx } from "../src/lib/tubeforge/tenant";
+import { must } from "../src/lib/tubeforge/must";
+import type { Scene } from "../src/lib/tubeforge/types";
+import type { AssembledTimeline, TimelineScene } from "../src/lib/tubeforge/timeline";
+
+let passed = 0;
+let failed = 0;
+const failures: string[] = [];
+let suite = "";
+
+function suiteStart(name: string) {
+  suite = name;
+  console.log(`\n◆ ${name}`);
+}
+
+async function test(name: string, fn: () => void | Promise<void>) {
+  try {
+    await fn();
+    passed++;
+    console.log(`  ✓ ${name}`);
+  } catch (err) {
+    failed++;
+    const msg = err instanceof Error ? err.message : String(err);
+    failures.push(`[${suite}] ${name} — ${msg}`);
+    console.error(`  ✗ ${name} — ${msg}`);
+  }
+}
+
+function ok(cond: unknown, msg: string): asserts cond {
+  if (!cond) throw new Error(msg);
+}
+
+function eq<T>(actual: T, expected: T, label = "value") {
+  const a = JSON.stringify(actual);
+  const b = JSON.stringify(expected);
+  if (a !== b) throw new Error(`${label}: expected ${b}, got ${a}`);
+}
+
+// --- fixtures ---------------------------------------------------------------
+
+const MARK = `s112_${Date.now().toString(36)}`;
+const CLEANUP_VIDEO_IDS: string[] = [];
+const CLEANUP_ORG_IDS: string[] = [];
+const CLEANUP_USER_IDS: string[] = [];
+
+function mkScene(index: number, over: Partial<Scene> = {}): Scene {
+  return {
+    index,
+    title: `Beat ${index}`,
+    narration: `Narration for scene ${index}.`,
+    visual: `A wide shot of beat ${index}`,
+    camera: "slow-zoom",
+    mood: "golden hour",
+    caption: `CAP ${index}`,
+    hostInScene: false,
+    rehook: false,
+    sfx: "none",
+    ...over,
+  };
+}
+
+async function makeVideo(scenes: Scene[], over: Partial<Video> = {}): Promise<Video> {
+  const org = await rawDb.organization.create({
+    data: { name: `S112 fixture ${MARK}`, slug: `s112-${MARK}-${CLEANUP_ORG_IDS.length}` },
+  });
+  CLEANUP_ORG_IDS.push(org.id);
+  const video = await rawDb.video.create({
+    data: {
+      organizationId: org.id,
+      topic: "S112 fixture topic",
+      niche: "history",
+      format: "story",
+      scenes: JSON.stringify(scenes),
+      hasVoiceover: false,
+      ...over,
+    },
+  });
+  CLEANUP_VIDEO_IDS.push(video.id);
+  return video;
+}
+
+function docOf(scenes: Scene[]): AssembledTimeline {
+  const docScenes: TimelineScene[] = scenes.map((s, i) => ({
+    index: s.index,
+    title: s.title,
+    narration: s.narration,
+    visual: s.visual,
+    startSec: i * 10,
+    endSec: i * 10 + 10,
+    durationSec: 10,
+    transitionIn: i === 0 ? null : "fade",
+    transitionOut: i === scenes.length - 1 ? null : "fade",
+    audio: {
+      voice: { enabled: true, level: 1 },
+      music: { enabled: true, level: 0.2, ducking: true },
+      sfx: { enabled: false, level: 1, kind: null },
+      ambient: { enabled: false, level: 0, kind: null },
+    },
+    caption: null,
+    source: "ai",
+    stockSource: null,
+    stockQuery: null,
+    shot: null,
+  }));
+  return {
+    schema: 2,
+    scenes: docScenes,
+    tracks: [],
+    sceneCount: docScenes.length,
+    totalDurationSec: docScenes.length * 10,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+async function reload(id: string): Promise<Video> {
+  const v = await rawDb.video.findUnique({ where: { id } });
+  if (!v) throw new Error("fixture video vanished");
+  return v;
+}
+
+function parseScenesOf(v: Video): Scene[] {
+  return v.scenes ? (JSON.parse(v.scenes) as Scene[]) : [];
+}
+
+/** The stable id of one scene of the row (fixtures guarantee presence). */
+function sceneIdOf(v: Video, index: number): string {
+  return must(`scene ${index} id`, parseScenesOf(v).find((s) => s.index === index)?.id);
+}
+
+// --- the battery ------------------------------------------------------------
+
+const v3 = await makeVideo([mkScene(1), mkScene(2), mkScene(3)]);
+
+suiteStart("S112 · append-only + first touch");
+
+await test("first edit backfills the pre-edit state as v1 and lands the edit as v2", async () => {
+  const before = parseScenesOf(v3);
+  const after = before.map((s) =>
+    s.index === 2 ? { ...s, narration: "Edited narration for scene 2." } : s
+  );
+  const commit = await commitSceneChanges({
+    video: v3,
+    beforeScenes: before,
+    beforeDoc: null,
+    afterScenes: after,
+    afterDoc: null,
+    kind: "edit",
+    origin: "test-first-edit",
+    userId: "user-fixture",
+  });
+  eq(commit.created.length, 1, "exactly one edit revision");
+  eq(commit.backfills.length, 1, "exactly one backfill row");
+  const head = commit.created[0];
+  eq(head.version, 2, "the edit is v2 (v1 is the backfill)");
+  eq(head.parentVersion, 1, "parented on the backfill");
+  eq(head.status, "draft", "a fresh edit is draft");
+  eq(head.changeKind, "edit", "changeKind edit");
+  const backfill = commit.backfills[0];
+  eq(backfill.status, "superseded", "the backfill is born superseded");
+  ok(
+    (parseRevisionContent(backfill.content)?.scene.narration ?? "").includes("Narration for scene 2"),
+    "the backfill carries the PRE-edit narration"
+  );
+  // The row now carries stable ids.
+  const row = parseScenesOf(await reload(v3.id));
+  ok(row.every((s) => typeof s.id === "string" && s.id.length > 0), "every scene gained an id");
+});
+
+await test("a second edit leaves v1 and v2 byte-identical (immutability)", async () => {
+  const v = await reload(v3.id);
+  const rowsBefore = await listRevisions(v3.id, sceneIdOf(v, 2));
+  const frozen = rowsBefore.map((r) => ({ id: r.id, content: r.content, version: r.version }));
+  const before = parseScenesOf(v);
+  const after = before.map((s) => (s.index === 2 ? { ...s, mood: "blue hour" } : s));
+  const commit = await commitSceneChanges({
+    video: v,
+    beforeScenes: before,
+    beforeDoc: null,
+    afterScenes: after,
+    afterDoc: null,
+    kind: "edit",
+    origin: "test-second-edit",
+  });
+  eq(commit.created.length, 1, "one new revision");
+  eq(commit.created[0].version, 3, "monotonic version");
+  eq(commit.backfills.length, 0, "no second backfill");
+  const rowsAfter = await listRevisions(v3.id, sceneIdOf(v, 2));
+  eq(rowsAfter.length, 3, "three rows now");
+  for (const f of frozen) {
+    const now = must(`row v${f.version}`, rowsAfter.find((r) => r.id === f.id));
+    eq(now.content, f.content, `v${f.version} content is byte-identical after the new edit`);
+  }
+  // v2 was draft, now superseded by v3.
+  const v2row = rowsAfter.find((r) => r.version === 2);
+  eq(v2row?.status, "superseded", "the prior draft head retired");
+});
+
+await test("a one-scene edit of three writes exactly one revision (surgical history)", async () => {
+  const v = await reload(v3.id);
+  const before = parseScenesOf(v);
+  const after = before.map((s) => (s.index === 3 ? { ...s, caption: "NEW CAP" } : s));
+  const commit = await commitSceneChanges({
+    video: v,
+    beforeScenes: before,
+    beforeDoc: null,
+    afterScenes: after,
+    afterDoc: null,
+    kind: "edit",
+    origin: "test-surgical",
+  });
+  eq(commit.created.length, 1, "only scene 3 got a revision");
+  ok(
+    commit.created[0].sceneId === sceneIdOf(v, 3),
+    "the revision is keyed on scene 3's stable id"
+  );
+  const total = await rawDb.sceneRevision.count({ where: { videoId: v3.id } });
+  eq(
+    total,
+    5,
+    "video total: scene 2 (backfill v1 + v2 + v3) + scene 3's first touch (backfill v1 + v2)"
+  );
+});
+
+suiteStart("S112 · optimistic concurrency");
+
+await test("a stale expectedVersion conflicts with the current head and writes nothing", async () => {
+  const v = await reload(v3.id);
+  const sceneId = sceneIdOf(v, 2);
+  const head = await headRevision(v3.id, sceneId);
+  eq(head?.version, 3, "head is v3");
+  const countBefore = await rawDb.sceneRevision.count({ where: { videoId: v3.id } });
+  const before = parseScenesOf(v);
+  const after = before.map((s) => (s.index === 2 ? { ...s, caption: "RACED" } : s));
+  let conflicted: RevisionConflict | null = null;
+  try {
+    await commitSceneChanges({
+      video: v,
+      beforeScenes: before,
+      beforeDoc: null,
+      afterScenes: after,
+      afterDoc: null,
+      kind: "edit",
+      origin: "test-conflict",
+      expectedVersion: 2, // stale — the client based its edit on v2
+      expectedSceneIndex: 2,
+    });
+  } catch (err) {
+    if (err instanceof RevisionConflict) conflicted = err;
+  }
+  ok(conflicted !== null, "the stale edit conflicts");
+  eq(conflicted?.current?.version ?? 0, 3, "the conflict carries the current head (v3)");
+  const countAfter = await rawDb.sceneRevision.count({ where: { videoId: v3.id } });
+  eq(countAfter, countBefore, "nothing was written by the refused edit");
+});
+
+await test("an honest expectedVersion passes the gate", async () => {
+  const v = await reload(v3.id);
+  const sceneId = sceneIdOf(v, 2);
+  const head = await headRevision(v3.id, sceneId);
+  const before = parseScenesOf(v);
+  const after = before.map((s) => (s.index === 2 ? { ...s, caption: "HONEST" } : s));
+  const commit = await commitSceneChanges({
+    video: v,
+    beforeScenes: before,
+    beforeDoc: null,
+    afterScenes: after,
+    afterDoc: null,
+    kind: "edit",
+    origin: "test-honest",
+    expectedVersion: head?.version ?? 0,
+    expectedSceneIndex: 2,
+  });
+  eq(commit.created.length, 1, "the honest edit lands");
+});
+
+await test("the unique index is the hard floor: a duplicate version cannot be inserted", async () => {
+  const v = await reload(v3.id);
+  const sceneId = sceneIdOf(v, 2);
+  const head = must("scene 2 head", await headRevision(v3.id, sceneId));
+  let p2002 = false;
+  try {
+    await rawDb.sceneRevision.create({
+      data: {
+        organizationId: v.organizationId,
+        videoId: v3.id,
+        sceneId,
+        version: head.version, // race the same version
+        origin: "test-race",
+        content: "{}",
+      },
+    });
+  } catch (err) {
+    p2002 = (err as { code?: string }).code === "P2002";
+  }
+  ok(p2002, "the DB rejects a duplicate (videoId, sceneId, version)");
+});
+
+suiteStart("S112 · rollback");
+
+await test("rollback restores old content as a NEW revision; history survives", async () => {
+  const v = await reload(v3.id);
+  const result = await rollbackScene({ video: v, sceneIndex: 2, toVersion: 2, userId: "user-fixture" });
+  ok(result.ok, "rollback ok");
+  if (!result.ok) throw new Error("unreachable");
+  const sceneId = sceneIdOf(v, 2);
+  const rows = await listRevisions(v3.id, sceneId);
+  eq(rows.length, 5, "v1..v4 plus the rollback = 5 rows — nothing was erased");
+  const head = rows[0];
+  eq(head.version, 5, "the rollback is the new head");
+  eq(head.changeKind, "rollback", "changeKind rollback");
+  eq(head.note, "Rollback to v2", "the note names the target");
+  const content = parseRevisionContent(head.content);
+  ok(
+    (content?.scene.narration ?? "").includes("Edited narration for scene 2"),
+    "the head now carries v2's narration"
+  );
+  // The ROW was restored too.
+  const rowScene = parseScenesOf(await reload(v3.id)).find((s) => s.index === 2);
+  ok(
+    (rowScene?.narration ?? "").includes("Edited narration for scene 2"),
+    "the row's scene narration is restored"
+  );
+});
+
+await test("rollback refuses: no history / no target / already current", async () => {
+  const fresh = await makeVideo([mkScene(1)]); // never touched — no ids, no history
+  const noHistory = await rollbackScene({ video: fresh, sceneIndex: 1, toVersion: 1 });
+  eq(noHistory.ok, false, "refused");
+  if (!noHistory.ok) eq(noHistory.reason, "no-history", "reason: no-history");
+
+  const v = await reload(v3.id);
+  const noTarget = await rollbackScene({ video: v, sceneIndex: 2, toVersion: 99 });
+  eq(noTarget.ok, false, "refused");
+  if (!noTarget.ok) eq(noTarget.reason, "no-target", "reason: no-target");
+
+  const again = await rollbackScene({ video: v, sceneIndex: 2, toVersion: 5 });
+  eq(again.ok, false, "refused");
+  if (!again.ok) eq(again.reason, "already-current", "reason: already-current");
+});
+
+suiteStart("S112 · epochs");
+
+await test("an epoch mints never-used ids and genesis rows for every scene", async () => {
+  const v = await reload(v3.id);
+  const oldScenes = parseScenesOf(v);
+  const oldIds = new Set(oldScenes.map((s) => s.id));
+  const regen = [mkScene(1, { narration: "New epoch scene 1" }), mkScene(2, { narration: "New epoch scene 2" })];
+  const commit = await commitSceneChanges({
+    video: v,
+    beforeScenes: oldScenes,
+    beforeDoc: null,
+    afterScenes: regen,
+    afterDoc: null,
+    kind: "epoch",
+    origin: "test-epoch",
+  });
+  eq(commit.created.length, 2, "genesis rows for both new scenes");
+  ok(commit.created.every((r) => r.changeKind === "epoch"), "changeKind epoch");
+  ok(commit.created.every((r) => r.parentVersion === null), "genesis has no parent");
+  const newRow = parseScenesOf(await reload(v3.id));
+  eq(newRow.length, 2, "the row now carries the regen scenes");
+  const newIds = newRow.map((s) => s.id);
+  eq(new Set(newIds).size, 2, "unique ids");
+  for (const id of newIds) ok(!oldIds.has(id), `minted id ${id} was never used before`);
+  // Retired lines simply STOP: their rows remain, read-only history.
+  const retired = await listRevisions(v3.id, must("old scene 2 id", oldScenes.find((s) => s.index === 2)?.id));
+  ok(retired.length > 0, "the retired scene's history is still readable");
+});
+
+await test("a second epoch avoids the FIRST epoch's ids too (full historical set)", async () => {
+  const v = await reload(v3.id);
+  const epoch1Ids = new Set(parseScenesOf(v).map((s) => s.id));
+  const regen2 = [mkScene(1, { narration: "Epoch 3 scene 1" })];
+  await commitSceneChanges({
+    video: v,
+    beforeScenes: parseScenesOf(v),
+    beforeDoc: null,
+    afterScenes: regen2,
+    afterDoc: null,
+    kind: "epoch",
+    origin: "test-epoch-2",
+  });
+  const epoch2Ids = parseScenesOf(await reload(v3.id)).map((s) => s.id);
+  for (const id of epoch2Ids) ok(!epoch1Ids.has(id), `second-epoch id ${id} avoids all retired ids`);
+});
+
+suiteStart("S112 · approved work is never destroyed");
+
+await test("an approved head stays approved under a newer draft", async () => {
+  const v = await reload(v3.id);
+  const sceneId = sceneIdOf(v, 1);
+  // Scene 1 of the current epoch has its genesis row; bless it approved
+  // (what Stage 5's recheck flow will do).
+  const head = must("scene 1 head", await headRevision(v3.id, sceneId));
+  await rawDb.sceneRevision.update({ where: { id: head.id }, data: { status: "approved" } });
+  const approvedBefore = await approvedRevision(v3.id, sceneId);
+  eq(approvedBefore?.version, head.version, "approvedRevision resolves the blessed head");
+
+  // A new draft lands on top.
+  const before = parseScenesOf(v);
+  const after = before.map((s) => (s.index === 1 ? { ...s, mood: "neon night" } : s));
+  const commit = await commitSceneChanges({
+    video: v,
+    beforeScenes: before,
+    beforeDoc: null,
+    afterScenes: after,
+    afterDoc: null,
+    kind: "edit",
+    origin: "test-approved-protect",
+  });
+  eq(commit.created.length, 1, "the draft landed");
+  eq(commit.created[0].status, "draft", "the new head is a draft");
+
+  const approvedRow = await rawDb.sceneRevision.findUnique({ where: { id: head.id } });
+  eq(approvedRow?.status, "approved", "the approved row was NOT superseded");
+  const approvedAfter = await approvedRevision(v3.id, sceneId);
+  eq(approvedAfter?.id, head.id, "approvedRevision still resolves it — render + rollback keep their source");
+});
+
+suiteStart("S112 · the union slice");
+
+await test("a doc-side change records a revision carrying the docScene half", async () => {
+  const v = await reload(v3.id);
+  const before = parseScenesOf(v);
+  const beforeDoc = docOf(before);
+  // Trim scene 1's window in the doc (a creative edit, row untouched).
+  const afterDoc: AssembledTimeline = {
+    ...beforeDoc,
+    scenes: beforeDoc.scenes.map((d) =>
+      d.index === 1 ? { ...d, endSec: d.endSec - 2, durationSec: d.durationSec - 2 } : d
+    ),
+  };
+  const commit = await commitSceneChanges({
+    video: v,
+    beforeScenes: before,
+    beforeDoc,
+    afterScenes: before,
+    afterDoc,
+    kind: "edit",
+    origin: "test-doc-slice",
+    timeline: JSON.stringify(afterDoc),
+  });
+  eq(commit.created.length, 1, "the doc-side change recorded a revision");
+  const content: SceneRevisionContent | null = parseRevisionContent(commit.created[0].content);
+  const slice = must("union-slice content", content);
+  eq(slice.docScene?.endSec, 8, "the revision's docScene carries the trimmed window");
+  eq(slice.scene.narration, before[0].narration, "the row half is intact");
+  // And the timeline column moved with it.
+  const stored = await reload(v3.id);
+  ok((stored.timeline ?? "").includes("\"endSec\":8"), "the doc was persisted in the same transaction");
+});
+
+suiteStart("S113 · artifact provenance");
+
+await test("register → ready, idempotent on the same input, superseded by a new one", async () => {
+  const v = await makeVideo([mkScene(1), mkScene(2)]);
+  const reg1 = await registerSceneArtifact({
+    video: v,
+    sceneIndex: 2,
+    type: "image",
+    storageKey: `${v.id}/scene-02.png`,
+    input: "prompt A|seed=1",
+    prompt: "prompt A",
+    bytes: 1234,
+  });
+  ok(reg1 !== null, "registered");
+  const row1 = await rawDb.sceneArtifact.findUnique({ where: { id: must("reg1", reg1).id } });
+  eq(row1?.status, "ready", "a direct registration lands ready");
+  eq(row1?.type, "image", "the proposal's artifact vocabulary");
+  ok((row1?.prompt ?? "").startsWith("prompt A"), "the FULL prompt is persisted (S111's discarded-prompt finding)");
+  ok(typeof row1?.inputHash === "string" && (row1?.inputHash ?? "").length === 64, "sha256 input hash");
+
+  // Same input at the same key: idempotent — the standing row returns.
+  const reg2 = await registerSceneArtifact({
+    video: v,
+    sceneIndex: 2,
+    type: "image",
+    storageKey: `${v.id}/scene-02.png`,
+    input: "prompt A|seed=1",
+    prompt: "prompt A",
+  });
+  eq(must("reg2", reg2).id, row1?.id, "same inputs → same row (crash-recovery re-runs are not duplicates)");
+
+  // A NEW input at the same key supersedes (history stays, staled).
+  const reg3 = await registerSceneArtifact({
+    video: v,
+    sceneIndex: 2,
+    type: "image",
+    storageKey: `${v.id}/scene-02.png`,
+    input: "prompt B|seed=2",
+    prompt: "prompt B",
+  });
+  ok(must("reg3", reg3).id !== row1?.id, "a new input is a new row");
+  const superseded = await rawDb.sceneArtifact.findUnique({ where: { id: must("row1 id", row1?.id) } });
+  eq(superseded?.status, "stale", "the prior row staled — never deleted");
+});
+
+await test("the pending→ready lifecycle accumulates re-roll costs through the bridge", async () => {
+  const v = await makeVideo([mkScene(1)]);
+  const attribution = await beginSceneArtifact({
+    video: v,
+    sceneIndex: 1,
+    type: "image",
+    storageKey: `${v.id}/scene-01.png`,
+    prompt: "the composed prompt",
+  });
+  ok(attribution !== null, "pending row begun");
+  const artId = must("artifact id", must("attribution", attribution).artifactId);
+  let row = await rawDb.sceneArtifact.findUnique({ where: { id: artId } });
+  eq(row?.status, "pending", "begun as pending");
+
+  // Two metered attempts (first-roll + quality-gate re-roll) accumulate.
+  await accumulateArtifactCost(artId, 1200);
+  await accumulateArtifactCost(artId, 800);
+  await finalizeSceneArtifact(attribution, {
+    input: "the composed prompt|seed=42|variant=1",
+    prompt: "the composed prompt",
+    bytes: 2048,
+  });
+  row = await rawDb.sceneArtifact.findUnique({ where: { id: artId } });
+  eq(row?.status, "ready", "finalized ready");
+  eq(row?.costMicroUsd, 2000, "re-roll costs SUM on the artifact (the bridge accumulates)");
+  eq(row?.bytes, 2048, "landed bytes recorded");
+});
+
+await test("scene artifacts resolve the stable sceneId + head revision", async () => {
+  const v = await makeVideo([mkScene(1)]);
+  // First touch: an edit mints the id + backfills v1 + lands v2.
+  const before = JSON.parse(must("scenes json", v.scenes)) as Scene[];
+  await commitSceneChanges({
+    video: v,
+    beforeScenes: before,
+    beforeDoc: null,
+    afterScenes: before.map((s) => (s.index === 1 ? { ...s, mood: "dusk" } : s)),
+    afterDoc: null,
+    kind: "edit",
+    origin: "test-provenance",
+  });
+  const after = await reload(v.id);
+  const reg = await registerSceneArtifact({
+    video: after,
+    sceneIndex: 1,
+    type: "audio",
+    storageKey: `${v.id}/scene-01.wav`,
+    input: "text|voice=jam|speed=1",
+    prompt: "text",
+  });
+  const row = await rawDb.sceneArtifact.findUnique({ where: { id: must("reg", reg).id } });
+  ok((row?.sceneId ?? "").length > 0, "the stable sceneId resolved");
+  eq(row?.revisionVersion, 2, "registered against the current head (Stage 3's stale check)");
+});
+
+suiteStart("S113 · the over-invalidation fix, measured");
+
+await test("a one-scene art change kills ONE clip + the renders — not every scene's", async () => {
+  const v = await makeVideo([mkScene(1), mkScene(2), mkScene(3)]);
+  // Seed the storage with the render's per-scene clips + the video-level set.
+  const seeded = [
+    `${v.id}/scene-01.mp4`,
+    `${v.id}/scene-02.mp4`,
+    `${v.id}/scene-03.mp4`,
+    `${v.id}/final.mp4`,
+    `${v.id}/preview.mp4`,
+    `${v.id}/subtitles.srt`,
+    `${v.id}/voiceover.wav`,
+    `${v.id}/scene-02.png`,
+  ];
+  for (const k of seeded) await storage.put(k, Buffer.from(`fixture:${k}`));
+
+  // THE OLD BEHAVIOR (measured baseline): whole-video invalidation after a
+  // one-scene art change — every scene's clip died (the §8.3 cost bug).
+  // THE FIX: sceneIndex scopes the sweep.
+  await invalidateRenderedArtifacts(v.id, { slidePngs: true, sceneIndex: 2 });
+
+  const survivors: string[] = [];
+  for (const k of seeded) if (await storage.exists(k)) survivors.push(k);
+  eq(
+    survivors,
+    [`${v.id}/scene-01.mp4`, `${v.id}/scene-03.mp4`, `${v.id}/voiceover.wav`, `${v.id}/scene-02.png`],
+    "scenes 1 + 3's clips SURVIVE (2 paid i2v generations skipped); the merged read + the art are untouched; the renders (the union) die"
+  );
+
+  for (const k of seeded) await storage.remove(k).catch(() => {});
+});
+
+await test("the declarative sweep matches PATCH's key sets and stales the registry", async () => {
+  const v = await makeVideo([mkScene(1), mkScene(2)]);
+  const seeded = [
+    `${v.id}/scene-02.wav`,
+    `${v.id}/scene-02.mp4`,
+    `${v.id}/scene-01.wav`,
+    `${v.id}/voiceover.wav`,
+    `${v.id}/voice-source.mp3`,
+    `${v.id}/final.mp4`,
+    `${v.id}/subtitles.srt`,
+  ];
+  for (const k of seeded) await storage.put(k, Buffer.from(`fixture:${k}`));
+  // A registered artifact at a swept key — the registry must mirror storage.
+  const reg = await registerSceneArtifact({
+    video: v,
+    sceneIndex: 2,
+    type: "audio",
+    storageKey: `${v.id}/scene-02.wav`,
+    input: "old narration|voice=jam",
+    prompt: "old narration",
+  });
+
+  const plan = planSceneInvalidation(v.id, 2, ["narration"]);
+  const { removed } = await sweepInvalidArtifacts(v.id, plan);
+  eq(
+    removed.sort(),
+    [`${v.id}/final.mp4`, `${v.id}/scene-02.mp4`, `${v.id}/scene-02.wav`, `${v.id}/subtitles.srt`, `${v.id}/voice-source.mp3`, `${v.id}/voiceover.wav`].sort(),
+    "narration sweep: the edited scene's WAV + clip, the merged read, the renders"
+  );
+  ok(await storage.exists(`${v.id}/scene-01.wav`), "every OTHER scene's audio survives — the surgical law");
+  const row = await rawDb.sceneArtifact.findUnique({ where: { id: must("reg", reg).id } });
+  eq(row?.status, "stale", "the registry row staled with its file");
+
+  for (const k of seeded) await storage.remove(k).catch(() => {});
+});
+
+await test("a caption sweep keeps ALL audio (no re-TTS) and the visual sweep deletes nothing", async () => {
+  const v = await makeVideo([mkScene(1), mkScene(2)]);
+  const seeded = [`${v.id}/scene-01.wav`, `${v.id}/scene-02.wav`, `${v.id}/final.mp4`, `${v.id}/subtitles.srt`];
+  for (const k of seeded) await storage.put(k, Buffer.from(`fixture:${k}`));
+
+  const capPlan = planSceneInvalidation(v.id, 2, ["caption"]);
+  const cap = await sweepInvalidArtifacts(v.id, capPlan);
+  eq(cap.removed.sort(), [`${v.id}/final.mp4`, `${v.id}/subtitles.srt`].sort(), "caption sweep: renders only");
+  ok(await storage.exists(`${v.id}/scene-02.wav`), "the edited scene's own read survives (captions never touch audio)");
+
+  const visPlan = planSceneInvalidation(v.id, 2, ["visual"]);
+  const vis = await sweepInvalidArtifacts(v.id, visPlan);
+  eq(vis.removed, [], "a visual-prompt edit deletes nothing (re-roll is explicit)");
+
+  for (const k of seeded) await storage.remove(k).catch(() => {});
+});
+
+suiteStart("S114 \u00b7 the scene preview lane");
+
+await test("previewing scene 2 lands scene-preview-02.mp4 and touches NOTHING else", async () => {
+  const v = await makeVideo([mkScene(1), mkScene(2), mkScene(3)], { renderMode: "kenburns" });
+  const dir = videoDir(v.id);
+  fs.mkdirSync(dir, { recursive: true });
+  // Real fixtures: 1-frame color art + 1s sine WAVs for every scene, so the
+  // per-scene validation passes and the kenburns executor runs real ffmpeg.
+  const nn = (i: number) => String(i).padStart(2, "0");
+  for (const s of [1, 2, 3]) {
+    await execFileAsync("ffmpeg", [
+      "-hide_banner", "-nostats", "-y",
+      "-f", "lavfi", "-i", "color=c=steelblue:s=640x360:d=1",
+      "-frames:v", "1", path.join(dir, `scene-${nn(s)}.png`),
+    ], { timeout: 60_000 });
+    await execFileAsync("ffmpeg", [
+      "-hide_banner", "-nostats", "-y",
+      "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+      "-ar", "44100", "-ac", "1", path.join(dir, `scene-${nn(s)}.wav`),
+    ], { timeout: 60_000 });
+  }
+  const seededFiles = ["scene-01.png", "scene-02.png", "scene-03.png", "scene-01.wav", "scene-02.wav", "scene-03.wav"];
+
+  const { renderVideo } = await import("../src/lib/tubeforge/render");
+  const scenes = parseScenesOf(v);
+  const result = await renderVideo({
+    videoId: v.id,
+    scenes: [must("scene 2", scenes.find((s) => s.index === 2))],
+    mode: "kenburns",
+    burnSubtitles: true,
+    smartCaptions: true,
+    music: false,
+    scenePreview: { sceneIndex: 2 },
+    onProgress: () => {},
+  } as Parameters<typeof renderVideo>[0]);
+
+  eq(result.fileName, "scene-preview-02.mp4", "the output is the scene preview key");
+  ok(result.fileBytes > 10_000, "a real encoded mp4 landed");
+  ok(await storage.exists(`${v.id}/scene-preview-02.mp4`), "published through the storage seam");
+
+  // THE EXIT CRITERION: nothing else moved.
+  for (const k of seededFiles) ok(await storage.exists(`${v.id}/${k}`), `input fixture ${k} untouched`);
+  for (const k of ["final.mp4", "preview.mp4", "subtitles.srt", "scene-01.mp4", "scene-03.mp4", "scene-preview-01.mp4", "scene-preview-03.mp4"])
+    ok(!(await storage.exists(`${v.id}/${k}`)), `${k} was NOT created by a scene-2 preview`);
+  // And the row's flags are untouched (a preview is not a certified final).
+  const after = await reload(v.id);
+  ok(!after.hasVideo && !after.hasPreview, "no video-level flags flipped");
+
+  // Cleanup: fixtures + the preview + the render-tmp scratch.
+  fs.rmSync(dir, { recursive: true, force: true });
+  for (const k of [...seededFiles, "scene-preview-02.mp4"].map((f) => `${v.id}/${f}`))
+    await storage.remove(k).catch(() => {});
+});
+
+await test("the preview artifact registers with its built-from revision (stale labeling)", async () => {
+  const v = await makeVideo([mkScene(1)]);
+  const before = parseScenesOf(v);
+  // First touch: head becomes v2.
+  await commitSceneChanges({
+    video: v,
+    beforeScenes: before,
+    beforeDoc: null,
+    afterScenes: before.map((s) => ({ ...s, mood: "dusk" })),
+    afterDoc: null,
+    kind: "edit",
+    origin: "test-preview-stale",
+  });
+  const afterRow = await reload(v.id);
+  const sceneId = must("scene id", parseScenesOf(afterRow).find((s) => s.index === 1)?.id);
+  const head = must("head", await headRevision(v.id, sceneId));
+
+  // A preview built from the head: current.
+  const { registerSceneArtifact, artifactStaleness } = await import("../src/lib/tubeforge/scene-artifacts");
+  const current = await registerSceneArtifact({
+    video: afterRow, sceneIndex: 1, type: "preview",
+    storageKey: `${v.id}/scene-preview-01.mp4`, input: "look-v2", prompt: "v", bytes: 100,
+  });
+  const rowNow = await rawDb.sceneArtifact.findUnique({ where: { id: must("cur", current).id } });
+  eq(artifactStaleness({ status: rowNow?.status ?? "", revisionVersion: rowNow?.revisionVersion ?? null }, head.version), "current", "built from the head \u2192 current");
+
+  // A newer edit lands \u2192 the SAME preview row is now stale (labeled, not deleted).
+  await commitSceneChanges({
+    video: afterRow,
+    beforeScenes: parseScenesOf(afterRow),
+    beforeDoc: null,
+    afterScenes: parseScenesOf(afterRow).map((s) => ({ ...s, mood: "night" })),
+    afterDoc: null,
+    kind: "edit",
+    origin: "test-preview-stale-2",
+  });
+  const newHead = must("new head", await headRevision(v.id, sceneId));
+  eq(newHead.version, head.version + 1, "the head moved");
+  eq(
+    artifactStaleness({ status: rowNow?.status ?? "", revisionVersion: rowNow?.revisionVersion ?? null }, newHead.version),
+    "stale",
+    "the pre-edit preview is labeled stale against the new head \u2014 the risk table's display-the-version law"
+  );
+});
+
+suiteStart("S115 · repair + cost authorization + idempotency");
+
+await test("the double-bill killer: a keyed enqueue resolves to ONE job row, done included", async () => {
+  const { createPendingJob } = await import("../src/lib/tubeforge/queue.ts");
+  const org = CLEANUP_ORG_IDS[0];
+  const key = `test-dblbill:${MARK}`;
+  const first = await createPendingJob({
+    organizationId: org, userId: null, kind: "render", entityId: "dblbill-video", idempotencyKey: key,
+  });
+  ok(!first.duplicate, "the first enqueue creates");
+  const count1 = await rawDb.job.count({ where: { idempotencyKey: key } });
+  eq(count1, 1, "exactly one row after the first enqueue");
+
+  // A retry while PENDING: same row, flagged duplicate.
+  const second = await createPendingJob({
+    organizationId: org, userId: null, kind: "render", entityId: "dblbill-video", idempotencyKey: key,
+  });
+  ok(second.duplicate, "the retry is a duplicate");
+  eq(second.jobId, first.jobId, "it resolves to the SAME job id");
+
+  // THE RETRY-AFTER-DONE PATH: mark the row done, retry again — still the
+  // same row. Before S115 a done job offered no dedup at all.
+  await rawDb.job.update({ where: { id: first.jobId }, data: { status: "done", endedAt: new Date() } });
+  const third = await createPendingJob({
+    organizationId: org, userId: null, kind: "render", entityId: "dblbill-video", idempotencyKey: key,
+  });
+  ok(third.duplicate, "the retry-after-done is a duplicate");
+  eq(third.jobId, first.jobId, "still the same job — no second paid run");
+  const count2 = await rawDb.job.count({ where: { idempotencyKey: key } });
+  eq(count2, 1, "ONE row for the whole sequence — the double-bill path is dead");
+
+  await rawDb.job.delete({ where: { id: first.jobId } });
+});
+
+await test("the repair ladder: propose (no cost, no job) → approve (job + stamp) → re-approve refused", async () => {
+  const { proposeSceneRepair, approveSceneRepair, rejectSceneRepair } = await import("../src/lib/tubeforge/scene-repairs.ts");
+  const v = await makeVideo([mkScene(1), mkScene(2)], { renderMode: "kenburns" });
+  // A REAL user row — Job.userId carries an FK; the approval stamp reads it.
+  const approver = await rawDb.user.create({
+    data: { email: `s115-ladder-${MARK}@example.test`, passwordHash: "pbkdf2$1$s$h" },
+  });
+  CLEANUP_USER_IDS.push(approver.id);
+
+  // PROPOSE: estimate + affected assets stored; no job, no spend.
+  const proposed = await proposeSceneRepair({
+    video: v, sceneIndex: 2, instruction: "Make the lighting warmer, keep the composition", userId: approver.id,
+  });
+  ok(proposed.ok, "proposal created");
+  if (!proposed.ok) throw new Error("unreachable");
+  const { ESTIMATED_COST_MICRO } = await import("../src/lib/tubeforge/billing.ts");
+  eq(proposed.estimateMicroUsd, ESTIMATED_COST_MICRO.image, "the estimate is the image call");
+  ok(proposed.affectedAssets.sceneKeys.includes(`${v.id}/scene-02.png`), "the affected list names what regenerates");
+  ok(proposed.affectedAssets.videoRenders, "and the renders rebuild");
+  const jobsBefore = await rawDb.job.count({ where: { entityId: { contains: v.id } } });
+  eq(jobsBefore, 0, "PROPOSE enqueues nothing — no silent paid calls");
+
+  // APPROVE: the job is enqueued under the idempotent key; the stamp lands.
+  // (The scene job body runs the real pipeline — the fixture has no art, so
+  // the closure settles the repair failed; the ENQUEUE + KEY + STAMP are the
+  // authorization surface under test. withCtx gives startJob the tenant
+  // context the route would.)
+  const approved = await withCtx(
+    { userId: approver.id, organizationId: v.organizationId, role: "owner" },
+    () => approveSceneRepair({ video: v, repairId: proposed.repairId, userId: approver.id })
+  );
+  ok(approved.ok, "approved");
+  if (!approved.ok) throw new Error("unreachable");
+  const approvedJobId = must("approved job", approved.jobId);
+  ok(approvedJobId !== null, "a job row exists");
+  const repairRow = await rawDb.sceneRepair.findUnique({ where: { id: proposed.repairId } });
+  ok(
+    repairRow?.status === "running" || repairRow?.status === "failed",
+    "the repair is running (or settled failed by the fixture's art-less scene job — the ladder is intact either way)"
+  );
+  eq(repairRow?.approvedBy, approver.id, "the approval stamp is on the record");
+  ok(repairRow?.idempotencyKey === approved.idempotencyKey, "the job link is the idempotent key");
+
+  // RE-APPROVE: either refused (still running — 409, not a second job) or,
+  // if the fixture's job already settled failed, an honest re-queue of the
+  // SAME row — never a second job, never a second spend.
+  const sceneJobCount = async () =>
+    rawDb.job.count({ where: { entityId: `${v.id}#scene2` } });
+  const beforeReapprove = await sceneJobCount();
+  const again = await withCtx(
+    { userId: approver.id, organizationId: v.organizationId, role: "owner" },
+    () => approveSceneRepair({ video: v, repairId: proposed.repairId, userId: approver.id })
+  );
+  const afterReapprove = await sceneJobCount();
+  eq(afterReapprove, Math.max(beforeReapprove, 1), "no second job row — approving twice cannot spend twice");
+  if (!again.ok) eq(again.status, 409, "the refusal is 409");
+
+  // The enqueued job is cleaned with the fixture video's org cascade —
+  // remove it explicitly here to keep the local DB tidy for the suite.
+  await rawDb.job.delete({ where: { id: must("job", approved.jobId) } }).catch(() => {});
+
+  // REJECT arm on a fresh proposal: nothing was generated, nothing spent.
+  const p2 = await proposeSceneRepair({ video: v, sceneIndex: 1, instruction: "Remove the crowd in the background" });
+  ok(p2.ok, "second proposal");
+  if (p2.ok) {
+    const rejected = await rejectSceneRepair({ video: v, repairId: p2.repairId, userId: approver.id });
+    ok(rejected.ok, "rejected");
+    const row = await rawDb.sceneRepair.findUnique({ where: { id: p2.repairId } });
+    eq(row?.status, "rejected", "the rejection is a record, and the estimate stays");
+  }
+});
+
+await test("the per-project ceiling: the admission refuses at the line (402 shape)", async () => {
+  const costGuard = await import("../src/lib/tubeforge/cost-guard.ts");
+  const { assertWithinVideoCeiling, videoSpendMicroUsd } = costGuard;
+  type CeilingError = InstanceType<typeof costGuard.CostCeilingExceededError>;
+  const v = await makeVideo([mkScene(1)], { spendCeilingMicro: 10_000 });
+
+  // Seed the video-scoped spend: 9,000 micro via a bridged UsageRecord.
+  const org = await rawDb.organization.findUnique({ where: { id: v.organizationId } });
+  const user = await rawDb.user.create({
+    data: { email: `s115-${MARK}@example.test`, passwordHash: "pbkdf2$1$s$h" },
+  });
+  CLEANUP_USER_IDS.push(user.id);
+  await rawDb.usageRecord.create({
+    data: {
+      organizationId: must("org", org).id, userId: user.id, capability: "image", provider: "test",
+      costMicroUsd: 9_000, videoId: v.id, sceneIndex: 1,
+    },
+  });
+  eq(await videoSpendMicroUsd(v.id), 9_000, "the per-video spend sums through the bridge");
+
+  // A 500 estimate fits (9,500 ≤ 10,000).
+  await assertWithinVideoCeiling(v, 500);
+  // A 2,000 estimate breaks the line (11,000 > 10,000).
+  let refused: CeilingError | null = null;
+  try {
+    await assertWithinVideoCeiling(v, 2_000);
+  } catch (err) {
+    if (err instanceof costGuard.CostCeilingExceededError) refused = err;
+  }
+  ok(refused !== null, "the admission refuses over the ceiling");
+  eq(refused?.ceilingMicroUsd, 10_000, "the refusal carries the numbers");
+  // And a NULL ceiling (the opt-in default) never refuses.
+  const v2 = await makeVideo([mkScene(1)]);
+  await assertWithinVideoCeiling(v2, 1_000_000);
+});
+
+suiteStart("S116 · the scene recheck + boundary lens + the approval gate");
+
+/** Real scene fixtures that PASS the battery's probes: structured art
+ *  (testsrc/smptebars — high-frequency detail, so a Ken Burns zoom reads
+ *  as visual change) and a 440 Hz sine at amplitude 0.25 (≈ -15 dBFS RMS —
+ *  inside the loudness window, under the true-peak ceiling). `sources`
+ *  carries one full lavfi source spec per scene (its own params — smptebars
+ *  takes no duration, testsrc does). */
+async function seedSceneMedia(v: Video, sources: string[]) {
+  const dir = videoDir(v.id);
+  fs.mkdirSync(dir, { recursive: true });
+  const nn = (i: number) => String(i).padStart(2, "0");
+  for (const [i, src] of sources.entries()) {
+    await execFileAsync("ffmpeg", [
+      "-hide_banner", "-nostats", "-y",
+      "-f", "lavfi", "-i", src,
+      "-frames:v", "1", path.join(dir, `scene-${nn(i + 1)}.png`),
+    ], { timeout: 60_000 });
+    await execFileAsync("ffmpeg", [
+      "-hide_banner", "-nostats", "-y",
+      "-f", "lavfi", "-i", "sine=frequency=440:duration=1,volume=0.25",
+      "-ar", "44100", "-ac", "1", path.join(dir, `scene-${nn(i + 1)}.wav`),
+    ], { timeout: 60_000 });
+  }
+  return dir;
+}
+
+await test("the recheck runs the scene battery on the standing preview and stores the verdict on the head revision", async () => {
+  const { runSceneRecheck, parseRecheckReport } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { registerSceneArtifact } = await import("../src/lib/tubeforge/scene-artifacts.ts");
+  const { serializeTimeline } = await import("../src/lib/tubeforge/timeline.ts");
+  const v0 = await makeVideo([mkScene(1), mkScene(2), mkScene(3)], { renderMode: "kenburns" });
+  // A REAL user row — the recheck's Activity writes carry the userId FK
+  // (the S115 fixture precedent).
+  const actor = await rawDb.user.create({
+    data: { email: `s116-recheck-${MARK}@example.test`, passwordHash: "pbkdf2$1$s$h" },
+  });
+  CLEANUP_USER_IDS.push(actor.id);
+  const dir = await seedSceneMedia(v0, ["testsrc=s=640x360:d=1", "testsrc=s=640x360:d=1", "testsrc=s=640x360:d=1"]);
+  const seededFiles = [1, 2, 3].flatMap((i) => [`scene-${String(i).padStart(2, "0")}.png`, `scene-${String(i).padStart(2, "0")}.wav`]);
+
+  // An aligned doc (windows + fade seams) + an edit on scene 2 → head v2.
+  const withDoc = await rawDb.video.update({
+    where: { id: v0.id },
+    data: { timeline: serializeTimeline(docOf(parseScenesOf(v0))) },
+  });
+  const before = parseScenesOf(withDoc);
+  await commitSceneChanges({
+    video: withDoc,
+    beforeScenes: before,
+    beforeDoc: docOf(before),
+    afterScenes: before.map((s) => (s.index === 2 ? { ...s, mood: "dusk" } : s)),
+    afterDoc: docOf(before),
+    kind: "edit",
+    origin: "test-s116-recheck",
+  });
+  const v = await reload(v0.id);
+  const sceneId = sceneIdOf(v, 2);
+  const head = must("head", await headRevision(v.id, sceneId));
+  eq(head.version, 2, "the edit is v2 over the backfill v1");
+  const contentBefore = head.content;
+
+  // The preview (renderVideo directly — the S114 lane) + its provenance row
+  // (registered from the head, so freshness reads current).
+  const { renderVideo } = await import("../src/lib/tubeforge/render");
+  const scenes = parseScenesOf(v);
+  await renderVideo({
+    videoId: v.id,
+    scenes: [must("scene 2", scenes.find((s) => s.index === 2))],
+    mode: "kenburns",
+    burnSubtitles: true,
+    smartCaptions: true,
+    music: false,
+    scenePreview: { sceneIndex: 2 },
+    onProgress: () => {},
+  } as Parameters<typeof renderVideo>[0]);
+  await registerSceneArtifact({
+    video: v, sceneIndex: 2, type: "preview",
+    storageKey: `${v.id}/scene-preview-02.mp4`, input: "s116-fixture", prompt: "v", bytes: 100,
+  });
+  ok(await storage.exists(`${v.id}/scene-preview-02.mp4`), "the preview landed");
+
+  const report = await withCtx(
+    { userId: actor.id, organizationId: v.organizationId, role: "owner" },
+    () => runSceneRecheck(v.id, 2)
+  );
+
+  // The verdict is TIED to the revision it judged.
+  eq(report.revisionVersion, 2, "the verdict records the head's own version");
+  eq(report.builtFromPreview?.staleness, "current", "the preview was built from the head — freshness passes");
+  eq(report.sceneId, sceneId, "the report keys on the stable scene id");
+
+  // The scene-segment probes measured the real media.
+  const byId = new Map(report.checks.map((c) => [c.id, c.status]));
+  eq(byId.get("playable"), "pass", "the preview plays (H.264 + AAC)");
+  eq(byId.get("black-frames"), "pass", "no black frames in the segment");
+  eq(byId.get("frozen-frames"), "pass", "the zoom moves — no frozen imagery");
+  eq(byId.get("aspect"), "pass", "640x360 is the row's 16:9");
+  eq(byId.get("loudness"), "pass", "the sine sits inside the LUFS window");
+  eq(byId.get("true-peak"), "pass", "amplitude 0.25 is under the ceiling");
+  eq(byId.get("loudness-range"), "pass", "a constant tone has no pumping range");
+  eq(byId.get("dead-air"), "pass", "a 2.2s scene is too short for dead air");
+  eq(byId.get("static-shots"), "pass", "structured art under zoom reads as visual change");
+  eq(byId.get("flicker"), "pass", "no brightness pumping");
+  eq(byId.get("stutter"), "pass", "CFR render, even timing");
+  eq(byId.get("duration"), "pass", "preview length = the WAV-derived fold (2.2s)");
+  ok(!byId.has("captions"), "no standing SRT → the captions check is not emitted (the whole-file battery's own precedent)");
+
+  // The seams: scene 2 of 3 owns BOTH seams; neither pair is rendered.
+  eq(report.seams.length, 2, "scene 2 owns the 1|2 and 2|3 seams");
+  ok(report.seams.every((s) => s.status === "unmeasured" && s.media === "none"), "no boundary pairs standing — honest unmeasured, with the render command");
+  ok(
+    report.seams.every((s) => (s.detail ?? "").includes("boundaryAfter")),
+    "each unmeasured seam carries the exact command that would render it"
+  );
+  eq(report.passed, false, "unmeasured seams keep the report red — never silently clean");
+
+  // The verdict landed ON the revision, and the content is untouched.
+  const headAfter = must("head after", await headRevision(v.id, sceneId));
+  const stored = parseRecheckReport(headAfter.recheck);
+  ok(stored !== null && stored.revisionVersion === 2 && stored.passed === false, "the verdict is stored on the head revision");
+  eq(headAfter.content, contentBefore, "the annotation wrote the recheck column; the content is byte-identical");
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  for (const k of [...seededFiles, "scene-preview-02.mp4"].map((f) => `${v.id}/${f}`))
+    await storage.remove(k).catch(() => {});
+});
+
+await test("the boundary lane renders the pair and the recheck measures the seam through the render's own fold", async () => {
+  const { runSceneRecheck } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { serializeTimeline, docSceneSettings } = await import("../src/lib/tubeforge/timeline.ts");
+  const { resolveTransition } = await import("../src/lib/tubeforge/transitions.ts");
+  const v0 = await makeVideo([mkScene(1), mkScene(2), mkScene(3)], { renderMode: "kenburns" });
+  // DIFFERENT art per scene, so the seam is a real visual change.
+  const dir = await seedSceneMedia(v0, ["testsrc=s=640x360:d=1", "smptebars=s=640x360", "testsrc=s=640x360:d=1"]);
+  const seededFiles = [1, 2, 3].flatMap((i) => [`scene-${String(i).padStart(2, "0")}.png`, `scene-${String(i).padStart(2, "0")}.wav`]);
+  const doc = docOf(parseScenesOf(v0));
+  const v = await rawDb.video.update({
+    where: { id: v0.id },
+    data: { timeline: serializeTimeline(doc) },
+  });
+  const scenes = parseScenesOf(v);
+
+  // The boundary lane's exact inputs: the PAIR, the doc's slice, the doc's
+  // durations (10s each — the fold caps them at 3× the 2.2s narration).
+  const { renderVideo } = await import("../src/lib/tubeforge/render");
+  const result = await renderVideo({
+    videoId: v.id,
+    scenes: [must("s1", scenes.find((s) => s.index === 1)), must("s2", scenes.find((s) => s.index === 2))],
+    mode: "kenburns",
+    burnSubtitles: true,
+    smartCaptions: true,
+    music: false,
+    boundaryPreview: { afterScene: 1 },
+    docScenes: docSceneSettings(doc, 3)?.slice(0, 2) ?? null,
+    sceneDurationsSec: [10, 10],
+    transition: resolveTransition(v, "kenburns"),
+    onProgress: () => {},
+  } as Parameters<typeof renderVideo>[0]);
+
+  eq(result.fileName, "scene-boundary-01.mp4", "the output is the boundary pair");
+  ok(result.fileBytes > 10_000, "a real encoded mp4 landed");
+  ok(await storage.exists(`${v.id}/scene-boundary-01.mp4`), "published through the storage seam");
+  for (const k of ["final.mp4", "preview.mp4", "subtitles.srt", "scene-boundary-02.mp4", "scene-preview-01.mp4", "scene-preview-02.mp4"])
+    ok(!(await storage.exists(`${v.id}/${k}`)), `${k} was NOT created by a boundary pair`);
+  for (const k of seededFiles) ok(await storage.exists(`${v.id}/${k}`), `input fixture ${k} untouched`);
+  const row = await reload(v.id);
+  ok(!row.hasVideo && !row.hasPreview, "no video-level flags flipped");
+
+  // The recheck's seam verdict: measured against the SAME durations the
+  // render consumed (the shared fold), not a private copy.
+  const report = await withCtx(
+    { userId: "user-fixture", organizationId: v.organizationId, role: "owner" },
+    () => runSceneRecheck(v.id, 1)
+  );
+  eq(report.seams.length, 1, "scene 1 owns only the seam AFTER it (1|2)");
+  const seam = must("seam", report.seams.find((s) => s.afterScene === 1));
+  eq(seam.media, "boundary-preview", "the verdict measured the standing pair");
+  eq(seam.status, "pass", "the fade seam lands where the fold says (no must-appear for blends, no strays)");
+  ok(
+    (seam.detail ?? "").includes("1|2") && (seam.value || (seam.detail ?? "")).length > 0,
+    "the verdict names the seam and its expectation"
+  );
+  // The freshness row is honestly red — scene 1 has no preview of its own.
+  const freshness = must("freshness", report.checks.find((c) => c.id === "preview-freshness"));
+  eq(freshness.status, "unmeasured", "no scene-1 preview standing — the report says so with the render command");
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  for (const k of [...seededFiles, "scene-boundary-01.mp4"].map((f) => `${v.id}/${f}`))
+    await storage.remove(k).catch(() => {});
+});
+
+await test("the approval gate: verdict-gated, idempotent, and the approved revision survives newer drafts", async () => {
+  const { runSceneRecheck, approveSceneRevision } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { registerSceneArtifact } = await import("../src/lib/tubeforge/scene-artifacts.ts");
+  const { approvedRevision } = await import("../src/lib/tubeforge/scene-revisions.ts");
+  const v0 = await makeVideo([mkScene(1)], { renderMode: "kenburns" });
+  const dir = await seedSceneMedia(v0, ["testsrc=s=640x360:d=1"]);
+  const seededFiles = ["scene-01.png", "scene-01.wav"];
+  const approver = await rawDb.user.create({
+    data: { email: `s116-approve-${MARK}@example.test`, passwordHash: "pbkdf2$1$s$h" },
+  });
+  CLEANUP_USER_IDS.push(approver.id);
+
+  // Head v2 via an edit, then the preview + its provenance row.
+  const before = parseScenesOf(v0);
+  await commitSceneChanges({
+    video: v0,
+    beforeScenes: before,
+    beforeDoc: null,
+    afterScenes: before.map((s) => ({ ...s, mood: "dusk" })),
+    afterDoc: null,
+    kind: "edit",
+    origin: "test-s116-approve",
+  });
+  const v = await reload(v0.id);
+  const sceneId = sceneIdOf(v, 1);
+  const { renderVideo } = await import("../src/lib/tubeforge/render");
+  const scenes = parseScenesOf(v);
+  await renderVideo({
+    videoId: v.id,
+    scenes: [must("s1", scenes.find((s) => s.index === 1))],
+    mode: "kenburns",
+    burnSubtitles: true,
+    smartCaptions: true,
+    music: false,
+    scenePreview: { sceneIndex: 1 },
+    onProgress: () => {},
+  } as Parameters<typeof renderVideo>[0]);
+  await registerSceneArtifact({
+    video: v, sceneIndex: 1, type: "preview",
+    storageKey: `${v.id}/scene-preview-01.mp4`, input: "s116-approve", prompt: "v", bytes: 100,
+  });
+  const ctx = { userId: approver.id, organizationId: v.organizationId, role: "owner" };
+
+  // 1) No verdict yet → approval refuses.
+  const early = await withCtx(ctx, () => approveSceneRevision({ video: v, sceneIndex: 1, userId: approver.id }));
+  ok(!early.ok && early.status === 409, "no verdict, no approval (409)");
+
+  // 2) The recheck: single scene, no seams, real media → a PASSING verdict.
+  const report = await withCtx(ctx, () => runSceneRecheck(v.id, 1));
+  eq(report.passed, true, `a clean single-scene preview passes the whole battery (flagged: ${report.checks.filter((c) => c.status !== "pass").map((c) => c.id).join(", ") || "none"})`);
+  eq(report.seams.length, 0, "a single-scene video has no seams");
+
+  // 3) Approval flips the status, and nothing else.
+  const approved = await withCtx(ctx, () => approveSceneRevision({ video: v, sceneIndex: 1, userId: approver.id }));
+  ok(approved.ok && !approved.already, "the passing verdict opens the gate");
+  const headRow = must("head", await headRevision(v.id, sceneId));
+  eq(headRow.status, "approved", "the head is approved");
+  eq(headRow.version, 2, "the version is untouched");
+  const again = await withCtx(ctx, () => approveSceneRevision({ video: v, sceneIndex: 1, userId: approver.id }));
+  ok(again.ok && again.already, "re-approval is idempotent — no error, no second write");
+
+  // 4) A newer draft lands: the approved revision SURVIVES (law 1), the new
+  //    head is draft with NO verdict, and its approval refuses.
+  const vNow = await reload(v.id);
+  await commitSceneChanges({
+    video: vNow,
+    beforeScenes: parseScenesOf(vNow),
+    beforeDoc: null,
+    afterScenes: parseScenesOf(vNow).map((s) => ({ ...s, mood: "night" })),
+    afterDoc: null,
+    kind: "edit",
+    origin: "test-s116-approve-2",
+  });
+  const standing = must("standing approved", await approvedRevision(v.id, sceneId));
+  eq(standing.version, 2, "the approved revision stays addressable under newer drafts");
+  const v3 = must("v3 head", await headRevision(v.id, sceneId));
+  eq(v3.version, 3, "the new head is v3");
+  eq(v3.status, "draft", "the new head is a draft");
+  const refused = await withCtx(ctx, async () => approveSceneRevision({ video: await reload(v.id), sceneIndex: 1, userId: approver.id }));
+  ok(!refused.ok && refused.status === 409, "the v3 head has no verdict — approval refuses");
+
+  // 5) The gate's other arms, seeded directly on the v3 row: a stale
+  //    verdict (judged v2) and a failed verdict both refuse.
+  const mkReport = (over: Record<string, unknown>) =>
+    JSON.stringify({
+      schema: 1, scope: "scene", sceneIndex: 1, sceneId, revisionVersion: 3,
+      builtFromPreview: null, checkedAt: new Date().toISOString(), passed: true,
+      checks: [{ id: "x", label: "x", status: "pass", pass: true, value: "" }], seams: [],
+      ...over,
+    });
+  await rawDb.sceneRevision.update({ where: { id: v3.id }, data: { recheck: mkReport({ revisionVersion: 2 }) } });
+  const stale = await withCtx(ctx, async () => approveSceneRevision({ video: await reload(v.id), sceneIndex: 1, userId: approver.id }));
+  ok(!stale.ok && (stale as { message?: string }).message?.includes("v2"), "a verdict for v2 cannot approve v3 — stale by comparison");
+  await rawDb.sceneRevision.update({ where: { id: v3.id }, data: { recheck: mkReport({ passed: false }) } });
+  const failed = await withCtx(ctx, async () => approveSceneRevision({ video: await reload(v.id), sceneIndex: 1, userId: approver.id }));
+  ok(!failed.ok, "a failed verdict blocks approval");
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  for (const k of [...seededFiles, "scene-preview-01.mp4"].map((f) => `${v.id}/${f}`))
+    await storage.remove(k).catch(() => {});
+});
+
+suiteStart("S117 · assembly from approved revisions + the render manifest");
+
+await test("the assembly: drafts never leak — baseline fallback, approved wins, the union slice at the current position", async () => {
+  const { resolveRenderAssembly } = await import("../src/lib/tubeforge/render-assembly.ts");
+  const { serializeTimeline } = await import("../src/lib/tubeforge/timeline.ts");
+  const v0 = await makeVideo([mkScene(1), mkScene(2)], { renderMode: "kenburns" });
+  const doc = docOf(parseScenesOf(v0));
+  const v = await rawDb.video.update({
+    where: { id: v0.id },
+    data: { timeline: serializeTimeline(doc) },
+  });
+
+  // Scene 2 edited (a DRAFT): the assembly must fall back to the v1
+  // backfill — the PRE-edit state. A draft never leaks into a final.
+  await commitSceneChanges({
+    video: v,
+    beforeScenes: parseScenesOf(v),
+    beforeDoc: doc,
+    afterScenes: parseScenesOf(v).map((s) => (s.index === 2 ? { ...s, mood: "stormy night" } : s)),
+    afterDoc: doc,
+    kind: "edit",
+    origin: "test-s117-assembly",
+  });
+  const rowAfterEdit = await reload(v.id);
+  const sceneId2 = sceneIdOf(rowAfterEdit, 2);
+  const withDraft = await withCtx(
+    { userId: "user-fixture", organizationId: v.organizationId, role: "owner" },
+    () => resolveRenderAssembly(rowAfterEdit)
+  );
+  ok(withDraft.changed, "the assembly swapped revision content in");
+  eq(withDraft.entries.length, 2, "one entry per scene");
+  eq(
+    JSON.stringify(withDraft.entries[0]),
+    JSON.stringify({ sceneIndex: 1, sceneId: sceneIdOf(rowAfterEdit, 1), source: "row", revisionVersion: null }),
+    "scene 1 (never edited) renders the row"
+  );
+  const e2 = withDraft.entries[1];
+  ok(
+    e2.sceneId === sceneId2 && e2.source === "baseline" && e2.revisionVersion === 1,
+    "the drafted scene falls back to the v1 baseline (the backfill)"
+  );
+  eq(withDraft.scenes[1].mood, "golden hour", "the DRAFT mood does NOT leak — the pre-edit content renders");
+  eq(withDraft.scenes[1].index, 2, "the restored content sits at the CURRENT position");
+
+  // Approve the draft (the S116 ladder's status flip) → the assembly
+  // consumes the APPROVED revision's content.
+  const head2 = must("head", await headRevision(v.id, sceneId2));
+  await rawDb.sceneRevision.update({ where: { id: head2.id }, data: { status: "approved" } });
+  const withApproved = await withCtx(
+    { userId: "user-fixture", organizationId: v.organizationId, role: "owner" },
+    () => resolveRenderAssembly(rowAfterEdit)
+  );
+  ok(
+    withApproved.entries[1].source === "approved" && withApproved.entries[1].revisionVersion === head2.version,
+    "the approved revision wins the assembly"
+  );
+  eq(withApproved.scenes[1].mood, "stormy night", "the approved content renders now");
+});
+
+await test("the manifest + the staleness ladder: a real render records its assembly; movement stales it", async () => {
+  const { runRenderJob } = await import("../src/lib/tubeforge/video-jobs.ts");
+  const { renderStaleness, parseRenderManifest } = await import("../src/lib/tubeforge/render-assembly.ts");
+  const { serializeTimeline } = await import("../src/lib/tubeforge/timeline.ts");
+  const v0 = await makeVideo([mkScene(1), mkScene(2)], {
+    renderMode: "kenburns",
+    hasStoryboard: true,
+    hasVoiceover: true,
+  });
+  const dir = await seedSceneMedia(v0, ["testsrc=s=640x360:d=1", "smptebars=s=640x360"]);
+  const doc = docOf(parseScenesOf(v0));
+  await rawDb.video.update({
+    where: { id: v0.id },
+    data: { timeline: serializeTimeline(doc) },
+  });
+  // A REAL user row — the render job's Activity writes carry the userId FK
+  // (the S115 fixture precedent; a fake id fails the FK and the job's own
+  // success-path audit write would fail the whole render).
+  const operator = await rawDb.user.create({
+    data: { email: `s117-render-${MARK}@example.test`, passwordHash: "pbkdf2$1$s$h" },
+  });
+  CLEANUP_USER_IDS.push(operator.id);
+  const ctx = { userId: operator.id, organizationId: v0.organizationId, role: "owner" };
+
+  // A draft on scene 2 BEFORE the render: the final must assemble the v1
+  // baseline, and the manifest must say so.
+  const rowBefore = await reload(v0.id);
+  await commitSceneChanges({
+    video: rowBefore,
+    beforeScenes: parseScenesOf(rowBefore),
+    beforeDoc: doc,
+    afterScenes: parseScenesOf(rowBefore).map((s) => (s.index === 2 ? { ...s, mood: "stormy night" } : s)),
+    afterDoc: doc,
+    kind: "edit",
+    origin: "test-s117-render",
+  });
+
+  await withCtx(ctx, () => runRenderJob(v0.id, { mode: "kenburns", music: false }));
+  const rendered = await reload(v0.id);
+  ok(rendered.hasVideo, "the final landed");
+  ok(await storage.exists(`${v0.id}/final.mp4`), "final.mp4 through the storage seam");
+  const manifest = parseRenderManifest(rendered.renderManifest);
+  ok(manifest !== null && manifest.entries.length === 2, "the manifest records the assembly");
+  eq(manifest?.entries[0].source, "row", "scene 1 rendered from the row");
+  ok(
+    manifest?.entries[1].source === "baseline" && manifest?.entries[1].revisionVersion === 1,
+    "scene 2 rendered from the v1 baseline — the draft NEVER leaked into the final"
+  );
+
+  // Nothing moved since the render → fresh.
+  const fresh = await withCtx(ctx, () => renderStaleness(rendered));
+  eq(fresh.status, "fresh", "the manifest still matches the current assembly sources");
+
+  // Approve the draft → the current source moves to approved v2 → STALE.
+  const sceneId2 = sceneIdOf(rendered, 2);
+  const head2 = must("head v2", await headRevision(v0.id, sceneId2));
+  await rawDb.sceneRevision.update({ where: { id: head2.id }, data: { status: "approved" } });
+  const staled = await withCtx(ctx, async () => renderStaleness(await reload(v0.id)));
+  ok(
+    staled.status === "stale" &&
+      (staled as { reasons?: string[] }).reasons?.some((r) => r.includes("approved v2")),
+    "the approval stales the standing final (the operator asked for v2 in it)"
+  );
+
+  // No manifest while history stands → UNKNOWN (a pre-S117 final cannot
+  // prove its assembly).
+  await rawDb.video.update({ where: { id: v0.id }, data: { renderManifest: null } });
+  const unknown = await withCtx(ctx, async () => renderStaleness(await reload(v0.id)));
+  eq(unknown.status, "unknown", "history + no manifest = unprovable, never fresh");
+
+  // And a video with NO history at all is fresh by construction (the row is
+  // the only truth — nothing to be stale against).
+  const noHistory = await makeVideo([mkScene(1)]);
+  const noHistoryVerdict = await withCtx(ctx, () => renderStaleness(noHistory));
+  eq(noHistoryVerdict.status, "fresh", "no history, no manifest: the row is the only truth — fresh");
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  for (const k of ["scene-01.png", "scene-01.wav", "scene-02.png", "scene-02.wav", "final.mp4", "subtitles.srt", "preview.mp4"].map((f) => `${v0.id}/${f}`))
+    await storage.remove(k).catch(() => {});
+});
+
+suiteStart("S118 · the VCE proposal persistence + the hardening closures");
+
+await test("persistVceProposals: proposals become durable repairs with estimates, and the dedup guard holds", async () => {
+  const { persistVceProposals } = await import("../src/lib/tubeforge/scene-repairs.ts");
+  const { ESTIMATED_COST_MICRO } = await import("../src/lib/tubeforge/billing.ts");
+  const v = await makeVideo([mkScene(1), mkScene(2)], { renderMode: "kenburns" });
+
+  const proposals = [
+    { sceneIndex: 2, dimension: "style", instruction: "Repaint this scene to match the video's dominant look: warmer palette. Keep the composition and subject." },
+    { sceneIndex: 1, dimension: "identity", instruction: "Restore the host's facial structure to the anchor." },
+  ];
+  const first = await withCtx(
+    { userId: "user-fixture", organizationId: v.organizationId, role: "owner" },
+    () => persistVceProposals(v.id, proposals)
+  );
+  eq(first, 2, "both proposals persisted");
+
+  const rows = await rawDb.sceneRepair.findMany({ where: { videoId: v.id }, orderBy: { createdAt: "asc" } });
+  eq(rows.length, 2, "two durable repair rows");
+  eq(rows.every((r) => r.origin === "vce"), true, "origin vce");
+  eq(rows.every((r) => r.status === "proposed"), true, "born proposed — nothing spent");
+  eq(
+    rows.every((r) => r.estimateMicroUsd === ESTIMATED_COST_MICRO.image),
+    true,
+    "each carries the estimate from the admission's own table"
+  );
+  ok(
+    rows.some((r) => (r.note ?? "").includes("style")),
+    "the dimension rides the note"
+  );
+
+  // The dedup guard: persisting the SAME proposals again adds nothing.
+  const second = await withCtx(
+    { userId: "user-fixture", organizationId: v.organizationId, role: "owner" },
+    () => persistVceProposals(v.id, proposals)
+  );
+  eq(second, 0, "the dedup guard refuses to re-propose standing open repairs");
+  const after = await rawDb.sceneRepair.count({ where: { videoId: v.id } });
+  eq(after, 2, "still exactly two rows");
+
+  // A CHANGED instruction (the verdict moved) is a new proposal.
+  const evolved = await withCtx(
+    { userId: "user-fixture", organizationId: v.organizationId, role: "owner" },
+    () =>
+      persistVceProposals(v.id, [
+        { sceneIndex: 2, dimension: "style", instruction: "Repaint this scene to match the video's dominant look: cooler palette. Keep the composition and subject." },
+      ])
+  );
+  eq(evolved, 1, "a changed instruction is a NEW proposal");
+  const finalCount = await rawDb.sceneRepair.count({ where: { videoId: v.id } });
+  eq(finalCount, 3, "three rows — the inbox grows only on real change");
+});
+
+// --- teardown ---------------------------------------------------------------
+
+try {
+  for (const id of CLEANUP_VIDEO_IDS) await rawDb.video.delete({ where: { id } }).catch(() => {});
+  for (const id of CLEANUP_ORG_IDS) await rawDb.organization.delete({ where: { id } }).catch(() => {});
+  for (const id of CLEANUP_USER_IDS) await rawDb.user.delete({ where: { id } }).catch(() => {});
+} finally {
+  await rawDb.$disconnect();
+}
+
+console.log(`\n${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
+for (const f of failures) console.log(`  ✗ ${f}`);
+process.exit(failed > 0 ? 1 : 0);
