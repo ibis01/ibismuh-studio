@@ -257,7 +257,7 @@ export const TTS_PROVIDERS: ProviderMeta[] = [
       { id: "sonic-3.5" },
       { id: "sonic-3" },
     ],
-    note: "Ultra-low latency, highly emotive TTS. Requires X-API-Key and Cartesia-Version headers.",
+    note: "Ultra-low latency, highly emotive TTS. Requires X-API-Key and Cartesia-Version headers. Voice pickers load YOUR account's voices live (custom voices included) — anything else falls back to a real account voice, never a stale hard-coded id.",
   },
   {
     id: "deepgram",

@@ -47,6 +47,127 @@ export function isClonedVoiceId(voice: string): boolean {
   return voice.startsWith(CLONED_VOICE_PREFIX);
 }
 
+// ---------- Cartesia voice resolution (the 404 fix) ----------
+
+/** Cartesia voices are UUIDs. Anything else ("jam", "tongtong", a clone id…
+ *  — voices saved under another provider) is NOT speakable by Cartesia and
+ *  would answer HTTP 404 "Voice not found". */
+export function isCartesiaVoiceId(voice: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    voice ?? "",
+  );
+}
+
+/** The static last-resort catalog — used only when the LIVE account list is
+ *  unreachable AND the requested voice is not a UUID. Kept in sync with the
+ *  registry note: the live list is the truth, this is the safety net. */
+const CARTESIA_STATIC_VOICES = [
+  { id: "b24f41fd-00a3-4cd8-992a-a0c9f13f3ef1", label: "Clive" },
+  { id: "30894953-bcce-41fe-892c-15ce19c843ff", label: "Parker" },
+  { id: "694f9389-aac1-45b6-b726-9d9369183238", label: "Bright Female" },
+  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", label: "Barbershop Man" },
+  { id: "a81b5a35-9d67-4dfc-b4d5-5e167c31a385", label: "Wise Woman" },
+  { id: "c2eb8f44-49cd-4a6a-9a0e-c7d6cc13f9a0", label: "Friendly Man" },
+  { id: "a01f57e5-4c4a-4a26-a26b-3d1e1b89a4c5", label: "Calm Female" },
+  { id: "bf991597-6c13-47e4-8411-91c9b9d5c5a7", label: "Soft Female" },
+  { id: "d46abd1d-2d02-43e8-819f-51fb652c1c61", label: "Narrator" },
+  { id: "8a1b5a35-9d67-4dfc-b4d5-5e167c31a385", label: "Deep Male" },
+];
+
+/** In-memory cache for the live voice list — keyed by baseUrl + key
+ *  fingerprint so switching accounts never serves the wrong account's
+ *  voices. 5-minute TTL: new custom voices appear within a settings
+ *  coffee break, without hammering GET /voices on every synthesis. */
+let cartesiaVoiceCache: {
+  key: string;
+  at: number;
+  voices: { id: string; label: string }[];
+} | null = null;
+const CARTESIA_VOICE_TTL_MS = 5 * 60 * 1000;
+
+function cartesiaCacheKey(config: {
+  baseUrl?: string;
+  apiKey?: string;
+}): string {
+  const fp = config.apiKey
+    ? config.apiKey.slice(-6)
+    : "";
+  return `${config.baseUrl?.trim() || "-"}|${fp}`;
+}
+
+/** GET {baseUrl}/voices — the ACCOUNT's real voices (public + the user's
+ *  custom clones). Never throws: on any failure it returns [] so callers
+ *  fall back to the static catalog instead of breaking synthesis. */
+export async function listCartesiaVoices(
+  config: CapabilityConfig,
+  opts?: { refresh?: boolean },
+): Promise<{ id: string; label: string }[]> {
+  const key = config.apiKey?.trim();
+  if (!key) return [];
+
+  const cacheKey = cartesiaCacheKey(config);
+  if (!opts?.refresh && cartesiaVoiceCache && cartesiaVoiceCache.key === cacheKey) {
+    if (Date.now() - cartesiaVoiceCache.at < CARTESIA_VOICE_TTL_MS) {
+      return cartesiaVoiceCache.voices;
+    }
+  }
+
+  const baseUrl =
+    config.baseUrl?.trim() ||
+    providerMeta("tts", "cartesia")?.defaultBaseUrl ||
+    "https://api.cartesia.ai";
+  try {
+    const res = await providerFetch(
+      "Cartesia voices",
+      joinUrl(baseUrl, "voices"),
+      {
+        method: "GET",
+        headers: {
+          "X-API-Key": key,
+          "Cartesia-Version": CARTESIA_VERSION,
+        },
+      },
+      { capability: "tts" },
+    );
+    const data = (await res.json()) as
+      | { voices?: unknown[] }
+      | unknown[]
+      | { data?: unknown[] };
+    const rows: unknown[] = Array.isArray(data)
+      ? data
+      : ((data as { voices?: unknown[] }).voices ??
+        (data as { data?: unknown[] }).data ??
+        []);
+    const voices = rows
+      .map((r) => r as { id?: string; name?: string })
+      .filter((r) => typeof r.id === "string" && r.id)
+      .map((r) => ({ id: r.id as string, label: (r.name as string) || (r.id as string) }));
+    cartesiaVoiceCache = { key: cacheKey, at: Date.now(), voices };
+    return voices;
+  } catch {
+    return [];
+  }
+}
+
+/** Resolve the voice to send to Cartesia:
+ *  1. A UUID (picked from the live list, or a valid account voice) → verbatim.
+ *  2. Anything else (a Z.ai voice name, a clone id, an empty string — the
+ *     Settings Test button) → the FIRST voice of the account's live list, so
+ *     the synthesis lands on a REAL existing voice.
+ *  3. Live list unreachable → the static catalog's first entry (readable
+ *     Cartesia 404 if even that is stale for the account, instead of a
+ *     mystery). */
+async function resolveCartesiaVoiceId(
+  voice: string,
+  config: CapabilityConfig,
+): Promise<string> {
+  const requested = voice?.trim() ?? "";
+  if (isCartesiaVoiceId(requested)) return requested;
+  const live = await listCartesiaVoices(config);
+  if (live.length) return live[0].id;
+  return CARTESIA_STATIC_VOICES[0].id;
+}
+
 /** The voice catalog for a provider (drives UI pickers + sanitization). */
 export function voiceCatalog(provider: ProviderId, model = "") {
   if (provider === "openai") {
@@ -67,6 +188,13 @@ export function voiceCatalog(provider: ProviderId, model = "") {
     // verbatim (sanitizeVoice below never rewrites a voicestudio voice).
     return OPENAI_VOICES.map((v) => ({ id: v.id, label: v.label }));
   }
+  if (provider === "cartesia") {
+    // Static fallback catalog — the live account list overlays it in the
+    // voices route (the one truth for pickers). UUIDs pass through
+    // sanitizeVoice verbatim, so any account voice picked in the UI rides
+    // to Cartesia untouched.
+    return CARTESIA_STATIC_VOICES.map((v) => ({ ...v }));
+  }
   // zai + zhipu share the same 7 studio voices; zhipu additionally accepts
   // cloned ids (appended to the catalog by the API layer, which can hit the DB).
   return VOICES.map((v) => ({ id: v.id, label: v.label }));
@@ -75,7 +203,11 @@ export function voiceCatalog(provider: ProviderId, model = "") {
 /** Map any stored voice onto the provider's catalog.
  *  Cloned voice ids are preserved for providers that can speak them
  *  (zhipu, selfhost) — switching to a provider that cannot falls back to the
- *  catalog's first entry, exactly like a zai-only voice switching to OpenAI. */
+ *  catalog's first entry, exactly like a zai-only voice switching to OpenAI.
+ *  Cartesia: UUID-shaped ids are the account's own voices (served live by the
+ *  voices route) and pass through verbatim; anything else maps to the static
+ *  fallback — the ADAPTER additionally upgrades that fallback to the
+ *  account's live first voice at synthesis time. */
 export function sanitizeVoice(
   provider: ProviderId,
   voice: string,
@@ -87,6 +219,7 @@ export function sanitizeVoice(
   )
     return voice;
   if (provider === "voicestudio") return voice; // verbatim — the server owns the catalog
+  if (provider === "cartesia" && isCartesiaVoiceId(voice)) return voice;
   const catalog = voiceCatalog(provider, model);
   return catalog.some((v) => v.id === voice) ? voice : catalog[0].id;
 }
@@ -386,6 +519,10 @@ async function geminiTts(
 
 // ---------- Cartesia (Sonic) ----------
 
+/** The Cartesia-Version header — one table, one truth (the same value rides
+ *  both the voices listing and the synthesis call). */
+export const CARTESIA_VERSION = "2025-04-16";
+
 async function cartesiaTts(
   req: TtsRequest,
   config: CapabilityConfig,
@@ -401,7 +538,12 @@ async function cartesiaTts(
     );
   }
 
-  const voiceId = req.voice?.trim() || "a0e99841-438c-4a64-b679-ae501e7d6091"; // Default "Barbershop Man" voice
+  // THE 404 FIX — resolve the voice against the ACCOUNT's real voices:
+  // UUID ids (picked from the live list in any picker) ride verbatim; a
+  // foreign voice name ("jam"), a clone id, or an empty string (the Settings
+  // Test button) resolves to the account's first live voice — never a stale
+  // hard-coded UUID.
+  const voiceId = await resolveCartesiaVoiceId(req.voice, config);
 
   const response = await providerFetch(
     "Cartesia TTS",
@@ -411,7 +553,7 @@ async function cartesiaTts(
       headers: {
         "Content-Type": "application/json",
         "X-API-Key": key,
-        "Cartesia-Version": "2025-04-16",
+        "Cartesia-Version": CARTESIA_VERSION,
       },
       body: JSON.stringify({
         model_id: model,
