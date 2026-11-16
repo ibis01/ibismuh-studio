@@ -21731,6 +21731,177 @@ await test("S150 the applier's reveal branch holds the construction laws", () =>
   for (const b of banned) ok(!APPLY_GRAPHICS_FRAME_FN.includes(b), `no ${b} — the grown applier stays idempotent by construction`);
 });
 
+// ─── S151 — the sketch-trace import pass (raster → ordered stroke geometry) ───
+
+suiteStart("S151 whiteboard — the sketch-trace import pass (raster → strokes)");
+
+/** Paint an ink rectangle onto a synthetic RGB page (ink = dark gray). */
+function inkRect(img: Uint8Array, w: number, x0: number, y0: number, x1: number, y1: number): void {
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const i = (y * w + x) * 3;
+      img[i] = 30;
+      img[i + 1] = 30;
+      img[i + 2] = 30;
+    }
+  }
+}
+
+function blankPage(w: number, h: number): Uint8Array {
+  return new Uint8Array(w * h * 3).fill(255);
+}
+
+await test("S151 the junction pairing law: a plus draws as two continuous strokes, not four branches", async () => {
+  const { traceRasterToSvgDoc } = await import("../src/lib/tubeforge/whiteboard/raster-trace");
+  const img = blankPage(64, 64);
+  inkRect(img, 64, 30, 6, 33, 57); // the vertical bar
+  inkRect(img, 64, 6, 30, 57, 33); // the horizontal bar
+  const traced = traceRasterToSvgDoc(img, 64, 64);
+  const penPaths = traced.svg.match(/<path id="p\d+" /g) ?? [];
+  eq(penPaths.length, 2, `four skeleton branches pair into two through-strokes (got ${penPaths.length})`);
+  ok(!/id="p\d+-f"/.test(traced.svg), "pure line art emits no fill elements");
+  // Every emitted path is ONE subpath (the W3 teleport law, by construction).
+  for (const [, d] of traced.svg.matchAll(/ d="([^"]+)"/g)) {
+    eq((d.match(/M /g) ?? []).length, 1, `one M per path: ${d.slice(0, 40)}…`);
+  }
+});
+
+await test("S151 the fill-after-outline law: a filled region emits its outline first, then the pure fill", async () => {
+  const { traceRasterToSvgDoc } = await import("../src/lib/tubeforge/whiteboard/raster-trace");
+  const img = blankPage(80, 80);
+  for (let y = 16; y <= 64; y++) {
+    const dy = y - 40;
+    const half = Math.floor(Math.sqrt(Math.max(0, 24 * 24 - dy * dy)));
+    if (half >= 0) inkRect(img, 80, 40 - half, y, 40 + half, y);
+  }
+  const traced = traceRasterToSvgDoc(img, 80, 80);
+  ok(traced.stats.fills === 1, `the disc classifies as one filled region (got ${traced.stats.fills})`);
+  const outlineIdx = traced.svg.indexOf('<path id="p1"');
+  const fillIdx = traced.svg.indexOf('<path id="p1-f"');
+  ok(outlineIdx >= 0, "the region outline exists as p1");
+  ok(/<path id="p1" [^>]*fill="none"/.test(traced.svg), "the outline is a pen path");
+  ok(/<path id="p1-f" [^>]*fill="#1d3557" stroke="none"/.test(traced.svg), "the fill is a pure fill");
+  ok(fillIdx > outlineIdx, "document order: the outline precedes its fill");
+});
+
+await test("S151 the reading-order law: a container draws before what it contains", async () => {
+  const { traceRasterToSvgDoc } = await import("../src/lib/tubeforge/whiteboard/raster-trace");
+  const img = blankPage(80, 80);
+  inkRect(img, 80, 8, 8, 71, 11);
+  inkRect(img, 80, 8, 68, 71, 71);
+  inkRect(img, 80, 8, 8, 11, 71);
+  inkRect(img, 80, 68, 8, 71, 71); // the hollow 4px border box
+  inkRect(img, 80, 30, 30, 45, 45); // the inner square
+  const traced = traceRasterToSvgDoc(img, 80, 80);
+  const pathEls = [...traced.svg.matchAll(/ d="([^"]+)"/g)].map((m) => m[1]);
+  const minXOf = (d: string): number => {
+    const nums = (d.match(/\d+/g) ?? []).map(Number);
+    return Math.min(...nums.filter((_, i) => i % 2 === 0));
+  };
+  const outerIdxs: number[] = [];
+  const innerIdxs: number[] = [];
+  pathEls.forEach((d, i) => {
+    const mx = minXOf(d);
+    if (mx <= 12) outerIdxs.push(i);
+    if (mx >= 28 && mx <= 48) innerIdxs.push(i);
+  });
+  ok(outerIdxs.length > 0 && innerIdxs.length > 0, "both the container and its content traced");
+  ok(
+    Math.max(...outerIdxs) < Math.min(...innerIdxs),
+    `the box's paths (last at ${Math.max(...outerIdxs)}) all precede the inner square's (first at ${Math.min(...innerIdxs)})`
+  );
+});
+
+await test("S151 the determinism law: the same bytes trace to a byte-identical document", async () => {
+  const { traceRasterToSvgDoc } = await import("../src/lib/tubeforge/whiteboard/raster-trace");
+  const img = blankPage(80, 80);
+  inkRect(img, 80, 30, 6, 33, 57);
+  inkRect(img, 80, 6, 30, 57, 33);
+  for (let y = 16; y <= 64; y++) {
+    const dy = y - 40;
+    const half = Math.floor(Math.sqrt(Math.max(0, 24 * 24 - dy * dy)));
+    if (half >= 0) inkRect(img, 80, 40 - half, y, 40 + half, y);
+  }
+  const a = traceRasterToSvgDoc(img, 80, 80);
+  const b = traceRasterToSvgDoc(img, 80, 80);
+  eq(a.svg, b.svg, "double-run byte equality");
+  eq(a.stats.commands, b.stats.commands, "the command counts match too");
+});
+
+await test("S151 the traced document rides the existing upload gates verbatim", async () => {
+  const { traceRasterToSvgDoc } = await import("../src/lib/tubeforge/whiteboard/raster-trace");
+  const { validateUploadedSvg } = await import("../src/lib/tubeforge/whiteboard/upload");
+  // A filled disc (bottom-right) and a plus (top-left) that do NOT touch —
+  // overlapping ink merges into one component by 4-connectivity.
+  const img = blankPage(96, 96);
+  for (let y = 32; y <= 72; y++) {
+    const dy = y - 52;
+    const half = Math.floor(Math.sqrt(Math.max(0, 20 * 20 - dy * dy)));
+    if (half >= 0) inkRect(img, 96, 52 - half, y, 52 + half, y);
+  }
+  inkRect(img, 96, 4, 4, 7, 27); // the plus's vertical bar
+  inkRect(img, 96, 2, 14, 27, 17); // the plus's horizontal bar
+  const traced = traceRasterToSvgDoc(img, 96, 96);
+  const v = validateUploadedSvg(Buffer.from(traced.svg, "utf-8"), "sketch.png", new Set());
+  ok(v.ok, `the traced doc passes sniff/sanitize/budgets/W3: ${v.ok ? "" : v.errors.join(" · ")}`);
+  if (v.ok) {
+    ok(v.paths >= 3, `the extraction sees the drawn geometry (${v.paths} paths)`);
+    ok(v.commands <= 2048, `the command total sits inside the per-asset wall (${v.commands})`);
+  }
+});
+
+await test("S151 the budget-by-construction law: a dense page fits the walls, a fat stroke collapses", async () => {
+  const { traceRasterToSvgDoc } = await import("../src/lib/tubeforge/whiteboard/raster-trace");
+  const img = blankPage(128, 128);
+  for (let k = 0; k < 24; k++) inkRect(img, 128, 2, 2 + k * 5, 125, 4 + k * 5);
+  const traced = traceRasterToSvgDoc(img, 128, 128);
+  ok(traced.stats.commands <= 2040, `the asset fits the per-asset headroom (${traced.stats.commands} commands)`);
+  const perPath = [...traced.svg.matchAll(/ d="([^"]+)"/g)].map((m) => (m[1].match(/[MLZ]/g) ?? []).length);
+  ok(Math.max(...perPath) <= 500, `every path sits inside the per-path headroom (max ${Math.max(...perPath)})`);
+  ok(traced.paths || traced.svg.length > 0, "the dense page still emits drawable geometry");
+  // The per-path collapse: one long Archimedean spiral (~2000 skeleton
+  // points) simplifies inside the per-path wall by escalating that path's
+  // tolerance deterministically.
+  const spiral = blankPage(128, 128);
+  const cx = 64;
+  const cy = 64;
+  let px = cx;
+  let py = cy;
+  for (let t = 0; t < 62; t += 0.02) {
+    const r = 1.0 * t;
+    const nx = Math.round(cx + r * Math.cos(t));
+    const ny = Math.round(cy + r * Math.sin(t));
+    if (nx !== px || ny !== py) {
+      if (nx >= 0 && nx < 128 && ny >= 0 && ny < 128) inkRect(spiral, 128, nx, ny, nx, ny);
+      px = nx;
+      py = ny;
+    }
+  }
+  const tracedSpiral = traceRasterToSvgDoc(spiral, 128, 128);
+  const spiralPerPath = [...tracedSpiral.svg.matchAll(/ d="([^"]+)"/g)].map(
+    (m) => (m[1].match(/[MLZ]/g) ?? []).length
+  );
+  ok(spiralPerPath.length >= 1, "the spiral traces");
+  ok(Math.max(...spiralPerPath) <= 500, `the spiral's stroke collapses inside the per-path wall (max ${Math.max(...spiralPerPath)})`);
+});
+
+await test("S151 blank paper refuses readably, and the raster sniff trusts magic bytes only", async () => {
+  const { traceRasterToSvgDoc, RasterTraceError, sniffRasterKind } = await import("../src/lib/tubeforge/whiteboard/raster-trace");
+  let threw: unknown = null;
+  try {
+    traceRasterToSvgDoc(blankPage(64, 64), 64, 64);
+  } catch (e) {
+    threw = e;
+  }
+  ok(threw instanceof RasterTraceError, "blank paper refuses");
+  ok(threw instanceof Error && threw.message.includes("blank paper"), `the refusal names the condition: ${threw instanceof Error ? threw.message : "?"}`);
+  ok(sniffRasterKind(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) === "png", "PNG magic");
+  ok(sniffRasterKind(Buffer.from([0xff, 0xd8, 0xff, 0xe0])) === "jpeg", "JPEG magic");
+  ok(sniffRasterKind(Buffer.from("RIFF\u0000\u0000\u0000\u0000WEBPVP8 ", "ascii")) === "webp", "WebP magic");
+  ok(sniffRasterKind(Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'>", "utf-8")) === null, "SVG bytes are not a raster");
+  ok(sniffRasterKind(Buffer.alloc(0)) === null, "empty bytes are not a raster");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
