@@ -366,20 +366,28 @@ export async function renderGraphics(
     if (decision !== null) {
       manifest = decision.plan;
       for (const [i, r] of decision.resumable) resumable.set(i, r);
-    } else {
-      manifest = {
-        version: RENDER_MANIFEST_VERSION,
-        fingerprint,
-        scenes: doc.scenes.map((scene, i) => ({
-          sceneId: scene.id,
-          index: i,
-          status: "pending" as const,
-          file: path.join(opts.outDir, `scene-${i + 1}.mp4`),
-          frames: 0,
-        })),
-      };
-      writeRenderManifest(opts.outDir, manifest);
     }
+  }
+  // S145 — the Phase-3 drill's finding: the manifest must be written on the
+  // FRESH path too. The resume gate above used to be the only writer, so a
+  // FIRST-time render that crashed mid-program left no crash record — the
+  // seam's own contract ("a crash loses at most the scene it was
+  // mid-rendering") was dead for the exact scenario it exists for. The
+  // manifest is recovery bookkeeping: it never shapes scene bytes (the
+  // fingerprint pins those), and a COMPLETED render still deletes it below.
+  if (manifest === null) {
+    manifest = {
+      version: RENDER_MANIFEST_VERSION,
+      fingerprint,
+      scenes: doc.scenes.map((scene, i) => ({
+        sceneId: scene.id,
+        index: i,
+        status: "pending" as const,
+        file: path.join(opts.outDir, `scene-${i + 1}.mp4`),
+        frames: 0,
+      })),
+    };
+    writeRenderManifest(opts.outDir, manifest);
   }
 
   // The look-rate (labelled drafts only — see RenderGraphicsOptions).

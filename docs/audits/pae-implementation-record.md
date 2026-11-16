@@ -40,7 +40,13 @@
 
 ## 4. Remaining (Phase 3 — benchmarks, not code)
 
-The production benchmark harness per the spec §6: render the historical / educational / motion-graphics programs on a fixed doc that exercises every directive kind; measure frame-at cost, full-render wall time vs the S128 baseline, determinism hash equality across runs (G1-DET-1 receipts), the resume drill (kill mid-render → resume → assembly), and the readcheck report. Receipts land in `docs/baselines/pae-<stage>-<date>.txt`.
+**CLOSED as S145** (docs/audits/s145-pae-phase3-benchmarks.md): the
+production benchmark harness ran the spec §6 program — the five axes
+(frame-at cost, the same-session A/B wall time, decoded-stream determinism,
+the resume drill, the readcheck) over the fixed three-program doc + the 3D
+keyed-object fixture. The drill caught and fixed a real defect (the
+fresh-path resume manifest was never written — a first-crash was
+unrecoverable); receipt at `docs/baselines/pae-phase3-2026-11-16.txt`.
 
 ## 5. Packaging
 

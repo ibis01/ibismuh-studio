@@ -17317,6 +17317,24 @@ await test("S132 the manifest io — round-trip through a real dir; corrupt/wron
   }
 });
 
+await test("S145 the drill's finding — the manifest is written on the FRESH path too (a first-time crash is recoverable)", async () => {
+  const src = fs.readFileSync("src/lib/tubeforge/graphics/render.ts", "utf8");
+  // The write must sit OUTSIDE the resume gate: the fresh path initializes
+  // the manifest whenever the resume decision produced none — a fresh
+  // render that dies mid-program must leave the crash record the seam
+  // consumes (the S145 Phase-3 drill caught the dead seam live).
+  const gate = src.indexOf("if (opts.resume === true) {");
+  const freshWrite = src.indexOf("if (manifest === null) {", gate);
+  const sceneLoop = src.indexOf("for (let si = 0; si < doc.scenes.length; si++) {", freshWrite);
+  ok(gate !== -1 && freshWrite !== -1 && freshWrite > gate && sceneLoop > freshWrite,
+    "the fresh-path manifest write sits between the resume gate and the scene loop");
+  const block = src.slice(freshWrite, freshWrite + 600);
+  ok(block.includes("writeRenderManifest(opts.outDir, manifest)"),
+    "the fresh path writes the manifest (the crash record exists for a FIRST-time render)");
+  ok(block.includes("status: \"pending\""),
+    "the fresh manifest starts all-pending (the per-scene updates mark the truth)");
+});
+
 // ---------------------------------------------------------------------------
 // S133 (PAE-5) — the animation QC lenses: the readcheck (the opuscar TEXTS
 // law, nativized) + the determinism sweep elevation. Pins: the read-time

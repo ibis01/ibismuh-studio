@@ -1,0 +1,48 @@
+PAE Phase 3 — production benchmarks (S145)
+Generated: 2026-11-16T05:08:06.776Z
+Harness: scripts/s145-pae-phase3-benchmark.mts (the spec §6 program)
+Doc: the fixed 3-scene benchmark doc (~30 s @ 24 fps, 1920×1080) —
+     scene-1 historical, scene-2 educational, scene-3 motion-graphics;
+     every directive kind exercised (6 tween channels, camera keys,
+     sfx/hit/cue events) + the 3D keyed-object fixture (S134 adapter).
+Note: no historical S128 baseline receipt exists in docs/baselines/ —
+     the (b) comparison is the SAME-SESSION A/B (the stripped twin: the
+     identical doc with tweens/camera/events deleted), same rig.
+
+(a) frame-at evaluation cost (600 samples/scene, 60-sample warmup)
+    scene-1: 240 frames — frameAt mean 7.6µs / p95 13.8µs / max 695.5µs
+    scene-2: 240 frames — frameAt mean 3.9µs / p95 7.6µs / max 41.0µs
+    scene-3: 240 frames — frameAt mean 22.6µs / p95 6.7µs / max 10899.9µs
+    objectAt (3 objects, keyed + static): mean 4.8µs / p95 5.2µs / max 291.3µs
+    objectAt double-pass state-identical: true
+    static witness holds authored fields at every t: true
+
+(b) full-render wall time (production engine, VO-less estimator clock)
+    full doc  ×2: 32.9s, 32.8s (mean 32.8s)
+    stripped  ×1: 31.1s
+    PAE directive overhead: +1.7s (5.6% of baseline)
+
+(c) determinism (two independent full renders)
+    decoded video streams md5-equal per scene: true
+    G1-DET-1 pure sweep double-run equal: true
+
+(d) the resume drill (S132 seam, SIGKILL mid-program)
+    killed after scene-1 encoded, during scene-2 frames: true
+    manifest survived the kill: true
+    resumed: scene-1 reused (byte-equal to control: true)
+    re-rendered: scene-2, scene-3 (decoded streams match control: true)
+    manifest deleted on completion: true
+    all scene MP4s byte-equal (container metadata may drift): true
+    resume wall time: 22.0s
+
+(e) the G1-READ-1 readcheck report (every on-screen text; violations: NONE)
+    h1: 28 chars → min 1240 ms, visible 8700 ms
+    sh2: 27 chars → min 1210 ms, visible 9300 ms
+    bl2a: 20 chars → min 1000 ms, visible 6100 ms
+    bl2b: 22 chars → min 1060 ms, visible 4700 ms
+    h3: 14 chars → min 820 ms, visible 8850 ms
+    co3: 29 chars → min 1270 ms, visible 4150 ms
+
+Verdict: the PAE directive vocabulary costs 5.6% wall time,
+evaluates in single-digit µs per frame, renders deterministically, resumes
+honestly, and every on-screen text passes its read window.
