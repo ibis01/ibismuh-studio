@@ -1,0 +1,844 @@
+     1→// S125 (K1) — the 2D character rig contract: CharacterRigDoc, the parts
+     2→// library, the standard slot vocabulary, and the validator (roadmap §6).
+     3→//
+     4→// THE OBJECTIVE (§6 verbatim): characters that actually move — poses,
+     5→// gestures, mouth shapes on narration — deterministically and natively,
+     6→// consistent with the S93 honesty law. The rig doc is the grammar of record;
+     7→// the pose evaluation (rig-frame.ts), the compose seam (rig-compose.ts), the
+     8→// planner (rig-director.ts) and the renderer (rig-render.ts) consume ONLY
+     9→// validated docs — the grammar gate runs at admission and frameAt-style
+    10→// functions carry no defensive branches (the graphics frame.ts law).
+    11→//
+    12→// THE GRAMMAR: a puppet rig is a PARTS SCENE GRAPH (art references + FK
+    13→// kinematics: parent chains, pivots, rest placements) plus a POSE SHEET
+    14→// (named joint states). Part art lives in the character's parts library
+    15→// (Character.parts — RigPartArt rows, stage-coordinate SVG fragments); the
+    16→// rig's parts reference art by id (referential integrity is a validator
+    17→// ERROR, never a substitute).
+    18→//
+    19→// THE STANDARD SLOTS (§6 verbatim): "standard slot names so pose sheets map:
+    20→// mouth set (closed|open|wide|oh|smile — 5 shapes is enough for honest
+    21→// narration-sync at explainer quality), brow, arm-l/arm-r 3-way
+    22→// (rest/raise/point)". The mouth set is an ART SWAP (five part variants — no
+    23→// honest "oh" exists as a rotation of "closed"), so it is validated as a
+    24→// part-variant set: a rig with any mouth part carries the complete five
+    25→// (partial = ERROR — the speaking beats would visibly break); a mouthless rig
+    26→// validates with a warning and renders closed-mouth (the rig will not fake
+    27→// speech). The brow and arm states are POSES on single parts (FK rotations
+    28→// cover explainer poses — the §6 non-goals); missing standard poses are a
+    29→// warning and the planner degrades to rest — quality loss, never breakage.
+    30→//
+    31→// PURE — no fs, no clock, no randomness (the S64 law generalizes). Same
+    32→// inputs, byte-identical results.
+    33→import { isEaseName } from "../anim/easing";
+    34→import type { Placement } from "../whiteboard/svg";
+    35→
+    36→// ---------------------------------------------------------------------------
+    37→// Version + the named walls (design record §7)
+    38→// ---------------------------------------------------------------------------
+    39→
+    40→export const RIG_VERSION = 1;
+    41→
+    42→export const RIG_STAGE_MIN = 240;
+    43→export const RIG_STAGE_MAX = 2160;
+    44→
+    45→/** The named walls — a puppet needs a dozen-ish parts and a sheet of poses,
+    46→ *  not an atlas. Grammar sprawl is K1's named risk; new slots/variants are a
+    47→ *  design-doc slice, never a drive-by union member (the G1 grammar law). */
+    48→export const RIG_BUDGETS = {
+    49→  parts: 24,
+    50→  poses: 24,
+    51→  jointsPerPose: 16,
+    52→  timelineRows: 64,
+    53→  svgCharsPerPart: 24_000,
+    54→} as const;
+    55→
+    56→/** The joint bands — the never-NaN floor's input side: the validator bounds
+    57→ *  every joint so the FK composition cannot produce NaN/Infinity (the pin:
+    58→ *  rig part transforms never NaN). rotateDeg is a delta from rest; scale is
+    59→ *  a multiplier; x/y are stage-px offsets. */
+    60→export const RIG_JOINT_BANDS = {
+    61→  rotateDegMax: 360,
+    62→  scaleMin: 0.2,
+    63→  scaleMax: 3,
+    64→  offsetFactorMax: 1.5,
+    65→} as const;
+    66→
+    67→// ---------------------------------------------------------------------------
+    68→// The slot vocabulary
+    69→// ---------------------------------------------------------------------------
+    70→
+    71→/** The mouth set — five shapes, an art swap (part variants), enough for
+    72→ *  honest beat-sync at explainer quality (the §6 wording; the scope claim is
+    73→ *  BEAT-SYNC, never phoneme lip-sync, in every doc/UI string). */
+    74→export const RIG_MOUTH_SLOTS = ["closed", "open", "wide", "oh", "smile"] as const;
+    75→export type RigMouthSlot = (typeof RIG_MOUTH_SLOTS)[number];
+    76→
+    77→export function isMouthSlot(v: string): v is RigMouthSlot {
+    78→  return (RIG_MOUTH_SLOTS as readonly string[]).includes(v);
+    79→}
+    80→
+    81→/** The part slots — the closed slot vocabulary. `prop` is the escape hatch
+    82→ *  for held objects (free-form, planner-optional). */
+    83→export const RIG_PART_SLOTS = [
+    84→  "head",
+    85→  "torso",
+    86→  "brow",
+    87→  "eye",
+    88→  "arm-l",
+    89→  "arm-r",
+    90→  "forearm-l",
+    91→  "forearm-r",
+    92→  "hand-l",
+    93→  "hand-r",
+    94→  "leg-l",
+    95→  "leg-r",
+    96→  "mouth",
+    97→  "prop",
+    98→] as const;
+    99→export type RigPartSlot = (typeof RIG_PART_SLOTS)[number];
+   100→
+   101→export function isPartSlot(v: string): v is RigPartSlot {
+   102→  return (RIG_PART_SLOTS as readonly string[]).includes(v);
+   103→}
+   104→
+   105→/** The standard pose-sheet names the planner may gesture with (the §6
+   106→ *  "arm-l/arm-r 3-way (rest/raise/point)" + the brow pair). Missing entries
+   107→ *  are warnings — gestures degrade to rest honestly. */
+   108→export const RIG_ARM_STATES = ["rest", "raise", "point"] as const;
+   109→export const RIG_BROW_STATES = ["rest", "raise"] as const;
+   110→
+   111→export function standardPoseIds(rig: { parts: RigPart[] }): string[] {
+   112→  const ids: string[] = [];
+   113→  const has = (slot: RigPartSlot) => rig.parts.some((p) => p.slot === slot);
+   114→  if (has("arm-l")) for (const s of RIG_ARM_STATES) ids.push(`arm-l-${s}`);
+   115→  if (has("arm-r")) for (const s of RIG_ARM_STATES) ids.push(`arm-r-${s}`);
+   116→  if (has("brow")) for (const s of RIG_BROW_STATES) ids.push(`brow-${s}`);
+   117→  return ids;
+   118→}
+   119→
+   120→// ---------------------------------------------------------------------------
+   121→// The contracts
+   122→// ---------------------------------------------------------------------------
+   123→
+   124→/** One part-art row in the character's parts library (Character.parts). The
+   125→ *  svg fragment is drawn in the rig STAGE's coordinates at REST (identity) —
+   126→ *  the placement math composes deltas on top, never re-baselines the art. */
+   127→export interface RigPartArt {
+   128→  id: string;
+   129→  slot: RigPartSlot;
+   130→  /** The mouth slot's variant (which of the five shapes this art draws). */
+   131→  variant?: RigMouthSlot;
+   132→  /** The part's SVG markup in stage coordinates (rest = identity). */
+   133→  svg: string;
+   134→}
+   135→
+   136→/** One rig part — a node in the FK scene graph. */
+   137→export interface RigPart {
+   138→  id: string;
+   139→  slot: RigPartSlot;
+   140→  /** Mouth parts carry WHICH shape they draw (must match the art row). */
+   141→  variant?: RigMouthSlot;
+   142→  /** The parts-library art id this node draws. */
+   143→  svgRef: string;
+   144→  /** Draw order (z-ascending). Ties are a warning, resolved stably by id. */
+   145→  z: number;
+   146→  /** The FK pivot in stage coordinates — finite, inside the stage band. */
+   147→  pivot: { x: number; y: number };
+   148→  /** The FK parent (part id) — acyclic by validator law. */
+   149→  parent?: string;
+   150→  /** The rest placement — the whiteboard svg.ts Placement shape (the graphics `at:` law). */
+   151→  rest: Placement;
+   152→}
+   153→
+   154→/** One joint state — a delta from rest. rotateDeg is required (the FK verb);
+   155→ *  the rest are optional refinements. All values validator-bounded. */
+   156→export interface RigJointState {
+   157→  rotateDeg: number;
+   158→  x?: number;
+   159→  y?: number;
+   160→  scale?: number;
+   161→}
+   162→
+   163→/** One pose — a named joint state over the rig's parts. `joints` keys are
+   164→ *  part ids (referential integrity = validator ERROR). The standard sheet
+   165→ *  (`arm-l-raise` …) uses the slot-state naming above. */
+   166→export interface RigPose {
+   167→  id: string;
+   168→  name: string;
+   169→  joints: Record<string, RigJointState>;
+   170→}
+   171→
+   172→/** The versioned rig doc — the grammar of record for one character. */
+   173→export interface CharacterRigDoc {
+   174→  version: number;
+   175→  /** The rig STAGE (art space): parts are drawn in these coordinates. */
+   176→  width: number;
+   177→  height: number;
+   178→  /** The editor/preview clock (24 | 30 — the shared timebase pin). The
+   179→   *  per-video render hook renders at the VIDEO's fps; the doc fps never
+   180→   *  forks the video clock (design record §3). */
+   181→  fps: 24 | 30;
+   182→  /** Background fill, "#rrggbb" — junk is an ERROR (the graphics law). */
+   183→  background: string;
+   184→  parts: RigPart[];
+   185→  poses: RigPose[];
+   186→}
+   187→
+   188→export interface RigValidationResult {
+   189→  doc: CharacterRigDoc | null; // null on structural nonsense
+   190→  errors: string[];
+   191→  warnings: string[];
+   192→}
+   193→
+   194→// ---------------------------------------------------------------------------
+   195→// Small pure readers
+   196→// ---------------------------------------------------------------------------
+   197→
+   198→const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+   199→
+   200→function asRecord(v: unknown): Record<string, unknown> | null {
+   201→  return typeof v === "object" && v !== null && !Array.isArray(v)
+   202→    ? (v as Record<string, unknown>)
+   203→    : null;
+   204→}
+   205→
+   206→function num(v: unknown): number | null {
+   207→  return typeof v === "number" && Number.isFinite(v) ? v : null;
+   208→}
+   209→
+   210→function str(v: unknown): string | null {
+   211→  return typeof v === "string" ? v : null;
+   212→}
+   213→
+   214→function placement(v: unknown, where: string, errors: string[]): Placement | null {
+   215→  const r = asRecord(v);
+   216→  if (!r) {
+   217→    errors.push(`${where}: rest placement missing`);
+   218→    return null;
+   219→  }
+   220→  const x = num(r.x);
+   221→  const y = num(r.y);
+   222→  const scale = num(r.scale);
+   223→  const rotateDeg = num(r.rotateDeg);
+   224→  if (x === null || y === null || scale === null || rotateDeg === null) {
+   225→    errors.push(`${where}: rest placement must be finite {x, y, scale, rotateDeg}`);
+   226→    return null;
+   227→  }
+   228→  return { x, y, scale, rotateDeg };
+   229→}
+   230→
+   231→function idLike(v: unknown): string | null {
+   232→  const s = str(v);
+   233→  if (!s) return null;
+   234→  const t = s.trim();
+   235→  return t.length > 0 && t.length <= 64 && /^[\w:.-]+$/.test(t) ? t : null;
+   236→}
+   237→
+   238→// ---------------------------------------------------------------------------
+   239→// The parts library validator
+   240→// ---------------------------------------------------------------------------
+   241→
+   242→export interface RigPartsValidationResult {
+   243→  parts: RigPartArt[] | null; // null on structural nonsense
+   244→  errors: string[];
+   245→  warnings: string[];
+   246→}
+   247→
+   248→/** Validate the character's parts library (Character.parts rows). The svg
+   249→ *  fragment is checked for shape + budget here; sanitization runs at compose
+   250→ *  time through the shared sanitizeSvg (one sanitizer, two consumers). */
+   251→export function validateRigParts(raw: unknown): RigPartsValidationResult {
+   252→  const errors: string[] = [];
+   253→  const warnings: string[] = [];
+   254→  if (!Array.isArray(raw)) {
+   255→    errors.push("parts must be an array of part rows");
+   256→    return { parts: null, errors, warnings };
+   257→  }
+   258→  if (raw.length > RIG_BUDGETS.parts) {
+   259→    errors.push(`parts: ${raw.length} rows exceeds the wall (${RIG_BUDGETS.parts})`);
+   260→    return { parts: null, errors, warnings };
+   261→  }
+   262→  const seen = new Set<string>();
+   263→  const out: RigPartArt[] = [];
+   264→  for (let i = 0; i < raw.length; i++) {
+   265→    const where = `part #${i + 1}`;
+   266→    const r = asRecord(raw[i]);
+   267→    if (!r) {
+   268→      errors.push(`${where}: not an object`);
+   269→      continue;
+   270→    }
+   271→    const id = idLike(r.id);
+   272→    if (!id) {
+   273→      errors.push(`${where}: id must be a short identifier`);
+   274→      continue;
+   275→    }
+   276→    const w = `part "${id}"`;
+   277→    if (seen.has(id)) {
+   278→      errors.push(`${w}: duplicate id`);
+   279→      continue;
+   280→    }
+   281→    seen.add(id);
+   282→    const slot = str(r.slot);
+   283→    if (!slot || !isPartSlot(slot)) {
+   284→      errors.push(`${w}: slot must be one of ${RIG_PART_SLOTS.join(", ")}`);
+   285→      continue;
+   286→    }
+   287→    const art: RigPartArt = { id, slot, svg: "" };
+   288→    if (slot === "mouth") {
+   289→      const variant = str(r.variant);
+   290→      if (!variant || !isMouthSlot(variant)) {
+   291→        errors.push(`${w}: a mouth part must carry variant ∈ ${RIG_MOUTH_SLOTS.join(", ")}`);
+   292→        continue;
+   293→      }
+   294→      art.variant = variant;
+   295→    } else if (r.variant !== undefined) {
+   296→      warnings.push(`${w}: variant dropped — only mouth parts carry variants`);
+   297→    }
+   298→    const svg = str(r.svg);
+   299→    if (!svg || svg.trim().length === 0) {
+   300→      errors.push(`${w}: svg missing — an empty part renders nothing and lies about it`);
+   301→      continue;
+   302→    }
+   303→    if (svg.length > RIG_BUDGETS.svgCharsPerPart) {
+   304→      errors.push(
+   305→        `${w}: svg is ${svg.length} chars — over the ${RIG_BUDGETS.svgCharsPerPart} wall (a part is a limb, not a poster)`
+   306→      );
+   307→      continue;
+   308→    }
+   309→    art.svg = svg;
+   310→    out.push(art);
+   311→  }
+   312→  if (errors.length > 0) return { parts: null, errors, warnings };
+   313→  // Mouth-set completeness across the LIBRARY rows (the doc validator checks
+   314→  // the RIG's references against this set).
+   315→  const mouths = out.filter((p) => p.slot === "mouth").map((p) => p.variant as RigMouthSlot);
+   316→  const dupMouth = mouths.filter((m, i) => mouths.indexOf(m) !== i);
+   317→  if (dupMouth.length > 0) {
+   318→    errors.push(`parts: duplicate mouth variants — ${[...new Set(dupMouth)].join(", ")}`);
+   319→    return { parts: null, errors, warnings };
+   320→  }
+   321→  return { parts: out, errors, warnings };
+   322→}
+   323→
+   324→/** Tolerant entry: null on unreadable. */
+   325→export function parseRigParts(json: string | null | undefined): RigPartArt[] | null {
+   326→  if (!json) return null;
+   327→  try {
+   328→    return validateRigParts(JSON.parse(json)).parts;
+   329→  } catch {
+   330→    return null;
+   331→  }
+   332→}
+   333→
+   334→/** Strict write: declared fields, declared order — byte-stable round-trip. */
+   335→export function writeRigParts(parts: RigPartArt[]): string {
+   336→  return JSON.stringify(
+   337→    parts.map((p) => {
+   338→      const out: Record<string, unknown> = { id: p.id, slot: p.slot };
+   339→      if (p.variant !== undefined) out.variant = p.variant;
+   340→      out.svg = p.svg;
+   341→      return out;
+   342→    })
+   343→  );
+   344→}
+   345→
+   346→// ---------------------------------------------------------------------------
+   347→// The rig doc validator
+   348→// ---------------------------------------------------------------------------
+   349→
+   350→function parsePose(raw: unknown, partIds: Set<string>, errors: string[], stageMax: number): RigPose | null {
+   351→  const r = asRecord(raw);
+   352→  if (!r) {
+   353→    errors.push("a pose is not an object");
+   354→    return null;
+   355→  }
+   356→  const id = idLike(r.id);
+   357→  const name = str(r.name);
+   358→  if (!id) {
+   359→    errors.push("a pose is missing an id");
+   360→    return null;
+   361→  }
+   362→  const where = `pose "${id}"`;
+   363→  if (!name || !name.trim()) {
+   364→    errors.push(`${where}: name missing`);
+   365→    return null;
+   366→  }
+   367→  const jointsRaw = asRecord(r.joints);
+   368→  if (!jointsRaw) {
+   369→    errors.push(`${where}: joints missing`);
+   370→    return null;
+   371→  }
+   372→  const keys = Object.keys(jointsRaw);
+   373→  if (keys.length > RIG_BUDGETS.jointsPerPose) {
+   374→    errors.push(`${where}: ${keys.length} joints exceeds the wall (${RIG_BUDGETS.jointsPerPose})`);
+   375→    return null;
+   376→  }
+   377→  const joints: Record<string, RigJointState> = {};
+   378→  for (const partId of keys) {
+   379→    const j = asRecord(jointsRaw[partId]);
+   380→    if (!j) {
+   381→      errors.push(`${where}: joint "${partId}" is not an object`);
+   382→      return null;
+   383→    }
+   384→    const rotateDeg = num(j.rotateDeg);
+   385→    if (rotateDeg === null) {
+   386→      errors.push(`${where}: joint "${partId}" rotateDeg must be a finite number`);
+   387→      return null;
+   388→    }
+   389→    if (Math.abs(rotateDeg) > RIG_JOINT_BANDS.rotateDegMax) {
+   390→      errors.push(
+   391→        `${where}: joint "${partId}" rotateDeg ${rotateDeg} outside the band (±${RIG_JOINT_BANDS.rotateDegMax})`
+   392→      );
+   393→      return null;
+   394→    }
+   395→    const state: RigJointState = { rotateDeg };
+   396→    const x = num(j.x);
+   397→    const y = num(j.y);
+   398→    const scale = num(j.scale);
+   399→    if (j.x !== undefined && x === null) {
+   400→      errors.push(`${where}: joint "${partId}" x must be a finite number`);
+   401→      return null;
+   402→    }
+   403→    if (j.y !== undefined && y === null) {
+   404→      errors.push(`${where}: joint "${partId}" y must be a finite number`);
+   405→      return null;
+   406→    }
+   407→    if (j.scale !== undefined && scale === null) {
+   408→      errors.push(`${where}: joint "${partId}" scale must be a finite number`);
+   409→      return null;
+   410→    }
+   411→    if (x !== null) {
+   412→      if (Math.abs(x as number) > stageMax) {
+   413→        errors.push(`${where}: joint "${partId}" x ${x} outside the stage band (±${Math.round(stageMax)}px)`);
+   414→        return null;
+   415→      }
+   416→      state.x = x as number;
+   417→    }
+   418→    if (y !== null) {
+   419→      if (Math.abs(y as number) > stageMax) {
+   420→        errors.push(`${where}: joint "${partId}" y ${y} outside the stage band (±${Math.round(stageMax)}px)`);
+   421→        return null;
+   422→      }
+   423→      state.y = y as number;
+   424→    }
+   425→    if (scale !== null) {
+   426→      if ((scale as number) < RIG_JOINT_BANDS.scaleMin || (scale as number) > RIG_JOINT_BANDS.scaleMax) {
+   427→        errors.push(
+   428→          `${where}: joint "${partId}" scale ${scale} outside the band (${RIG_JOINT_BANDS.scaleMin}..${RIG_JOINT_BANDS.scaleMax})`
+   429→        );
+   430→        return null;
+   431→      }
+   432→      state.scale = scale as number;
+   433→    }
+   434→    joints[partId] = state;
+   435→  }
+   436→  for (const partId of keys) {
+   437→    if (!partIds.has(partId)) {
+   438→      errors.push(`${where}: joint "${partId}" references no rig part (referential integrity)`);
+   439→      return null;
+   440→    }
+   441→  }
+   442→  return { id, name: name.trim().slice(0, 80), joints };
+   443→}
+   444→
+   445→/** Validate a rig doc against its parts library. `parts` is the ALREADY
+   446→ *  validated library (validateRigParts) — the caller resolves it first so
+   447→ *  the two gates cannot disagree. PURE. */
+   448→export function validateRigDoc(raw: unknown, parts: RigPartArt[] | null): RigValidationResult {
+   449→  const errors: string[] = [];
+   450→  const warnings: string[] = [];
+   451→
+   452→  const root = asRecord(raw);
+   453→  if (!root) {
+   454→    errors.push("rig doc must be an object");
+   455→    return { doc: null, errors, warnings };
+   456→  }
+   457→  if (root.version !== RIG_VERSION) {
+   458→    errors.push(`rig version must be ${RIG_VERSION} — got ${String(root.version)}`);
+   459→    return { doc: null, errors, warnings };
+   460→  }
+   461→  const width = num(root.width);
+   462→  const height = num(root.height);
+   463→  if (width === null || height === null) {
+   464→    errors.push("rig width/height must be finite numbers");
+   465→    return { doc: null, errors, warnings };
+   466→  }
+   467→  if (
+   468→    width < RIG_STAGE_MIN || width > RIG_STAGE_MAX ||
+   469→    height < RIG_STAGE_MIN || height > RIG_STAGE_MAX
+   470→  ) {
+   471→    errors.push(
+   472→      `rig stage ${width}x${height} outside the walls (${RIG_STAGE_MIN}..${RIG_STAGE_MAX} each)`
+   473→    );
+   474→    return { doc: null, errors, warnings };
+   475→  }
+   476→  if (root.fps !== 24 && root.fps !== 30) {
+   477→    errors.push(`rig fps must be 24 or 30 — got ${String(root.fps)} (the shared timebase)`);
+   478→    return { doc: null, errors, warnings };
+   479→  }
+   480→  const background = str(root.background);
+   481→  if (!background || !HEX_RE.test(background)) {
+   482→    errors.push("rig background must be #rrggbb — junk is refused, never substituted");
+   483→    return { doc: null, errors, warnings };
+   484→  }
+   485→  if (!Array.isArray(root.parts) || root.parts.length === 0) {
+   486→    errors.push("rig parts missing — a rig without parts draws nothing");
+   487→    return { doc: null, errors, warnings };
+   488→  }
+   489→  if (root.parts.length > RIG_BUDGETS.parts) {
+   490→    errors.push(`rig parts: ${root.parts.length} exceeds the wall (${RIG_BUDGETS.parts})`);
+   491→    return { doc: null, errors, warnings };
+   492→  }
+   493→  const artIds = new Set((parts ?? []).map((p) => p.id));
+   494→  if (artIds.size === 0) {
+   495→    errors.push("parts library empty — every rig part must reference resolved art");
+   496→    return { doc: null, errors, warnings };
+   497→  }
+   498→
+   499→  // Parts pass 1 — shapes, ids, art references.
+   500→  const seen = new Set<string>();
+   501→  const partRaw: {
+   502→    id: string;
+   503→    slot: RigPartSlot;
+   504→    variant?: RigMouthSlot;
+   505→    svgRef: string;
+   506→    z: number;
+   507→    pivot: { x: number; y: number };
+   508→    parent?: string;
+   509→    rest: Placement;
+   510→  }[] = [];
+   511→  for (let i = 0; i < root.parts.length; i++) {
+   512→    const r = asRecord(root.parts[i]);
+   513→    if (!r) {
+   514→      errors.push(`rig part #${i + 1}: not an object`);
+   515→      continue;
+   516→    }
+   517→    const id = idLike(r.id);
+   518→    if (!id) {
+   519→      errors.push(`rig part #${i + 1}: id must be a short identifier`);
+   520→      continue;
+   521→    }
+   522→    const where = `rig part "${id}"`;
+   523→    if (seen.has(id)) {
+   524→      errors.push(`${where}: duplicate id`);
+   525→      continue;
+   526→    }
+   527→    seen.add(id);
+   528→    const slot = str(r.slot);
+   529→    if (!slot || !isPartSlot(slot)) {
+   530→      errors.push(`${where}: slot must be one of ${RIG_PART_SLOTS.join(", ")}`);
+   531→      continue;
+   532→    }
+   533→    const svgRef = idLike(r.svgRef);
+   534→    if (!svgRef) {
+   535→      errors.push(`${where}: svgRef must be a short identifier`);
+   536→      continue;
+   537→    }
+   538→    if (!artIds.has(svgRef)) {
+   539→      errors.push(`${where}: svgRef "${svgRef}" resolves to no parts-library row (referential integrity)`);
+   540→      continue;
+   541→    }
+   542→    const z = num(r.z);
+   543→    if (z === null) {
+   544→      errors.push(`${where}: z must be a finite number`);
+   545→      continue;
+   546→    }
+   547→    const pivotRec = asRecord(r.pivot);
+   548→    const px = pivotRec ? num(pivotRec.x) : null;
+   549→    const py = pivotRec ? num(pivotRec.y) : null;
+   550→    if (px === null || py === null) {
+   551→      errors.push(`${where}: pivot must be finite {x, y} in stage coordinates (pivot sanity)`);
+   552→      continue;
+   553→    }
+   554→    const offMax = Math.max(width, height) * RIG_JOINT_BANDS.offsetFactorMax;
+   555→    if (Math.abs(px) > offMax || Math.abs(py) > offMax) {
+   556→      errors.push(`${where}: pivot (${px}, ${py}) outside the stage band (±${Math.round(offMax)}px — pivot sanity)`);
+   557→      continue;
+   558→    }
+   559→    const rest = placement(r.rest, where, errors);
+   560→    if (!rest) continue;
+   561→    const part: (typeof partRaw)[number] = { id, slot, svgRef, z, pivot: { x: px, y: py }, rest };
+   562→    if (slot === "mouth") {
+   563→      const variant = str(r.variant);
+   564→      if (!variant || !isMouthSlot(variant)) {
+   565→        errors.push(`${where}: a mouth part must carry variant ∈ ${RIG_MOUTH_SLOTS.join(", ")}`);
+   566→        continue;
+   567→      }
+   568→      // The rig's variant must match its art row's variant — a mismatch is
+   569→      // the exact silent lie a swap-swap rig must never ship.
+   570→      const artRow = (parts ?? []).find((a) => a.id === svgRef);
+   571→      if (artRow && artRow.slot === "mouth" && artRow.variant !== variant) {
+   572→        errors.push(`${where}: variant "${variant}" disagrees with art row "${svgRef}" (${artRow.variant})`);
+   573→        continue;
+   574→      }
+   575→      part.variant = variant;
+   576→    } else if (r.variant !== undefined) {
+   577→      warnings.push(`${where}: variant dropped — only mouth parts carry variants`);
+   578→    }
+   579→    const parent = r.parent === undefined || r.parent === null ? undefined : idLike(r.parent);
+   580→    if (r.parent !== undefined && r.parent !== null && !parent) {
+   581→      errors.push(`${where}: parent must be a part id`);
+   582→      continue;
+   583→    }
+   584→    if (parent) part.parent = parent;
+   585→    partRaw.push(part);
+   586→  }
+   587→  if (errors.length > 0) return { doc: null, errors, warnings };
+   588→
+   589→  const partIds = new Set(partRaw.map((p) => p.id));
+   590→
+   591→  // Parent resolution — referential integrity + acyclicity (the FK chain law).
+   592→  for (const p of partRaw) {
+   593→    if (!p.parent) continue;
+   594→    if (!partIds.has(p.parent)) {
+   595→      errors.push(`rig part "${p.id}": parent "${p.parent}" resolves to no rig part (referential integrity)`);
+   596→    }
+   597→  }
+   598→  if (errors.length > 0) return { doc: null, errors, warnings };
+   599→  const depthOf = new Map<string, number>();
+   600→  const chain = (id: string, seenChain: Set<string>): number | null => {
+   601→    if (depthOf.has(id)) return depthOf.get(id) as number;
+   602→    if (seenChain.has(id)) return null; // cycle
+   603→    const me = partRaw.find((p) => p.id === id);
+   604→    if (!me?.parent) {
+   605→      depthOf.set(id, 0);
+   606→      return 0;
+   607→    }
+   608→    seenChain.add(id);
+   609→    const up = chain(me.parent, seenChain);
+   610→    seenChain.delete(id);
+   611→    if (up === null) return null;
+   612→    depthOf.set(id, up + 1);
+   613→    return up + 1;
+   614→  };
+   615→  let maxDepth = 0;
+   616→  for (const p of partRaw) {
+   617→    const d = chain(p.id, new Set());
+   618→    if (d === null) {
+   619→      errors.push(`rig part "${p.id}": parent chain is cyclic — FK requires a forest`);
+   620→      break;
+   621→    }
+   622→    maxDepth = Math.max(maxDepth, d);
+   623→  }
+   624→  if (errors.length > 0) return { doc: null, errors, warnings };
+   625→  if (maxDepth > 6) {
+   626→    warnings.push(`rig depth ${maxDepth} — beyond 6 FK links, pose authoring gets confusing (kept, warned)`);
+   627→  }
+   628→
+   629→  // Mouth-set completeness over the RIG's mouth parts (the speaking contract).
+   630→  const rigMouths = partRaw.filter((p) => p.slot === "mouth").map((p) => p.variant as RigMouthSlot);
+   631→  if (rigMouths.length === 0) {
+   632→    warnings.push("rig has no mouth parts — the speaking schedule renders closed-mouth (the rig will not fake speech)");
+   633→  } else {
+   634→    const missing = RIG_MOUTH_SLOTS.filter((s) => !rigMouths.includes(s));
+   635→    if (missing.length > 0) {
+   636→      errors.push(`rig mouth set incomplete — missing ${missing.join(", ")} (a partial set visibly breaks the speaking beats)`);
+   637→      return { doc: null, errors, warnings };
+   638→    }
+   639→    const dupMouth = rigMouths.filter((m, i) => rigMouths.indexOf(m) !== i);
+   640→    if (dupMouth.length > 0) {
+   641→      errors.push(`rig mouth set duplicates — ${[...new Set(dupMouth)].join(", ")}`);
+   642→      return { doc: null, errors, warnings };
+   643→    }
+   644→  }
+   645→
+   646→  // Poses.
+   647→  if (!Array.isArray(root.poses)) {
+   648→    errors.push("rig poses missing (an empty sheet is valid; a missing sheet is junk)");
+   649→    return { doc: null, errors, warnings };
+   650→  }
+   651→  if (root.poses.length > RIG_BUDGETS.poses) {
+   652→    errors.push(`rig poses: ${root.poses.length} exceeds the wall (${RIG_BUDGETS.poses})`);
+   653→    return { doc: null, errors, warnings };
+   654→  }
+   655→  const poseSeen = new Set<string>();
+   656→  const poses: RigPose[] = [];
+   657→  const stageMax = Math.max(width, height) * RIG_JOINT_BANDS.offsetFactorMax;
+   658→  for (const rawPose of root.poses) {
+   659→    const pose = parsePose(rawPose, partIds, errors, stageMax);
+   660→    if (!pose) continue;
+   661→    if (poseSeen.has(pose.id)) {
+   662→      errors.push(`pose "${pose.id}": duplicate id`);
+   663→      continue;
+   664→    }
+   665→    poseSeen.add(pose.id);
+   666→    poses.push(pose);
+   667→  }
+   668→  if (errors.length > 0) return { doc: null, errors, warnings };
+   669→
+   670→  // The standard sheet — missing entries warn, gestures degrade to rest.
+   671→  for (const pid of standardPoseIds({ parts: partRaw })) {
+   672→    if (!poseSeen.has(pid)) {
+   673→      warnings.push(`standard pose "${pid}" missing — the planner will not gesture with it (degrades to rest)`);
+   674→    }
+   675→  }
+   676→  // z ties resolve stably (id order) but are told to the author.
+   677→  const zSeen = new Map<number, number>();
+   678→  for (const p of partRaw) zSeen.set(p.z, (zSeen.get(p.z) ?? 0) + 1);
+   679→  for (const [z, n] of zSeen) {
+   680→    if (n > 1) warnings.push(`z ${z} shared by ${n} parts — draw order falls back to id order (stable, but say it with z)`);
+   681→  }
+   682→
+   683→  const doc: CharacterRigDoc = {
+   684→    version: RIG_VERSION,
+   685→    width,
+   686→    height,
+   687→    fps: root.fps === 24 ? 24 : 30,
+   688→    background,
+   689→    parts: partRaw.map((p) => ({
+   690→      id: p.id,
+   691→      slot: p.slot,
+   692→      ...(p.variant !== undefined ? { variant: p.variant } : {}),
+   693→      svgRef: p.svgRef,
+   694→      z: p.z,
+   695→      pivot: { x: p.pivot.x, y: p.pivot.y },
+   696→      ...(p.parent ? { parent: p.parent } : {}),
+   697→      rest: { x: p.rest.x, y: p.rest.y, scale: p.rest.scale, rotateDeg: p.rest.rotateDeg },
+   698→    })),
+   699→    poses,
+   700→  };
+   701→  return { doc, errors, warnings };
+   702→}
+   703→
+   704→/** Tolerant entry (the parseScene3D shape): null on unreadable. */
+   705→export function parseRigDoc(
+   706→  json: string | null | undefined,
+   707→  partsJson: string | null | undefined
+   708→): CharacterRigDoc | null {
+   709→  if (!json) return null;
+   710→  let raw: unknown;
+   711→  try {
+   712→    raw = JSON.parse(json);
+   713→  } catch {
+   714→    return null;
+   715→  }
+   716→  let parts: RigPartArt[] | null = null;
+   717→  if (partsJson) {
+   718→    try {
+   719→      parts = validateRigParts(JSON.parse(partsJson)).parts;
+   720→    } catch {
+   721→      parts = null;
+   722→    }
+   723→  }
+   724→  return validateRigDoc(raw, parts).doc;
+   725→}
+   726→
+   727→// ---------------------------------------------------------------------------
+   728→// Strict write — exactly the declared fields, version first, key order
+   729→// stable. Byte-stable round-trip is the pin:
+   730→// writeRigDoc(validateRigDoc(JSON.parse(writeRigDoc(doc)), parts).doc) ≡ string
+   731→// ---------------------------------------------------------------------------
+   732→
+   733→function serializeJoint(j: RigJointState): Record<string, unknown> {
+   734→  const out: Record<string, unknown> = { rotateDeg: j.rotateDeg };
+   735→  if (j.x !== undefined) out.x = j.x;
+   736→  if (j.y !== undefined) out.y = j.y;
+   737→  if (j.scale !== undefined) out.scale = j.scale;
+   738→  return out;
+   739→}
+   740→
+   741→function serializePose(p: RigPose): Record<string, unknown> {
+   742→  const out: Record<string, unknown> = { id: p.id, name: p.name, joints: {} };
+   743→  const jointsRec = out.joints as Record<string, unknown>;
+   744→  for (const k of Object.keys(p.joints)) jointsRec[k] = serializeJoint(p.joints[k]);
+   745→  return out;
+   746→}
+   747→
+   748→/** Strict write: exactly the declared fields, version first, key order
+   749→ *  stable — byte-stable round-trip is the pin. */
+   750→export function writeRigDoc(doc: CharacterRigDoc): string {
+   751→  return JSON.stringify({
+   752→    version: doc.version,
+   753→    width: doc.width,
+   754→    height: doc.height,
+   755→    fps: doc.fps,
+   756→    background: doc.background,
+   757→    parts: [...doc.parts]
+   758→      .sort((a, b) => a.z - b.z || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+   759→      .map((p) => {
+   760→        const out: Record<string, unknown> = { id: p.id, slot: p.slot };
+   761→        if (p.variant !== undefined) out.variant = p.variant;
+   762→        out.svgRef = p.svgRef;
+   763→        out.z = p.z;
+   764→        out.pivot = { x: p.pivot.x, y: p.pivot.y };
+   765→        if (p.parent !== undefined) out.parent = p.parent;
+   766→        out.rest = { x: p.rest.x, y: p.rest.y, scale: p.rest.scale, rotateDeg: p.rest.rotateDeg };
+   767→        return out;
+   768→      }),
+   769→    poses: doc.poses.map(serializePose),
+   770→  });
+   771→}
+   772→
+   773→// ---------------------------------------------------------------------------
+   774→// The scaffold — the deterministic starter doc (the rig/auto planner's
+   775→// native half; the LLM pass fills expressive states on top)
+   776→// ---------------------------------------------------------------------------
+   777→
+   778→export interface RigPartSeed {
+   779→  id: string;
+   780→  slot: RigPartSlot;
+   781→  variant?: RigMouthSlot;
+   782→  svgRef: string;
+   783→  z: number;
+   784→  pivot: { x: number; y: number };
+   785→  parent?: string;
+   786→}
+   787→
+   788→/** Build a minimal VALID rig doc from part seeds + art rows: every seeded
+   789→ *  part references the art library, the rest placements are identity in
+   790→ *  stage space (the art IS the rest), and the pose sheet starts empty (the
+   791→ *  standard poses arrive from the parts pass / the author — the validator's
+   792→ *  warnings name them). Junk seeds are REFUSED, never substituted (the
+   793→ *  honesty law — a scaffold that silently rewrites inputs would lie). */
+   794→export function scaffoldRigDoc(input: {
+   795→  width?: number;
+   796→  height?: number;
+   797→  fps?: 24 | 30;
+   798→  background?: string;
+   799→  parts: RigPartSeed[];
+   800→  art: RigPartArt[];
+   801→}): RigValidationResult {
+   802→  const warnings: string[] = [];
+   803→  const width = input.width ?? 1080;
+   804→  const height = input.height ?? 1080;
+   805→  const fps = input.fps === 24 ? 24 : 30;
+   806→  const background = input.background ?? "#1c1424";
+   807→  const doc = {
+   808→    version: RIG_VERSION,
+   809→    width,
+   810→    height,
+   811→    fps,
+   812→    background,
+   813→    parts: input.parts.map((p) => ({
+   814→      id: p.id,
+   815→      slot: p.slot,
+   816→      ...(p.variant !== undefined ? { variant: p.variant } : {}),
+   817→      svgRef: p.svgRef,
+   818→      z: p.z,
+   819→      pivot: { x: p.pivot.x, y: p.pivot.y },
+   820→      ...(p.parent ? { parent: p.parent } : {}),
+   821→      rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 },
+   822→    })),
+   823→    poses: [] as RigPose[],
+   824→  };
+   825→  const artCheck = validateRigParts(input.art);
+   826→  if (!artCheck.parts) {
+   827→    return { doc: null, errors: artCheck.errors, warnings };
+   828→  }
+   829→  const result = validateRigDoc(doc, artCheck.parts);
+   830→  return { doc: result.doc, errors: result.errors, warnings: [...warnings, ...result.warnings] };
+   831→}
+   832→
+   833→// ---------------------------------------------------------------------------
+   834→// The ease reader shared with the timeline grammar (rig-frame.ts) — the doc
+   835→// itself carries no timelines in v1 (the compile-only law, design record §1);
+   836→// this reader exists so both grammars share ONE ease check.
+   837→// ---------------------------------------------------------------------------
+   838→
+   839→/** Shared ease reader for the timeline grammar — "linear" is the fallback
+   840→ *  (motion is honest before it is pretty). */
+   841→export function readEase(v: unknown): string {
+   842→  return typeof v === "string" && isEaseName(v) ? v : "linear";
+   843→}
+   844→

@@ -1,0 +1,840 @@
+     1→"use client";
+     2→
+     3→// Scene Studio — per-scene image editing dialog ("edit each storyboard image
+     4→// to suit my taste"). Four ways to shape a scene's art, all in one place:
+     5→//   • Art style   — 11-style taste palette (SCENE_ART_STYLES) woven into the
+     6→//                   scene's image prompt at generation time
+     7→//   • Prompt      — edit the visual prompt / mood text, save, regenerate
+     8→//   • AI edit     — instruction-based edit of the CURRENT image ("make it
+     9→//                   night, remove the crowd") that keeps the composition
+    10→//   • Upload      — replace with your own artwork (cover-cropped to the
+    11→//                   pipeline canvas server-side)
+    12→//
+    13→// Text edits (PATCH) never invalidate the render; image actions do (the
+    14→// server deletes stale MP4s), which the copy below makes explicit.
+    15→
+    16→import { useEffect, useRef, useState } from "react";
+    17→import {
+    18→  Dialog,
+    19→  DialogContent,
+    20→  DialogDescription,
+    21→  DialogHeader,
+    22→  DialogTitle,
+    23→} from "@/components/ui/dialog";
+    24→import { Button } from "@/components/ui/button";
+    25→import { Input } from "@/components/ui/input";
+    26→import { Label } from "@/components/ui/label";
+    27→import { Textarea } from "@/components/ui/textarea";
+    28→import { clsx } from "clsx";
+    29→import {
+    30→  Brush,
+    31→  ImageUp,
+    32→  Loader2,
+    33→  Presentation,
+    34→  RefreshCw,
+    35→  Save,
+    36→  ShieldCheck,
+    37→  Sparkles,
+    38→} from "lucide-react";
+    39→import { toast } from "sonner";
+    40→import { SCENE_ART_STYLES, type SceneDTO, type SlideDTO } from "@/lib/tubeforge/types";
+    41→import { SceneTrustPanel } from "./scene-trust-panel";
+    42→
+    43→type Busy = "save" | "regen" | "edit" | "upload" | null;
+    44→
+    45→/** Friendly labels for the slide layout catalog (slides.ts SLIDE_LAYOUTS). */
+    46→const SLIDE_LAYOUT_LABELS: Record<string, string> = {
+    47→  statement: "Statement",
+    48→  icon: "Icon",
+    49→  photo: "Photo card",
+    50→  counter: "Counter",
+    51→  bars: "Comparison bars",
+    52→  card: "Spec card",
+    53→  steps: "Steps",
+    54→  price: "Price chip",
+    55→};
+    56→
+    57→/** Dot colors for the slide accent catalog (mirrors slides.ts ACCENT_HEX). */
+    58→const SLIDE_ACCENT_HEX: Record<string, string> = {
+    59→  yellow: "#FFC918",
+    60→  green: "#00A64F",
+    61→  red: "#FF3B30",
+    62→  blue: "#0A7CFF",
+    63→  mono: "#0D0D0F",
+    64→};
+    65→
+    66→/** Two-tone gradient swatch per art style — a quick visual signature for
+    67→ *  the palette grid (UI-only; the prompt text stays the source of truth). */
+    68→const STYLE_SWATCHES: Record<string, [string, string]> = {
+    69→  default: ["#6366f1", "#a855f7"],
+    70→  photoreal: ["#38bdf8", "#34d399"],
+    71→  anime: ["#f472b6", "#60a5fa"],
+    72→  watercolor: ["#fbcfe8", "#bfdbfe"],
+    73→  comic: ["#ef4444", "#facc15"],
+    74→  render3d: ["#22d3ee", "#818cf8"],
+    75→  noir: ["#e5e5e5", "#525252"],
+    76→  vintage: ["#dcb579", "#8a5a2b"],
+    77→  neon: ["#e879f9", "#22d3ee"],
+    78→  pastel: ["#fde68a", "#c4b5fd"],
+    79→  epic: ["#f59e0b", "#4338ca"],
+    80→};
+    81→const styleSwatch = (id: string): [string, string] =>
+    82→  STYLE_SWATCHES[id] ?? STYLE_SWATCHES.default;
+    83→
+    84→export function SceneEditorDialog({
+    85→  videoId,
+    86→  scene,
+    87→  open,
+    88→  onOpenChange,
+    89→  onUpdated,
+    90→  renderMode = "kenburns",
+    91→  slide = null,
+    92→  slideBusy = false,
+    93→  onRerollSlide,
+    94→}: {
+    95→  videoId: string;
+    96→  scene: SceneDTO | null;
+    97→  open: boolean;
+    98→  onOpenChange: (v: boolean) => void;
+    99→  /** Called after ANY successful change so the parent refreshes storyboard + video. */
+   100→  onUpdated: () => void;
+   101→  /** Video render mode — "slides" unlocks the slide design section. */
+   102→  renderMode?: string;
+   103→  /** This scene's designed slide (null = deck not designed yet). */
+   104→  slide?: SlideDTO | null;
+   105→  /** True while the slide design re-roll job is in flight. */
+   106→  slideBusy?: boolean;
+   107→  /** Re-design just this slide (fresh AI take) — parent owns the job + polling. */
+   108→  onRerollSlide?: () => void;
+   109→}) {
+   110→  const [visual, setVisual] = useState("");
+   111→  const [mood, setMood] = useState("");
+   112→  const [style, setStyle] = useState("default");
+   113→  const [narration, setNarration] = useState("");
+   114→  const [caption, setCaption] = useState("");
+   115→  const [instruction, setInstruction] = useState("");
+   116→  // Stage 5 (module C) — the cast's logged look for THIS scene. The director
+   117→  // pass proposes it; the human adjusts it here; an approved plan weaves it
+   118→  // into the image prompt on the next re-roll.
+   119→  const [outfit, setOutfit] = useState("");
+   120→  const [accessory, setAccessory] = useState("");
+   121→  const [busy, setBusy] = useState<Busy>(null);
+   122→  const fileRef = useRef<HTMLInputElement>(null);
+   123→  const [pendingFile, setPendingFile] = useState<File | null>(null);
+   124→
+   125→  // Stage 4a (T-4.6) — in-dialog regeneration: stay open, poll until the
+   126→  // repaint lands, then offer a Before/After compare of the image.
+   127→  const [repainting, setRepainting] = useState(false);
+   128→  const [prevImage, setPrevImage] = useState<string | null>(null);
+   129→  const [compare, setCompare] = useState<"after" | "before">("after");
+   130→  const lastImageRef = useRef<string | null>(null);
+   131→
+   132→  // Re-seed local state whenever a different scene opens — render-time
+   133→  // adjust (guarded seed compare) replacing the re-seed effect: same
+   134→  // trigger triple (scene index, repaint, open), same final state, one
+   135→  // fewer paint.
+   136→  const [sceneSeed, setSceneSeed] = useState({
+   137→    index: scene?.index,
+   138→    imageUrl: scene?.imageUrl,
+   139→    open,
+   140→  });
+   141→  if (
+   142→    scene &&
+   143→    (sceneSeed.index !== scene.index ||
+   144→      sceneSeed.imageUrl !== scene.imageUrl ||
+   145→      sceneSeed.open !== open)
+   146→  ) {
+   147→    setSceneSeed({ index: scene.index, imageUrl: scene.imageUrl, open });
+   148→    setVisual(scene.visual);
+   149→    setMood(scene.mood);
+   150→    setStyle(scene.style || "default");
+   151→    setNarration(scene.narration);
+   152→    setCaption(scene.caption);
+   153→    setInstruction("");
+   154→    setPendingFile(null);
+   155→    setOutfit(scene.appearance?.outfit ?? "");
+   156→    setAccessory(scene.appearance?.accessory ?? "");
+   157→  }
+   158→
+   159→  // Track image transitions while open — any repaint (re-roll, AI edit,
+   160→  // upload) records the previous take for the Before/After compare.
+   161→  useEffect(() => {
+   162→    if (!open || !scene) return;
+   163→    const current = scene.imageUrl;
+   164→    if (lastImageRef.current && current && current !== lastImageRef.current) {
+   165→      setPrevImage(lastImageRef.current);
+   166→      setCompare("after");
+   167→    }
+   168→    lastImageRef.current = current;
+   169→  }, [scene?.imageUrl, open, scene]);
+   170→
+   171→  if (!scene) return null;
+   172→
+   173→  const dirty =
+   174→    visual !== scene.visual ||
+   175→    mood !== scene.mood ||
+   176→    style !== (scene.style || "default") ||
+   177→    narration !== scene.narration ||
+   178→    caption !== scene.caption;
+   179→
+   180→  /** Stage 5 (module C) — save the cast's look for this scene. Separate from
+   181→   *  saveText: it targets the appearance log (PUT /appearance), not the
+   182→   *  scene row, and never invalidates anything — the look applies at the
+   183→   *  next re-roll under an approved plan. */
+   184→  const appearanceDirty =
+   185→    scene.hostInScene &&
+   186→    (outfit !== (scene.appearance?.outfit ?? "") ||
+   187→      accessory !== (scene.appearance?.accessory ?? ""));
+   188→
+   189→  const saveAppearance = async (): Promise<boolean> => {
+   190→    if (!appearanceDirty) return true;
+   191→    try {
+   192→      const res = await fetch(`/api/videos/${videoId}/appearance`, {
+   193→        method: "PUT",
+   194→        headers: { "Content-Type": "application/json" },
+   195→        body: JSON.stringify({ sceneIndex: scene.index, outfit, accessory }),
+   196→      });
+   197→      const d = (await res.json()) as { error?: string };
+   198→      if (!res.ok) throw new Error(d.error ?? "Could not save the look");
+   199→      toast.success(`Look saved for scene ${scene.index}`, {
+   200→        description: "Re-roll the scene to repaint it in this outfit (active under an approved director plan).",
+   201→      });
+   202→      onUpdated();
+   203→      return true;
+   204→    } catch (e) {
+   205→      fail(e, "Could not save the look");
+   206→      return false;
+   207→    }
+   208→  };
+   209→
+   210→  const fail = (e: unknown, fallback: string) =>
+   211→    toast.error(e instanceof Error ? e.message : fallback, {
+   212→      description: e instanceof Error ? undefined : fallback,
+   213→    });
+   214→
+   215→  /** PATCH the scene text; returns true on success. (Stage 4a, T-4.6:
+   216→   *  narration + caption ride the same save; a narration change reports
+   217→   *  `invalidated` when it cleared a stale voiceover.) */
+   218→  const saveText = async (silent = false): Promise<boolean> => {
+   219→    if (!dirty) return true;
+   220→    try {
+   221→      const body: Record<string, unknown> = { index: scene.index };
+   222→      if (visual !== scene.visual) body.visual = visual;
+   223→      if (mood !== scene.mood) body.mood = mood;
+   224→      if (style !== (scene.style || "default")) body.style = style;
+   225→      if (narration !== scene.narration) body.narration = narration;
+   226→      if (caption !== scene.caption) body.caption = caption;
+   227→      // S136 — optimistic concurrency (the Stabilisation Gate): the PATCH
+   228→      // carries the revision head this edit was based on. The 409 gate
+   229→      // existed since S112 but the UI never sent the version (Stage 7
+   230→      // closed without adopting it), so a concurrent edit silently
+   231→      // superseded instead of conflicting. head null = no revisions yet →
+   232→      // 0, the first-edit-always-passes law. The version feed failing is
+   233→      // an honest degradation — the route's in-transaction gate stays
+   234→      // authoritative for the data it does receive.
+   235→      try {
+   236→        const revRes = await fetch(`/api/videos/${videoId}/scenes/${scene.index}/revisions`, { cache: "no-store" });
+   237→        if (revRes.ok) {
+   238→          const rev = (await revRes.json()) as { head?: { version?: number } | null };
+   239→          body.expectedSceneVersion = rev.head?.version ?? 0;
+   240→        }
+   241→      } catch {
+   242→        /* advisory — proceed without the version claim */
+   243→      }
+   244→      const res = await fetch(`/api/videos/${videoId}/scenes`, {
+   245→        method: "PATCH",
+   246→        headers: { "Content-Type": "application/json" },
+   247→        body: JSON.stringify(body),
+   248→      });
+   249→      const d = (await res.json()) as { error?: string; invalidated?: boolean; captionsEdited?: boolean };
+   250→      if (!res.ok) throw new Error(d.error ?? "Could not save scene changes");
+   251→      if (!silent) toast.success(`Scene ${scene.index} updated`);
+   252→      if (d.invalidated) {
+   253→        toast.warning("Voiceover cleared", {
+   254→          description:
+   255→            "The narration changed — re-render the voiceover so the audio matches.",
+   256→        });
+   257→      } else if (d.captionsEdited) {
+   258→        // S43 — captions ride the next render; the voice is NEVER touched.
+   259→        toast.info("Caption saved", {
+   260→          description:
+   261→            "It becomes this scene's on-screen subtitle on the next render — the voice is untouched.",
+   262→        });
+   263→      }
+   264→      onUpdated();
+   265→      return true;
+   266→    } catch (e) {
+   267→      fail(e, "Could not save scene changes");
+   268→      return false;
+   269→    }
+   270→  };
+   271→
+   272→  /** Poll until this scene's repaint lands (T-4.6 — the dialog stays open
+   273→   *  and the image swaps in place; before/after becomes available). */
+   274→  const pollRepaint = async () => {
+   275→    setRepainting(true);
+   276→    try {
+   277→      for (let i = 0; i < 50; i++) {
+   278→        await new Promise((r) => setTimeout(r, 3000));
+   279→        const res = await fetch(`/api/videos/${videoId}/storyboard`, { cache: "no-store" });
+   280→        if (!res.ok) continue;
+   281→        const d = await res.json();
+   282→        const s = (d.scenes ?? []).find((x: { index: number; generating: boolean }) => x.index === scene.index);
+   283→        if (s && !s.generating) break;
+   284→      }
+   285→    } finally {
+   286→      setRepainting(false);
+   287→      onUpdated();
+   288→    }
+   289→  };
+   290→
+   291→  const onSave = async () => {
+   292→    setBusy("save");
+   293→    await saveText();
+   294→    setBusy(null);
+   295→  };
+   296→
+   297→  /** Save text edits first, then repaint from the saved prompt. */
+   298→  const onRegenerate = async () => {
+   299→    setBusy("regen");
+   300→    if (!(await saveText(true))) {
+   301→      setBusy(null);
+   302→      return;
+   303→    }
+   304→    try {
+   305→      const res = await fetch(`/api/videos/${videoId}/storyboard`, {
+   306→        method: "POST",
+   307→        headers: { "Content-Type": "application/json" },
+   308→        body: JSON.stringify({ scene: scene.index }),
+   309→      });
+   310→      const d = (await res.json()) as { accepted?: boolean; error?: string };
+   311→      if (!res.ok) throw new Error(d.error ?? "Scene re-roll failed");
+   312→      toast.success(`Repainting scene ${scene.index}…`, {
+   313→        description: "The image regenerates right here — compare before/after when it lands.",
+   314→      });
+   315→      onUpdated();
+   316→      void pollRepaint();
+   317→    } catch (e) {
+   318→      fail(e, "Scene re-roll failed");
+   319→    } finally {
+   320→      setBusy(null);
+   321→    }
+   322→  };
+   323→
+   324→  const onAiEdit = async () => {
+   325→    if (instruction.trim().length < 3) {
+   326→      toast.error("Describe the change first — e.g. “make it night with warm window light”");
+   327→      return;
+   328→    }
+   329→    setBusy("edit");
+   330→    // S42: persist text edits BEFORE the art rotates — the repaint lands a
+   331→    // new version-stamped URL, which re-seeds this dialog from server truth;
+   332→    // saving first means that truth already carries the user's keystrokes.
+   333→    if (!(await saveText(true))) {
+   334→      setBusy(null);
+   335→      return;
+   336→    }
+   337→    try {
+   338→      const res = await fetch(`/api/videos/${videoId}/storyboard`, {
+   339→        method: "POST",
+   340→        headers: { "Content-Type": "application/json" },
+   341→        body: JSON.stringify({ scene: scene.index, instruction: instruction.trim() }),
+   342→      });
+   343→      const d = (await res.json()) as { accepted?: boolean; error?: string };
+   344→      if (!res.ok) throw new Error(d.error ?? "AI edit failed");
+   345→      toast.success(`Editing scene ${scene.index}…`, {
+   346→        description: "The composition is kept — only your requested change is applied.",
+   347→      });
+   348→      onUpdated();
+   349→      void pollRepaint();
+   350→    } catch (e) {
+   351→      fail(e, "AI edit failed");
+   352→    } finally {
+   353→      setBusy(null);
+   354→    }
+   355→  };
+   356→
+   357→  const onUpload = async () => {
+   358→    if (!pendingFile) {
+   359→      toast.error("Choose an image first");
+   360→      return;
+   361→    }
+   362→    setBusy("upload");
+   363→    // S42: same contract as re-roll — save text edits first, so the re-seed
+   364→    // that follows the new art URL never reverts unsaved keystrokes.
+   365→    if (!(await saveText(true))) {
+   366→      setBusy(null);
+   367→      return;
+   368→    }
+   369→    try {
+   370→      const form = new FormData();
+   371→      form.set("scene", String(scene.index));
+   372→      form.set("file", pendingFile);
+   373→      const res = await fetch(`/api/videos/${videoId}/storyboard/upload`, {
+   374→        method: "POST",
+   375→        body: form,
+   376→      });
+   377→      const d = (await res.json()) as { ok?: boolean; error?: string };
+   378→      if (!res.ok) throw new Error(d.error ?? "Upload failed");
+   379→      toast.success(`Scene ${scene.index} now uses your artwork`, {
+   380→        description: "Existing renders were removed — render again to rebuild the video.",
+   381→      });
+   382→      setPendingFile(null);
+   383→      onUpdated();
+   384→    } catch (e) {
+   385→      fail(e, "Upload failed");
+   386→    } finally {
+   387→      setBusy(null);
+   388→    }
+   389→  };
+   390→
+   391→  const anyBusy = busy !== null;
+   392→
+   393→  return (
+   394→    <Dialog open={open} onOpenChange={onOpenChange}>
+   395→      <DialogContent className="max-w-2xl max-h-[88vh] overflow-y-auto glass border-white/12">
+   396→        <DialogHeader>
+   397→          <DialogTitle className="flex items-center gap-2 text-base">
+   398→            <Brush className="h-4 w-4 text-primary" />
+   399→            Scene {scene.index} Studio — {scene.title}
+   400→          </DialogTitle>
+   401→          <DialogDescription className="text-xs">
+   402→            {renderMode === "slides"
+   403→              ? "Shape this scene's slide and its art — re-roll the design, restyle, edit the prompt, or upload your own image."
+   404→              : "Shape this scene's art to your taste — style, prompt, AI edits or your own image. Narration is never touched."}
+   405→          </DialogDescription>
+   406→        </DialogHeader>
+   407→
+   408→        <div className="space-y-5">
+   409→          {/* Slide design (keynote slides mode) — what viewers actually see */}
+   410→          {renderMode === "slides" && (
+   411→            <div className="space-y-2 rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">
+   412→              <div className="flex items-center justify-between gap-2">
+   413→                <div className="flex items-center gap-1.5 min-w-0">
+   414→                  <Presentation className="h-3.5 w-3.5 text-violet-300 shrink-0" />
+   415→                  <Label className="text-xs">Slide design</Label>
+   416→                  {slide && (
+   417→                    <span className="text-[10px] text-muted-foreground truncate">
+   418→                      · {SLIDE_LAYOUT_LABELS[slide.layout] ?? slide.layout}
+   419→                    </span>
+   420→                  )}
+   421→                </div>
+   422→                {slide && (
+   423→                  <Button
+   424→                    size="sm"
+   425→                    variant="outline"
+   426→                    disabled={anyBusy || slideBusy || !onRerollSlide}
+   427→                    onClick={onRerollSlide}
+   428→                    className="h-7 text-[11px] border-white/15 bg-white/4"
+   429→                    title="Ask the art director for a fresh take on this one slide — the rest of the deck keeps its design"
+   430→                  >
+   431→                    {slideBusy ? (
+   432→                      <Loader2 className="h-3 w-3 animate-spin" />
+   433→                    ) : (
+   434→                      <RefreshCw className="h-3 w-3" />
+   435→                    )}
+   436→                    Re-roll design
+   437→                  </Button>
+   438→                )}
+   439→              </div>
+   440→              {slide ? (
+   441→                <>
+   442→                  <div className="flex flex-wrap items-center gap-1.5">
+   443→                    <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/4 px-1.5 py-0.5 text-[9px] text-muted-foreground">
+   444→                      <span
+   445→                        aria-hidden
+   446→                        className="h-2 w-2 rounded-full"
+   447→                        style={{ background: SLIDE_ACCENT_HEX[slide.accent] ?? "#FFC918" }}
+   448→                      />
+   449→                      {slide.accent}
+   450→                    </span>
+   451→                    {slide.badge && (
+   452→                      <span className="rounded-md border border-white/10 bg-white/4 px-1.5 py-0.5 text-[9px] text-muted-foreground uppercase">
+   453→                        badge: {slide.badge}
+   454→                      </span>
+   455→                    )}
+   456→                    {slide.useImage && (
+   457→                      <span className="rounded-md border border-white/10 bg-white/4 px-1.5 py-0.5 text-[9px] text-muted-foreground">
+   458→                        uses this scene&apos;s art
+   459→                      </span>
+   460→                    )}
+   461→                  </div>
+   462→                  <div className="relative rounded-xl overflow-hidden border border-white/10">
+   463→                    {slide.hasPng ? (
+   464→                      <img
+   465→                        src={slide.pngUrl ?? ""}
+   466→                        alt={`Slide ${slide.index}: ${slide.headline}`}
+   467→                        className="w-full aspect-video object-cover object-top"
+   468→                      />
+   469→                    ) : (
+   470→                      <div className="w-full aspect-video bg-white/4 flex flex-col items-center justify-center gap-2">
+   471→                        {slideBusy ? (
+   472→                          <Loader2 className="h-5 w-5 animate-spin text-primary" />
+   473→                        ) : (
+   474→                          <Presentation className="h-5 w-5 text-muted-foreground" />
+   475→                        )}
+   476→                        <span className="text-[10px] text-muted-foreground">
+   477→                          Preview appears after the next render
+   478→                        </span>
+   479→                      </div>
+   480→                    )}
+   481→                  </div>
+   482→                  <p className="text-[10px] text-muted-foreground/80">
+   483→                    Headline: “{slide.headline}” — re-rolling keeps the narration, changes only this slide&apos;s design.
+   484→                  </p>
+   485→                </>
+   486→              ) : (
+   487→                <p className="text-[10px] text-muted-foreground">
+   488→                  The deck is designed when the video renders (or on your first
+   489→                  re-roll) — one designed slide per scene, timed to the narration.
+   490→                </p>
+   491→              )}
+   492→            </div>
+   493→          )}
+   494→
+   495→          {/* Current art — with in-dialog repaint progress + Before/After (T-4.6) */}
+   496→          <div className="space-y-1.5">
+   497→            <div className="flex items-center justify-between gap-2">
+   498→              {renderMode === "slides" && (
+   499→                <Label className="text-xs text-muted-foreground">
+   500→                  Scene art{slide?.useImage ? " — used by this slide's photo card" : " — feeds the storyboard"}
+   501→                </Label>
+   502→              )}
+   503→              {prevImage && (
+   504→                <div className="flex rounded-lg border border-white/10 bg-white/4 p-0.5 ml-auto" role="group" aria-label="Compare takes">
+   505→                  {(["before", "after"] as const).map((side) => (
+   506→                    <button
+   507→                      key={side}
+   508→                      type="button"
+   509→                      onClick={() => setCompare(side)}
+   510→                      aria-pressed={compare === side}
+   511→                      className={`tf-focusable h-6 px-2 rounded-md text-[10px] font-medium capitalize transition-colors ${
+   512→                        compare === side ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground"
+   513→                      }`}
+   514→                    >
+   515→                      {side}
+   516→                    </button>
+   517→                  ))}
+   518→                </div>
+   519→              )}
+   520→            </div>
+   521→            <div className="relative rounded-xl overflow-hidden border border-white/10">
+   522→            {(compare === "before" && prevImage) || (compare === "after" && scene.hasImage) ? (
+   523→              <img
+   524→                src={(compare === "before" ? prevImage : scene.imageUrl) ?? ""}
+   525→                alt={`Scene ${scene.index}: ${scene.title}${compare === "before" ? " (previous take)" : ""}`}
+   526→                className="w-full aspect-video object-cover"
+   527→              />
+   528→            ) : (
+   529→              <div className="w-full aspect-video bg-white/4 flex items-center justify-center text-[11px] text-muted-foreground">
+   530→                No art yet — set the look below and regenerate
+   531→              </div>
+   532→            )}
+   533→            {repainting && (
+   534→              <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2">
+   535→                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+   536→                <p className="text-xs text-white/85">Repainting scene {scene.index}…</p>
+   537→                <p className="text-[10px] text-white/55">The new take appears here — compare it with the old one after.</p>
+   538→              </div>
+   539→            )}
+   540→            {scene.hasStock && !repainting && (
+   541→              <span className="absolute bottom-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[9px] text-white">
+   542→                stock clip plays in this scene
+   543→              </span>
+   544→            )}
+   545→            </div>
+   546→          </div>
+   547→
+   548→          {/* Art style palette */}
+   549→          <div className="space-y-1.5">
+   550→            <Label className="text-xs text-muted-foreground">Art style</Label>
+   551→            <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+   552→              {SCENE_ART_STYLES.map((s) => {
+   553→                const [c1, c2] = styleSwatch(s.id);
+   554→                return (
+   555→                  <button
+   556→                    key={s.id}
+   557→                    type="button"
+   558→                    disabled={anyBusy}
+   559→                    onClick={() => setStyle(s.id)}
+   560→                    aria-pressed={style === s.id}
+   561→                    className={clsx(
+   562→                      "flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] transition-all",
+   563→                      style === s.id
+   564→                        ? "border-primary/50 bg-primary/8 text-foreground"
+   565→                        : "border-white/10 bg-white/3 hover:border-white/25 text-muted-foreground"
+   566→                    )}
+   567→                  >
+   568→                    <span
+   569→                      aria-hidden
+   570→                      className="h-3.5 w-3.5 shrink-0 rounded-[4px] ring-1 ring-white/15"
+   571→                      style={{
+   572→                        background: `linear-gradient(135deg, ${c1} 0%, ${c2} 100%)`,
+   573→                      }}
+   574→                    />
+   575→                    <span className="truncate">{s.label}</span>
+   576→                  </button>
+   577→                );
+   578→              })}
+   579→            </div>
+   580→            <p className="text-[10px] text-muted-foreground/80">
+   581→              {SCENE_ART_STYLES.find((s) => s.id === style)?.prompt ||
+   582→                "The standard TubeForge cinematic look"}
+   583→            </p>
+   584→          </div>
+   585→
+   586→          {/* Narration & caption (T-4.6) — the scene's spoken text. A
+   587→              narration change clears the stale voiceover (same contract as the
+   588→              Script tab); captions re-render with the next render. */}
+   589→          <div className="space-y-2.5 rounded-xl border border-white/10 bg-white/3 p-3">
+   590→            <p className="tf-kicker">Narration &amp; caption</p>
+   591→            <div className="space-y-1.5">
+   592→              <Label htmlFor={`narration-${scene.index}`} className="text-xs text-muted-foreground">
+   593→                Narration — what the voice reads in this scene
+   594→              </Label>
+   595→              <Textarea
+   596→                id={`narration-${scene.index}`}
+   597→                value={narration}
+   598→                onChange={(e) => setNarration(e.target.value)}
+   599→                rows={3}
+   600→                maxLength={3000}
+   601→                disabled={anyBusy}
+   602→                className="text-xs"
+   603→              />
+   604→              {narration !== scene.narration && (
+   605→                <p className="text-[10px] text-amber-300/90 leading-snug">
+   606→                  Saving this clears the stale voiceover — re-render it from the Package tab.
+   607→                </p>
+   608→              )}
+   609→            </div>
+   610→            <div className="space-y-1.5">
+   611→              <Label htmlFor={`caption-${scene.index}`} className="text-xs text-muted-foreground">
+   612→                Caption — this scene&apos;s on-screen subtitle (next render)
+   613→              </Label>
+   614→              <Input
+   615→                id={`caption-${scene.index}`}
+   616→                value={caption}
+   617→                onChange={(e) => setCaption(e.target.value)}
+   618→                maxLength={60}
+   619→                disabled={anyBusy}
+   620→                className="h-8 text-xs"
+   621→              />
+   622→              <p className="text-[10px] text-muted-foreground/80 leading-snug">
+   623→                One line shown across this scene — the voice never reads it. Empty
+   624→                falls back to the word-synced narration captions.
+   625→              </p>
+   626→            </div>
+   627→          </div>
+   628→
+   629→          {/* Cast look (Stage 5, module C) — host scenes only. The director
+   630→              pass proposes the outfit; the human approves by keeping it or
+   631→              adjusts it here; an approved plan weaves it into this scene's
+   632→              image prompt so the cast dresses consistently across scenes. */}
+   633→          {scene.hostInScene && (
+   634→            <div className="space-y-2.5 rounded-xl border border-white/10 bg-white/3 p-3">
+   635→              <div className="flex items-center justify-between gap-2">
+   636→                <p className="tf-kicker">Cast look in this scene</p>
+   637→                {appearanceDirty && (
+   638→                  <Button
+   639→                    size="sm"
+   640→                    className="h-7 px-2.5 text-[11px]"
+   641→                    disabled={anyBusy}
+   642→                    onClick={() => void saveAppearance()}
+   643→                  >
+   644→                    Save look
+   645→                  </Button>
+   646→                )}
+   647→              </div>
+   648→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+   649→                <div className="space-y-1">
+   650→                  <Label htmlFor={`outfit-${scene.index}`} className="text-[10px] text-muted-foreground">
+   651→                    Outfit
+   652→                  </Label>
+   653→                  <Input
+   654→                    id={`outfit-${scene.index}`}
+   655→                    value={outfit}
+   656→                    onChange={(e) => setOutfit(e.target.value)}
+   657→                    maxLength={160}
+   658→                    disabled={anyBusy}
+   659→                    className="h-8 text-xs"
+   660→                    placeholder="e.g. charcoal blazer, white tee"
+   661→                  />
+   662→                </div>
+   663→                <div className="space-y-1">
+   664→                  <Label htmlFor={`accessory-${scene.index}`} className="text-[10px] text-muted-foreground">
+   665→                    Accessory
+   666→                  </Label>
+   667→                  <Input
+   668→                    id={`accessory-${scene.index}`}
+   669→                    value={accessory}
+   670→                    onChange={(e) => setAccessory(e.target.value)}
+   671→                    maxLength={160}
+   672→                    disabled={anyBusy}
+   673→                    className="h-8 text-xs"
+   674→                    placeholder="e.g. round glasses, silver watch"
+   675→                  />
+   676→                </div>
+   677→              </div>
+   678→              <p className="text-[10px] text-muted-foreground leading-snug">
+   679→                Applies at the next re-roll, under an approved director plan. Clear both to stop
+   680→                directing the outfit.
+   681→              </p>
+   682→            </div>
+   683→          )}
+   684→
+   685→          {/* Prompt + mood */}
+   686→          <div className="space-y-2.5">
+   687→            <div className="space-y-1.5">
+   688→              <Label htmlFor={`visual-${scene.index}`} className="text-xs text-muted-foreground">
+   689→                Visual prompt — what the image paints
+   690→              </Label>
+   691→              <Textarea
+   692→                id={`visual-${scene.index}`}
+   693→                value={visual}
+   694→                onChange={(e) => setVisual(e.target.value)}
+   695→                rows={3}
+   696→                maxLength={1200}
+   697→                disabled={anyBusy}
+   698→                className="text-xs"
+   699→                placeholder="Concrete subject doing something, in a specific place, at a specific time of day…"
+   700→              />
+   701→            </div>
+   702→            <div className="space-y-1.5">
+   703→              <Label htmlFor={`mood-${scene.index}`} className="text-xs text-muted-foreground">
+   704→                Mood — palette &amp; lighting keywords
+   705→              </Label>
+   706→              <Input
+   707→                id={`mood-${scene.index}`}
+   708→                value={mood}
+   709→                onChange={(e) => setMood(e.target.value)}
+   710→                maxLength={200}
+   711→                disabled={anyBusy}
+   712→                className="h-8 text-xs"
+   713→                placeholder="teal shadows, cold moonlight, volumetric haze"
+   714→              />
+   715→            </div>
+   716→            <div className="flex items-center gap-2">
+   717→              <Button
+   718→                size="sm"
+   719→                variant="outline"
+   720→                disabled={anyBusy || !dirty}
+   721→                onClick={onSave}
+   722→                className="h-8 text-xs"
+   723→              >
+   724→                {busy === "save" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+   725→                Save changes
+   726→              </Button>
+   727→              <Button
+   728→                size="sm"
+   729→                disabled={anyBusy}
+   730→                onClick={onRegenerate}
+   731→                className="h-8 text-xs bg-brand-gradient hover:opacity-90 font-medium"
+   732→              >
+   733→                {busy === "regen" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+   734→                {dirty ? "Save & regenerate" : "Regenerate image"}
+   735→              </Button>
+   736→            </div>
+   737→          </div>
+   738→
+   739→          {/* AI edit */}
+   740→          <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/3 p-3">
+   741→            <div className="flex items-center gap-1.5">
+   742→              <Sparkles className="h-3.5 w-3.5 text-primary" />
+   743→              <Label className="text-xs">AI edit — keep the shot, change the details</Label>
+   744→            </div>
+   745→            <p className="text-[10px] text-muted-foreground">
+   746→              Describe a change and the model repaints THIS image in place —
+   747→              same composition, your tweak. Perfect for “make it night”,
+   748→              “warmer light”, “remove the crowd”.
+   749→            </p>
+   750→            <div className="flex items-center gap-2">
+   751→              <Input
+   752→                value={instruction}
+   753→                onChange={(e) => setInstruction(e.target.value)}
+   754→                maxLength={500}
+   755→                disabled={anyBusy || !scene.hasImage}
+   756→                className="h-8 flex-1 text-xs"
+   757→                placeholder="e.g. make it night with warm window light"
+   758→                onKeyDown={(e) => {
+   759→                  if (e.key === "Enter" && !anyBusy) void onAiEdit();
+   760→                }}
+   761→              />
+   762→              <Button
+   763→                size="sm"
+   764→                variant="outline"
+   765→                disabled={anyBusy || !scene.hasImage}
+   766→                onClick={onAiEdit}
+   767→                className="h-8 text-xs"
+   768→              >
+   769→                {busy === "edit" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+   770→                Apply
+   771→              </Button>
+   772→            </div>
+   773→            {!scene.hasImage && (
+   774→              <p className="text-[10px] text-amber-300/90">
+   775→                Generate this scene&apos;s image first — edits need art to work from.
+   776→              </p>
+   777→            )}
+   778→          </div>
+   779→
+   780→          {/* Upload replacement */}
+   781→          <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/3 p-3">
+   782→            <div className="flex items-center gap-1.5">
+   783→              <ImageUp className="h-3.5 w-3.5 text-primary" />
+   784→              <Label className="text-xs">Use your own image</Label>
+   785→            </div>
+   786→            <p className="text-[10px] text-muted-foreground">
+   787→              PNG / JPEG / WebP / HEIC (iPhone photos) up to 15 MB. It&apos;s
+   788→              center-cropped to the video canvas (16:9) automatically.
+   789→              Replacing art removes existing renders — render again afterwards.
+   790→            </p>
+   791→            <div className="flex items-center gap-2">
+   792→              <input
+   793→                ref={fileRef}
+   794→                type="file"
+   795→                accept="image/png,image/jpeg,image/webp,image/heic,image/heif"
+   796→                className="hidden"
+   797→                onChange={(e) => setPendingFile(e.target.files?.[0] ?? null)}
+   798→              />
+   799→              <Button
+   800→                size="sm"
+   801→                variant="outline"
+   802→                disabled={anyBusy}
+   803→                onClick={() => fileRef.current?.click()}
+   804→                className="h-8 text-xs"
+   805→              >
+   806→                {pendingFile ? pendingFile.name.slice(0, 32) : "Choose image…"}
+   807→              </Button>
+   808→              <Button
+   809→                size="sm"
+   810→                disabled={anyBusy || !pendingFile}
+   811→                onClick={onUpload}
+   812→                className="h-8 text-xs bg-brand-gradient hover:opacity-90 font-medium"
+   813→              >
+   814→                {busy === "upload" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageUp className="h-3.5 w-3.5" />}
+   815→                Replace scene art
+   816→              </Button>
+   817→            </div>
+   818→          </div>
+   819→
+   820→          {/* S118 — the trust layer's surface: revisions, the recheck
+   821→              verdict + approval, the repair inbox, and the seam/preview
+   822→              renders (Stages 1–6, made visible). */}
+   823→          <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/3 p-3">
+   824→            <div className="flex items-center gap-1.5">
+   825→              <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+   826→              <Label className="text-xs">History, checks &amp; approval</Label>
+   827→            </div>
+   828→            <p className="text-[10px] text-muted-foreground">
+   829→              Every edit is an immutable revision. Re-check this scene (its preview,
+   830→              its cues, its seams), approve the checked version to pin it into the
+   831→              render, or restore an older one — restorations never erase history.
+   832→            </p>
+   833→            <SceneTrustPanel videoId={videoId} sceneIndex={scene.index} onUpdated={onUpdated} />
+   834→          </div>
+   835→        </div>
+   836→      </DialogContent>
+   837→    </Dialog>
+   838→  );
+   839→}
+   840→
