@@ -63,9 +63,11 @@
 
 - **No stroke-authored text**: glyph ink traces as skeleton strokes (the
   writing motion) — the `<text>`/glyph-outline route stays named C1.5/C2 as
-  before; no planner emission changes; no Studio UX for rasters yet (the
-  palette's upload field accepts the new formats server-side; the Studio's
-  picker follow-up rides the next stage).
+  before; no planner emission changes. **The Studio raster picker** landed
+  as this program's second commit: the palette accepts PNG/JPEG/WebP with
+  client-side transport walls (8 MB raster / 256 KB SVG — fast refusals that
+  avoid a doomed POST) and trace-aware feedback ("Traced … N strokes, M
+  fills"); the server gates stay the only truth.
 - **The escalation loop's refusal branch** (over-wall ink at the coarsest
   tolerance) is implemented and maps to a readable 400, but the battery pins
   the per-path collapse and the walls, not a >2,040-command fixture — the

@@ -297,6 +297,20 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
     setBusy("upload");
     setError(null);
     setNotice(null);
+    // S151 — fast client-side transport walls: the server owns the truth,
+    // these only avoid a POST that is already doomed.
+    const looksRaster = /\.(png|jpe?g|webp)$/i.test(file.name) || /^image\/(png|jpeg|webp)$/.test(file.type);
+    const looksSvg = /\.svg$/i.test(file.name) || file.type === "image/svg+xml";
+    if (looksRaster && file.size > 8 * 1024 * 1024) {
+      setError("The image is over the 8 MB cap — export it smaller and try again");
+      if (uploadFileRef.current) uploadFileRef.current.value = "";
+      return;
+    }
+    if (looksSvg && file.size > 256 * 1024) {
+      setError("The SVG is over the 256 KB cap — simplify or split it, then try again");
+      if (uploadFileRef.current) uploadFileRef.current.value = "";
+      return;
+    }
     try {
       const form = new FormData();
       form.append("file", file);
@@ -310,12 +324,17 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
         probeMs?: number;
         error?: string;
         errors?: string[];
+        traced?: { from?: string; strokes: number; fills: number; tolerance: number };
       };
       if (!res.ok) {
         setError(body.errors?.length ? body.errors.join(" · ") : (body.error ?? "Upload failed"));
         return;
       }
-      setNotice(`Uploaded "${body.assetId}" (${body.bytes ?? 0} B stored, raster probe ${body.probeMs ?? "?"} ms)`);
+      setNotice(
+        body.traced
+          ? `Traced "${body.assetId}" from ${body.traced.from ?? "image"} — ${body.traced.strokes} strokes, ${body.traced.fills} fills (${body.bytes ?? 0} B stored, probe ${body.probeMs ?? "?"} ms)`
+          : `Uploaded "${body.assetId}" (${body.bytes ?? 0} B stored, raster probe ${body.probeMs ?? "?"} ms)`
+      );
       await load(); // refresh the palette + the merged library
     } catch {
       setError("Upload failed");
@@ -631,18 +650,23 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
             </div>
           </div>
 
-          {/* S69 Phase C — uploads: the §7 gates' palette surface */}
+          {/* S69 Phase C — uploads: the §7 gates' palette surface. S151:
+              rasters are traced into stroke geometry server-side and ride
+              the same gates — the picker just widens. */}
           <div className="rounded-lg border border-white/10 bg-black/20 p-2.5">
             <div className="mb-1.5 flex items-center justify-between gap-2">
               <p className="text-[11px] font-medium uppercase tracking-wide text-white/40">
-                Uploads — your SVGs (256 KB cap, sanitized + budgeted)
+                Uploads — SVG (256 KB) or PNG/JPEG/WebP (8 MB, traced to strokes)
               </p>
-              <label className={`${btnGhost} cursor-pointer`} title="Upload an SVG through the seven gates">
-                {busy === "upload" ? "Uploading…" : "+ Upload SVG"}
+              <label
+                className={`${btnGhost} cursor-pointer`}
+                title="Upload an SVG or a PNG/JPEG/WebP — rasters are traced into pen strokes and ride the same seven gates"
+              >
+                {busy === "upload" ? "Uploading…" : "+ Upload SVG / image"}
                 <input
                   ref={uploadFileRef}
                   type="file"
-                  accept=".svg,image/svg+xml"
+                  accept=".svg,image/svg+xml,image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
