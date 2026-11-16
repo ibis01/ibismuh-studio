@@ -43,3 +43,13 @@ key, and the sha256 manifest. The K1 character artifacts ride the same
 session (one command, two rubric sheets) — see `k1-blind-rubric.md` §4.
 
 **This record stays PENDING until the scorers run.** It is listed as the one open item of S123's close in `docs/audits/s123-motion-graphics.md` §8 — the stage's other evidence (unit battery 685 green, the proof GATE GREEN, the lane pins, the draft-speed receipt, the QC calibrations) is complete and machine-verified.
+
+## 5. The session on the final head (S144)
+
+Assembled 2026-11-16 on HEAD `a159f4b` (post-S143 — the audit's P5, the last
+product finding): `validation/rescore/2026-11-16T04-34-12`, every arm green
+through the REAL final engines (both source renders re-rendered fresh before
+assembly; the record: `docs/audits/s144-blind-rescore-session.md`). The
+graphics artifact the scorers will score descends from the committed proof
+pipeline as it stands TODAY, not as it stood when this record was drafted.
+This record stays PENDING until the scorers run.

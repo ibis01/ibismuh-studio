@@ -73,3 +73,12 @@ the S93 portrait render still available via `scripts/s93-rig-smoke.mts`.
 as S123's blind rescore. S125's machine evidence (unit battery 734 green, the
 smoke 23/23 green with the real render, the lane pins, the cache receipts)
 is complete and machine-verified.
+
+## 5. The session on the final head (S144)
+
+The K1 arms (compiled gestures + the rest-only control) ride the session
+assembled 2026-11-16 on HEAD `a159f4b` (post-S143): `validation/rescore/
+2026-11-16T04-34-12` — both arms re-rendered green through the final engines
+before assembly, the smoke 31/31 on the current head (the record:
+`docs/audits/s144-blind-rescore-session.md`). This record stays PENDING
+until the scorers run.
