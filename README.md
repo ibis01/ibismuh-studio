@@ -9,8 +9,37 @@ standard + the content-policy visual scan under a restricted policy), and
 publishes to a connected YouTube channel — all inside a multi-user web
 application with metered AI spending and Stripe billing underneath.
 
-**Status:** S135 landed the CI repair (the applier's camera leg — every graphics render since S130 died at the first frame apply — plus the storyboard refusal chain, the mode-aware Auto-Pilot, and the missing 2D/3D type picks; 806 → 807 tests); **S136 is the Stabilisation Wave (2026-11-15)** — the read-only Stabilisation Gate audit (9 exit conditions: 4 PASS / 5 PARTIAL / 0 FAIL) drove the proof-infrastructure waves with the feature freeze intact: the 28-test scene-revision battery joined the CI check job, the K1 rig smoke joined the e2e job and proves rendered body-part movement on pixels (a fixture whose part ids differ from its slots — the B1 statue class can never ship green again), the graphics artifact is ffprobe-decoded in the S87 battery (Part C), the narration-sync QC check got its verdict fixtures, the E12 cancellation drill joined CI, and the two defect classes (B1: slot-keyed mocap never reached id-addressed parts; B2: unguarded failure receipts in the render/storyboard/scene/short/convert lanes) are fixed with failing-first regression pins — 807 → 814 tests. CI is 8/8
-green on `main` with the 814-test unit battery. The production loop is
+**Status:** the Stabilisation Gate era is closed. The read-only gate audit
+(2026-11-15) drove the proof-infrastructure waves + the B1/B2 defect fixes
+(the S136 Stabilisation Wave, merged as PR #28: the 28-test scene-revision
+battery joined the CI check job, the K1 rig smoke joined the e2e job and
+proves rendered body-part movement on pixels — a fixture whose part ids
+differ from its slots, so the B1 statue class can never ship green again —
+the graphics artifact is ffprobe-decoded in the S87 battery (Part C), the
+narration-sync QC check got its verdict fixtures, the E12 cancellation drill
+joined CI), and the gate was **SEALED at 8/9 PASS** (the blind re-scores
+remain the humans' open item — the S128/S144 kits own those sessions).
+Feature stages legally resumed: **S137** (the whiteboard scaffold builds the
+video's OWN title/close cards and rich boards), **S138** (the music bed
+heal-or-fallback wall), **S139** (the naturalist pen — eased lockstep,
+tremble, breathing ink, sketch passes), **S140** (the import admission wall —
+atomic admission, in-transaction count wall, compensation sweep), **S141**
+(the BVH admission wall + O(1) joint map), **S142** (the effects asset
+library — the emphasis vocabulary), **S143 Stage X-full** (per-scene
+mixed-engine dispatch: a MIXED plan — whiteboard + video + graphics scenes —
+renders end to end), **S144** (the blind re-score kit session on the final
+head), **S145** (the PAE Phase 3 production benchmarks — frameAt 3.9–7.6 µs,
+SIGKILL-resume byte-identical), **S146** (the stabilized baseline + the fresh
+W1 "before" receipt — the layer-upgrade program's Phase 1), **S147** (the
+rhetorical beat layer — the directive's typed beat schema, the matcher's
+alts/emphasis wiring, the mark that fires after its claim). 2026-11-16: the
+voice-expansion TTS lanes (Gemini, Cartesia, Deepgram, PlayHT) joined the
+registry and their missing S90 priors rows — the CI regression they briefly
+caused — were repaired; **S148** landed the MG-1 motion-quality slice (the
+easing table grew `anticipation` + `spring` per the MG-1 design record, the
+stagger primitive became substrate data, the 3D keyframes gained the
+destination-key ease field, and the six-preset motion registry landed). CI is
+8/8 green on `main` with the 852-test unit battery. The production loop is
 feature-complete, and the production-readiness arc (S99–S108) closed every
 reliability gate with CI evidence — clean-clone bootstrap, queue leases +
 fencing, atomic storage admission, shared rate limiting + trusted-proxy IP law,
