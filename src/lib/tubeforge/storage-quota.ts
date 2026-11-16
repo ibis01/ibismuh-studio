@@ -80,7 +80,14 @@ async function storageAdmissionTx<T>(fn: (tx: Prisma.TransactionClient) => Promi
   const serializable = !`${process.env.DATABASE_URL ?? ""}`.startsWith("file:");
   for (let attempt = 1; ; attempt += 1) {
     try {
-      return await rawDb.$transaction(fn, serializable ? { isolationLevel: "Serializable" } : undefined);
+      // VERCEL FIX: Increased timeout to 30s and maxWait to 5s to prevent
+      // "Transaction already closed" errors during slow network/DB operations.
+      const txOptions = {
+        timeout: 30000,
+        maxWait: 5000,
+        ...(serializable ? { isolationLevel: "Serializable" as const } : {}),
+      };
+      return await rawDb.$transaction(fn, txOptions);
     } catch (err) {
       // P2034 — the transaction conflict Serializable exists to produce.
       // Retry against the winner's committed rows (spend.ts's
