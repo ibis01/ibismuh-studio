@@ -96,6 +96,11 @@ function sceneRuntime(
   const assetTags = new Map<string, string[]>(
     [...lib.assets.values()].map((a) => [a.id, a.tags])
   );
+  // S147 — the matcher's extended vocabulary (the same build the renderer
+  // makes): alts + role, so the preview's beat plan matches the final's.
+  const assetMeta = new Map<string, { alts?: string[]; role?: string }>(
+    [...lib.assets.values()].map((a) => [a.id, { alts: a.alts, role: a.role }])
+  );
   // W7 — the pose selector's vocabulary (the same build the renderer makes).
   const roles = new Map<string, AssetRole>();
   for (const a of lib.assets.values()) {
@@ -114,7 +119,7 @@ function sceneRuntime(
           scene.board
         )
       : null;
-  return { lib, geometry, scene, durationMs, events: beatSceneEvents(scene, durationMs, geometry, assetTags), carry, roles };
+  return { lib, geometry, scene, durationMs, events: beatSceneEvents(scene, durationMs, geometry, assetTags, undefined, assetMeta), carry, roles };
 }
 
 /** Placement bbox corners in SCENE space: R(rot)·s·(u,v) + (x,y) over the

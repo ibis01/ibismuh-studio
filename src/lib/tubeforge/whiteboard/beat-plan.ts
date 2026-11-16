@@ -78,6 +78,17 @@ export interface WhiteboardBeat {
    *  durationMs − HOLD_END_MS exactly like the fill law's draw budget. */
   startMs: number;
   endMs: number;
+  /** S147 — the rhetorical lens (additive, optional; derived in planBeats).
+   *  Absent on old plans; nothing render-path consumes `rhetorical` yet. */
+  rhetorical?: RhetoricalPurpose;
+  /** What the hand does on screen during this beat. */
+  action?: BeatAction;
+  /** The emphasis level — high beats may fire their mark. */
+  emphasis?: BeatEmphasis;
+  /** The fx-* asset that punctuates this beat: compileBeats orders its
+   *  items LAST (the mark lands after the claim — the W4 law). Absent ⇒
+   *  the compiled events are byte-identical to the pre-S147 order. */
+  markAssetId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +142,108 @@ export function classifySentence(sentence: string, index: number): BeatPurpose {
   return "support";
 }
 
+// ---------------------------------------------------------------------------
+// S147 — the rhetorical layer (the 2026-11-16 layer-upgrade directive's §2):
+// the beat gains its RHETORICAL purpose (what the sentence does in the
+// argument), its ACTION (what the hand does on screen), and its EMPHASIS
+// level — all ADDITIVE optional fields, derived deterministically, compiled
+// into the existing AnimationEvent grammar (no second timeline grammar).
+// The STRUCTURAL classifier above is UNTOUCHED — the K1 rig director consumes
+// it ("one classifier, two consumers") and its outputs stay byte-identical.
+// ---------------------------------------------------------------------------
+
+/** Why the sentence exists in the ARGUMENT — the directive's §2 taxonomy.
+ *  A second lens on the same sentence: derived from the same cue family as
+ *  the structural purpose plus the comparison/evidence/conclusion cues.
+ *  Old plans absent the field (the tolerant-read law); nothing consumes it
+ *  for rendering yet — the editor and the LLM planner read it. */
+export type RhetoricalPurpose =
+  | "setup"
+  | "claim"
+  | "mechanism"
+  | "comparison"
+  | "evidence"
+  | "conclusion";
+
+const CONCLUSION_RE = /\b(in short|in summary|the takeaway|bottom line|ultimately|the point is|never forget|remember this|the whole point|that's why|that is why|in the end|the key insight|the lesson|remember the)\b/i;
+const COMPARISON_RE = /\b(better|worse|faster|slower|cheaper|unlike|compared|whereas|instead|rather than|versus|vs\b\.?|more than|less than|the difference)\b/i;
+const EVIDENCE_RE = /\b(percent|study|studies|research|survey|measured|statistics|twice|half|double|triple|times)\b|%|\breported\b/i;
+
+/** The rhetorical classifier — PURE, deterministic, same cue-family laws as
+ *  classifySentence (checked in order; the last sentence IS the conclusion
+ *  slot — the grammar's close card already owns it). */
+export function classifyRhetorical(sentence: string, index: number, total: number): RhetoricalPurpose {
+  if (total >= 2 && index === total - 1) return "conclusion";
+  if (CONCLUSION_RE.test(sentence)) return "conclusion";
+  if (COMPARISON_RE.test(sentence)) return "comparison";
+  if (EVIDENCE_RE.test(sentence)) return "evidence";
+  // The claim outranks the mechanism — the structural classifier's own
+  // precedence (subject before action): "The heart IS a pump" is a claim
+  // even though it carries the verb-noun "pump".
+  if (SUBJECT_RE.test(sentence)) return "claim";
+  if (ACTION_RE.test(sentence)) return "mechanism";
+  if (SETUP_RE.test(sentence) || index === 0) return "setup";
+  return "claim";
+}
+
+/** The hand's emphasis level on this beat (the directive's §2 `emphasis`).
+ *  High rides the structural emphasis purpose (the cue family that already
+ *  owns exclamation + stakes phrases); low is reserved for the editor. */
+export type BeatEmphasis = "low" | "normal" | "high";
+
+export function beatEmphasisOf(purpose: BeatPurpose): BeatEmphasis {
+  return purpose === "emphasis" ? "high" : "normal";
+}
+
+/** What the hand DOES on screen during this beat (the directive's §2
+ *  `action`). Derived, never authored: draw/write/hold from the beat's
+ *  contents, the mark verbs (underline/circle/crossout) from a placed
+ *  fx-* effect on a HIGH-emphasis beat, reveal for a non-mark effect. */
+export type BeatAction =
+  | "draw"
+  | "write"
+  | "underline"
+  | "circle"
+  | "crossout"
+  | "reveal"
+  | "hold";
+
+/** The effects pack's frozen id prefix (S142) — the mark-capable assets. */
+const FX_PREFIX = "fx-";
+
+function markActionOf(fxAssetId: string): BeatAction | undefined {
+  if (fxAssetId === "fx-underline") return "underline";
+  if (fxAssetId === "fx-circle-mark") return "circle";
+  // fx-crossout does not exist yet — the action stays in the vocabulary for
+  // the editor and the future slice; the other effects punctuate (reveal).
+  return "reveal";
+}
+
+function beatActionOf(
+  assetIds: readonly string[],
+  geometry: Map<string, AssetGeometry>,
+  markAssetId: string | undefined
+): BeatAction {
+  if (markAssetId) return markActionOf(markAssetId) ?? "reveal";
+  let paths = 0;
+  let texts = 0;
+  for (const id of assetIds) {
+    paths += geometry.get(id)?.paths.size ?? 0;
+    texts += TEXT_IDS_BY_ASSET.get(id)?.length ?? 0;
+  }
+  if (paths === 0 && texts === 0) return "hold";
+  if (paths === 0 && texts > 0) return "write";
+  return "draw";
+}
+
+/** The per-asset metadata the matcher scores beyond tags: the S142 effects'
+ *  alts (their phrase vocabulary) and the W3 role. Optional — absent meta
+ *  degrades the matcher to today's cue+tag scoring byte-for-byte. */
+export interface AssetBeatMeta {
+  alts?: readonly string[];
+  role?: string;
+}
+
 /** Concept cue table — WHAT the narrator is mentioning, keyed by the
  *  built-in concept ids. Mirrors the scaffold planner's KEYWORD_PICKS
  *  (whiteboard-planner.ts) semantics: the planner picks the asset FROM the
@@ -177,13 +290,23 @@ function mentionScore(
   sentenceTokens: string[],
   sentence: string,
   assetId: string,
-  tags: readonly string[] | undefined
+  tags: readonly string[] | undefined,
+  meta?: AssetBeatMeta
 ): number {
   let score = 0;
   const cue = ASSET_CUES.get(assetId);
   if (cue && cue.test(sentence)) score += 2;
   const tokens = new Set(sentenceTokens);
   for (const t of tagTokens(tags)) if (tokens.has(t)) score += 1;
+  // S147 — the S142 recorded follow-up: score the asset's ALTS (the
+  // effects' phrase vocabulary) into the candidate ranking, and give the
+  // emphasis role its edge — but ONLY on an emphasis-class sentence, so
+  // the marks sprinkle instead of wallpapering every board.
+  const lower = sentence.toLowerCase();
+  for (const alt of meta?.alts ?? []) {
+    if (alt && lower.includes(alt.toLowerCase())) score += 2;
+  }
+  if (meta?.role === "emphasis" && EMPHASIS_RE.test(sentence)) score += 2;
   return score;
 }
 
@@ -240,6 +363,9 @@ export interface PlanBeatsOptions {
    *  strokes land on the clock the VO actually spoke); a mismatch
    *  degrades to the word-proportional estimator byte-for-byte. */
   anchors?: WordAnchors;
+  /** S147 — per-asset alts + role (the matcher's extended vocabulary).
+   *  Absent ⇒ byte-identical scoring (tags + cue table only). */
+  assetMeta?: ReadonlyMap<string, AssetBeatMeta>;
 }
 
 /** The exact claimed-key grammar the fill law uses (timing.ts:66-70). */
@@ -321,7 +447,8 @@ export function planBeats(
           sentenceTokens[i],
           sentences[i],
           pl.assetId,
-          opts.assetTags?.get(pl.assetId)
+          opts.assetTags?.get(pl.assetId),
+          opts.assetMeta?.get(pl.assetId)
         );
         if (score > best) {
           best = score;
@@ -392,14 +519,27 @@ export function planBeats(
   const beats: WhiteboardBeat[] = [];
   for (const [sentence, assetIds] of bySentence) {
     const window = windows[sentence];
+    const purpose = classifySentence(sentences[sentence], sentence);
+    // S147 — the additive fields. The mark: the FIRST fx-* asset assigned to
+    // a HIGH-emphasis beat (deterministic; a mark on a normal beat draws in
+    // order — the sprinkle law). The action rides the mark when one fires.
+    const emphasis = beatEmphasisOf(purpose);
+    const markAssetId =
+      emphasis === "high"
+        ? assetIds.find((id) => id.startsWith(FX_PREFIX))
+        : undefined;
     beats.push({
       id: `beat-${sentence + 1}`,
-      purpose: classifySentence(sentences[sentence], sentence),
+      purpose,
       sentence,
       phrase: sentences[sentence],
       assetIds,
       startMs: window.startMs,
       endMs: window.endMs,
+      rhetorical: classifyRhetorical(sentences[sentence], sentence, sentences.length),
+      action: beatActionOf(assetIds, opts.geometry, markAssetId),
+      emphasis,
+      markAssetId,
     });
   }
   beats.sort((a, b) => a.sentence - b.sentence);
@@ -420,14 +560,22 @@ export function planBeats(
     const moved = firstBeat.assetIds.shift();
     if (firstBeat.assetIds.length === 0) beats.shift();
     if (moved) {
+      const purpose = classifySentence(sentences[0], 0);
+      const emphasis = beatEmphasisOf(purpose);
+      const markAssetId =
+        emphasis === "high" && moved.startsWith(FX_PREFIX) ? moved : undefined;
       beats.unshift({
         id: "beat-1",
-        purpose: classifySentence(sentences[0], 0),
+        purpose,
         sentence: 0,
         phrase: sentences[0],
         assetIds: [moved],
         startMs: windows[0].startMs,
         endMs: windows[0].endMs,
+        rhetorical: classifyRhetorical(sentences[0], 0, sentences.length),
+        action: beatActionOf([moved], opts.geometry, markAssetId),
+        emphasis,
+        markAssetId,
       });
     }
   }
@@ -480,6 +628,17 @@ export function compileBeats(
       }
     }
     if (items.length === 0) continue; // the every-beat-has-an-action law
+
+    // S147 — the emphasis mark fires LAST: the labeled item lands, THEN the
+    // mark punctuates it (the W4 law — emphasis fires after the spoken
+    // claim). Stable sort: only mark-asset items move; absent markAssetId
+    // leaves the order byte-identical to the pre-S147 compile.
+    if (beat.markAssetId) {
+      items.sort(
+        (a, b) =>
+          (a.assetId === beat.markAssetId ? 1 : 0) - (b.assetId === beat.markAssetId ? 1 : 0)
+      );
+    }
 
     // The fill law's arithmetic, scoped to the beat window.
     const gaps = PATH_GAP_MS * (items.length - 1);
@@ -534,11 +693,12 @@ export function beatSceneEvents(
   durationMs: number,
   geometry: Map<string, AssetGeometry>,
   assetTags?: ReadonlyMap<string, readonly string[]>,
-  anchors?: WordAnchors
+  anchors?: WordAnchors,
+  assetMeta?: ReadonlyMap<string, AssetBeatMeta>
 ): AnimationEvent[] {
   const fallback = () => scheduleScene(scene, durationMs, geometry, anchors);
   if (!(durationMs > 0)) return fallback();
-  const beats = planBeats(scene, { durationMs, geometry, assetTags, anchors });
+  const beats = planBeats(scene, { durationMs, geometry, assetTags, anchors, assetMeta });
   if (beats.length === 0) return fallback();
   const events = compileBeats(beats, scene, durationMs, geometry);
   // A usable plan always adds the unclaimed work; an empty list here is

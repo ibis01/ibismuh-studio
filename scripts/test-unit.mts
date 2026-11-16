@@ -13774,6 +13774,76 @@ await test("W2 planBeats: deterministic; windows inside the clock; the hold hold
   eq(a.find((beat) => beat.sentence === 2)?.purpose, "support", "the closing statement classifies as support");
 });
 
+await test("S147 the rhetorical layer — the second lens classifies the directive's taxonomy", async () => {
+  const { classifyRhetorical, beatEmphasisOf } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
+  eq(classifyRhetorical("Imagine a factory floor.", 0, 3), "setup", "the opener is setup");
+  eq(classifyRhetorical("The sensor detects movement and sends an alert.", 1, 4), "mechanism", "the how sentence is mechanism");
+  eq(classifyRhetorical("Studies show 40 percent fewer errors.", 1, 3), "evidence", "the numbers sentence is evidence");
+  eq(classifyRhetorical("Practice is faster than re-reading.", 1, 3), "comparison", "the comparison sentence is comparison");
+  eq(classifyRhetorical("This is the key insight.", 1, 3), "conclusion", "the takeaway cue is conclusion");
+  eq(classifyRhetorical("The heart is a pump.", 0, 1), "claim", "a single declarative sentence is a claim");
+  eq(classifyRhetorical("The valve opens next.", 3, 4), "conclusion", "the LAST sentence is the conclusion slot (the grammar's own rule)");
+  eq(beatEmphasisOf("emphasis"), "high", "the structural emphasis purpose rides high");
+  eq(beatEmphasisOf("support"), "normal", "everything else rides normal");
+});
+
+await test("S147 planBeats fills the additive fields; the mark fires LAST in the compile", async () => {
+  const { planBeats, compileBeats } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
+  const { buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const lib = loadLibrary();
+  const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
+  const meta = new Map([...lib.assets.values()].map((a) => [a.id, { alts: a.alts, role: a.role }]));
+  const scene = {
+    id: "scene-1",
+    narration: "Money moves fast! That is the whole point.",
+    background: "#ffffff" as const,
+    placements: [
+      { assetId: "coin", placement: { x: 700, y: 500, scale: 1.4, rotateDeg: 0 }, order: 0 },
+      { assetId: "fx-underline", placement: { x: 700, y: 620, scale: 1.2, rotateDeg: 0 }, order: 1 },
+    ],
+    animations: [],
+    camera: [{ cx: 960, cy: 540, scale: 1, startMs: 0, durationMs: 0 }],
+  };
+  const beats = planBeats(scene, { durationMs: 8000, geometry: geo, assetMeta: meta });
+  ok(beats.every((b) => b.rhetorical !== undefined && b.action !== undefined && b.emphasis !== undefined), "every beat carries the additive fields");
+  const emph = beats.find((b) => b.purpose === "emphasis");
+  ok(emph !== undefined, "the exclamation sentence is the emphasis beat");
+  eq(emph?.markAssetId, "fx-underline", "the fx asset on the HIGH beat is the mark");
+  eq(emph?.action, "underline", "the mark's action rides the beat");
+  // THE COMPILE LAW: the mark's paths fire AFTER the labeled item's.
+  const events = compileBeats(beats, scene, 8000, geo);
+  const coinLast = Math.max(...events.filter((e) => e.type === "draw_path" && e.assetId === "coin").map((e) => e.startMs));
+  const fxFirst = Math.min(...events.filter((e) => e.type === "draw_path" && e.assetId === "fx-underline").map((e) => e.startMs));
+  ok(Number.isFinite(coinLast) && Number.isFinite(fxFirst) && fxFirst >= coinLast, `the mark fires after the label (fx starts ${fxFirst}ms ≥ coin's last draw ${coinLast}ms)`);
+});
+
+await test("S147 byte-identity — no fx placements ⇒ identical windows, assignments, and compiled events with or without meta", async () => {
+  const { planBeats, compileBeats } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
+  const { buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const lib = loadLibrary();
+  const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
+  const meta = new Map([...lib.assets.values()].map((a) => [a.id, { alts: a.alts, role: a.role }]));
+  const scene = {
+    id: "scene-1",
+    narration: "Markets react first. Then money moves fast! The data confirms the trend.",
+    background: "#ffffff" as const,
+    placements: [
+      { assetId: "coin", placement: { x: 700, y: 500, scale: 1.4, rotateDeg: 0 }, order: 0 },
+      { assetId: "bar-chart", placement: { x: 1100, y: 500, scale: 1.4, rotateDeg: 0 }, order: 1 },
+    ],
+    animations: [],
+    camera: [{ cx: 960, cy: 540, scale: 1, startMs: 0, durationMs: 0 }],
+  };
+  const plain = planBeats(scene, { durationMs: 8000, geometry: geo });
+  const withMeta = planBeats(scene, { durationMs: 8000, geometry: geo, assetMeta: meta });
+  const core = (beats: typeof plain) =>
+    JSON.stringify(beats.map(({ id, sentence, assetIds, startMs, endMs, purpose }) => ({ id, sentence, assetIds, startMs, endMs, purpose })));
+  eq(core(plain), core(withMeta), "meta without fx placements never moves a window or an assignment");
+  eq(JSON.stringify(compileBeats(plain, scene, 8000, geo)), JSON.stringify(compileBeats(withMeta, scene, 8000, geo)), "the compiled events are byte-identical (no fx ⇒ no behavior change)");
+});
+
 await test("W2 planBeats: the cards own the opening and closing sentences", async () => {
   const { planBeats } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
   const { buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
@@ -14099,8 +14169,8 @@ await test("W2: the seams and the one-source constants are wired (source pins)",
     "the renderer schedules through beatSceneEvents (the one-source law; W4 adds the spoken-window anchors)"
   );
   ok(
-    canvasSrc.includes("beatSceneEvents(scene, durationMs, geometry, assetTags)"),
-    "the editor preview schedules through beatSceneEvents (preview ≡ final)"
+    canvasSrc.includes("beatSceneEvents(scene, durationMs, geometry, assetTags, undefined, assetMeta)"),
+    "the editor preview schedules through beatSceneEvents with the same meta the renderer passes (preview ≡ final, S147)"
   );
   // The beat compiler imports the fill law's constants — never a second
   // implementation of the schedule math.
@@ -15046,7 +15116,7 @@ await test("W4 voice anchors: the render seam and the caller are wired (compile-
   const renderSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/render.ts", "utf8");
   ok(renderSrc.includes('import { sceneVoiceAnchors } from "./voice-anchors"'), "render.ts imports the ladder");
   ok(renderSrc.includes("anchorsBySceneId"), "render.ts carries the per-scene anchors map");
-  ok(/beatSceneEvents\(scene,\s*durationMs,\s*geometry,\s*assetTags,\s*anchorsBySceneId\.get\(scene\.id\)\)/.test(renderSrc), "the beat plan receives the scene's anchors");
+  ok(/beatSceneEvents\(scene,\s*durationMs,\s*geometry,\s*assetTags,\s*anchorsBySceneId\.get\(scene\.id\),\s*assetMeta\)/.test(renderSrc), "the beat plan receives the scene's anchors (and the S147 meta)");
   // The lane caller opts in on BOTH paths (preview + full render).
   const jobsSrc = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
   const calls = jobsSrc.match(/renderWhiteboard\((\w+),\s*\{[^}]*\}\)/gs) ?? [];

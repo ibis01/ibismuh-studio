@@ -409,6 +409,11 @@ export async function renderWhiteboard(
   const assetTags = new Map<string, string[]>(
     [...lib.assets.values()].map((a) => [a.id, a.tags])
   );
+  // S147 — the matcher's extended vocabulary: the assets' alts + role (the
+  // effects' phrase scoring rides the same build the tags ride).
+  const assetMeta = new Map<string, { alts?: string[]; role?: string }>(
+    [...lib.assets.values()].map((a) => [a.id, { alts: a.alts, role: a.role }])
+  );
   const geometry = buildGeometry(
     [...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths }))
   );
@@ -453,7 +458,7 @@ export async function renderWhiteboard(
       // W4 slice 3 — voiced scenes with sane anchors ride the SPOKEN
       // window (the strokes land on the words that introduce them);
       // anchorless scenes keep the estimator byte-for-byte.
-      const events = beatSceneEvents(scene, durationMs, geometry, assetTags, anchorsBySceneId.get(scene.id));
+      const events = beatSceneEvents(scene, durationMs, geometry, assetTags, anchorsBySceneId.get(scene.id), assetMeta);
       eventsByScene.push(events);
       const frames = clock.scenes[si].frames;
       // W6 — the carry plan: a continuous scene inherits the PREVIOUS
