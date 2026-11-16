@@ -51,7 +51,7 @@ import {
   slideSegmentGraph,
   type SlideBrand,
 } from "./slides";
-import { validatePlanKinds, type CompositionPlan, type PlanVisualKind } from "./composition-plan";
+import { engineSegmentVerdict, type CompositionPlan, type PlanVisualKind } from "./composition-plan";
 import {
   planSceneMovements,
   sceneFilterGraph,
@@ -237,6 +237,19 @@ export interface RenderOptions {
    *  (no-doc renders, "render without timeline"). Parity-pinned: the two
    *  derivations agree exactly on every doc today's engines write. */
   timelinePlan?: CompositionPlan | null;
+  /** S143 (Stage X-full, the audit's F5) — the PRE-RENDERED ENGINE segments
+   *  for the plan's engine-kind scenes, aligned BY POSITION to `scenes`
+   *  (the docScenes all-or-nothing law: a length that matches neither the
+   *  full list nor the rendered slice drops the whole array — the wall then
+   *  refuses any engine kind, fail-closed). Each entry is the engine lane's
+   *  own artifact for that scene (whiteboard/graphics single-scene render);
+   *  the compositor STAGES it (transcode to the segment profile) and never
+   *  draws engine ink itself (the S87 slice-3 law). An engine scene without
+   *  its segment refuses at the wall — never a hole in a final. Named
+   *  "staged" — the D2 firewall (no routing logic reads the director's
+   *  ADVISORY engine pick) is a source-level law, and these artifacts are
+   *  the dispatcher's own delivery, never that pick. */
+  stagedEngineSegments?: (string | null)[];
   onProgress?: (current: number, total: number, label: string) => void;
 }
 
@@ -629,6 +642,36 @@ function resolveShotInputs(
     });
   }
   return out;
+}
+
+/** S143 (Stage X-full) — the ENGINE-SEGMENT staging transcode: the engine
+ *  lane's artifact rides ITS OWN geometry (the whiteboard project's canvas,
+ *  the graphics doc's surface), and the compositor's segment profile is a
+ *  different law (OUTPUT_SIZES geometry, the render fps, the quality tier's
+ *  x264/aac profile — the concat demuxer's `-c copy` requires IDENTICAL
+ *  codec parameters across segments). The staging pass letterboxes the
+ *  engine canvas into the render geometry (scale+pad, no crop — engine ink
+ *  is never lost) and re-encodes to the exact segment profile. NO `-t`: the
+ *  engine's own clock is senior for its scenes (the delivered artifact IS
+ *  the duration — the orchestrator probes and patches the windows after).
+ *  Exported for the unit pin (the args are the law's text). */
+export function engineSegmentTranscodeArgs(input: {
+  src: string;
+  out: string;
+  aspect: "16:9" | "9:16" | "1:1";
+  fps: number;
+  quality: { crf: string; preset: string };
+}): string[] {
+  const [w, h] = OUTPUT_SIZES[input.aspect].out;
+  return [
+    "-y",
+    "-i", input.src,
+    "-r", String(input.fps),
+    "-vf", `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`,
+    "-c:v", "libx264", "-preset", input.quality.preset, "-crf", input.quality.crf,
+    "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2",
+    input.out,
+  ];
 }
 
 /** Build one scene segment: visual track of exactly `dur` + narration audio
@@ -1612,6 +1655,16 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
   // renders). Homogeneous docs make the two reads identical — the parity
   // pins hold them to it.
   const planScenes = opts.timelinePlan?.scenes ?? null;
+  // S143 — the engine segments align like docScenes (all-or-nothing): a
+  // dispatch array for the FULL list slices to the preview head; anything
+  // else drops whole (null = no engine segments — the wall's verdict then
+  // refuses every engine kind, which is exactly the honest pre-S143 state).
+  const engineSegments =
+    opts.stagedEngineSegments && opts.stagedEngineSegments.length === opts.scenes.length
+      ? opts.stagedEngineSegments.slice(0, scenes.length)
+      : opts.stagedEngineSegments && opts.stagedEngineSegments.length === scenes.length
+        ? opts.stagedEngineSegments
+        : null;
   // S87 slice 3 — the routing wall: whiteboard-kind clips execute through
   // the Whiteboard lane (peer ENGINE, shared CONTRACT); runRenderJob routes
   // mode-whiteboard videos there before this entry. A whiteboard plan
@@ -1619,15 +1672,19 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
   // BEFORE any paid motion planning or geometry work runs.
   // S123 (G1) — the graphics lane rides the SAME wall: graphics-kind clips
   // execute through the graphics lane only.
-  // Stage X — the refusal reads the BUILDER REGISTRY (composition-plan's
-  // COMPOSITOR_SEGMENT_KINDS), not a hard-coded kind list: a kind without a
-  // segment builder refuses with the registry's name (the per-scene
-  // dispatch lands kind by kind; the wall message stays one string).
+  // Stage X-full (S143) — the refusal reads the BUILDER REGISTRY plus the
+  // ENGINE-SEGMENT verdict: an engine kind WITH its pre-rendered segment
+  // is admitted (the compositor stages the artifact); one WITHOUT refuses
+  // with the registry's name (the per-scene dispatch landed kind by kind;
+  // the wall message stays one string).
   {
-    const unsupported = validatePlanKinds((planScenes ?? []).map((ps) => ps.kind)).unsupported;
-    if (unsupported.length > 0)
+    const verdict = engineSegmentVerdict(
+      (planScenes ?? []).map((ps) => ps.kind),
+      engineSegments ?? []
+    );
+    if (!verdict.ok)
       throw new Error(
-        `visual kinds without a compositor segment builder (${unsupported.join(", ")}) execute through their engine lanes — the compositor received an engine plan, which is a routing bug (not a render input problem)`
+        `visual kinds without a compositor segment builder (${[...new Set(verdict.missing.map((m) => m.kind))].join(", ")}) execute through their engine lanes — Stage X admits them only as pre-rendered engine segments, and ${verdict.missing.length} engine scene(s) arrived with none: a routing bug, not a render input problem`
       );
   }
   const sceneKindOf = (i: number): PlanVisualKind =>
@@ -1977,7 +2034,36 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
     // i2v/stock/slides scenes carry none (their channels have no intra-scene
     // flips), and neither do M2 scenes that fell back before the graph ran.
     const shotJoinMarks: (ShotJoinMark[] | undefined)[] = [];
+    // S143 — the positions whose segment arrived PRE-RENDERED from its
+    // engine lane (the compositor stages the artifact instead of building).
+    const engineSegIdx: number[] = [];
     for (const [i, scene] of scenes.entries()) {
+      // S143 — the ENGINE branch: this scene's ink is ALREADY drawn (the
+      // engine lane's own artifact, delivered by the dispatcher) — stage it
+      // to the segment profile and let its OWN clock patch the windows
+      // after the loop. The engine owns its scene's pixels AND sound
+      // end-to-end (the S87 slice-3 law at the artifact level): the
+      // compositor's creative layer (grade/pip/chroma/sfx/ambience) has no
+      // purchase on an engine scene; caption TEXT still applies through
+      // the captions pass below (it is a document-level edit, not a
+      // segment-builder fact).
+      const engineSeg = engineSegments?.[i] ?? null;
+      if (engineSeg && fs.existsSync(engineSeg)) {
+        const kind = sceneKindOf(i);
+        report(i, `Drawing the ${kind} scene ${i + 1} (its engine lane's own render)`);
+        const segPath = path.join(tmpDir, `seg-${String(i + 1).padStart(2, "0")}.mp4`);
+        await run("ffmpeg", engineSegmentTranscodeArgs({
+          src: engineSeg,
+          out: segPath,
+          aspect: motionAspect,
+          fps: motionFps,
+          quality: QUALITY_ENCODING[opts.quality ?? "standard"],
+        }));
+        segPaths.push(segPath);
+        shotJoinMarks.push(undefined); // engines have no M2 intra-scene joins
+        engineSegIdx.push(i);
+        continue;
+      }
       // S35 — the label tells the truth about WHO is playing: the channel
       // decides, and a per-scene i2v pick says so by name.
       const chan = channels[i]?.channel;
@@ -2070,6 +2156,27 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
         fps: motionFps,
       });
       segPaths.push(segPath);
+    }
+
+    // S143 — the engine's own clock wins for its scenes: probe each staged
+    // engine segment and patch the composition windows BEFORE the stitch.
+    // The stitch's blend shifts, the caption debt, the expected cuts, and
+    // the QC lenses all read `durations`/`segments` — patching once here
+    // keeps every downstream consumer on the engine's DELIVERED truth (a
+    // scene the engine rendered 9.4s long is 9.4s in the final, whatever
+    // the narration estimate guessed).
+    if (engineSegIdx.length > 0) {
+      for (const i of engineSegIdx) {
+        const actual = await probeDuration(segPaths[i]);
+        if (Number.isFinite(actual) && actual > 0) {
+          durations[i] = Math.max(0.5, Math.round(actual * 1000) / 1000);
+        }
+      }
+      let engineCursor = 0;
+      for (let i = 0; i < durations.length; i++) {
+        segments[i] = { start: Math.round(engineCursor * 1000) / 1000, duration: durations[i] };
+        engineCursor += durations[i];
+      }
     }
 
     // 3) Stitch into the base video — the timeline doc's PER-BOUNDARY

@@ -65,6 +65,41 @@ export function validatePlanKinds(kinds: readonly PlanVisualKind[]): PlanKindsVe
   return { ok: unsupported.length === 0, unsupported };
 }
 
+/** S143 (Stage X-full, the audit's F5) — the per-scene ENGINE-SEGMENT
+ *  verdict: an engine kind (whiteboard/graphics) is legal in the
+ *  compositor's plan ONLY as a PRE-RENDERED segment. The engine lane draws
+ *  its own ink (the S87 slice-3 law — the compositor never builds engine
+ *  segments), the dispatcher collects every engine-kind scene's artifact
+ *  BEFORE the compositor runs, and this verdict is the compositor's only
+ *  admission check: a plan scene whose kind has no builder but which
+ *  carries its engine segment PASSES (the compositor stages the artifact —
+ *  transcode to the segment profile, the engine's own clock patched into
+ *  the composition windows); one missing segment refuses the WHOLE plan
+ *  fail-closed (never a hole in the middle of a final).
+ *
+ *  PURE — the wall reads this instead of scanning kinds inline, so the
+ *  admission law is pin-able without spawning a render. */
+export interface EngineSegmentVerdict {
+  ok: boolean;
+  /** The positions whose kind has no builder AND no engine segment. */
+  missing: { position: number; kind: PlanVisualKind }[];
+}
+
+export function engineSegmentVerdict(
+  kinds: readonly (PlanVisualKind | undefined)[],
+  engineSegments: readonly (string | null)[]
+): EngineSegmentVerdict {
+  const registry = COMPOSITOR_SEGMENT_KINDS as readonly string[];
+  const missing: { position: number; kind: PlanVisualKind }[] = [];
+  for (let i = 0; i < kinds.length; i++) {
+    const kind = kinds[i];
+    if (kind && !registry.includes(kind) && !engineSegments[i]) {
+      missing.push({ position: i, kind });
+    }
+  }
+  return { ok: missing.length === 0, missing };
+}
+
 export interface CompositionPlanScene {
   /** Play-order position (0-based) — the row's scenes align BY POSITION
    *  (the sceneOrder contract keeps row and doc in the same play order). */

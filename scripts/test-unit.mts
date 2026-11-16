@@ -13461,13 +13461,15 @@ await test("s123 P3: the lane is wired end-to-end — route branch, job dispatch
     jobsKind.includes('row.kind === "graphics" && row.entityId === baseEntityId(row.entityId)'),
     "the graphics FULL render rides the idempotence recovery wall (an already-landed final is marked done, never re-rendered)"
   );
-  // The compositor's routing wall — Stage X moved it onto the BUILDER
-  // REGISTRY (the refusal is registry-driven now, not a hard-coded kind
-  // list; the law is unchanged: engine clips execute through their lanes).
+  // The compositor's routing wall — Stage X-full (S143) moved it onto the
+  // BUILDER REGISTRY + the ENGINE-SEGMENT verdict (the law evolved: engine
+  // clips execute through their lanes AND arrive as pre-rendered segments
+  // when the plan is mixed; the refusal is still registry-driven).
   const compositor = fs.readFileSync("src/lib/tubeforge/render.ts", "utf8");
   ok(
-    compositor.includes("validatePlanKinds((planScenes ?? []).map((ps) => ps.kind))"),
-    "the compositor's routing wall reads the builder registry (engine clips execute through their engine lanes only)"
+    compositor.includes("engineSegmentVerdict((planScenes ?? []).map((ps) => ps.kind),") ||
+      compositor.includes("engineSegmentVerdict("),
+    "the compositor's routing wall reads the S143 engine-segment verdict (engine clips execute through their lanes AND arrive as staged artifacts)"
   );
   // The doc column + its migration.
   const schema = fs.readFileSync("prisma/schema.prisma", "utf8");
@@ -20556,10 +20558,40 @@ await test("Stage X the builder registry — the multi-kind gate is a registry, 
   ok(!engine.ok && engine.unsupported.length === 1 && engine.unsupported[0] === "graphics", "an engine kind without a builder names itself");
   const mixed = cp.validatePlanKinds(["whiteboard", "character"]);
   ok(!mixed.ok && mixed.unsupported.length === 2, "every unsupported kind is listed (the all-or-nothing law)");
-  // The compositor's wall READS the registry (the source pin).
+  // The compositor's wall READS the S143 verdict now (the source pin).
   const renderSrc = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
-  ok(renderSrc.includes("validatePlanKinds("), "the wall consumes the registry");
+  ok(renderSrc.includes("engineSegmentVerdict("), "the wall consumes the registry through the S143 engine-segment verdict");
   ok(renderSrc.includes("visual kinds without a compositor segment builder"), "the refusal names the registry law");
+});
+
+await test("S143 Stage X-full (audit F5) — the engine-segment verdict: a mixed plan with its artifacts rides, one missing segment refuses whole", async () => {
+  const cp = await import("../src/lib/tubeforge/composition-plan");
+  // A mixed plan with every engine segment staged: ADMITTED.
+  const mixed = cp.engineSegmentVerdict(["whiteboard", "video", "graphics"], ["/tmp/wb1.mp4", null, "/tmp/gx3.mp4"]);
+  ok(mixed.ok && mixed.missing.length === 0, "a mixed plan with every engine segment rides (Stage X-full's whole point)");
+  // One missing segment refuses the WHOLE plan — never a hole in a final.
+  const hole = cp.engineSegmentVerdict(["video", "whiteboard", "video"], [null, null, null]);
+  ok(!hole.ok && hole.missing.length === 1 && hole.missing[0]?.position === 1, "the one engine scene without its segment refuses (fail-closed)");
+  eq(hole.missing[0]?.kind, "whiteboard", "the refusal names the kind");
+  // The pre-S143 routing bug stays refused: a pure engine plan, no artifacts.
+  const pure = cp.engineSegmentVerdict(["whiteboard", "whiteboard"], []);
+  ok(!pure.ok && pure.missing.length === 2, "a pure engine plan with no artifacts is still the routing bug");
+  // Compositor kinds never consult segments (the builders' own law).
+  const own = cp.engineSegmentVerdict(["video", "image"], [null, null]);
+  ok(own.ok, "video/image scenes need no engine segment (the builders own them)");
+  // The dispatcher + the staging transcode ride the sources (source pins).
+  const jobSrc = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  ok(jobSrc.includes("buildEngineSegments"), "the mixed-engine dispatcher rides the render job");
+  ok(jobSrc.includes("stagedEngineSegments: engineSegments ?? undefined"), "the dispatcher's artifacts ride renderVideo");
+  ok(jobSrc.includes("it cannot draw engine ink itself"), "the dispatcher's refusals name the S87 slice-3 law");
+  const r = await import("../src/lib/tubeforge/render");
+  const args = r.engineSegmentTranscodeArgs({ src: "a.mp4", out: "b.mp4", aspect: "16:9", fps: 30, quality: { crf: "20", preset: "veryfast" } });
+  const flat = args.join(" ");
+  ok(flat.includes("scale=1920:1080:force_original_aspect_ratio=decrease"), "the staging letterboxes into the render geometry (no crop — engine ink is never lost)");
+  ok(flat.includes("pad=1920:1080:(ow-iw)/2:(oh-ih)/2") && flat.includes("format=yuv420p"), "the pad centers the engine canvas; the pixel format matches the segment law");
+  ok(args.includes("libx264") && args.includes("-crf") && args.includes("veryfast"), "the video profile matches the segment law (identical codecs — the concat's -c copy)");
+  ok(flat.includes("-c:a aac -b:a 160k -ar 48000 -ac 2"), "the audio profile matches the segment law");
+  ok(!args.includes("-t"), "no -t: the engine's own clock is senior (the delivered artifact IS the duration — the orchestrator patches the windows after)");
 });
 
 await test("S135 the graphics applier string EXECUTES — camera leg, absent-camera leg, and the bare-reference ban (the CI repair receipt)", async () => {

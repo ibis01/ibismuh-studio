@@ -75,7 +75,7 @@ import type { ExpectedCuts } from "./render-qc";
 import { applyQcPolicy, qcEnforcementMode } from "./qc-policy";
 import { parsePlan, getApprovedAudioMap } from "./director-plan";
 import { parseTimeline, docSceneSettings, type DocSceneSettings } from "./timeline";
-import { compositionPlan, type CompositionPlan } from "./composition-plan";
+import { compositionPlan, type CompositionPlan, type PlanVisualKind } from "./composition-plan";
 import type { ExportQuality, MusicPick, PosterPick, ShortPick } from "./studio-doc";
 import { docMusicPick, docPosterPick, docShortPick } from "./studio-doc";
 import { resolveTransition, transitionSummary, sanitizeTransitionStyle, TRANSITION_IDS } from "./transitions";
@@ -801,6 +801,136 @@ async function runBoundaryPreviewJob(
   });
 }
 
+/**
+ * S143 (Stage X-full, the audit's F5) — the MIXED-ENGINE DISPATCHER.
+ *
+ * The pre-S143 dispatch was by VIDEO MODE: a whiteboard video routes whole
+ * to the whiteboard lane, a graphics video whole to the graphics lane, and
+ * the compositor's wall refused ANY plan carrying an engine kind — a mixed
+ * doc (scene 1 board, scene 2 video) could never render at all. Stage
+ * X-full completes the per-scene dispatch: the plan's ENGINE-kind scenes
+ * render through their own lanes as single-scene full-quality artifacts
+ * (the engine's own clock, own surface, own audio — VO only, no bed: the
+ * video-wide bed rides the compositor's finalize), the compositor-kind
+ * scenes keep the existing segment builders, and the compositor stages the
+ * engine artifacts through the S143 transcode (engineSegmentVerdict is the
+ * admission law).
+ *
+ * The engine scene mapping law: the scaffold names engine scenes
+ * `scene-<index>` after the STORY scene index (voFilesFor's documented
+ * contract) — the plan's scene at position i carries sceneIndex, and the
+ * engine scene with that id renders. An engine-kind plan scene whose
+ * engine doc/project doesn't carry the scene refuses loudly (a data bug,
+ * not a render input problem).
+ *
+ * Cancellation rides the render job's own guard kind; progress reports
+ * through the caller's onProgress (the job's setJobProgress seam).
+ */
+async function buildEngineSegments(
+  video: { id: string; whiteboardProject: string | null; graphicsDoc: string | null },
+  renderScenes: { index: number }[],
+  plan: CompositionPlan,
+  onProgress: (current: number, total: number, label: string) => void
+): Promise<(string | null)[]> {
+  const segDir = path.join(videoDir(video.id), "engine-segs");
+  fs.rmSync(segDir, { recursive: true, force: true });
+  fs.mkdirSync(segDir, { recursive: true });
+  const total = renderScenes.length;
+  const out: (string | null)[] = renderScenes.map(() => null);
+  const kindAt = (i: number): PlanVisualKind => plan.scenes[i]?.kind ?? "video";
+
+  // ---- the whiteboard scenes: one full-quality single-scene render each ----
+  const wbIdx = renderScenes.map((_, i) => i).filter((i) => kindAt(i) === "whiteboard");
+  if (wbIdx.length > 0) {
+    const doc = parseWhiteboardDoc(video.whiteboardProject);
+    if (!doc) {
+      throw new Error(
+        `the plan carries ${wbIdx.length} whiteboard-kind scene(s) but the video has no whiteboard project — scaffold one in the Whiteboard Studio (Stage X-full: the compositor consumes engine segments, it cannot draw engine ink itself)`
+      );
+    }
+    const { project, uploadedAssets } = await loadValidatedProject(doc, video.id);
+    const voFiles = voFilesFor(project.scenes, video.id);
+    for (const i of wbIdx) {
+      const sceneIndex = plan.scenes[i]?.sceneIndex ?? renderScenes[i]?.index ?? i + 1;
+      const sceneId = `scene-${sceneIndex}`;
+      const engineScene = project.scenes.find((s) => s.id === sceneId);
+      if (!engineScene) {
+        throw new Error(
+          `the plan's scene ${sceneIndex} is whiteboard-kind but the project carries no "${sceneId}" — the scaffold names engine scenes scene-<index>; re-scaffold or fix the plan's kinds`
+        );
+      }
+      if (isJobCancelled(video.id, "render")) throw new JobCancelledError();
+      onProgress(Math.min(i + 1, total), total, `Drawing scene ${sceneIndex} through the whiteboard engine`);
+      const one: WhiteboardProject = { ...project, scenes: [engineScene] };
+      const res = await renderWhiteboard(one, {
+        outDir: path.join(segDir, `wb-scene-${sceneIndex}`),
+        voFiles,
+        asrAnchors: true,
+        uploadedAssets,
+        onProgress: (label, fraction) => {
+          if (isJobCancelled(video.id, "render")) throw new JobCancelledError();
+          setJobProgress(video.id, "render", Math.max(1, Math.round(fraction * total)), total, `${label} (scene ${sceneIndex})`);
+        },
+      });
+      const file = res.scenes[0]?.file ?? null;
+      if (!file || !fs.existsSync(file)) {
+        throw new Error(`the whiteboard engine returned no artifact for scene ${sceneIndex}`);
+      }
+      out[i] = file;
+    }
+  }
+
+  // ---- the graphics scenes: the SAME treatment through the graphics lane ----
+  const gxIdx = renderScenes.map((_, i) => i).filter((i) => kindAt(i) === "graphics");
+  if (gxIdx.length > 0) {
+    const doc = parseGraphicsDoc(video.graphicsDoc);
+    if (!doc) {
+      throw new Error(
+        `the plan carries ${gxIdx.length} graphics-kind scene(s) but the video has no graphics doc — scaffold one in the Graphics Studio (Stage X-full: the compositor consumes engine segments, it cannot draw engine ink itself)`
+      );
+    }
+    // S126 — the import lane's one-seam resolution (the SAME call the
+    // graphics lane's own job makes): missing sprites refuse fail-closed.
+    const referencedKeys = doc.scenes
+      .flatMap((s) => s.elements.filter((el) => el.kind === "sprite" && el.sprite !== undefined).map((el) => el.sprite?.assetKey ?? ""))
+      .filter(Boolean);
+    const { assets: spriteAssets, missing: missingImports } = await resolveSpriteAssets(video.id, referencedKeys);
+    if (missingImports.length > 0) {
+      throw new Error(`unresolved sprite imports (${missingImports.join(", ")}) — re-upload or remove the sprites before rendering`);
+    }
+    const voFiles = voFilesFor(doc.scenes, video.id);
+    for (const i of gxIdx) {
+      const sceneIndex = plan.scenes[i]?.sceneIndex ?? renderScenes[i]?.index ?? i + 1;
+      const sceneId = `scene-${sceneIndex}`;
+      const engineScene = doc.scenes.find((s) => s.id === sceneId);
+      if (!engineScene) {
+        throw new Error(
+          `the plan's scene ${sceneIndex} is graphics-kind but the doc carries no "${sceneId}" — the scaffold names engine scenes scene-<index>; re-scaffold or fix the plan's kinds`
+        );
+      }
+      if (isJobCancelled(video.id, "render")) throw new JobCancelledError();
+      onProgress(Math.min(i + 1, total), total, `Composing scene ${sceneIndex} through the graphics engine`);
+      const scoped = { ...doc, scenes: [engineScene] };
+      const res = await renderGraphics(scoped, {
+        outDir: path.join(segDir, `gx-scene-${sceneIndex}`),
+        voFiles,
+        spriteAssets,
+        onProgress: (label, fraction) => {
+          if (isJobCancelled(video.id, "render")) throw new JobCancelledError();
+          setJobProgress(video.id, "render", Math.max(1, Math.round(fraction * total)), total, `${label} (scene ${sceneIndex})`);
+        },
+      });
+      const file = res.scenes[0]?.file ?? null;
+      if (!file || !fs.existsSync(file)) {
+        throw new Error(`the graphics engine returned no artifact for scene ${sceneIndex}`);
+      }
+      out[i] = file;
+    }
+  }
+
+  return out;
+}
+
 export async function runRenderJob(
   videoId: string,
   opts: RenderJobOptions = {}
@@ -996,6 +1126,28 @@ export async function runRenderJob(
     : null;
 
   try {
+    // S143 (Stage X-full, the audit's F5) — the mixed-engine dispatch: a plan
+    // carrying ENGINE kinds collects each engine scene's artifact BEFORE the
+    // compositor runs (the engine lane draws its ink — the S87 slice-3 law;
+    // the compositor only stages the artifact). A pure-compositor plan (every
+    // doc the engines write today) never enters the dispatcher — the
+    // pre-S143 path rides byte-identical. A misaligned plan (length ≠ the
+    // rendered scene list) falls to null: the wall's verdict then refuses
+    // any engine kind, fail-closed.
+    const engineSegments =
+      timelinePlan &&
+      timelinePlan.scenes.length === renderScenes.length &&
+      timelinePlan.scenes.some((s) => s.kind === "whiteboard" || s.kind === "graphics")
+        ? await buildEngineSegments(
+            { id: videoId, whiteboardProject: video.whiteboardProject, graphicsDoc: video.graphicsDoc },
+            renderScenes,
+            timelinePlan,
+            (current, total, label) => {
+              if (isJobCancelled(videoId, "render")) throw new JobCancelledError();
+              setJobProgress(videoId, "render", current, total, label);
+            }
+          )
+        : null;
     const result = await renderVideo({
       videoId,
       scenes: renderScenes,
@@ -1022,6 +1174,7 @@ export async function runRenderJob(
       sceneDurationsSec,
       docScenes,
       timelinePlan,
+      stagedEngineSegments: engineSegments ?? undefined,
       motion: sanitizeMotion({
         mode: video.motionMode,
         intensity: video.motionIntensity,
