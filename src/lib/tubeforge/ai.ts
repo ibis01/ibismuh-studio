@@ -16,22 +16,21 @@ import {
   imageEditSupported,
 } from "./providers/image";
 
-import { scratchDir, storageDriverKind } from "./storage";
+import { isVercelRuntime, scratchDir, storageDriverKind } from "./storage";
 import * as storage from "./storage";
 
 export function videoDir(videoId: string) {
-  // VERCEL FIX: Vercel's root filesystem is read-only. We MUST use /tmp.
-  // This prevents the ENOENT error when story.ts tries to write scene WAVs.
-  if (process.env.VERCEL === "1" || process.env.NOW_BUILDER === "1") {
-    const tmpDir = path.join("/tmp", "tubeforge-uploads", videoId);
-    fs.mkdirSync(tmpDir, { recursive: true });
-    return tmpDir;
-  }
-  
-  // Storage seam (T-3.7): local driver keeps the historical uploads/<id>/
-  // layout (ffmpeg writes there directly); the s3 driver redirects renders
-  // to a local scratch dir while durable artifacts live in object storage.
-  return scratchDir(videoId);
+  // S150 — ONE root again: storage.ts's UPLOAD_ROOT now lands on /tmp on
+  // Vercel, so scratchDir() and every put()/get() share the same writable
+  // tree — the scene WAVs written here, the merged voiceover.wav published
+  // through storage.put, and the renderer's ffmpeg inputs all resolve to
+  // /tmp/tubeforge-uploads/<videoId>/. This restores the one-seam design the
+  // interim hard-coded /tmp path forked around.
+  // The explicit mkdir keeps the failure loud (scratchDir swallows
+  // read-only-FS errors by design — module-evaluation callers rely on that).
+  const dir = scratchDir(videoId);
+  if (isVercelRuntime()) fs.mkdirSync(dir, { recursive: true });
+  return dir;
 }
 
 let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;

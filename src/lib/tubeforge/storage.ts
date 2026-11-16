@@ -61,10 +61,30 @@ export function storageDriverKind(): StorageDriverKind {
   return process.env.TUBEFORGE_STORAGE_DRIVER === "s3" ? "s3" : "local";
 }
 
-/** Local root — also the scratch root for generated artifacts (both drivers). */
+/** True on Vercel (serverless functions and builds) — the deployed filesystem
+ *  is read-only everywhere except /tmp. */
+export function isVercelRuntime(): boolean {
+  return process.env.VERCEL === "1" || process.env.NOW_BUILDER === "1";
+}
+
+/** Local root — also the scratch root for generated artifacts (both drivers).
+ *
+ *  S150 — the ENOENT mkdir incident: on Vercel the historical default root
+ *  (<cwd>/uploads = /var/task/uploads) sits on the READ-ONLY function
+ *  filesystem. Every put() down the local driver died with
+ *  "ENOENT: no such file or directory, mkdir '<path>'" the moment a job
+ *  survived long enough to reach it — the S148 transaction fix unblocked the
+ *  voiceover job, it spoke every scene, merged the WAV, and THEN crashed at
+ *  the merged voiceover.wav publish. Defaulting the root to /tmp (writable,
+ *  the same tree ai.ts's videoDir scratch already uses) makes the local
+ *  driver work on Vercel out of the box; an explicit TUBEFORGE_UPLOAD_ROOT
+ *  always wins, and durable-artifact-grade deployments on serverless are
+ *  still the s3 driver (see scratchDir's note). */
 export const UPLOAD_ROOT = process.env.TUBEFORGE_UPLOAD_ROOT
   ? path.resolve(process.env.TUBEFORGE_UPLOAD_ROOT)
-  : path.join(process.cwd(), "uploads");
+  : isVercelRuntime()
+    ? "/tmp/tubeforge-uploads"
+    : path.join(process.cwd(), "uploads");
 
 
 export interface PutOptions {
