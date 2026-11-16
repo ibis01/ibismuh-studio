@@ -30,3 +30,15 @@ model Post {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+model WhiteboardScene {
+  id        String   @id @default(cuid())
+  name      String
+  width     Int
+  height    Int
+  options   String
+  stats     String
+  imageData String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
