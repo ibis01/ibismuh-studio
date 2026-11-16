@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/tubeforge/tenant-db";
 import { requireUser } from "@/lib/tubeforge/tenant";
 import type { Video } from "@prisma/client";
-import { parseJsonLoose, generateScriptPackage } from "@/lib/tubeforge/ai";
+import { parseJsonLoose } from "@/lib/tubeforge/ai";
 import { log } from "@/lib/tubeforge/log";
 
 // S57/T-57.2 — helper-scope logger (brainstormAngles has no request in
@@ -10,18 +10,12 @@ import { log } from "@/lib/tubeforge/log";
 const batchLog = log.child({ mod: "batch" });
 import { aiCall } from "@/lib/tubeforge/budget";
 import { CreditBlockedError, creditBlockResponse } from "@/lib/tubeforge/billing";
-import { generateSceneScriptPackage } from "@/lib/tubeforge/story";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { commitSceneChanges } from "@/lib/tubeforge/scene-revisions";
-import { parseTimeline } from "@/lib/tubeforge/timeline";
-import { deriveStatus } from "@/lib/tubeforge/status";
+import { runScriptJob } from "@/lib/tubeforge/script-job";
 import { startJob } from "@/lib/tubeforge/jobs";
 import { serializeVideo } from "@/lib/tubeforge/serialize";
 import { chatComplete } from "@/lib/tubeforge/providers/chat";
 import { FORMATS, RENDER_MODES } from "@/lib/tubeforge/types";
 import { errorText } from "@/lib/tubeforge/redact";
-
-const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).length;
 
 interface Angle {
   title: string;
@@ -120,12 +114,18 @@ export async function POST(req: NextRequest) {
       ? String(body.renderMode)
       : "kenburns";
 
-    // S67 — whiteboard is a story-format mode (the E1 design §2.2 law):
-    // a classic-script batch row with it is a contradiction, refused here
-    // (400) instead of a video that can never render.
-    if (renderMode === "whiteboard" && format !== "story")
+    // S67 — the engine modes are STORY-format modes (the E1 design §2.2
+    // law; S123: the engine lanes are a SET — graphics joins whiteboard):
+    // a classic-script batch row with either is a contradiction, refused
+    // here (400) instead of a video that can never render (the single-
+    // create route's gate, aligned — the S155 audit's finding: a batch of
+    // classic+graphics rows was accepted and could never render).
+    if (
+      (renderMode === "whiteboard" || renderMode === "graphics") &&
+      format !== "story"
+    )
       return NextResponse.json(
-        { error: "Whiteboard mode needs a scene-based story — create the row with format \"story\"" },
+        { error: `${renderMode === "whiteboard" ? "Whiteboard" : "Motion graphics"} mode needs a scene-based story — create the rows with format "story"` },
         { status: 400 }
       );
 
@@ -178,106 +178,16 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // 3) Queue script generation per video. Each runs as its own tracked
-    // "script" job so Library polling, job history and crash recovery work
-    // exactly like a single-video create.
+    // 3) Queue script generation per video — through THE ONE JOB BODY
+    // (S155): runScriptJob carries the storm-round patience (~2.5 h of
+    // riding out 429 storms with escalating cool-downs), the S135 ordered
+    // failure writes, the engine-lane error attribution and the Stop
+    // handling the batch's inline copy lacked — a 429 storm failed every
+    // video in the series on round 1 while a single create survived. Each
+    // row still runs as its own tracked "script" job, so Library polling,
+    // job history and crash recovery work exactly like a single create.
     for (const video of videos) {
-      const isStory = video.format === "story";
-      await startJob(video.id, "script", async () => {
-        try {
-          if (isStory) {
-            const pkg = await generateSceneScriptPackage({
-              topic: video.topic,
-              niche: video.niche,
-              tone: video.tone,
-              length: video.length,
-              contentPolicy: video.contentPolicy,
-              character: character
-                ? {
-                    name: character.name,
-                    personality: character.personality,
-                    identityAnchor: character.identityAnchor,
-                  }
-                : null,
-            });
-            // S112 — EPOCH commit (fresh video, genesis revisions from
-            // creation; the batch's script job runs under the request ctx).
-            await commitSceneChanges({
-              video,
-              beforeScenes: parseScenes(video.scenes),
-              beforeDoc: parseTimeline(video.timeline),
-              afterScenes: pkg.scenes,
-              afterDoc: parseTimeline(video.timeline),
-              kind: "epoch",
-              origin: "batch-regen",
-              rowUpdate: {
-                title: pkg.title,
-                script: pkg.script,
-                description: pkg.description,
-                tags: pkg.tags.join(", "),
-                wordCount: wordCount(pkg.script),
-                status: "scripted",
-                error: null,
-              },
-            });
-            await db.activity.create({
-              data: {
-                organizationId: auth.ctx.organizationId,
-                userId: auth.ctx.userId,
-                videoId: video.id,
-                stage: "script",
-                message: `Scene script written — "${pkg.title}" (${pkg.scenes.length} scenes, ${wordCount(pkg.script)} words)`,
-              },
-            });
-          } else {
-            const pkg = await generateScriptPackage({
-              topic: video.topic,
-              niche: video.niche,
-              tone: video.tone,
-              length: video.length,
-            });
-            await db.video.update({
-              where: { id: video.id },
-              data: {
-                title: pkg.title,
-                script: pkg.script,
-                description: pkg.description,
-                tags: pkg.tags.join(", "),
-                wordCount: wordCount(pkg.script),
-                status: deriveStatus({ ...video, script: pkg.script }),
-                error: null,
-              },
-            });
-            await db.activity.create({
-              data: {
-                organizationId: auth.ctx.organizationId,
-                userId: auth.ctx.userId,
-                videoId: video.id,
-                stage: "script",
-                message: `Script written — "${pkg.title}" (${wordCount(pkg.script)} words)`,
-              },
-            });
-          }
-        } catch (err) {
-          const message = errorText(err, "Script generation failed");
-          await db.video
-            .update({ where: { id: video.id }, data: { status: "failed", error: message } })
-            .catch(() => {});
-          await db.activity
-            .create({
-              data: {
-                organizationId: auth.ctx.organizationId,
-                userId: auth.ctx.userId,
-                videoId: video.id,
-                stage: "script",
-                level: "error",
-                message: `Script generation failed: ${message}`,
-              },
-            })
-            .catch(() => {});
-          throw err;
-        }
-      });
+      await startJob(video.id, "script", () => runScriptJob(video.id));
     }
 
     return NextResponse.json(

@@ -1021,27 +1021,32 @@ export function CreateView() {
             if (!stocked) return;
           }
 
+          // S155 — the stages are INDEPENDENT toggles: voice, thumbnail and
+          // render each key off their own switch. The old nesting trapped
+          // thumbnail AND render inside autoVoice — a user with their own
+          // voice got no render at all, and a user with a voice but no
+          // auto-thumb got no thumbnail (the classic branch's bug too).
           if (autopilot && autoVoice) {
             const voiced = await runStage("voiceover", () =>
               startVoiceover(v.id),
             );
             if (!voiced) return;
+          }
 
-            if (autopilot && autoThumb) {
-              const thumbed = await runStage("thumbnail", () =>
-                startThumbnail(v.id),
-              );
-              if (!thumbed) return;
+          if (autopilot && autoThumb) {
+            const thumbed = await runStage("thumbnail", () =>
+              startThumbnail(v.id),
+            );
+            if (!thumbed) return;
+          }
 
-              if (renderMode === "animated") {
-                // Full AI animation — runs end-to-end now (background render
-                // job, ~4 min per scene). The stepper tracks live progress.
-                await runStage("render", () => startRender(v.id, "animated"));
-              } else {
-                // Ken Burns + Stock b-roll hybrid — Smart Motion compositor.
-                await runStage("render", () => startRender(v.id, renderMode));
-              }
-            }
+          if (renderMode === "animated") {
+            // Full AI animation — runs end-to-end now (background render
+            // job, ~4 min per scene). The stepper tracks live progress.
+            await runStage("render", () => startRender(v.id, "animated"));
+          } else {
+            // Ken Burns + Stock b-roll hybrid — Smart Motion compositor.
+            await runStage("render", () => startRender(v.id, renderMode));
           }
         } else {
           if (autopilot && autoVoice) {
@@ -1049,9 +1054,9 @@ export function CreateView() {
               startVoiceover(v.id),
             );
             if (!voiced) return;
-            if (autopilot && autoThumb) {
-              await runStage("thumbnail", () => startThumbnail(voiced.id));
-            }
+          }
+          if (autopilot && autoThumb) {
+            await runStage("thumbnail", () => startThumbnail(v.id));
           }
         }
 

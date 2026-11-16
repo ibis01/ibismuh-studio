@@ -339,8 +339,8 @@ RETENTION RULES:
 - The FIRST sentence is the hook: open in mid-action, drop a shocking number, or start at the most dramatic moment. Name something concrete within the first 5 words. NEVER open with background, context or a dictionary-style definition. The hook must open a loop the script only closes near the end.
 - Insert a pattern interrupt every ~75 words: a reversal ('But then...'), a direct question, or a counter-intuitive fact.
 - The script is SPOKEN aloud: write numbers and formulas in words ("ten percent a year", never "(1+R)^T"; "20 percent", never "20%"). No markdown, no stage directions.
-- The script is SPOKEN aloud: write formulas in words ("ten percent a year", never "(1+R)^T"; "20 percent", never "20%"). No markdown, no stage directions.
 - Every paragraph ends on a line that pulls the viewer forward. The final paragraph is the call-to-action.
+- LENGTH IS A CONTRACT: the script must be at least ${Math.round(words * 0.55)} words (the target is about ${words}). A thin script is a failed response, not a valid one.
 
 Return JSON with exactly these keys:
 {
@@ -360,6 +360,17 @@ Return JSON with exactly these keys:
           : [];
         if (!title || !script)
           throw new Error("Incomplete script package from model");
+        // S155 — the classic length contract (the S151 story floor's
+        // sibling): the picker promises about N words, and a lazy model used
+        // to ship a thin script silently. Below the floor = a failed
+        // generation — aiCall's retry loop re-asks with the same length
+        // instruction instead of recording a script half the promised size.
+        const wordCount = script.split(/\s+/).filter(Boolean).length;
+        const minWords = Math.round(words * 0.55);
+        if (wordCount < minWords)
+          throw new Error(
+            `Script came back short: ${wordCount} words for a ${opts.length} video that promises about ${words} — retrying`
+          );
         return { title, script, description, tags };
       },
     }

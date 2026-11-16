@@ -12877,6 +12877,9 @@ await test("scene-revisions: the eleven mutator sites all record revisions (sour
   // through commitSceneChanges or is a defensive fallback in stock.ts (the
   // video-vanished-mid-run edge). A NEW path that writes scenes directly
   // fails this pin — it would bypass the revision history.
+  // (S155: the batch route no longer commits DIRECTLY — its rows ride
+  // runScriptJob, whose commit is pinned via script-job.ts below. The
+  // transitively-covered path is asserted in the batch's own pin.)
   const mutators: Array<[string, string]> = [
     ["src/app/api/videos/[id]/scenes/route.ts", "commitSceneChanges"],
     ["src/app/api/videos/[id]/assemble/route.ts", "commitSceneChanges"],
@@ -12884,7 +12887,6 @@ await test("scene-revisions: the eleven mutator sites all record revisions (sour
     ["src/app/api/videos/[id]/studio/voice/route.ts", "commitSceneChanges"],
     ["src/app/api/videos/[id]/studio/pace/route.ts", "commitSceneChanges"],
     ["src/app/api/videos/[id]/script/route.ts", "commitSceneChanges"],
-    ["src/app/api/videos/batch/route.ts", "commitSceneChanges"],
     ["src/lib/tubeforge/script-job.ts", "commitSceneChanges"],
     ["src/lib/tubeforge/convert.ts", "commitSceneChanges"],
     ["src/lib/tubeforge/stock.ts", "commitSceneChanges"],
@@ -21634,6 +21636,38 @@ await test("S154 the engine ffmpeg seams all ride the zombie-aware runner", asyn
   ok(gfx.includes('runProcess("ffmpeg"') && !gfx.includes("execFileP(\"ffmpeg\""), "the graphics encoder uses runProcess");
   const kin = await fsp.readFile("src/lib/tubeforge/slides-kinetic.ts", "utf8");
   ok(kin.includes('runProcess("ffmpeg"') && !kin.includes("execFile)(\"ffmpeg\""), "the kinetic clip encoder uses runProcess");
+});
+
+// ---------- suite: S155 — the classic lane: the length contract, independent stages ----------
+
+suiteStart("S155 — the classic lane: a lazy script cannot ship thin, and the autopilot stages are independent toggles");
+
+await test("S155 the classic length contract: below the floor is a failed generation — aiCall re-asks, never ships thin", async () => {
+  const src = await fsp.readFile("src/lib/tubeforge/ai.ts", "utf8");
+  ok(src.includes("Script came back short") && src.includes("opts.length} video that promises about ${words}"), "the classic floor throws the honest retry error");
+  ok(src.includes("Math.round(words * 0.55)"), "the floor is 55% of the promised words");
+  ok(src.includes("LENGTH IS A CONTRACT"), "the prompt states the contract up front (the model gets the rule before the judge)");
+  // The duplicated SPOKEN-aloud rule is gone (the S155 audit's cosmetic find).
+  ok((src.match(/The script is SPOKEN aloud/g) ?? []).length === 1, "the spoken-aloud rule appears once, not twice");
+});
+
+await test("S155 the autopilot stages are independent toggles — voice, thumbnail and render key off their OWN switches", async () => {
+  const src = await fsp.readFile("src/components/tubeforge/views/create-view.tsx", "utf8");
+  ok(src.includes("the stages are INDEPENDENT toggles"), "the S155 note marks the decoupling");
+  ok(!/\$\{startThumbnail\(voiced\.id\)/.test(src), "the classic thumbnail no longer hangs off the voiced result");
+  // The story branch: thumbnail + render must sit OUTSIDE the autoVoice block.
+  const storyBlock = src.slice(src.indexOf("the stages are INDEPENDENT toggles"), src.indexOf("Auto-Pilot complete"));
+  ok(storyBlock.includes('if (autopilot && autoThumb) {'), "the thumbnail reads its own toggle");
+  ok(/if \(renderMode === "animated"\)/.test(storyBlock), "the render runs regardless of the voice/thumb toggles");
+  ok(storyBlock.indexOf("autoVoice") < storyBlock.indexOf("autoThumb"), "voice and thumbnail are sequential, not nested");
+});
+
+await test("S155 the batch rides THE ONE script job — storm patience, ordered failure writes, no second body", async () => {
+  const src = await fsp.readFile("src/app/api/videos/batch/route.ts", "utf8");
+  ok(src.includes("runScriptJob(video.id)"), "every batch row runs the shared script job body");
+  ok(!src.includes("generateSceneScriptPackage"), "the batch no longer carries its own inline generation copy");
+  ok(!src.includes("batch-regen"), "the inline origin label is gone with the copy");
+  ok(/renderMode === "whiteboard" \|\| renderMode === "graphics"\) &&\n      format !== "story"/.test(src), "the engine-lane contradiction gate covers graphics AND whiteboard (the single-create alignment)");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
