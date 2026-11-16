@@ -46,6 +46,7 @@ import { ingestCustomAudio } from "./voice";
 import { deriveStatus } from "./status";
 import { runQualityGate } from "./quality";
 import { renderVideo, invalidateRenderedArtifacts } from "./render";
+import type { LivelinessDecision } from "./liveliness";
 import { draftColdStartOpener, pickBestScene, renderShort } from "./shorts";
 import { convertClassicToScenes } from "./convert";
 import { verifyNarration } from "./verify";
@@ -650,11 +651,27 @@ async function runScenePreviewJob(
       ? docSceneSettings(timeline, scenes.length)?.slice(pos, pos + 1) ?? null
       : null;
 
+  // S154 — the preview renders the SAME channel the final will: the rig
+  // pair rides (a rigged scene's preview shows the character, not the KB
+  // fallback the final would never play). The full render's fetch, mirrored.
+  const rigCharacter = video.characterId
+    ? await db.character.findUnique({
+        where: { id: video.characterId },
+        select: { hasPortrait: true, rigDoc: true, parts: true },
+      })
+    : null;
+
   const result = await renderVideo({
     videoId,
     scenes: [scene],
     mode,
-    character: null,
+    character: rigCharacter
+      ? {
+          hasPortrait: rigCharacter.hasPortrait,
+          rigDoc: rigCharacter.rigDoc,
+          parts: rigCharacter.parts,
+        }
+      : null,
     burnSubtitles: mode !== "slides",
     smartCaptions: true,
     music: false, // the preview checks the scene, not the score
@@ -749,11 +766,26 @@ async function runBoundaryPreviewJob(
       )
     : undefined;
 
+  // S154 — the boundary preview rides the rig too (the pair must cut the
+  // seam EXACTLY as the full render would — including the rig channel).
+  const rigCharacter = video.characterId
+    ? await db.character.findUnique({
+        where: { id: video.characterId },
+        select: { hasPortrait: true, rigDoc: true, parts: true },
+      })
+    : null;
+
   const result = await renderVideo({
     videoId,
     scenes: pair,
     mode,
-    character: null,
+    character: rigCharacter
+      ? {
+          hasPortrait: rigCharacter.hasPortrait,
+          rigDoc: rigCharacter.rigDoc,
+          parts: rigCharacter.parts,
+        }
+      : null,
     burnSubtitles: mode !== "slides",
     smartCaptions: true,
     music: false, // the pair checks the seam, not the score
@@ -930,6 +962,23 @@ async function buildEngineSegments(
   }
 
   return out;
+}
+
+/** S154 — the liveliness ledger's durable summary: the per-scene notes
+ *  (what actually played and why) appended to the completion Activity
+ *  message. Capped at six notes — the feed stays readable; a deck of
+ *  identical decisions carries ONE representative note. Empty → "" (the
+ *  message is byte-identical when nothing degraded). */
+function buildLedgerNotes(ledger: LivelinessDecision[] | undefined): string {
+  if (!ledger || ledger.length === 0) return "";
+  const noted = ledger.filter((d) => d.reason && d.reason.length > 0);
+  if (noted.length === 0) return "";
+  const picked =
+    noted.length <= 6
+      ? noted
+      : [...noted.slice(0, 5), noted[noted.length - 1]];
+  const suffix = noted.length > 6 ? ` (+${noted.length - 6} more)` : "";
+  return ` — per-scene: ${picked.map((d) => `s${d.sceneIndex} ${d.reason.slice(0, 80)}`).join("; ")}${suffix}`;
 }
 
 export async function runRenderJob(
@@ -1292,7 +1341,13 @@ export async function runRenderJob(
             // operator learns about a hold HERE, not at export time.
             (applyQcPolicy(report, { mode: qcEnforcementMode() }).blocked
               ? " — EXPORT ON HOLD (blocking finding; see QC card)"
-              : ""),
+              : "") +
+            // S154 — THE LIVELINESS LEDGER, PERSISTED. The S35 contract says
+            // "the degradation is VISIBLE, never silent" — but the ledger was
+            // computed and dropped: a rig/i2v/kinetic fallback lived only in
+            // the transient progress label. The durable record rides the
+            // completion Activity row (the feed the operator actually reads).
+            buildLedgerNotes(result.liveliness),
         },
       });
 

@@ -37,16 +37,15 @@
 // page held across the project grew until the 4GB worker's OOM killer
 // fired (the S75 E10 receipt) — a fresh context per scene hands chromium's
 // memory back at every scene boundary; the browser itself is reused.
-import { execFile } from "child_process";
 import { createHash } from "crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { promisify } from "util";
 
 // The container-safe launch args + the VO loudness contract — the
 // whiteboard engine's exported seams, reused verbatim (the S113
 // no-private-copies law extended to the engine plumbing).
 import { WB_CHROMIUM_LAUNCH_ARGS, normalizeVoSlot } from "../whiteboard/render";
+import { runProcess } from "../proc";
 import { framePlanWindows } from "../anim/clock";
 import { planFromTracks, type CompositionPlan } from "../composition-plan";
 import type { TimelineTrack } from "../timeline";
@@ -58,12 +57,12 @@ import { graphicsTracks } from "./tracks";
 import { writeGraphicsDoc, type GraphicsDoc } from "./types";
 import { wavDurationSec } from "../wav";
 
-const execFileP = promisify(execFile);
-
 async function runFfmpeg(args: string[]): Promise<void> {
-  await execFileP("ffmpeg", args, { maxBuffer: 32 * 1024 * 1024 }).catch((e) => {
-    throw new Error(`ffmpeg failed: ${String(e.stderr ?? e.message).slice(-1200)}`);
-  });
+  // The zombie-aware runner (proc.ts) — the engine doctrine (the S154
+  // consistency fix): after Playwright has lived in this process, bun
+  // intermittently stops reaping children; runProcess decides completion
+  // itself so a hung reaper can't stall a scene encode.
+  await runProcess("ffmpeg", args, { timeoutMs: 10 * 60 * 1000, label: "graphics-encode" });
 }
 
 export interface RenderGraphicsOptions {

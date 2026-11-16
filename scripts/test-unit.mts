@@ -21595,6 +21595,47 @@ await test("S153 the seat: video-only clips, the sidecar cache, the honest fallb
   ok(kin.includes("Math.min(opts.fps, 30)"), "the D3 shared timebase: clips render at min(fps, 30)");
 });
 
+// ---------- suite: S154 — the character lane: the ledger lands, previews ride the rig ----------
+
+suiteStart("S154 — the character lane: mocap re-arms the render key, previews show the rig, the ledger is durable");
+
+await test("S154 previews render the SAME channel as the final — the rig pair rides both preview jobs", async () => {
+  const src = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  ok(!src.includes("scenes: [scene],\n    mode,\n    character: null,"), "the scene preview no longer hardcodes character: null");
+  ok(!src.includes("scenes: pair,\n    mode,\n    character: null,"), "the boundary preview no longer hardcodes character: null");
+  ok((src.match(/const rigCharacter = video\.characterId/g) ?? []).length >= 3, "all three renderVideo call sites fetch the rig pair");
+  ok(src.includes("select: { hasPortrait: true, rigDoc: true, parts: true }"), "the fetch reads exactly the columns the render consumes");
+});
+
+await test("S154 the liveliness ledger is DURABLE — the completion activity carries the per-scene notes", async () => {
+  const src = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  ok(src.includes("buildLedgerNotes(result.liveliness)"), "the completion message appends the ledger's notes");
+  const fn = src.slice(src.indexOf("function buildLedgerNotes"));
+  ok(fn.includes("d.reason && d.reason.length > 0"), "empty reasons add no noise");
+  ok(fn.includes("+${noted.length - 6} more"), "the feed stays readable past six notes (capped, representative)");
+  const eng = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  ok(eng.includes("the stored rig columns did not parse"), "a corrupt rig degrade is LOGGED (visible, never silent)");
+});
+
+await test("S154 mocap re-arms the render key — a capture upload can never again 'do nothing'", async () => {
+  const src = await fsp.readFile("src/app/api/videos/[id]/character/mocap/route.ts", "utf8");
+  ok(src.includes("invalidateRenderedArtifacts(id)"), "the upload invalidates the stale artifacts");
+  ok(src.includes("hasVideo: false, videoDuration: null"), "the row re-arms the S115 idempotency key (updatedAt bump)");
+  ok(src.includes("Mocap captured for scene"), "the capture lands in the activity feed (the API-only lane becomes visible)");
+  const del = src.slice(src.indexOf("export async function DELETE"));
+  ok(del.includes("invalidateRenderedArtifacts(id)"), "a capture removal is a content change too");
+});
+
+await test("S154 the engine ffmpeg seams all ride the zombie-aware runner", async () => {
+  const rig = await fsp.readFile("src/lib/tubeforge/characters/rig-render.ts", "utf8");
+  ok(rig.includes('runProcess("ffmpeg"'), "the rig encoder uses runProcess (was the one plain-execFile seam)");
+  ok(!rig.includes("execFileP(\"ffmpeg\""), "no execFile ffmpeg call survives in the rig lane");
+  const gfx = await fsp.readFile("src/lib/tubeforge/graphics/render.ts", "utf8");
+  ok(gfx.includes('runProcess("ffmpeg"') && !gfx.includes("execFileP(\"ffmpeg\""), "the graphics encoder uses runProcess");
+  const kin = await fsp.readFile("src/lib/tubeforge/slides-kinetic.ts", "utf8");
+  ok(kin.includes('runProcess("ffmpeg"') && !kin.includes("execFile)(\"ffmpeg\""), "the kinetic clip encoder uses runProcess");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

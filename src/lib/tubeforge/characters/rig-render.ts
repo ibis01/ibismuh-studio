@@ -30,13 +30,12 @@
 // (second line); per-scene context recycling hands chromium's memory back
 // (the S75 E10 receipt — one context per renderRigScene call, closed in
 // finally).
-import { execFile } from "child_process";
-import crypto from "node:crypto";
+import { createHash } from "crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { promisify } from "util";
 
 import { WB_CHROMIUM_LAUNCH_ARGS } from "../whiteboard/render";
+import { runProcess } from "../proc";
 import { frameCountOf } from "../anim/clock";
 import { planFromTracks, type CompositionPlan } from "../composition-plan";
 import type { TimelineTrack } from "../timeline";
@@ -46,12 +45,13 @@ import { assertRigBudget } from "./preflight";
 import { characterTracks, type RigSceneSlot } from "./tracks";
 import { writeRigDoc, writeRigParts, type CharacterRigDoc, type RigPartArt } from "./rig2d";
 
-const execFileP = promisify(execFile);
-
 async function runFfmpeg(args: string[]): Promise<void> {
-  await execFileP("ffmpeg", args, { maxBuffer: 32 * 1024 * 1024 }).catch((e) => {
-    throw new Error(`ffmpeg failed: ${String(e.stderr ?? e.message).slice(-1200)}`);
-  });
+  // The zombie-aware runner (proc.ts) — the module's own doctrine: after
+  // Playwright has lived in this process, bun intermittently stops reaping
+  // children; runProcess decides completion itself so a hung reaper can't
+  // stall a clip encode (the S154 consistency fix: the rig encoder was the
+  // one ffmpeg seam still riding plain execFile).
+  await runProcess("ffmpeg", args, { timeoutMs: 10 * 60 * 1000, label: "rig-encode" });
 }
 
 export interface RenderRigSceneOptions {
@@ -207,8 +207,7 @@ export async function renderRigScene(args: RenderRigSceneArgs): Promise<RigScene
 
 /** The cache hash — deterministic over EVERY render input. Pure. */
 export function rigClipHash(args: RenderRigSceneArgs): string {
-  return crypto
-    .createHash("sha256")
+  return createHash("sha256")
     .update(
       JSON.stringify({
         rig: writeRigDoc(args.rig),

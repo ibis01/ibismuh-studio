@@ -48,6 +48,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { WB_CHROMIUM_LAUNCH_ARGS } from "./whiteboard/render";
+import { runProcess } from "./proc";
 import { frameCountOf } from "./anim/clock";
 import { slideHtml, type SlideBrand, type SlideSpec } from "./slides";
 
@@ -607,9 +608,8 @@ export async function renderKineticSlideClips(
 }
 
 async function runFfmpeg(args: string[]): Promise<void> {
-  const { execFile } = await import("child_process");
-  const { promisify } = await import("util");
-  await promisify(execFile)("ffmpeg", args, { maxBuffer: 32 * 1024 * 1024 }).catch((e) => {
-    throw new Error(`ffmpeg failed: ${String(e.stderr ?? e.message).slice(-1200)}`);
-  });
+  // The zombie-aware runner (proc.ts) — the engine doctrine (the S154
+  // consistency fix): a hung reaper after Playwright can't stall a clip
+  // encode; runProcess decides completion itself.
+  await runProcess("ffmpeg", args, { timeoutMs: 10 * 60 * 1000, label: "slide-kinetic-encode" });
 }

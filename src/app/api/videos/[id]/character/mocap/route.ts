@@ -3,6 +3,7 @@ import { db } from "@/lib/tubeforge/tenant-db";
 import { requireUser } from "@/lib/tubeforge/tenant";
 import { StorageQuotaError } from "@/lib/tubeforge/storage";
 import * as storage from "@/lib/tubeforge/storage";
+import { invalidateRenderedArtifacts } from "@/lib/tubeforge/render";
 import { parseScenes } from "@/lib/tubeforge/story";
 import { estimateNarrationSec } from "@/lib/tubeforge/timeline";
 import { parseBvh, buildMocapTimeline } from "@/lib/tubeforge/characters/bvh";
@@ -173,6 +174,23 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     throw err;
   }
 
+  // S154 — the capture is a CONTENT change the render dedupe must see: the
+  // S115 idempotency key derives from video.updatedAt + the option digest,
+  // so a storage-only write was INVISIBLE to it — uploading a capture after
+  // a render answered accepted:false and the upload appeared to do nothing.
+  // The same discipline every doc edit rides: invalidate the rendered
+  // artifacts + touch the row (the updatedAt bump re-arms the key).
+  await invalidateRenderedArtifacts(id);
+  await db.video.update({ where: { id }, data: { hasVideo: false, videoDuration: null } });
+  await db.activity.create({
+    data: {
+      organizationId: video.organizationId,
+      videoId: id,
+      stage: "render",
+      message: `Mocap captured for scene ${sceneIndex} — ${timeline.rows.length} pose rows, ${mapped} joints mapped (${boundParts} parts bound); render to see it move`,
+    },
+  });
+
   return NextResponse.json({
     ok: true,
     sceneKey: `scene-${sceneIndex}`,
@@ -211,6 +229,11 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
     } else {
       await storage.put(MOCAP_KEY(id), Buffer.from(JSON.stringify(body), "utf8"));
     }
+    // S154 — a capture removal is a content change too: the standing final
+    // no longer reflects the video (the deleted scene reverts to compiled
+    // beats) — the artifacts invalidate and the row re-arms the render key.
+    await invalidateRenderedArtifacts(id);
+    await db.video.update({ where: { id }, data: { hasVideo: false, videoDuration: null } });
     return NextResponse.json({ ok: true, scenes: Object.keys(body) });
   } catch {
     return NextResponse.json({ error: "No authored motion on this video" }, { status: 404 });

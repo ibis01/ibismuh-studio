@@ -1857,7 +1857,17 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
       if (!opts.character?.rigDoc) return null;
       const rig = parseRigDoc(opts.character.rigDoc, opts.character.parts ?? null);
       const art = parseRigParts(opts.character.parts ?? null);
-      return rig && art ? { rig, art } : null;
+      if (!(rig && art)) {
+        // S154 — the corrupt-rig degrade is VISIBLE, never silent: junk
+        // columns used to answer null with no trace and the scene played
+        // Ken Burns with zero durable record of why.
+        renderLog.warn(
+          "the stored rig columns did not parse — the native rig is skipped for this render",
+          { videoId: opts.videoId }
+        );
+        return null;
+      }
+      return { rig, art };
     })();
     const nativeRig = scenes.map((s) => Boolean(rigInputs && s.hostInScene));
     const channels = selectChannels({
