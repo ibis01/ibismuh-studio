@@ -170,17 +170,13 @@ export const TTS_PROVIDERS: ProviderMeta[] = [
     defaultBaseUrl: "http://127.0.0.1:3900",
     keyUrl: "https://github.com/debpalash/VoiceStudio",
     models: [
-      // S121 — the audited engine hints carry the LICENSE verdicts (the
-      // unverified-pricing law's sibling): an engine whose weights forbid
-      // commercial use never reaches a paying render by silence — see
-      // model-license-policy.ts (fail-closed) + docs/design/
-      // s121-integration-roadmap.md. omnivoice is VoiceStudio's DEFAULT
-      // engine and its weights are CC-BY-NC; the Apache/MIT engines below
-      // are the permissive lanes.
       { id: "voxcpm2", hint: "Apache-2.0 — commercial-OK (recommended)" },
       { id: "cosyvoice", hint: "Apache-2.0 — commercial-OK" },
       { id: "kittentts", hint: "Apache-2.0, CPU-only — commercial-OK" },
-      { id: "omnivoice", hint: "the default engine — CC-BY-NC weights, non-commercial" },
+      {
+        id: "omnivoice",
+        hint: "the default engine — CC-BY-NC weights, non-commercial",
+      },
     ],
     note: "Your own VoiceStudio server (OpenAI-compatible API, default port 3900). Loopback servers need no key; remote ones take the OMNIVOICE_API_KEY as the API key. The AGPL app stays a separate service you run — TubeForge never bundles it.",
   },
@@ -238,12 +234,61 @@ export const TTS_PROVIDERS: ProviderMeta[] = [
     keyUrl: "https://elevenlabs.io/app/settings/api-keys",
     models: [{ id: "eleven_multilingual_v2" }, { id: "eleven_turbo_v2_5" }],
   },
+  {
+    id: "gemini",
+    kind: "gemini",
+    label: "Google (Gemini TTS)",
+    defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    keyUrl: "https://aistudio.google.com/apikey",
+    models: [
+      { id: "gemini-3.8-flash-tts", hint: "highly expressive (recommended)" },
+      { id: "gemini-3.8-flash-lite-tts", hint: "faster, cheaper" },
+    ],
+    note: "Native Gemini TTS via generateContent. Returns WAV audio. Ensure your Google AI Studio key has access to TTS models.",
+  },
+  {
+    id: "cartesia",
+    kind: "native",
+    label: "Cartesia (Sonic)",
+    defaultBaseUrl: "https://api.cartesia.ai",
+    keyUrl: "https://play.cartesia.ai/console",
+    models: [
+      { id: "sonic-3.6", hint: "latest, fastest" },
+      { id: "sonic-3.5" },
+      { id: "sonic-3" },
+    ],
+    note: "Ultra-low latency, highly emotive TTS. Requires X-API-Key and Cartesia-Version headers.",
+  },
+  {
+    id: "deepgram",
+    kind: "native",
+    label: "Deepgram (Aura)",
+    defaultBaseUrl: "https://api.deepgram.com/v1",
+    keyUrl: "https://console.deepgram.com/",
+    models: [
+      { id: "aura-2-thalia-en", hint: "recommended female" },
+      { id: "aura-2-asteria-en", hint: "expressive female" },
+      { id: "aura-2-orpheus-en", hint: "deep male" },
+      { id: "aura-2-arcas-en", hint: "casual male" },
+    ],
+    note: "Deepgram Aura-2 voices. New accounts get $200 free credits.",
+  },
+  {
+    id: "playht",
+    kind: "native",
+    label: "PlayHT",
+    defaultBaseUrl: "https://api.play.ht/api/v2",
+    keyUrl: "https://play.ht/studio/api-access",
+    models: [
+      { id: "Play3.0-mini", hint: "realtime, low-latency" },
+      { id: "PlayDialog", hint: "expressive conversational" },
+      { id: "PlayHT2.0-turbo", hint: "fast turbo" },
+    ],
+    note: "Requires both X-USER-ID and Authorization headers. Enter your credentials as 'userId:apiKey' in the API Key field.",
+  },
 ];
 
 // ───────────────────────────── ASR ─────────────────────────────
-// S121 — transcription is its OWN capability (it historically rode the tts
-// capability; the asr setting FOLLOWS tts until an ai.asr row is saved, so
-// today's behavior is the default and nothing breaks when it is unset).
 export const ASR_PROVIDERS: ProviderMeta[] = [
   {
     id: "voicestudio",
@@ -252,15 +297,14 @@ export const ASR_PROVIDERS: ProviderMeta[] = [
     defaultBaseUrl: "http://127.0.0.1:3900",
     keyUrl: "https://github.com/debpalash/VoiceStudio",
     models: [
-      // S121 — whisperx is VoiceStudio's primary ASR engine and the only one
-      // whose word timestamps were verified to wav2vec2 forced-alignment
-      // precision (±10-30 ms). moonshine emits NO timestamps — word-level
-      // work silently degrades to the silence ladder when it is active.
-      { id: "whisperx", hint: "verified word timestamps (±10-30 ms) — recommended" },
+      {
+        id: "whisperx",
+        hint: "verified word timestamps (±10-30 ms) — recommended",
+      },
       { id: "faster-whisper", hint: "word timestamps" },
       { id: "moonshine", hint: "CPU-friendly, NO word timestamps" },
     ],
-    note: "Word-level timestamps (verbose_json + word granularity) upgrade captions and the whiteboard anchors from derived to MEASURED timing. Same server as the VoiceStudio TTS row.",
+    note: "Word-level timestamps upgrade captions and the whiteboard anchors from derived to MEASURED timing. Same server as the VoiceStudio TTS row.",
   },
   {
     id: "openai",

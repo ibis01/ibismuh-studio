@@ -6,14 +6,12 @@
 //   heygen  → HeyGen Voice (api.heygen.com/v3, free tier)
 //   openai  → POST {baseUrl}/audio/speech (tts-1 / tts-1-hd / gpt-4o-mini-tts,
 //             response_format "wav" so downstream WAV merging keeps working)
+//   gemini  → POST {baseUrl}/models/{model}:generateContent (responseModalities: ["AUDIO"])
+//   cartesia → POST {baseUrl}/tts/bytes (X-API-Key + Cartesia-Version headers)
+//   deepgram → POST {baseUrl}/speak?model={model} (Authorization: Token)
+//   playht   → POST {baseUrl}/tts/stream (X-USER-ID + Authorization)
 //   voicestudio → S121 — the USER-MANAGED VoiceStudio server's OpenAI-
-//             compatible API: POST {baseUrl}/v1/audio/speech. Voices pass
-//             through VERBATIM (the server owns the catalog — ids, names and
-//             OpenAI aliases all answer); model = the engine id. The AGPL
-//             app stays a separate service; TubeForge talks the wire only.
-//
-// Voices are sanitized to the provider's catalog so a video saved with a Z.ai
-// voice keeps working after switching to OpenAI (falls back to "alloy").
+//             compatible API: POST {baseUrl}/v1/audio/speech.
 
 import { zaiClientFor } from "../zai-client";
 import {
@@ -24,7 +22,11 @@ import {
 import { providerMeta, OPENAI_VOICES, type ProviderId } from "./registry";
 import { VOICES } from "../types";
 import { joinUrl, providerFetch, ProviderHttpError } from "./http";
-import { getSampleWavByVoiceId, voiceProfileProvider, voiceProfileRemoteVoiceId } from "../voice-clone";
+import {
+  getSampleWavByVoiceId,
+  voiceProfileProvider,
+  voiceProfileRemoteVoiceId,
+} from "../voice-clone";
 import { applyPronunciations, loadPronunciations } from "../pronounce";
 import { selfhostEndpoint, sharedVoiceServer } from "../shared-voice";
 
@@ -155,6 +157,18 @@ export async function ttsSynthesize(
   }
   if (config.provider === "heygen") {
     return heygenTts(request, config);
+  }
+  if (config.provider === "gemini") {
+    return geminiTts(request, config);
+  }
+  if (config.provider === "cartesia") {
+    return cartesiaTts(request, config);
+  }
+  if (config.provider === "deepgram") {
+    return deepgramTts(request, config);
+  }
+  if (config.provider === "playht") {
+    return playhtTts(request, config);
   }
   return zaiTts(request, config);
 }
@@ -305,6 +319,214 @@ export async function heygenTts(
   return buffer;
 }
 
+// ---------- Gemini TTS (Google AI Studio) ----------
+
+async function geminiTts(
+  req: TtsRequest,
+  config: CapabilityConfig,
+): Promise<Buffer> {
+  const meta = providerMeta("tts", "gemini");
+  const baseUrl =
+    config.baseUrl?.trim() ||
+    meta?.defaultBaseUrl ||
+    "https://generativelanguage.googleapis.com/v1beta";
+  const model = config.model?.trim() || "gemini-3.8-flash-tts";
+  const key = config.apiKey?.trim();
+
+  if (!key) {
+    throw new Error(
+      "Gemini TTS needs an API key from aistudio.google.com (Settings → AI Providers)",
+    );
+  }
+
+  // Gemini requires the key as a query parameter, not a Bearer header.
+  const url = `${baseUrl}/models/${model}:generateContent?key=${key}`;
+
+  // Gemini TTS uses a hardcoded default voice (Puck) because the underlying
+  // generateContent API takes prebuilt voice names (Puck, Charon, Kore, etc.)
+  // rather than the Z.ai studio voice ids.
+  const voiceName = "Puck";
+
+  const response = await providerFetch("Gemini TTS", url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: req.input }] }],
+      generationConfig: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName,
+            },
+          },
+        },
+      },
+    }),
+  });
+
+  const data = await response.json();
+  const audioB64 = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+
+  if (!audioB64) {
+    throw new Error(
+      `Gemini TTS returned no audio data — raw response: ${JSON.stringify(data).slice(0, 300)}`,
+    );
+  }
+
+  // Gemini returns base64-encoded audio (often WAV/L16).
+  const buffer = Buffer.from(audioB64, "base64");
+
+  if (buffer.length < 44) {
+    throw new Error("Gemini TTS returned empty or invalid audio");
+  }
+
+  return buffer;
+}
+
+// ---------- Cartesia (Sonic) ----------
+
+async function cartesiaTts(
+  req: TtsRequest,
+  config: CapabilityConfig,
+): Promise<Buffer> {
+  const meta = providerMeta("tts", "cartesia");
+  const baseUrl =
+    config.baseUrl?.trim() || meta?.defaultBaseUrl || "https://api.cartesia.ai";
+  const model = config.model?.trim() || "sonic-3.6";
+  const key = config.apiKey?.trim();
+  if (!key) {
+    throw new Error(
+      "Cartesia needs an API key from play.cartesia.ai/console (Settings → AI Providers)",
+    );
+  }
+
+  const voiceId = req.voice?.trim() || "a0e99841-438c-4a64-b679-ae501e7d6091"; // Default "Barbershop Man" voice
+
+  const response = await providerFetch(
+    "Cartesia TTS",
+    joinUrl(baseUrl, "tts/bytes"),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": key,
+        "Cartesia-Version": "2025-04-16",
+      },
+      body: JSON.stringify({
+        model_id: model,
+        transcript: req.input,
+        voice: {
+          mode: "id",
+          id: voiceId,
+        },
+        output_format: {
+          container: "wav",
+          encoding: "pcm_s16le",
+          sample_rate: 44100,
+        },
+      }),
+    },
+  );
+
+  const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+  if (buffer.length < 44) throw new Error("Cartesia TTS returned empty audio");
+  return buffer;
+}
+
+// ---------- Deepgram (Aura) ----------
+
+async function deepgramTts(
+  req: TtsRequest,
+  config: CapabilityConfig,
+): Promise<Buffer> {
+  const meta = providerMeta("tts", "deepgram");
+  const baseUrl =
+    config.baseUrl?.trim() ||
+    meta?.defaultBaseUrl ||
+    "https://api.deepgram.com/v1";
+  const model = config.model?.trim() || "aura-2-thalia-en";
+  const key = config.apiKey?.trim();
+  if (!key) {
+    throw new Error(
+      "Deepgram needs an API key from console.deepgram.com (Settings → AI Providers)",
+    );
+  }
+
+  const url = `${joinUrl(baseUrl, "speak")}?model=${encodeURIComponent(model)}`;
+
+  const response = await providerFetch("Deepgram TTS", url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Token ${key}`, // Note: Token, not Bearer
+    },
+    body: JSON.stringify({ text: req.input }),
+  });
+
+  const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+  if (buffer.length < 44) throw new Error("Deepgram TTS returned empty audio");
+  return buffer;
+}
+
+// ---------- PlayHT ----------
+
+async function playhtTts(
+  req: TtsRequest,
+  config: CapabilityConfig,
+): Promise<Buffer> {
+  const meta = providerMeta("tts", "playht");
+  const baseUrl =
+    config.baseUrl?.trim() ||
+    meta?.defaultBaseUrl ||
+    "https://api.play.ht/api/v2";
+  const model = config.model?.trim() || "Play3.0-mini";
+  const rawKey = config.apiKey?.trim();
+  if (!rawKey) {
+    throw new Error(
+      "PlayHT needs a userId:apiKey pair in the API key field (Settings → AI Providers)",
+    );
+  }
+
+  // PlayHT requires BOTH X-USER-ID and Authorization headers.
+  // We expect the key to be formatted as "userId:apiKey".
+  const idx = rawKey.indexOf(":");
+  if (idx === -1) {
+    throw new Error(
+      "PlayHT credentials must be formatted as 'userId:apiKey' (get both from play.ht/studio/api-access)",
+    );
+  }
+  const userId = rawKey.slice(0, idx).trim();
+  const apiKey = rawKey.slice(idx + 1).trim();
+
+  // PlayHT requires a valid voice ID. We default to a known public voice
+  // if the caller hasn't provided one, but the user can override it.
+  const voiceId = req.voice?.trim() || "larry";
+
+  const response = await providerFetch(
+    "PlayHT TTS",
+    joinUrl(baseUrl, "tts/stream"),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-USER-ID": userId,
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        text: req.input,
+        voice: voiceId,
+        voice_engine: model,
+        output_format: "wav",
+      }),
+    },
+  );
+
+  const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+  if (buffer.length < 44) throw new Error("PlayHT TTS returned empty audio");
+  return buffer;
+}
+
 // ---------- VoiceStudio (the user's own server — S121) ----------
 
 /** S121 — the VoiceStudio lane: the user's own server, OpenAI-compatible
@@ -320,12 +542,15 @@ export async function voicestudioTts(
   config: CapabilityConfig,
 ): Promise<Buffer> {
   const meta = providerMeta("tts", "voicestudio");
-  const baseUrl = config.baseUrl?.trim() || meta?.defaultBaseUrl || "http://127.0.0.1:3900";
+  const baseUrl =
+    config.baseUrl?.trim() || meta?.defaultBaseUrl || "http://127.0.0.1:3900";
   const key = config.apiKey?.trim();
   const model = config.model?.trim() || "voxcpm2"; // the permissive recommended lane
   const voice = req.voice; // VERBATIM — ids, names and aliases all answer
 
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
   if (key) headers.Authorization = `Bearer ${key}`;
 
   const response = await providerFetch(
@@ -345,7 +570,8 @@ export async function voicestudioTts(
     { capability: "tts" },
   );
   const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
-  if (buffer.length < 44) throw new Error("VoiceStudio TTS returned empty audio");
+  if (buffer.length < 44)
+    throw new Error("VoiceStudio TTS returned empty audio");
   return buffer;
 }
 
