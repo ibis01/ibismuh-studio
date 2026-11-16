@@ -84,6 +84,14 @@ const TTS_PRIORS: Record<string, ProviderPriors> = {
   selfhost: { quality: 0.7, latency: 0.3, fit: 0.85 }, // free forever, CPU speed, cloning
   openai: { quality: 0.82, latency: 0.85, fit: 0.78 },
   elevenlabs: { quality: 0.95, latency: 0.8, fit: 0.9 },
+  // The four registry TTS lanes the voice-expansion commit added (2026-11-16).
+  // Priors are STARTING BELIEFS per the file header, derived from each
+  // registry row's own notes; the TTS fit law stays CLONING-dominated, and
+  // none of the four registry notes document clone-from-sample support.
+  gemini: { quality: 0.86, latency: 0.8, fit: 0.74 }, // native generateContent WAV; flash-tts "highly expressive"
+  cartesia: { quality: 0.84, latency: 0.92, fit: 0.72 }, // "ultra-low latency, highly emotive" — the latency lane
+  deepgram: { quality: 0.8, latency: 0.88, fit: 0.62 }, // Aura-2: English-only voices, free starting credits
+  playht: { quality: 0.8, latency: 0.84, fit: 0.72 }, // Play3.0-mini realtime / PlayDialog expressive; dual-header auth
 };
 
 /** S121 — ASR priors: fit is dominated by WORD-TIMESTAMP support (the
