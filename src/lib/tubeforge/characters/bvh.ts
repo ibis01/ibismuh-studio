@@ -25,6 +25,23 @@
 // mocap conversion is DATA (the user's own capture), not a compiled beat,
 // so it may persist (the compile-only law governs BEATS, not authored art).
 //
+// THE ADMISSION WALL (S141, audit F3): the parser refuses what the budgets
+// cannot hold — named errors, fail closed, BEFORE the work (the S101 byte
+// wall / S140 count wall's pattern, seated in the mocap lane). Two traps
+// the wall closes:
+//   • the QUADRATIC FIND — the old hierarchy walk looked every OFFSET and
+//     CHANNELS line up with joints.find (O(lines × joints)); adversarial
+//     input turned a parse into a hang. The open-joint map makes every
+//     lookup O(1) — the walk is linear forever.
+//   • the MEMORY BLOW — motion memory is bounded by the TEXT wall's own
+//     arithmetic (≤ maxTextChars/2 floats ≈ 32 MB at the 8M wall); the
+//     frame count the header declares can no longer multiply past what
+//     the text actually carries.
+// Real captures sit far inside every wall (humanoid rigs ≈ 65 joints /
+// 72 columns; captures the scene clock consumes are seconds-long), so
+// every honest FreeMoCap export parses byte-identically — the
+// determinism pin does not move.
+//
 // PURE — no fs, no clock, no randomness. Same text → byte-identical
 // timeline rows (pinned).
 import type { RigPoseRow, RigPoseTimeline } from "./rig-frame";
@@ -55,17 +72,45 @@ export interface BvhParseResult {
   errors: string[];
 }
 
+/** S141 (audit F3) — the mocap admission wall. Sized from real captures
+ *  with generous headroom: humanoid rigs carry ≈ 65 joints and ≈ 72 motion
+ *  columns; the scene clock consumes seconds of motion, not hours. A file
+ *  past any wall refuses with a NAMED error before a single byte of work. */
+export const BVH_ADMISSION = {
+  /** The parsed text's own wall (the route's 12 MB file cap is the
+   *  transport cap; the parser is its own wall — pure, no route). */
+  maxTextChars: 8_000_000,
+  maxJoints: 1024,
+  maxColumns: 512,
+  maxFrames: 200_000,
+  minFrameTimeMs: 1,
+  maxFrameTimeMs: 60_000,
+} as const;
+
 /** Parse BVH text (the public format). Tolerant of whitespace depth;
- *  strict about structure — a file the gates cannot trust refuses with
- *  named errors, never guesses. */
+ *  strict about structure; honest about size — a file the gates cannot
+ *  trust refuses with named errors, never guesses, never hangs. */
 export function parseBvh(text: string): BvhParseResult {
   const errors: string[] = [];
+  // The text wall fires BEFORE the split — the cheapest refusal of the
+  // walk (admission precedes work, the S140 law's shape).
+  if (text.length > BVH_ADMISSION.maxTextChars) {
+    errors.push(`the BVH text is ${text.length} chars — the admission wall is ${BVH_ADMISSION.maxTextChars}`);
+    return { doc: null, errors };
+  }
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0 && !l.startsWith("#"));
   if (lines.length === 0) return { doc: null, errors: ["empty BVH text"] };
   if (!/^HIERARCHY$/i.test(lines[0])) {
     return { doc: null, errors: ['a BVH starts with "HIERARCHY"'] };
   }
   const joints: BvhJoint[] = [];
+  // S141 — the open-joint map: name → the pushed-but-not-yet-channelized
+  // joint. The old code answered "which joint is this OFFSET/CHANNELS for?"
+  // with joints.find over the WHOLE array per line — the quadratic the
+  // wall closes. Same semantics, O(1): an entry lives from its block's
+  // first line until its CHANNELS lands (columnStart === -1 marked that,
+  // once; the map marks it now).
+  const openJoints = new Map<string, BvhJoint>();
   const stack: { name: string; channels: string[]; columnStart: number }[] = [];
   let column = 0;
   let i = 1;
@@ -86,9 +131,15 @@ export function parseBvh(text: string): BvhParseResult {
         return { doc: null, errors };
       }
       if (isRoot) sawRoot = true;
+      if (joints.length >= BVH_ADMISSION.maxJoints) {
+        errors.push(`the hierarchy declares joint ${joints.length + 1} "${m[1]}" — the admission wall is ${BVH_ADMISSION.maxJoints} joints`);
+        return { doc: null, errors };
+      }
       const parent = stack.length > 0 ? stack[stack.length - 1].name : null;
       stack.push({ name: m[1], channels: [], columnStart: column });
-      joints.push({ name: m[1], parent, channels: [], offset: [0, 0, 0], columnStart: -1 });
+      const joint: BvhJoint = { name: m[1], parent, channels: [], offset: [0, 0, 0], columnStart: -1 };
+      joints.push(joint);
+      openJoints.set(m[1], joint);
       continue;
     }
     if (/^End\s+Site$/i.test(line)) {
@@ -104,7 +155,7 @@ export function parseBvh(text: string): BvhParseResult {
         errors.push("OFFSET outside a joint block");
         return { doc: null, errors };
       }
-      const joint = joints.find((j) => j.name === top.name && j.columnStart === -1);
+      const joint = openJoints.get(top.name);
       if (joint) joint.offset = [Number(m[1]), Number(m[2]), Number(m[3])];
       continue;
     }
@@ -121,13 +172,18 @@ export function parseBvh(text: string): BvhParseResult {
         errors.push(`CHANNELS declares ${count} names but carries ${names.length}`);
         return { doc: null, errors };
       }
+      if (column + count > BVH_ADMISSION.maxColumns) {
+        errors.push(`the hierarchy declares ${column + count} motion columns — the admission wall is ${BVH_ADMISSION.maxColumns}`);
+        return { doc: null, errors };
+      }
       top.channels = names;
       top.columnStart = column;
       column += count;
-      const joint = joints.find((j) => j.name === top.name && j.columnStart === -1);
+      const joint = openJoints.get(top.name);
       if (joint) {
         joint.channels = names;
         joint.columnStart = top.columnStart;
+        openJoints.delete(top.name); // channelized — the open mark lifts
       }
       continue;
     }
@@ -171,6 +227,14 @@ export function parseBvh(text: string): BvhParseResult {
   }
   if (frames <= 0 || rowsStart < 0 || !(frameTimeMs > 0)) {
     errors.push('the MOTION header needs "Frames: N" and "Frame Time: T"');
+    return { doc: null, errors };
+  }
+  if (frames > BVH_ADMISSION.maxFrames) {
+    errors.push(`the capture declares ${frames} frames — the admission wall is ${BVH_ADMISSION.maxFrames}`);
+    return { doc: null, errors };
+  }
+  if (!(frameTimeMs >= BVH_ADMISSION.minFrameTimeMs && frameTimeMs <= BVH_ADMISSION.maxFrameTimeMs)) {
+    errors.push(`the frame time ${frameTimeMs}ms is outside the admission band [${BVH_ADMISSION.minFrameTimeMs}, ${BVH_ADMISSION.maxFrameTimeMs}]`);
     return { doc: null, errors };
   }
   if (column === 0) {

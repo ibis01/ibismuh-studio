@@ -20010,7 +20010,7 @@ await test("S126 the lane wiring — the seven gates, the one-seam resolution, t
 
 suiteStart("characters — S125-ext the BVH sidecar (K1-ext)");
 
-import { buildMocapTimeline, mapJointToSlot, parseBvh } from "../src/lib/tubeforge/characters/bvh";
+import { BVH_ADMISSION, buildMocapTimeline, mapJointToSlot, parseBvh } from "../src/lib/tubeforge/characters/bvh";
 
 const BVH_FIXTURE = `HIERARCHY
 ROOT Hips
@@ -20199,6 +20199,75 @@ await test("S125-ext the sidecar wiring — the clean-room boundary, the route, 
   ok(hook.includes("character/mocap.json"), "the hook reads the authored-motion file");
   ok(hook.includes("authoredTimeline"), "the ladder's authored rung rides the hook");
   ok(hook.includes("authoredTimeline\n        ?"), "authored > compiled (the ladder order)");
+});
+
+await test("S141 the mocap admission wall (audit F3) — text, joints, columns, frames, and the band refuse by name", () => {
+  // The text wall fires BEFORE the split — the cheapest refusal (admission
+  // precedes work, the S140 law's shape).
+  const big = "HIERARCHY\n" + "x".repeat(BVH_ADMISSION.maxTextChars);
+  const t = parseBvh(big);
+  ok(t.doc === null && t.errors[0]?.includes("the admission wall is"), "the text wall refuses by name (before the split)");
+  ok(t.errors[0]?.includes(String(BVH_ADMISSION.maxTextChars)) === true, "the wall names its own budget");
+
+  // The joints wall — ROOT + 1023 JOINTs ride (exactly the wall); one more
+  // refuses. OFFSET-only joints: the columns wall must stay out of the way
+  // so the JOINT count is the wall this pin actually fires.
+  const manyJoints = (n: number) =>
+    "HIERARCHY\nROOT r\n{\nCHANNELS 3 Xrotation Yrotation Zrotation\n" +
+    Array.from({ length: n }, (_, k) => `JOINT j${k}\nOFFSET 0 0 0\n`).join("") +
+    "}\nMOTION\nFrames: 1\nFrame Time: 0.1\n0 0 0";
+  const insideJoints = parseBvh(manyJoints(BVH_ADMISSION.maxJoints - 1));
+  ok(insideJoints.doc !== null, `ROOT + ${BVH_ADMISSION.maxJoints - 1} JOINTs parse (sitting ON the wall)`);
+  const overJoints = parseBvh(manyJoints(BVH_ADMISSION.maxJoints));
+  ok(overJoints.doc === null && overJoints.errors[0]?.includes("the admission wall is"), "the joints wall refuses by name");
+
+  // The columns wall — the motion row's width has a ceiling.
+  const withCols = (n: number) =>
+    `HIERARCHY\nROOT r\nCHANNELS ${n} ${Array.from({ length: n }, (_, k) => `c${k}rotation`).join(" ")}\nMOTION\nFrames: 1\nFrame Time: 0.1\n${Array.from({ length: n }, () => "0").join(" ")}`;
+  const insideCols = parseBvh(withCols(BVH_ADMISSION.maxColumns));
+  ok(insideCols.doc !== null, `exactly ${BVH_ADMISSION.maxColumns} columns parse`);
+  const overCols = parseBvh(withCols(BVH_ADMISSION.maxColumns + 1));
+  ok(overCols.doc === null && overCols.errors[0]?.includes("motion columns"), "the columns wall refuses by name");
+
+  // The frames wall + the frame-time band (the header lies can no longer
+  // multiply past what the walls hold).
+  const withHeader = (frames: number, time: string) =>
+    BVH_FIXTURE.replace("Frames: 6", `Frames: ${frames}`).replace("Frame Time: 0.0416667", `Frame Time: ${time}`);
+  const overFrames = parseBvh(withHeader(BVH_ADMISSION.maxFrames + 1, "0.0416667"));
+  ok(overFrames.doc === null && overFrames.errors[0]?.includes("frames — the admission wall"), "the frames wall refuses by name");
+  const belowBand = parseBvh(withHeader(6, "0.0005"));
+  ok(belowBand.doc === null && belowBand.errors[0]?.includes("outside the admission band"), "the frame time below the band refuses by name");
+  const aboveBand = parseBvh(withHeader(6, "120"));
+  ok(aboveBand.doc === null && aboveBand.errors[0]?.includes("outside the admission band"), "the frame time above the band refuses by name");
+  const bandEdges = [withHeader(6, "0.001"), withHeader(6, "60")].map((s) => parseBvh(s));
+  ok(bandEdges.every((r) => r.doc !== null), "the band's edges (1ms, 60s) ride — honest captures never hit the walls");
+
+  // And the honest fixture still parses (the walls are generous — the
+  // determinism pin does not move).
+  ok(parseBvh(BVH_FIXTURE).doc !== null, "the honest fixture still parses");
+});
+
+await test("S141 the wall's arithmetic — the walk stays linear under the walls (the quadratic find is dead)", () => {
+  // 1024 joints + a flood of OFFSET lines near the text wall: the old
+  // joints.find walked every joint per line (hundreds of millions of
+  // string comparisons — adversarial input turned a parse into a hang);
+  // the open-joint map answers in O(1). The budget is generous: the
+  // pin's job is to catch a REGRESSION to the quadratic, not to time.
+  const channelized = Math.floor((BVH_ADMISSION.maxColumns - 3) / 1); // 509 channelized (root 3 + one each)
+  const offsetOnly = BVH_ADMISSION.maxJoints - 1 - channelized; // the rest ride OFFSETs only
+  const text =
+    "HIERARCHY\nROOT r\n{\nCHANNELS 3 Xrotation Yrotation Zrotation\n" +
+    Array.from({ length: channelized }, (_, k) => `JOINT j${k}\n{\nOFFSET 0 0 0\nCHANNELS 1 Xrotation\n}\n`).join("") +
+    Array.from({ length: offsetOnly }, (_, k) => `JOINT w${k}\n{\nOFFSET 0 0 0\n`).join("") +
+    "OFFSET 0 0 0\n".repeat(200_000) +
+    `MOTION\nFrames: 2\nFrame Time: 0.1\n${Array.from({ length: 3 + channelized }, () => "0").join(" ")}\n${Array.from({ length: 3 + channelized }, () => "0").join(" ")}`;
+  ok(text.length <= BVH_ADMISSION.maxTextChars, "the stress file rides inside the text wall");
+  const started = performance.now();
+  const r = parseBvh(text);
+  const elapsed = performance.now() - started;
+  ok(r.doc !== null, `the stress file parses (${r.errors[0] ?? "ok"})`);
+  eq(r.doc?.joints.length, BVH_ADMISSION.maxJoints, "every joint the wall admits rides");
+  ok(elapsed < 10_000, `the walk stays linear (${Math.round(elapsed)}ms << the quadratic's minutes)`);
 });
 
 // ---------------------------------------------------------------------------
