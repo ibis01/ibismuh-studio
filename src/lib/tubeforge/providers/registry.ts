@@ -41,8 +41,11 @@ export const CHAT_PROVIDERS: ProviderMeta[] = [
     defaultBaseUrl: "https://api.openai.com/v1",
     keyUrl: "https://platform.openai.com/api-keys",
     models: [
-      { id: "gpt-4o-mini", hint: "cheap + fast — great for scripts" },
-      { id: "gpt-4o" },
+      { id: "gpt-6.1-terra", hint: "recommended — current gen, $1/$5 per 1M" },
+      { id: "gpt-6-luna", hint: "cheapest — $0.10/$0.50 per 1M, fast" },
+      { id: "gpt-6.1-sol", hint: "$2/$10 — deeper quality" },
+      { id: "gpt-6-astra", hint: "flagship — $10/$50 per 1M" },
+      { id: "gpt-4o-mini", hint: "legacy — prior gen, still callable" },
     ],
   },
   {
@@ -63,8 +66,10 @@ export const CHAT_PROVIDERS: ProviderMeta[] = [
     defaultBaseUrl: "https://generativelanguage.googleapis.com",
     keyUrl: "https://aistudio.google.com/apikey",
     models: [
-      { id: "gemini-2.5-flash", hint: "recommended" },
-      { id: "gemini-2.5-pro" },
+      { id: "gemini-3.6-flash", hint: "recommended — current flash gen" },
+      { id: "gemini-3.5-flash-lite", hint: "fast + cheap" },
+      { id: "gemini-2.5-pro", hint: "legacy — deep reasoning, deprecation pending" },
+      { id: "gemini-2.5-flash", hint: "legacy — prior gen, still served" },
     ],
   },
   {
@@ -76,12 +81,12 @@ export const CHAT_PROVIDERS: ProviderMeta[] = [
     models: [
       { id: "openai/gpt-oss-120b", hint: "recommended — fast + free tier" },
       { id: "openai/gpt-oss-20b", hint: "cheaper, smaller" },
-      { id: "meta-llama/llama-4-scout-17b-16e-instruct", hint: "long context" },
-      { id: "meta-llama/llama-4-maverick-17b-128e-instruct" },
+      { id: "meta-llama/llama-4-scout-17b-16e-instruct", hint: "legacy — being phased out" },
+      { id: "meta-llama/llama-4-maverick-17b-128e-instruct", hint: "legacy — being phased out" },
       { id: "qwen/qwen3-32b" },
-      { id: "deepseek-r1-distill-llama-70b", hint: "reasoning" },
+      { id: "deepseek-r1-distill-llama-70b", hint: "legacy — old distill" },
     ],
-    note: "gpt-oss-120b/20b are the free-tier successors to the retired Llama 3.x lineup.",
+    note: "gpt-oss-120b/20b are the free-tier workhorses; the Llama 3.x/4 lineup is being phased out on Groq.",
   },
   {
     id: "deepseek",
@@ -111,7 +116,10 @@ export const CHAT_PROVIDERS: ProviderMeta[] = [
     label: "xAI Grok",
     defaultBaseUrl: "https://api.x.ai/v1",
     keyUrl: "https://console.x.ai/",
-    models: [{ id: "grok-4" }],
+    models: [
+      { id: "grok-4", hint: "recommended — $3/$15 per 1M" },
+      { id: "grok-4.1-fast", hint: "newer 4.1 Fast gen" },
+    ],
   },
   {
     id: "openrouter",
@@ -221,10 +229,11 @@ export const TTS_PROVIDERS: ProviderMeta[] = [
     defaultBaseUrl: "https://api.openai.com/v1",
     keyUrl: "https://platform.openai.com/api-keys",
     models: [
-      { id: "tts-1", hint: "standard" },
-      { id: "tts-1-hd", hint: "higher fidelity" },
-      { id: "gpt-4o-mini-tts", hint: "newest, most voices" },
+      { id: "gpt-4o-mini-tts", hint: "recommended — newest; retires Jan 6, 2027" },
+      { id: "tts-1-hd", hint: "legacy — retires Jan 6, 2027" },
+      { id: "tts-1", hint: "classic — retires Jan 6, 2027" },
     ],
+    note: "OpenAI announced the TTS shutdown (tts-1, tts-1-hd, gpt-4o-mini-tts) for Jan 6, 2027 — all still fully served until then; plan a Voiceover migration if you stay on OpenAI.",
   },
   {
     id: "elevenlabs",
@@ -253,9 +262,9 @@ export const TTS_PROVIDERS: ProviderMeta[] = [
     defaultBaseUrl: "https://api.cartesia.ai",
     keyUrl: "https://play.cartesia.ai/console",
     models: [
-      { id: "sonic-3.6", hint: "latest, fastest" },
-      { id: "sonic-3.5" },
-      { id: "sonic-3" },
+      { id: "sonic-3.6", hint: "recommended — current gen" },
+      { id: "sonic-3.5", hint: "legacy — Older Models doc" },
+      { id: "sonic-3", hint: "legacy — Older Models doc" },
     ],
     note: "Ultra-low latency, highly emotive TTS. Requires X-API-Key and Cartesia-Version headers. Voice pickers load YOUR account's voices live (custom voices included) — anything else falls back to a real account voice, never a stale hard-coded id.",
   },
@@ -345,7 +354,6 @@ export const IMAGE_PROVIDERS: ProviderMeta[] = [
     models: [
       { id: "flux", hint: "best quality (recommended)" },
       { id: "turbo", hint: "faster, slightly lower quality" },
-      { id: "flux-realism", hint: "photorealistic" },
     ],
     note: "No API key, but the anonymous tier stamps a WATERMARK on every image and allows 1 image / 45s / IP — a 16-scene storyboard takes ~12 min. For watermark-free free images switch to Cloudflare, Together AI, or Hugging Face. No identity-locked edits (host scenes fall back to prompt-seeded generation).",
     requiresKey: false,
@@ -387,7 +395,7 @@ export const IMAGE_PROVIDERS: ProviderMeta[] = [
     keyUrl: "https://build.nvidia.com/explore/visual",
     models: [
       { id: "black-forest-labs/flux.1-dev", hint: "high quality" },
-      { id: "black-forest-labs/flux.2-klein", hint: "newer, faster" },
+      { id: "black-forest-labs/flux.2-klein-4b", hint: "newer, faster" },
     ],
     note: "Free tier: 1,000 inference credits/month. No credit card required. Key starts with nvapi-.",
   },
@@ -490,7 +498,10 @@ export const VIDEO_PROVIDERS: ProviderMeta[] = [
     label: "Kling AI",
     defaultBaseUrl: "https://api-beijing.klingai.com",
     keyUrl: "https://app.klingai.com/dev",
-    models: [{ id: "kling-v1", hint: "image-to-video" }],
+    models: [
+      { id: "kling-v2-master", hint: "recommended — current 2.x gen" },
+      { id: "kling-v1", hint: "legacy — v1 still served" },
+    ],
     note: "New users get one-time free credits + daily free credits.",
   },
   {
@@ -546,8 +557,8 @@ export const VIDEO_PROVIDERS: ProviderMeta[] = [
     label: "Runway",
     defaultBaseUrl: "https://api.dev.runwayml.com/v1",
     keyUrl: "https://dev.runwayml.com/",
-    models: [{ id: "gen4_turbo" }, { id: "gen3a_turbo" }],
-    note: "125 one-time free credits on signup.",
+    models: [{ id: "gen4_turbo", hint: "recommended" }],
+    note: "gen3a_turbo was retired (Aug 2026 deprecated-tools sweep). 125 one-time free credits on signup.",
   },
   {
     id: "luma",

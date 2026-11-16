@@ -75,7 +75,7 @@ function visionModelFor(config: CapabilityConfig): string {
     config.visionModel?.trim() ||
     config.model?.trim() ||
     meta?.models[0]?.id ||
-    "gpt-4o-mini"
+    "gpt-6.1-terra"
   );
 }
 
@@ -117,7 +117,7 @@ async function zaiVision(req: VisionRequest, config: CapabilityConfig): Promise<
 async function openaiVision(req: VisionRequest, config: CapabilityConfig): Promise<string> {
   const meta = providerMetaRequired("chat", "openai");
   const baseUrl = config.baseUrl?.trim() || meta.defaultBaseUrl;
-  const model = config.visionModel?.trim() || config.model?.trim() || "gpt-4o-mini";
+  const model = config.visionModel?.trim() || config.model?.trim() || "gpt-6.1-terra";
   const key = config.apiKey?.trim();
   if (!key) throw new Error("OpenAI-compatible vision needs an API key");
 
@@ -215,7 +215,7 @@ async function anthropicVision(req: VisionRequest, config: CapabilityConfig): Pr
 async function geminiVision(req: VisionRequest, config: CapabilityConfig): Promise<string> {
   const meta = providerMetaRequired("chat", "gemini");
   const baseUrl = config.baseUrl?.trim() || meta.defaultBaseUrl;
-  const model = config.visionModel?.trim() || config.model?.trim() || "gemini-2.5-flash";
+  const model = config.visionModel?.trim() || config.model?.trim() || "gemini-3.6-flash";
   const key = config.apiKey?.trim();
   if (!key) throw new Error("Gemini vision needs an API key");
 

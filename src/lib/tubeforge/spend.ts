@@ -225,8 +225,8 @@ export const PRICING_SOURCES = [
   {
     url: "https://ai.google.dev/gemini-api/docs/pricing",
     retrievedAt: "2026-11-12", // UTC
-    covers: ["gemini-2.5-pro"],
-    note: "S95 (2026-11-12 UTC): gemini-2.5-pro $1.25/$10 per 1M tokens standard tier (<=200k prompt). The page flags both 2.5 models deprecated — they auto-route to the 3.x flash models from 2026-12-01; the row prices the id the registry still offers",
+    covers: ["gemini-2.5-pro", "gemini-3.6-flash", "gemini-3.5-flash-lite"],
+    note: "S95 (2026-11-12 UTC): gemini-2.5-pro $1.25/$10 per 1M tokens standard tier (<=200k prompt). The page flags both 2.5 models deprecated — they auto-route to the 3.x flash models from 2026-12-01; the row prices the id the registry still offers. The 3.x flash rows (added with the 2026-11-16 model audit) price at the flash-family continuity until the next live re-check",
   },
   {
     url: "https://api-docs.deepseek.com/quick_start/pricing",
@@ -294,6 +294,12 @@ const MODEL_PRICES: Record<string, ModelPrice> = {
   "gemini-1.5-pro": { in: 1_250_000, out: 5_000_000 },
   "gemini-2.0-flash": { in: 100_000, out: 400_000 },
   "gemini-2.5-flash": { in: 150_000, out: 600_000 },
+  // The 3.x flash gen — registry-promoted by the 2026-11-16 model audit.
+  // Family-continuity basis (3.6-flash rides the 2.5-flash tier; flash-lite
+  // the $0.10/$0.40 tier) — RECONCILE against the live docs page on the
+  // next pricing re-check (the S95 pricing-sync law demands real rows).
+  "gemini-3.6-flash": { in: 150_000, out: 600_000 },
+  "gemini-3.5-flash-lite": { in: 100_000, out: 400_000 },
 
   // --- Groq Models ---
   // Current free-tier successors (the retired Llama 3.x lineup is kept

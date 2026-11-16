@@ -227,7 +227,7 @@ async function gated<T>(
   const hold = await admitDispatch({
     provider: s.provider,
     model: s.model,
-    estimatedMicro: estimateDispatchMicroUsd(s.model || "gpt-4o", texts),
+    estimatedMicro: estimateDispatchMicroUsd(s.model || "gpt-6.1-terra", texts),
   });
   try {
     const result = await dispatch();

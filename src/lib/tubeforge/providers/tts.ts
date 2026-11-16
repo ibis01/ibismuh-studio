@@ -171,9 +171,10 @@ async function resolveCartesiaVoiceId(
 /** The voice catalog for a provider (drives UI pickers + sanitization). */
 export function voiceCatalog(provider: ProviderId, model = "") {
   if (provider === "openai") {
-    // No model stored → adapter defaults to tts-1, which only knows the
-    // classic six voices.
-    const effective = model.trim() || "tts-1";
+    // No model stored → adapter defaults to gpt-4o-mini-tts (the tts-1 pair it
+    // replaced is retired Jan 6, 2027). The classic six voices work on every
+    // model; the extended set unlocks on non-tts-1 models (classicOnly below).
+    const effective = model.trim() || "gpt-4o-mini-tts";
     const classicOnly = /^tts-1(-hd)?$/.test(effective);
     const list = classicOnly
       ? OPENAI_VOICES.filter((v) => v.classic)
@@ -922,7 +923,7 @@ async function openaiTts(
     config.baseUrl?.trim() ||
     meta?.defaultBaseUrl ||
     "https://api.openai.com/v1";
-  const model = config.model?.trim() || "tts-1";
+  const model = config.model?.trim() || "gpt-4o-mini-tts";
   const key = config.apiKey?.trim();
 
   // Skip the API key check if the provider is local (like TTSFM) or
