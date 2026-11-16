@@ -21292,6 +21292,76 @@ await test("S140 F2 — the count wall rides the admission transaction (the S101
   ok(fs.existsSync("scripts/s140-import-wall-drill.mts"), "the drill script exists (the REAL race proof lives there, not in pins)");
 });
 
+// ---------- suite: S151 — the fleet-truth law + the scene-count contract ----------
+
+suiteStart("S151 — the fleet-truth law (job status lives in the rows, not the instance) + the scene-count contract");
+
+await test("S151 ranges: the picker promises short 6–8, medium 12–14, long 16–20 — and the target is the range's top", async () => {
+  const { SCENE_COUNT_RANGES, SCENE_COUNTS } = await import("../src/lib/tubeforge/types");
+  ok(SCENE_COUNT_RANGES.short.min === 6 && SCENE_COUNT_RANGES.short.max === 8, "short promises 6–8 scenes");
+  ok(SCENE_COUNT_RANGES.medium.min === 12 && SCENE_COUNT_RANGES.medium.max === 14, "medium promises 12–14 scenes");
+  ok(SCENE_COUNT_RANGES.long.min === 16 && SCENE_COUNT_RANGES.long.max === 20, "long promises 16–20 scenes");
+  for (const length of ["short", "medium", "long"]) {
+    ok(SCENE_COUNTS[length] === SCENE_COUNT_RANGES[length].max, `the ${length} generation target is its range's top`);
+    ok(SCENE_COUNTS[length] >= SCENE_COUNT_RANGES[length].min, `the ${length} target never sits below its own floor`);
+  }
+});
+
+await test("S151 floor law: the script package enforces the range's minimum — a lazy model response cannot ship a thin board", async () => {
+  const src = await fsp.readFile("src/lib/tubeforge/story.ts", "utf8");
+  ok(src.includes("SCENE_COUNT_RANGES[opts.length]?.min"), "generateSceneScriptPackage reads the length's floor");
+  ok(src.includes("Script came back short"), "a below-floor package throws the honest retry error (aiCall re-asks)");
+  // The old acceptance gate (>= 2 scenes) is gone — the floor replaced it.
+  // (The lookbehind keeps a different function's `opts.scenes.length < 2`
+  // short-circuit from false-positiving.)
+  ok(!/(?<![\w.])scenes\.length\s*<\s*2/.test(src), "the lenient >=2 acceptance is no longer the script gate");
+});
+
+await test("S151 fleet law: jobFleetStatus reads the LATEST durable row — pending/running active, failed → its error", async () => {
+  const src = await fsp.readFile("src/lib/tubeforge/jobs.ts", "utf8");
+  ok(/export async function jobFleetStatus\(/.test(src), "the fleet status reader is exported");
+  const fn = src.slice(src.indexOf("export async function jobFleetStatus"));
+  ok(fn.includes('orderBy: { createdAt: "desc" }'), "the LATEST row for (entityId, kind) is the truth");
+  ok(fn.includes('"pending"') && fn.includes('"running"'), "queued + claimed both count as active");
+  ok(fn.includes('"failed"'), "a failed latest row carries its error to the poller");
+});
+
+await test("S151 fleet law: the poll-facing GETs read the rows — storyboard, render (+lane), stock, per-scene flags", async () => {
+  const sb = await fsp.readFile("src/app/api/videos/[id]/storyboard/route.ts", "utf8");
+  ok(sb.includes("jobFleetStatus(id, \"storyboard\")"), "the storyboard GET consults the durable rows");
+  ok(/generating: isJobRunning\(id, "storyboard"\) \|\| fleet\.active/.test(sb), "generating = local registry OR fleet");
+  ok(sb.includes("?? fleet.error"), "the poller sees a failed row's error even on another instance");
+
+  const render = await fsp.readFile("src/app/api/videos/[id]/render/route.ts", "utf8");
+  ok(render.includes("jobFleetStatus(id, \"render\")"), "the render GET consults the durable rows");
+  ok(render.includes("jobFleetStatus(id, laneKind)"), "the engine lanes (whiteboard/graphics) are fleet-truth too");
+
+  const stock = await fsp.readFile("src/app/api/videos/[id]/stock/route.ts", "utf8");
+  ok(stock.includes("jobFleetStatus(id, \"stock\")"), "the stock GET consults the durable rows");
+  ok(stock.includes("#scene`"), "the per-scene stock flags ride ONE grouped fleet query");
+
+  const stockN = await fsp.readFile("src/app/api/videos/[id]/stock/[n]/route.ts", "utf8");
+  ok(stockN.includes("jobFleetStatus(jobKey, \"stock\")"), "the per-scene stock POST answers fleet truth");
+});
+
+await test("S151 scene flags: serializeScenes answers from the rows — no instance-memory per-scene probe survives", async () => {
+  const src = await fsp.readFile("src/lib/tubeforge/story.ts", "utf8");
+  ok(!src.includes('isJobRunning(`${videoId}#scene'), "the per-scene generating flag no longer probes instance memory");
+  ok(src.includes('entityId: { startsWith: `${videoId}#scene` }'), "the flags come from one grouped query over the composite entityIds");
+  ok(src.includes("jobError: sceneJobErrors.get(s.index)"), "each scene carries its latest failed re-roll's error");
+});
+
+await test("S151 client honesty: the poller throws a failed re-roll's error; the dialog checks the start and counts what landed", async () => {
+  const poll = await fsp.readFile("src/lib/tubeforge/poll.ts", "utf8");
+  ok(/jobError\)\s*throw new Error\(scene\.jobError\)/.test(poll), "pollScene refuses to toast success over a failed re-roll");
+
+  const dlg = await fsp.readFile("src/components/tubeforge/video-detail-dialog.tsx", "utf8");
+  ok(/Could not start the storyboard/.test(dlg), "the full-storyboard start is checked (an unchecked 400/409 used to lie)");
+  ok(/Could not start the scene re-roll/.test(dlg), "the single-scene start is checked too");
+  ok(dlg.includes("board.complete") && dlg.includes("Storyboard partially painted"), "the success toast requires the board to ACTUALLY be complete");
+  ok(!dlg.includes("${scenes.length || \"All\"} scenes rendered"), "the stale client-side count no longer claims 'rendered'");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

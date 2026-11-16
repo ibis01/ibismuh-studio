@@ -30,7 +30,7 @@ import {
   LENGTHS,
   THUMB_STYLES,
   RENDER_MODES,
-  SCENE_COUNTS,
+  SCENE_COUNT_RANGES,
   type VideoDTO,
 } from "@/lib/tubeforge/types";
 import { formatDuration } from "@/components/tubeforge/shared";
@@ -347,7 +347,11 @@ export function CreateView() {
   // S135 — the engine lanes draw natively (whiteboard pen, graphics doc);
   // their "storyboard" leg scaffolds the doc instead of painting AI art.
   const isEngineLaneMode = renderMode === "whiteboard" || renderMode === "graphics";
-  const sceneCount = SCENE_COUNTS[length] ?? 6;
+  const sceneRange = SCENE_COUNT_RANGES[length] ?? { min: 6, max: 8 };
+  // S151 — the picker promises the length's RANGE (short 6–8, medium 12–14,
+  // long 16–20), not a single number: the label and the generator now speak
+  // the same contract.
+  const sceneCountLabel = `${sceneRange.min}–${sceneRange.max} scenes`;
 
   // The Concept step (1) needs a topic (or a pasted script) before the brief
   // can advance. The type picker (0) is always valid — that IS the first
@@ -1530,7 +1534,7 @@ export function CreateView() {
                   variant="outline"
                   className="border-white/15 bg-white/5 text-muted-foreground text-[10px]"
                 >
-                  {sceneCount} scenes ·{" "}
+                  {sceneCountLabel} ·{" "}
                   {LENGTHS.find((l) => l.id === length)?.label ?? length}
                 </Badge>
               </div>
@@ -1795,7 +1799,7 @@ export function CreateView() {
               </Badge>
               <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-[11px]">
                 {LENGTHS.find((l) => l.id === length)?.label ?? length}
-                {isStory ? ` · ${sceneCount} scenes` : ""}
+                {isStory ? ` · ${sceneCountLabel}` : ""}
               </Badge>
               <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-[11px]">
                 {voice} · {speed.toFixed(1)}x

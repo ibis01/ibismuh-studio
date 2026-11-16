@@ -193,15 +193,30 @@ export const CAMERAS = [
 ] as const;
 
 /**
- * Scene count per script length. Tuned for retention pacing: shorter scenes
+ * S151 — scene count per script length, as a RANGE the picker promises and
+ * the script generator enforces (the floor is a hard contract, see
+ * generateSceneScriptPackage). Tuned for retention pacing: shorter scenes
  * mean more visual changes, more hooks and tighter narration. The render
  * engine adds scene-aware Ken Burns shots on top (Smart Motion), so the
  * on-screen view changes far more often than the scene count alone implies.
  */
+export const SCENE_COUNT_RANGES: Record<string, { min: number; max: number }> = {
+  short: { min: 6, max: 8 },
+  medium: { min: 12, max: 14 },
+  long: { min: 16, max: 20 },
+};
+
+/**
+ * The generation TARGET per length — the top of its range. The prompt asks
+ * for exactly this many scenes; the post-parse floor (SCENE_COUNT_RANGES)
+ * rejects lazy responses that land below the range's minimum instead of
+ * silently shipping a thin storyboard (the live incident: 4 scenes for a
+ * short that promises 6–8).
+ */
 export const SCENE_COUNTS: Record<string, number> = {
   short: 8,
-  medium: 12,
-  long: 16,
+  medium: 14,
+  long: 20,
 };
 
 /**
@@ -316,6 +331,10 @@ export interface SceneDTO {
   hasImage: boolean;
   imageUrl: string | null;
   generating: boolean; // single-scene re-roll in flight
+  /** S151 — the latest scene re-roll job's failure, read from the durable
+   * Job rows (fleet truth). Null when the last attempt succeeded or none
+   * ran; pollScene throws it so a failed re-roll can't toast success. */
+  jobError?: string | null;
   hasStock: boolean;
   stockUrl: string | null;
   stockSource: string | null; // "pexels" | "pixabay"

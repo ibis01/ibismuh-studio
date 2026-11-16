@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/tubeforge/tenant-db";
 import { requireUser } from "@/lib/tubeforge/tenant";
 import { serializeScenes, storyboardComplete, parseScenes } from "@/lib/tubeforge/story";
-import { startJob, isJobRunning, lastJobError } from "@/lib/tubeforge/jobs";
+import { startJob, isJobRunning, lastJobError, jobFleetStatus } from "@/lib/tubeforge/jobs";
 import { runStoryboardJob, runSceneJob } from "@/lib/tubeforge/video-jobs";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -21,11 +21,17 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: "Not a scene-based video" }, { status: 400 });
 
   const scenes = parseScenes(video.scenes);
+  // S151 — the generating/error pair is FLEET truth: this GET may run on a
+  // different instance than the POST that started the job, so the in-memory
+  // registry alone answers "no" on tick 0 and the client's poll resolves
+  // while the paint is still running (or failed) elsewhere. The durable Job
+  // row is the shared source the queue maintains.
+  const fleet = await jobFleetStatus(id, "storyboard");
   return NextResponse.json({
     scenes: await serializeScenes(id, scenes),
     complete: await storyboardComplete(id, scenes),
-    generating: isJobRunning(id, "storyboard"),
-    error: lastJobError(id, "storyboard"),
+    generating: isJobRunning(id, "storyboard") || fleet.active,
+    error: lastJobError(id, "storyboard") ?? fleet.error,
   });
 }
 

@@ -1292,18 +1292,38 @@ export function VideoDetailDialog({
     setBusy("storyboard");
     setBoardGenerating(true);
     try {
-      await fetch(`/api/videos/${video.id}/storyboard`, {
+      const res = await fetch(`/api/videos/${video.id}/storyboard`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
       });
-      await pollStoryboard(video.id, { timeoutMs: 20 * 60 * 1000 });
+      // S151 — the start must be checked: an unchecked 400/409 left the poll
+      // resolving on tick 0 (nothing running) and the success toast firing
+      // over a board that never painted.
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error ?? "Could not start the storyboard");
+      }
+      const board = await pollStoryboard(video.id, { timeoutMs: 20 * 60 * 1000 });
       await reloadScenes(video.id);
       await refreshVideo(video.id);
-      toast({
-        title: "Storyboard painted",
-        description: `${scenes.length || "All"} scenes rendered — review the art and roll the video.`,
-      });
+      // S151 — honesty law: the toast counts what actually landed. "complete"
+      // false (or art missing) is a partial paint — the resume semantics make
+      // the next Generate cheap (finished scenes are kept).
+      const painted = board.scenes.filter((s) => s.hasImage).length;
+      const total = board.scenes.length || scenes.length;
+      if (board.complete && painted >= total) {
+        toast({
+          title: "Storyboard painted",
+          description: `${total} scenes rendered — review the art and roll the video.`,
+        });
+      } else {
+        toast({
+          title: "Storyboard partially painted",
+          description: `${painted} of ${total} scenes have art — tap Generate storyboard again to paint the rest.`,
+          variant: "destructive",
+        });
+      }
       bumpRefresh();
     } catch (e) {
       toast({
@@ -1325,11 +1345,16 @@ export function VideoDetailDialog({
       prev.map((s) => (s.index === index ? { ...s, generating: true } : s))
     );
     try {
-      await fetch(`/api/videos/${video.id}/storyboard`, {
+      const res = await fetch(`/api/videos/${video.id}/storyboard`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ scene: index }),
       });
+      // S151 — the start must be checked (same law as the full storyboard).
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error ?? "Could not start the scene re-roll");
+      }
       await pollScene(video.id, index);
       await reloadScenes(video.id);
       if (renderMode === "slides") await reloadSlides(video.id);

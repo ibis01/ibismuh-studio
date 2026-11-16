@@ -371,6 +371,32 @@ export function lastJobError(entityId: string, kind: JobKind): string | null {
   return state.lastErrors.get(key(entityId, kind)) ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// S151 — the FLEET truth. The registry above answers for THIS process only.
+// On Vercel the POST that started a job and the GET that polls its status
+// routinely land on DIFFERENT lambda instances: the poller saw
+// "not generating, no error" on tick 0 and the UI celebrated ("Storyboard
+// painted — 4 scenes rendered") a job that was still running — or already
+// failed — somewhere else. The durable Job rows are the shared truth the
+// queue already maintains, so the status endpoints read the LATEST row for
+// (entityId, kind): pending/running → active, failed → its error, terminal
+// rows (done/cancelled/interrupted) → settled. One query per status poll —
+// the [entityId, kind] index carries it.
+export async function jobFleetStatus(
+  entityId: string,
+  kind: JobKind
+): Promise<{ active: boolean; error: string | null }> {
+  const row = await db.job.findFirst({
+    where: { entityId, kind },
+    orderBy: { createdAt: "desc" },
+    select: { status: true, error: true },
+  });
+  return {
+    active: row?.status === "pending" || row?.status === "running",
+    error: row?.status === "failed" ? (row.error ?? null) : null,
+  };
+}
+
 /** Report human-readable progress for a running job (render: scene 3 of 6). */
 export function setJobProgress(
   entityId: string,

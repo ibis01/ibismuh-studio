@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/tubeforge/tenant-db";
 import { requireUser } from "@/lib/tubeforge/tenant";
 import { parseScenes } from "@/lib/tubeforge/story";
-import { isJobRunning, lastJobError, jobProgress, startJob } from "@/lib/tubeforge/jobs";
+import { isJobRunning, lastJobError, jobProgress, startJob, jobFleetStatus } from "@/lib/tubeforge/jobs";
 import { assertWithinVideoCeiling, CostCeilingExceededError } from "@/lib/tubeforge/cost-guard";
 
 const digestOf = (input: string) =>
@@ -45,8 +45,19 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   // actually running.
   const laneKind =
     video.renderMode === "whiteboard" ? "whiteboard" : video.renderMode === "graphics" ? "graphics" : null;
+  // S151 — FLEET truth: the render POST and this poll may land on different
+  // serverless instances; the in-memory registry alone answers "not
+  // rendering" on tick 0 while the job is running (or failed) elsewhere.
+  const [fleetRender, fleetLane] = await Promise.all([
+    jobFleetStatus(id, "render"),
+    laneKind !== null
+      ? jobFleetStatus(id, laneKind)
+      : Promise.resolve({ active: false, error: null as string | null }),
+  ]);
   const rendering =
-    isJobRunning(id, "render") || (laneKind !== null && isJobRunning(id, laneKind));
+    isJobRunning(id, "render") ||
+    fleetRender.active ||
+    (laneKind !== null && (isJobRunning(id, laneKind) || fleetLane.active));
   // S117 — the manifest + the live staleness verdict (computed, never
   // stored): what the standing final was assembled from, and whether the
   // current approved content has moved on since.
@@ -63,7 +74,8 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     staleness,
     error:
       lastJobError(id, "render") ??
-      (laneKind ? lastJobError(id, laneKind) : null) ??
+      fleetRender.error ??
+      (laneKind ? lastJobError(id, laneKind) ?? fleetLane.error : null) ??
       video.error,
   });
 }

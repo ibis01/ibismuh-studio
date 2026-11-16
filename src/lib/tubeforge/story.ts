@@ -12,10 +12,9 @@ import { aiCall } from "./budget";
 import { runQualityGate } from "./quality";
 import { closestPriorDistance, imageHash, sceneImageHashes } from "./arthash";
 import { mergeWavs, wavDurationSec } from "./wav";
-import { CAMERAS, SCENE_COUNTS, SFX_KINDS, sanitizeSceneStyle, sceneStylePrompt, type Scene, type StockRef, type StockVerification } from "./types";
+import { CAMERAS, SCENE_COUNTS, SCENE_COUNT_RANGES, SFX_KINDS, sanitizeSceneStyle, sceneStylePrompt, type Scene, type StockRef, type StockVerification } from "./types";
 import { normalizeFocalToken } from "./motion";
 import { characterSceneFragment, readPortrait } from "./characters";
-import { isJobRunning } from "./jobs";
 import { chatComplete } from "./providers/chat";
 import { ttsSynthesize } from "./providers/tts";
 import { imageEdit, imageGenerate, imageEditSupported } from "./providers/image";
@@ -196,6 +195,26 @@ export async function serializeScenes(
       });
     }
   }
+  // S151 — per-scene re-roll flags read the durable Job rows (FLEET truth),
+  // not this instance's registry: the re-roll POST and this poll land on
+  // different serverless instances, and an instance-memory flag cleared on
+  // tick 0 — the studio celebrated re-rolls that were still painting (or
+  // already failed) somewhere else. ONE grouped query for the whole board
+  // (the [entityId, kind] index carries it); latest row per scene wins.
+  const sceneJobRows = await db.job.findMany({
+    where: { entityId: { startsWith: `${videoId}#scene` }, kind: "scene" },
+    orderBy: { createdAt: "desc" },
+    select: { entityId: true, status: true, error: true },
+  });
+  const generatingScenes = new Set<number>();
+  const sceneJobErrors = new Map<number, string>();
+  for (const row of sceneJobRows) {
+    const idx = Number(row.entityId.slice(row.entityId.lastIndexOf("#scene") + 6));
+    if (!Number.isFinite(idx) || generatingScenes.has(idx) || sceneJobErrors.has(idx))
+      continue; // first sight (newest row) is the truth
+    if (row.status === "pending" || row.status === "running") generatingScenes.add(idx);
+    else if (row.status === "failed" && row.error) sceneJobErrors.set(idx, row.error);
+  }
   return scenes.map((s) => {
     const art = artByIdx.get(s.index) ?? null;
     const hasImage = art !== null;
@@ -220,7 +239,8 @@ export async function serializeScenes(
       imageUrl: hasImage
         ? `/api/videos/${videoId}/storyboard/${s.index}?v=${sceneArtVersion(art)}`
         : null,
-      generating: isJobRunning(`${videoId}#scene${s.index}`, "scene"),
+      generating: generatingScenes.has(s.index),
+      jobError: sceneJobErrors.get(s.index) ?? null,
       hasStock: Boolean(s.stock),
       stockUrl: s.stock ? `/api/videos/${videoId}/stock/${s.index}` : null,
       stockSource: s.stock?.source ?? null,
@@ -665,8 +685,20 @@ Return JSON with exactly these keys:
     .map((s: Record<string, unknown>, i: number) => normalizeScene(s, i))
     .filter((s: Scene) => s.narration && s.visual);
 
-  if (!title || scenes.length < 2)
+  if (!title)
     throw new Error("Incomplete scene package from model");
+
+  // S151 — the length contract: the picker promises the length's scene range
+  // (SCENE_COUNT_RANGES), so a lazy model response must not silently shrink
+  // the storyboard (the live incident: 4 scenes for a short that promises
+  // 6–8). Below the floor = a failed generation — aiCall's retry loop re-asks
+  // with the same "exactly N scenes" instruction instead of painting thin.
+  const minScenes =
+    SCENE_COUNT_RANGES[opts.length]?.min ?? Math.max(4, Math.ceil(sceneCount / 2));
+  if (scenes.length < minScenes)
+    throw new Error(
+      `Script came back short: ${scenes.length} scenes for a ${opts.length} video that promises at least ${minScenes} — retrying`
+    );
 
   // Deterministic retention map — the model's own rehook/sfx choices are
   // overridden (it over-flags both), narration math is spoken, visuals are

@@ -348,9 +348,17 @@ export async function pollScene(
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const scene = (data.scenes ?? []).find(
-      (s: { index: number; generating: boolean }) => s.index === sceneIndex
+      (s: { index: number; generating: boolean; jobError?: string | null }) =>
+        s.index === sceneIndex
     );
-    if (!scene || !scene.generating) return;
+    if (!scene || !scene.generating) {
+      // S151 — a failed re-roll ALSO clears the generating flag (the Job row
+      // reached "failed"); without this check the flag-clear resolved as
+      // success and the studio toasted "repainted" over an old image. The
+      // per-scene jobError comes from the durable Job rows (fleet truth).
+      if (scene?.jobError) throw new Error(scene.jobError);
+      return;
+    }
 
     if (Date.now() > deadline)
       throw new Error("Scene re-roll is taking unusually long — check back shortly.");

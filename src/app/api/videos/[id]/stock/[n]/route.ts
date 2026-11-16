@@ -4,7 +4,7 @@ import { db } from "@/lib/tubeforge/tenant-db";
 import { requireUser } from "@/lib/tubeforge/tenant";
 import { parseScenes } from "@/lib/tubeforge/story";
 import { readSceneStock, readStockKeys, sanitizeStockQuery } from "@/lib/tubeforge/stock";
-import { startJob, isJobRunning, lastJobError } from "@/lib/tubeforge/jobs";
+import { startJob, isJobRunning, lastJobError, jobFleetStatus } from "@/lib/tubeforge/jobs";
 import { runStockSceneJob } from "@/lib/tubeforge/queue-handlers";
 
 type Ctx = { params: Promise<{ id: string; n: string }> };
@@ -88,12 +88,15 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     payload: { query: queryOverride ?? null },
   });
 
+  // S151 — fleet truth for the status pair (the POST and this GET may run on
+  // different serverless instances).
+  const fleet = await jobFleetStatus(jobKey, "stock");
   return NextResponse.json(
     {
       accepted,
       generating: true,
-      error: lastJobError(jobKey, "stock"),
-      running: isJobRunning(jobKey, "stock"),
+      error: lastJobError(jobKey, "stock") ?? fleet.error,
+      running: isJobRunning(jobKey, "stock") || fleet.active,
     },
     { status: accepted ? 202 : 200 }
   );
