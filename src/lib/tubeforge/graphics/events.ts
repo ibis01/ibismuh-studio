@@ -46,8 +46,12 @@ export function eventFrameAt(ms: number, fps: number): number {
  * list. The caller passes a VALIDATED doc (the Part F law: the validator
  * has already bounded every event by its own scene's clock).
  */
-export function graphicsEventList(doc: GraphicsDoc, fps: number): GraphicsEventSlot[] {
-  const sceneMs = graphicsSceneDurationsMs(doc);
+export function graphicsEventList(
+  doc: GraphicsDoc,
+  fps: number,
+  voMsBySceneId?: Map<string, number>
+): GraphicsEventSlot[] {
+  const sceneMs = graphicsSceneDurationsMs(doc, voMsBySceneId);
   const out: GraphicsEventSlot[] = [];
   let framesBefore = 0;
   let cursorMs = 0;

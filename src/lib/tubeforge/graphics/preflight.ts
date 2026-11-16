@@ -56,13 +56,17 @@ export interface GraphicsBudgetReport {
 /** The preflight budget report — the DELIVERED frame arithmetic (R-1):
  *  per-scene frames via framePlanWindows(sceneMs, doc.fps), summed; the
  *  scene clocks come from the ONE clock rule (frame.ts
- *  graphicsSceneDurationsMs — explicit > the house estimate). Pure;
+ *  graphicsSceneDurationsMs — explicit > measured VO + tail > the house
+ *  estimate, S152). Pure;
  *  throws on a doc with no scenes (a caller bug, same as frameAt). */
-export function graphicsBudgetReport(doc: GraphicsDoc): GraphicsBudgetReport {
+export function graphicsBudgetReport(
+  doc: GraphicsDoc,
+  voMsBySceneId?: Map<string, number>
+): GraphicsBudgetReport {
   if (doc.scenes.length === 0) {
     throw new Error("graphicsBudgetReport: the doc has no scenes — pass a validated GraphicsDoc");
   }
-  const sceneMs = graphicsSceneDurationsMs(doc);
+  const sceneMs = graphicsSceneDurationsMs(doc, voMsBySceneId);
   const plan = framePlanWindows(sceneMs, doc.fps);
   const frames = plan.scenes.reduce((sum, w) => sum + w.frames, 0);
   const totalMs = sceneMs.reduce((sum, ms) => sum + ms, 0);
@@ -81,9 +85,15 @@ export function graphicsBudgetReport(doc: GraphicsDoc): GraphicsBudgetReport {
 /** The admission gate — throws the named-wall refusal when the DELIVERED
  *  count exceeds the wall at doc.fps; returns the report otherwise. The
  *  renderer calls this BEFORE chromium launches (the E0 audit §6 risk-4
- *  receipt: 4 GB workers OOM on long renders). */
-export function assertGraphicsBudget(doc: GraphicsDoc): GraphicsBudgetReport {
-  const report = graphicsBudgetReport(doc);
+ *  receipt: 4 GB workers OOM on long renders). S152 — pass the MEASURED
+ *  narration map so the wall judges the SAME extended clock the render
+ *  will deliver (an estimate-only admission could pass a program the
+ *  VO-extended clock refuses). */
+export function assertGraphicsBudget(
+  doc: GraphicsDoc,
+  voMsBySceneId?: Map<string, number>
+): GraphicsBudgetReport {
+  const report = graphicsBudgetReport(doc, voMsBySceneId);
   if (!report.ok) throw new Error(report.refusal ?? "graphics budget wall exceeded");
   return report;
 }

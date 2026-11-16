@@ -21,6 +21,8 @@ import { validateWhiteboardProject } from "@/lib/tubeforge/whiteboard/storyboard
 import { loadVideoLibrary } from "@/lib/tubeforge/whiteboard/asset-store";
 import { parseGraphicsDoc } from "@/lib/tubeforge/graphics/types";
 import { assertGraphicsBudget } from "@/lib/tubeforge/graphics/preflight";
+import { measureGraphicsVoMs } from "@/lib/tubeforge/graphics/vo-ms";
+import { videoDir } from "@/lib/tubeforge/ai";
 import { resolveRenderLane } from "@/lib/tubeforge/render-lane";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -213,7 +215,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         { status: 409 }
       );
     try {
-      assertGraphicsBudget(doc);
+      // S152 — the wall reads the MEASURED narration clock (the WAV truth
+      // the render extends its scenes to hold), so admission judges the
+      // delivered program, not an estimate-only shadow of it.
+      assertGraphicsBudget(doc, measureGraphicsVoMs(videoDir(id), doc));
     } catch (err) {
       return NextResponse.json(
         { error: err instanceof Error ? err.message : "the graphics doc exceeds the frame budget" },

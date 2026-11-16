@@ -27,9 +27,10 @@ type Ctx = { params: Promise<{ id: string }> };
  *
  * GET  — the doc (validated server-side before return), the MEASURED
  *        narration durations (`voMs`, WAV header math on the standing
- *        scene-NN.wav files — display truth: the doc clock owns duration,
- *        so a longer VO truncates at the scene boundary and the studio
- *        surfaces the delta honestly), the budgets for client-side
+ *        scene-NN.wav files — S152: this IS clock truth now, the render
+ *        extends an unplanned scene to its narration + tail, and the
+ *        studio surfaces the extended windows through the same numbers),
+ *        the budgets for client-side
  *        enforcement, the draft scales, and the preflight + QC evidence
  *        (the R-1 budget report + the G1 subcheck matrix — the same rows
  *        the render admission will judge).
@@ -81,15 +82,18 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
   // The preflight + QC evidence — the SAME reports the admission gate and
   // the render will judge (the studio shows what the click will do).
+  // S152 — the measured narration map feeds both, so the evidence and the
+  // studio's clock are the EXTENDED clock the render will deliver.
   let preflight: ReturnType<typeof graphicsBudgetReport> | null = null;
   let qc: ReturnType<typeof graphicsQcMatrix> | null = null;
   if (doc) {
+    const voMsMap = new Map(Object.entries(voMs));
     try {
-      preflight = graphicsBudgetReport(doc);
+      preflight = graphicsBudgetReport(doc, voMsMap);
     } catch {
       preflight = null; // a doc with no scenes — the validator refuses it anyway
     }
-    qc = graphicsQcMatrix(doc, Object.keys(voMs).length);
+    qc = graphicsQcMatrix(doc, Object.keys(voMs).length, voMsMap);
   }
 
   return NextResponse.json({

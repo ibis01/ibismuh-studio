@@ -13,8 +13,8 @@
 // framePlanWindows(sceneMs, doc.fps) — the ONE clock derivation, shared
 // with the preflight wall (R-1) and the anim substrate. The scene clocks
 // come from the ONE clock rule (frame.ts graphicsSceneDurationsMs —
-// explicit > the house estimate). Contiguity holds by construction at
-// either fps (D3).
+// explicit > measured VO + tail > the house estimate, S152). Contiguity
+// holds by construction at either fps (D3).
 //
 // Pure, deterministic, ffmpeg-free. The graphics module stays a leaf:
 // this imports the shared contract types (timeline.ts) + the engine's own
@@ -62,10 +62,14 @@ export interface GraphicsTracksOptions {
   voSceneIds?: Iterable<string>;
   /** True when the render assembles a music bed. */
   musicOn?: boolean;
+  /** S152 — the MEASURED narration durations (scene id → ms): the same
+   *  map the renderer threads through frameAt and the wall, so the
+   *  contract's windows are the delivered windows (one clock). */
+  voMsBySceneId?: Map<string, number>;
 }
 
 export function graphicsTracks(doc: GraphicsDoc, opts: GraphicsTracksOptions = {}): TimelineTrack[] {
-  const plan = framePlanWindows(graphicsSceneDurationsMs(doc), doc.fps);
+  const plan = framePlanWindows(graphicsSceneDurationsMs(doc, opts.voMsBySceneId), doc.fps);
 
   const visualClips: TimelineClip[] = doc.scenes.map((scene, i) => ({
     id: `g${i}`,

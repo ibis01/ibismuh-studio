@@ -40,7 +40,7 @@
 //     the wall — this component never writes a doc).
 //   the scale anchor is the placement point (the composer's translate… 
 //     scale semantics), the handle is a distance-ratio gesture.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   APPLY_GRAPHICS_FRAME_FN,
@@ -68,6 +68,11 @@ export interface GraphicsCanvasProps {
   /** Throttled (~10 Hz) time reporter for the studio's slider. */
   onTime: (tMs: number) => void;
   onEnded: () => void;
+  /** S152 — the measured narration durations (scene id → ms, the GET
+   *  route's WAV truth): the canvas plays the DELIVERED clock (explicit >
+   *  VO + tail > estimate — the render's precedence, frame.ts). Absent =
+   *  the estimate-only shape. */
+  voMsBySceneId?: Record<string, number>;
   /** S126 — the resolved import bytes (assetKey → per-frame data URIs);
    *  the same resolution the render job runs (the one-seam law). Absent =
    *  spriteless preview (byte-identical to the pre-S126 compose). */
@@ -92,15 +97,16 @@ const HANDLE_PX = 12;
 const HIT_SLOP = 8;
 
 /** Total doc duration (ms) — the ONE clock rule (frame.ts), recomputed
- *  per doc change. */
-function docTotalMs(doc: GraphicsDoc): number {
-  return graphicsSceneDurationsMs(doc).reduce((a, b) => a + b, 0);
+ *  per doc change. S152 — the measured map rides along (the delivered
+ *  clock), absent → the estimate shape. */
+function docTotalMs(doc: GraphicsDoc, voMs?: Map<string, number>): number {
+  return graphicsSceneDurationsMs(doc, voMs).reduce((a, b) => a + b, 0);
 }
 
 /** The active scene index for a global tMs — the exact scene resolution
  *  frameAt performs (first clock whose end is strictly ahead). */
-function activeSceneIndex(doc: GraphicsDoc, tMs: number): number {
-  const sceneMs = graphicsSceneDurationsMs(doc);
+function activeSceneIndex(doc: GraphicsDoc, tMs: number, voMs?: Map<string, number>): number {
+  const sceneMs = graphicsSceneDurationsMs(doc, voMs);
   let cursor = 0;
   for (let i = 0; i < sceneMs.length; i++) {
     cursor += sceneMs[i];
@@ -128,6 +134,7 @@ export default function GraphicsCanvas({
   seek,
   onTime,
   onEnded,
+  voMsBySceneId,
   spriteAssets,
   editable = false,
   selectedId = null,
@@ -149,7 +156,14 @@ export default function GraphicsCanvas({
   /** The live outline during a gesture — written by the pointer handlers
    *  (event boundaries), never computed from a ref during render. */
   const [liveOutline, setLiveOutline] = useState<ElementBounds | null>(null);
-  const totalMs = docTotalMs(doc);
+  // S152 — the delivered clock: the measured narration map threaded
+  // through the SAME pure rule the renderer reads (one clock, editor and
+  // engine).
+  const voMsMap = useMemo(
+    () => (voMsBySceneId ? new Map(Object.entries(voMsBySceneId)) : undefined),
+    [voMsBySceneId]
+  );
+  const totalMs = docTotalMs(doc, voMsMap);
   const frameDurMs = 1000 / doc.fps;
   const viewScale = Math.min(720 / doc.width, 520 / doc.height);
 
@@ -165,7 +179,7 @@ export default function GraphicsCanvas({
     const applyFrame = (tMs: number): void => {
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
-      const frame = frameAt(doc, Math.max(0, Math.min(tMs, totalMs)));
+      const frame = frameAt(doc, Math.max(0, Math.min(tMs, totalMs)), voMsMap);
       (win as unknown as { __gApply?: (p: string) => boolean }).__gApply?.(graphicsFramePayload(frame));
     };
     const applyPlaced = (): void => {
@@ -195,7 +209,7 @@ export default function GraphicsCanvas({
     };
     applyRef.current = applyFrame;
     setupRef.current = setup;
-  }, [doc, totalMs]);
+  }, [doc, totalMs, voMsMap]);
 
   // The srcdoc swap — when the ACTIVE scene changes (whole-doc playback).
   // The composed skeleton is the deterministic poster frame; the applier
@@ -271,7 +285,7 @@ export default function GraphicsCanvas({
       tRef.current += frameDurMs;
       const t = Math.min(tRef.current, totalMs);
       applyRef.current?.(t);
-      const idx = activeSceneIndex(doc, t);
+      const idx = activeSceneIndex(doc, t, voMsMap);
       if (idx !== loadedSceneRef.current) setActiveScene(idx);
       if (now - lastReportRef.current > 100) {
         lastReportRef.current = now;
@@ -288,7 +302,7 @@ export default function GraphicsCanvas({
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
     };
-  }, [playing, frameDurMs, totalMs, doc, onTime, onEnded]);
+  }, [playing, frameDurMs, totalMs, doc, onTime, onEnded, voMsMap]);
 
   // Imperative scrub: a fresh nonce applies the time immediately (and
   // follows any scene change it implies). In edit mode the placed state
@@ -297,7 +311,7 @@ export default function GraphicsCanvas({
   useEffect(() => {
     if (!seek) return;
     tRef.current = Math.max(0, Math.min(seek.tMs, totalMs));
-    const idx = activeSceneIndex(doc, tRef.current);
+    const idx = activeSceneIndex(doc, tRef.current, voMsMap);
     if (idx !== loadedSceneRef.current) {
       setActiveScene(idx);
       // The srcdoc effect swaps + onLoad applies at the preserved t.

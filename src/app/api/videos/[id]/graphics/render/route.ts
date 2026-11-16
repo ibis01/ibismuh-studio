@@ -3,11 +3,13 @@ import { db } from "@/lib/tubeforge/tenant-db";
 import { requireUser } from "@/lib/tubeforge/tenant";
 import { isJobRunning, startJob } from "@/lib/tubeforge/jobs";
 import { runGraphicsJob } from "@/lib/tubeforge/video-jobs";
+import { videoDir } from "@/lib/tubeforge/ai";
 import {
   parseGraphicsDoc,
   validGraphicsId,
 } from "@/lib/tubeforge/graphics/types";
 import { assertGraphicsBudget } from "@/lib/tubeforge/graphics/preflight";
+import { measureGraphicsVoMs } from "@/lib/tubeforge/graphics/vo-ms";
 import { graphicsDraftPlan } from "@/lib/tubeforge/graphics/draft";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -73,8 +75,11 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
   // Same gate the job will apply — refuse BEFORE the queue so the user
   // sees the named-wall refusal on click, not in a failed job card.
+  // S152 — the wall reads the MEASURED narration clock (the WAV truth the
+  // render will extend its scenes to hold), so admission judges the
+  // delivered program, not an estimate-only shadow of it.
   try {
-    assertGraphicsBudget(doc);
+    assertGraphicsBudget(doc, measureGraphicsVoMs(videoDir(id), doc));
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "the graphics doc exceeds the frame budget" },

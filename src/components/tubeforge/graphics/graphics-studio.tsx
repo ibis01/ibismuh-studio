@@ -8,9 +8,11 @@
 // text payloads) through the validated PUT, and render — labelled drafts
 // at a viewport scale or the full render through the engine lane.
 //
-// The doc clock IS the timeline: the studio surfaces the measured VO
-// (voMs) as DISPLAY truth — a longer VO truncates at the scene boundary
-// (the render law), so a scene whose VO overruns its clock is flagged
+// The doc clock IS the timeline — S152: the clock HOLDS the narration. The
+// studio surfaces the measured VO (voMs) as CLOCK truth — an unplanned
+// scene extends to its narration + tail (the render law), so the transport
+// and the scene labels read the delivered windows; only an EXPLICIT
+// durationMs owns the boundary, and a VO that overruns it is flagged
 // honestly instead of silently re-cutting the doc.
 //
 // S124 — the element editor (the Layout mode): select/drag/scale/z-order
@@ -24,6 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import GraphicsCanvas from "./graphics-canvas";
 import { graphicsGroupClaims } from "@/lib/tubeforge/graphics/compose";
+import { GRAPHICS_VO_TAIL_MS } from "@/lib/tubeforge/graphics/frame";
 import {
   applyZOrder,
   ELEMENT_EDITOR_LIMITS,
@@ -221,14 +224,30 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
     queueMicrotask(() => void load());
   }, [load]);
 
+  // S152 — the delivered clock mirror (the doc rule: explicit > measured
+  // VO + tail > estimate — frame.ts's precedence, mirrored for the
+  // transport labels; the canvas plays the SAME map through the SAME
+  // pure rule, so the editor and the engine agree on every window).
+  const voMsMap = useMemo(
+    () => new Map(Object.entries(data?.voMs ?? {})),
+    [data]
+  );
   const sceneMs = useMemo(
-    () => (buffer ? buffer.scenes.map((s) => (s.durationMs !== undefined && s.durationMs > 0 ? s.durationMs : estimateMs(s))) : []),
-    [buffer]
+    () =>
+      buffer
+        ? buffer.scenes.map((s) => {
+            if (s.durationMs !== undefined && s.durationMs > 0) return s.durationMs;
+            const vo = voMsMap.get(s.id);
+            if (vo !== undefined && vo > 0) return Math.round(vo + GRAPHICS_VO_TAIL_MS);
+            return estimateMs(s);
+          })
+        : [],
+    [buffer, voMsMap]
   );
   const totalMs = useMemo(() => sceneMs.reduce((a, b) => a + b, 0), [sceneMs]);
 
-  // The client-side clock mirror (the doc rule: explicit > estimate) — the
-  // same arithmetic frame.ts applies, for the transport labels only.
+  // The client-side estimate floor (the doc rule's last rung) — the same
+  // arithmetic frame.ts applies, for the transport labels only.
   function estimateMs(scene: GraphicsScene): number {
     // 2.6 words-per-second house clock (timing.ts estimateNarrationMs) —
     // mirrored here as a display-only lower bound; the doc/explicit truth
@@ -504,6 +523,7 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
         onSelect={setSelectedId}
         onPlacement={commitPlacement}
         spriteAssets={spriteAssets ?? undefined}
+        voMsBySceneId={data?.voMs}
       />
       {missingImports.length > 0 && (
         <p className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-400/25 rounded-lg px-3 py-2">
@@ -697,7 +717,9 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
                 <span className="ml-2 font-normal text-white/50">
                   {fmtSec(clockMs)} · {scene.elements.length} element{scene.elements.length === 1 ? "" : "s"}
                   {vo !== undefined ? ` · VO ${fmtSec(vo)}` : ""}
-                  {voOverrun ? " · VO overruns the clock (the render truncates at the boundary)" : ""}
+                  {voOverrun && scene.durationMs !== undefined && scene.durationMs > 0
+                    ? " · VO overruns the explicit duration (the render cuts at the boundary — your explicit cut wins)"
+                    : ""}
                 </span>
               </summary>
               <div className="mt-2 space-y-2 text-xs">

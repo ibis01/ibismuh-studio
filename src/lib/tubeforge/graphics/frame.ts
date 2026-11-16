@@ -54,10 +54,19 @@
 //   count → the POP channel only (the value channel is untouched — an
 //   overshoot would falsify the number).
 //
-//   The scene clock: explicit durationMs > the house 2.6-wps estimate
+//   The scene clock (S152 — the measured-narration law, the whiteboard
+//   lane's sceneDurationMs precedence mirrored): explicit durationMs >
+//   MEASURED narration (+ the VO tail) > the house 2.6-wps estimate
 //   (timing.ts#estimateNarrationMs — ONE clock model, reused, never
-//   re-implemented). frameAt resolves the ACTIVE scene for the doc clock
-//   and clamps to [0, total].
+//   re-implemented). The measured map is the renderer-side ffprobe/WAV
+//   truth threaded through every clock reader (frameAt, the preflight
+//   wall, the tracks projection, the QC lenses) so budget, contract and
+//   delivered frames agree on the SAME extended clock — a scene holds its
+//   narration instead of truncating it mid-sentence at the 2.6-wps
+//   boundary. An EXPLICIT durationMs still wins: the author's cut is
+//   deliberate, and the QC battery's narration-sync check judges it.
+//   frameAt resolves the ACTIVE scene for the doc clock and clamps to
+//   [0, total].
 //
 // Deviation from the Part B sketch, recorded: frameAt(doc, tMs) — the
 // sketch's geometry arg came from the whiteboard pattern; the graphics
@@ -142,10 +151,19 @@ interface SceneClock {
   durationMs: number;
 }
 
-/** The per-scene effective clocks: explicit > the house estimate (ONE
- *  clock model). Pure — recomputed per call, cheap at the grammar's
- *  walls (≤24 scenes). */
-function sceneClocks(doc: GraphicsDoc): SceneClock[] {
+/** The VO tail (ms) — the hold after the last spoken word before the cut
+ *  (the whiteboard lane's 350 ms stroke-landing tail, mirrored: a scene
+ *  that ends the instant the narration stops feels clipped). ONE named
+ *  constant — the clock rule and the pins cite it. */
+export const GRAPHICS_VO_TAIL_MS = 350;
+
+/** The per-scene effective clocks: explicit > measured VO + tail > the
+ *  house estimate (ONE clock model — S152, the whiteboard precedence
+ *  mirrored). `voMsBySceneId` is the renderer-side measurement (WAV
+ *  header math on the standing scene WAVs); absent → the estimate only
+ *  (the client editor's shape). Pure — recomputed per call, cheap at the
+ *  grammar's walls (≤24 scenes). */
+function sceneClocks(doc: GraphicsDoc, voMsBySceneId?: Map<string, number>): SceneClock[] {
   if (doc.scenes.length === 0) {
     // Junk input is a CALLER bug (the keyframe.ts law) — the validator
     // refuses empty docs; frameAt refuses loudly too, never fabricates.
@@ -154,9 +172,12 @@ function sceneClocks(doc: GraphicsDoc): SceneClock[] {
   const clocks: SceneClock[] = [];
   let cursor = 0;
   for (const scene of doc.scenes) {
+    const voMs = voMsBySceneId?.get(scene.id);
     const durationMs = scene.durationMs !== undefined && scene.durationMs > 0
       ? scene.durationMs
-      : estimateNarrationMs(scene.narration);
+      : voMs !== undefined && voMs > 0
+        ? Math.round(voMs + GRAPHICS_VO_TAIL_MS)
+        : estimateNarrationMs(scene.narration);
     clocks.push({ scene, startMs: cursor, endMs: cursor + durationMs, durationMs });
     cursor += durationMs;
   }
@@ -302,8 +323,12 @@ function elementFrame(el: GraphicsElement, tMs: number): GraphicsElementFrame {
  * at their composed frame state. PURE: same input → byte-identical output
  * (pinned by the sweep-hash test).
  */
-export function frameAt(doc: GraphicsDoc, tMs: number): GraphicsFrameState {
-  const clocks = sceneClocks(doc);
+export function frameAt(
+  doc: GraphicsDoc,
+  tMs: number,
+  voMsBySceneId?: Map<string, number>
+): GraphicsFrameState {
+  const clocks = sceneClocks(doc, voMsBySceneId);
   const last: SceneClock | undefined = clocks[clocks.length - 1];
   if (last === undefined) throw new Error("frameAt: the doc has no scenes — pass a validated GraphicsDoc");
   const total = last.endMs;
@@ -339,17 +364,22 @@ export function frameAt(doc: GraphicsDoc, tMs: number): GraphicsFrameState {
  *  against GRAPHICS_FRAME_BUDGET, exposed here so the wall has one
  *  calculator. Uses the anim/clock frame rule (round to whole frames —
  *  frameCountOf's Math.round). */
-export function graphicsFrameCount(doc: GraphicsDoc): number {
-  const clocks = sceneClocks(doc);
+export function graphicsFrameCount(doc: GraphicsDoc, voMsBySceneId?: Map<string, number>): number {
+  const clocks = sceneClocks(doc, voMsBySceneId);
   const last: SceneClock | undefined = clocks[clocks.length - 1];
   if (last === undefined) throw new Error("graphicsFrameCount: the doc has no scenes — pass a validated GraphicsDoc");
   return frameCountOf(last.endMs, doc.fps);
 }
 
-/** The per-scene clocks in ms — explicit durationMs > the house estimate
- *  (ONE clock rule; this is its single home, shared with the preflight
- *  wall (R-1) and the tracks projection, which quantize it through
- *  framePlanWindows at doc.fps). Pure. */
-export function graphicsSceneDurationsMs(doc: GraphicsDoc): number[] {
-  return sceneClocks(doc).map((c) => c.durationMs);
+/** The per-scene clocks in ms — explicit durationMs > measured VO + tail
+ *  > the house estimate (ONE clock rule; this is its single home, shared
+ *  with the preflight wall (R-1) and the tracks projection, which
+ *  quantize it through framePlanWindows at doc.fps — S152: every reader
+ *  takes the SAME measured map so the wall, the contract and the
+ *  delivered frames agree on the extended clock). Pure. */
+export function graphicsSceneDurationsMs(
+  doc: GraphicsDoc,
+  voMsBySceneId?: Map<string, number>
+): number[] {
+  return sceneClocks(doc, voMsBySceneId).map((c) => c.durationMs);
 }

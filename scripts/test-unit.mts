@@ -13623,7 +13623,7 @@ await test("s123 P3: the lane is wired end-to-end — route branch, job dispatch
   const route = fs.readFileSync("src/app/api/videos/[id]/render/route.ts", "utf8");
   ok(
     route.includes('if (lane.lane === "graphics")') &&
-      route.includes("assertGraphicsBudget(doc)") &&
+      route.includes("assertGraphicsBudget(doc") &&
       route.includes("parseGraphicsDoc(video.graphicsDoc)"),
     "POST /render carries the graphics lane branch: doc parse + the admission-time preflight wall + the engine enqueue"
   );
@@ -21360,6 +21360,130 @@ await test("S151 client honesty: the poller throws a failed re-roll's error; the
   ok(/Could not start the scene re-roll/.test(dlg), "the single-scene start is checked too");
   ok(dlg.includes("board.complete") && dlg.includes("Storyboard partially painted"), "the success toast requires the board to ACTUALLY be complete");
   ok(!dlg.includes("${scenes.length || \"All\"} scenes rendered"), "the stale client-side count no longer claims 'rendered'");
+});
+
+// ---------- suite: S152 — the measured-narration clock (graphics lane) ----------
+
+suiteStart("S152 — the measured-narration clock: an unplanned graphics scene holds its narration, never truncates it");
+
+await test("S152 clock precedence: explicit durationMs > measured VO + tail > the house estimate — one rule, one tail", async () => {
+  const { graphicsSceneDurationsMs, GRAPHICS_VO_TAIL_MS } = await import("../src/lib/tubeforge/graphics/frame");
+  const { estimateNarrationMs } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const doc = mustValidate(
+    gDoc([
+      gScene("scene-1", [gEl("h1", "headline")]), // no explicit duration
+      gScene("scene-2", [gEl("h2", "headline")], { durationMs: 8000 }), // explicit
+      gScene("scene-3", [gEl("h3", "headline")]), // no VO in the map → estimate
+    ]),
+    "s152 clock"
+  );
+  const voMs = new Map([
+    ["scene-1", 9000], // slower narration than the 2.6-wps estimate
+    ["scene-2", 15000], // explicit duration must STILL win
+  ]);
+  const extended = graphicsSceneDurationsMs(doc, voMs);
+  const estimated = graphicsSceneDurationsMs(doc);
+  ok(extended[0] === 9000 + GRAPHICS_VO_TAIL_MS, "an unplanned scene extends to its measured narration + the tail");
+  ok(GRAPHICS_VO_TAIL_MS === 350, "the VO tail is the house 350 ms (the whiteboard stroke-landing tail, mirrored)");
+  ok(extended[1] === 8000, "an EXPLICIT duration wins over the measured VO (the author's cut is deliberate)");
+  ok(extended[2] === estimated[2], "a scene with no measurement rides the house estimate");
+  ok(estimated[0] === estimateNarrationMs("two short words"), "absent map → the estimate shape (the client editor's world)");
+});
+
+await test("S152 frameAt resolves scenes on the EXTENDED clock — the narration hold is real frames, not a label", async () => {
+  const { frameAt } = await import("../src/lib/tubeforge/graphics/frame");
+  const doc = mustValidate(
+    gDoc([
+      gScene("scene-1", [gEl("h1", "headline")], { narration: "one" }),
+      gScene("scene-2", [gEl("h2", "headline")], { narration: "two" }),
+    ]),
+    "s152 frameAt"
+  );
+  // scene-1's estimate for a tiny narration is the 4000 ms floor; give it
+  // 9 s of measured VO — a t INSIDE the extension must resolve scene-1
+  // (the estimate-only clock would have cut into scene-2 there).
+  const voMs = new Map([["scene-1", 9000]]);
+  const insideExtension = 4000 + 3000; // 7 s — past the estimate, inside the extension
+  ok(frameAt(doc, insideExtension, voMs).sceneId === "scene-1", "the extension plays scene-1's narration to its end");
+  ok(frameAt(doc, insideExtension).sceneId === "scene-2", "the estimate-only clock has already moved on (the S152 wound, pinned)");
+});
+
+await test("S152 the wall and the contract ride the SAME extended clock — admission judges the delivered program", async () => {
+  const { graphicsBudgetReport } = await import("../src/lib/tubeforge/graphics/preflight");
+  const { graphicsSceneDurationsMs } = await import("../src/lib/tubeforge/graphics/frame");
+  const { graphicsTracks } = await import("../src/lib/tubeforge/graphics/tracks");
+  const { graphicsExpectedCuts, graphicsHoldWindows } = await import("../src/lib/tubeforge/graphics/qc");
+  const doc = mustValidate(
+    gDoc([
+      gScene("scene-1", [gEl("h1", "headline")]),
+      gScene("scene-2", [gEl("h2", "headline")]),
+    ]),
+    "s152 wall"
+  );
+  const voMs = new Map([
+    ["scene-1", 9000],
+    ["scene-2", 6000],
+  ]);
+  const onEstimate = graphicsBudgetReport(doc);
+  const onMeasured = graphicsBudgetReport(doc, voMs);
+  ok(onMeasured.frames > onEstimate.frames, "the delivered frame count grows with the narration (the wall sees the real program)");
+  const tracks = graphicsTracks(doc, { voMsBySceneId: voMs, voSceneIds: voMs.keys() });
+  const visual = tracks.find((t) => t.kind === "graphics")?.clips ?? [];
+  const first = graphicsSceneDurationsMs(doc, voMs);
+  // The windows are FRAME-QUANTIZED (the D3 law) — 9350 ms @ 24 fps lands
+  // on 224 frames = 9.3333 s; compare against the SAME quantization.
+  const quantizedFirstSec = Math.round((first[0] / 1000) * doc.fps) / doc.fps;
+  approx(visual[0].endSec, quantizedFirstSec, 0.011, "the contract's first window ends at the EXTENDED (frame-quantized, 2-dp house clock) boundary");
+  // The QC lenses judge the same clock: the first cut sits at the extended
+  // boundary, and the hold window closes at the extended scene end.
+  const cuts = graphicsExpectedCuts(doc, voMs);
+  const holds = graphicsHoldWindows(doc, voMs);
+  approx(cuts.cuts[0], first[0] / 1000, 1e-9, "the expected cut sits at the measured boundary (the battery stays honest)");
+  ok(holds.length > 0 && Math.abs(holds[0].endSec - first[0] / 1000) < 1e-9, "the legal hold closes at the extended scene end");
+});
+
+await test("S152 measureGraphicsVoMs: the ONE probe — WAV header math, the scene-<n> mapping law, honest omissions", async () => {
+  const { measureGraphicsVoMs } = await import("../src/lib/tubeforge/graphics/vo-ms");
+  const { pcmToWav } = await import("../src/lib/tubeforge/wav");
+  const doc = mustValidate(
+    gDoc([
+      gScene("scene-1", [gEl("h1", "headline")]),
+      gScene("scene-2", [gEl("h2", "headline")]),
+      gScene("intro", [gEl("h3", "headline")]), // hand-authored id — no WAV mapping
+    ]),
+    "s152 probe"
+  );
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "s152-vo-"));
+  try {
+    const wav = pcmToWav(Buffer.alloc(96000), 48000, 1, 16); // exactly 1 s (48k samples × 2 bytes)
+    fs.writeFileSync(path.join(dir, "scene-01.wav"), wav); // sceneWavFile is zero-padded (the WAV layout law)
+    fs.writeFileSync(path.join(dir, "scene-09.wav"), wav); // not a scene in the doc
+    const voMs = measureGraphicsVoMs(dir, doc);
+    ok(voMs.get("scene-1") === 1000, "scene-1 reads its WAV header (1 s → 1000 ms)");
+    ok(!voMs.has("scene-2"), "a scene with no WAV file is omitted (the ladder rides the estimate)");
+    ok(!voMs.has("intro"), "hand-authored scene ids never map to the WAV layout (the one mapping law)");
+    const empty = measureGraphicsVoMs(path.join(dir, "missing"), doc);
+    ok(empty.size === 0, "an unreadable dir answers an EMPTY map — never a throw, never a fabrication");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+await test("S152 the renderer measures its own slots before the wall — the clock law is wired at every admission surface", async () => {
+  const eng = await fsp.readFile("src/lib/tubeforge/graphics/render.ts", "utf8");
+  ok(/assertGraphicsBudget\(doc, voMsBySceneId\)/.test(eng), "the engine's wall reads the measured clock");
+  ok(eng.includes("wavDurationSec(fs.readFileSync(voPath))"), "the renderer measures its normalized slots (WAV math)");
+  ok(/frameAt\(doc, tMs, voMsBySceneId\)/.test(eng), "every frame resolves on the extended clock");
+  ok(eng.includes("voMsBySceneId,"), "the tracks projection rides the same map");
+  const lane = await fsp.readFile("src/app/api/videos/[id]/render/route.ts", "utf8");
+  ok(lane.includes("assertGraphicsBudget(doc, measureGraphicsVoMs(videoDir(id), doc))"), "the shared lane's admission wall reads the measured clock");
+  const groute = await fsp.readFile("src/app/api/videos/[id]/graphics/render/route.ts", "utf8");
+  ok(groute.includes("assertGraphicsBudget(doc, measureGraphicsVoMs(videoDir(id), doc))"), "the graphics route's admission wall reads the measured clock");
+  const get = await fsp.readFile("src/app/api/videos/[id]/graphics/route.ts", "utf8");
+  ok(get.includes("graphicsBudgetReport(doc, voMsMap)") && get.includes("graphicsQcMatrix(doc, Object.keys(voMs).length, voMsMap)"), "the GET's evidence rides the measured clock too");
+  const jobs = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  ok(jobs.includes("graphicsExpectedCuts(graphicsDoc, graphicsVoMs)"), "the QC battery's cut expectation rides the measured clock");
+  ok(jobs.includes("graphicsHoldWindows(doc, voMs)"), "the lane's hold windows ride the measured clock");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

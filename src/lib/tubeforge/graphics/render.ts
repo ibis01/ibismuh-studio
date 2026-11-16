@@ -12,15 +12,20 @@
 // the whiteboard's normalizeVoSlot REUSED, never a private copy), then the
 // concat + the house music bed produce the final MP4.
 //
-// THE CLOCK (the doc law — "the doc clock IS the timeline", compose.ts):
+// THE CLOCK (the doc law — "the doc clock IS the timeline", compose.ts —
+// S152 amendment: the doc clock holds the narration):
 // scene durations come from graphicsSceneDurationsMs (explicit durationMs >
-// the house 2.6-wps estimate — ONE clock model) and frames come from
-// framePlanWindows at doc.fps — the SAME derivation the preflight wall (R-1)
-// and the tracks projection read, so budget, contract and delivered frames
-// agree by construction. VO does NOT extend a graphics scene: the apad law
-// pads a short slot to the scene's delivered length, and an overrun slot
-// truncates at the scene boundary (the doc owns duration; the QC battery's
-// narration-sync check is the judge). Per-frame time enters frameAt as the
+// the MEASURED narration + the VO tail > the house 2.6-wps estimate — ONE
+// clock model, the whiteboard lane's precedence mirrored) and frames come
+// from framePlanWindows at doc.fps — the SAME derivation the preflight wall
+// (R-1) and the tracks projection read, so budget, contract and delivered
+// frames agree by construction. The measured map (WAV header math on the
+// standing scene WAVs, the render's own voFiles) threads through EVERY
+// clock reader — the wall, the tracks, frameAt, the QC lenses — so an
+// unplanned scene EXTENDS to hold its narration instead of truncating it
+// mid-sentence at the 2.6-wps boundary (the S76-era apad law still pads a
+// SHORT slot; an EXPLICIT durationMs still owns the boundary — the
+// author's cut, judged by the QC battery's narration-sync check). Per-frame time enters frameAt as the
 // GLOBAL doc clock (sceneCursorMs + the frame's scene-local offset) so the
 // render reads the exact truth the editor reads — scene resolution and the
 // scene-local motion evaluation stay one function call apart (the R-6 law).
@@ -51,6 +56,7 @@ import { frameAt, graphicsSceneDurationsMs } from "./frame";
 import { assertGraphicsBudget } from "./preflight";
 import { graphicsTracks } from "./tracks";
 import { writeGraphicsDoc, type GraphicsDoc } from "./types";
+import { wavDurationSec } from "../wav";
 
 const execFileP = promisify(execFile);
 
@@ -309,20 +315,15 @@ export async function renderGraphics(
   doc: GraphicsDoc,
   opts: RenderGraphicsOptions
 ): Promise<GraphicsRenderResult> {
-  // The preflight wall FIRST (the E0 audit §6 risk-4 receipt: 4GB workers
-  // learn about unbounded renders from the OOM killer, never from this
-  // renderer) — the DELIVERED frame arithmetic at doc.fps (R-1), before
-  // chromium launches.
-  assertGraphicsBudget(doc);
-
-  // The clock — ONE derivation shared with the wall and the tracks.
-  const sceneMs = graphicsSceneDurationsMs(doc);
-  const plan = framePlanWindows(sceneMs, doc.fps);
-
-  // The VO slots: normalized at the engine boundary (the S76 loudness
-  // contract — in-window slots pass through untouched), probed BEFORE
-  // chromium so the encode law knows every stream's shape up front.
+  // The VO slots FIRST (S152 — the measured-narration clock needs the
+  // durations before the wall reads the clock): normalized at the engine
+  // boundary (the S76 loudness contract — in-window slots pass through
+  // untouched), probed via WAV header math BEFORE chromium so the encode
+  // law knows every stream's shape up front, and the measured ms feed the
+  // ONE clock rule below (an unplanned scene extends to its narration —
+  // the whiteboard precedence, mirrored).
   const voResolved = new Map<string, string>();
+  const voMsBySceneId = new Map<string, number>();
   let anyVoAudio = false;
   const voNormDir = path.join(opts.outDir, "vo-norm");
   for (const scene of doc.scenes) {
@@ -331,7 +332,24 @@ export async function renderGraphics(
     anyVoAudio = true;
     const voPath = await normalizeVoSlot(voRaw, voNormDir, scene.id);
     voResolved.set(scene.id, voPath);
+    try {
+      const sec = wavDurationSec(fs.readFileSync(voPath));
+      if (sec > 0) voMsBySceneId.set(scene.id, Math.round(sec * 1000));
+    } catch {
+      /* unreadable slot → the scene rides the estimate (the ladder floor) */
+    }
   }
+
+  // The preflight wall (the E0 audit §6 risk-4 receipt: 4GB workers
+  // learn about unbounded renders from the OOM killer, never from this
+  // renderer) — the DELIVERED frame arithmetic at doc.fps (R-1), on the
+  // SAME measured clock the loop below delivers (S152), before
+  // chromium launches.
+  assertGraphicsBudget(doc, voMsBySceneId);
+
+  // The clock — ONE derivation shared with the wall and the tracks.
+  const sceneMs = graphicsSceneDurationsMs(doc, voMsBySceneId);
+  const plan = framePlanWindows(sceneMs, doc.fps);
 
   // S87 slice 3 — COMPOSE THROUGH THE CONTRACT: the engine emits its
   // timeline tracks (visual + the P3 audio truth), and the plan is read
@@ -342,6 +360,7 @@ export async function renderGraphics(
   const tracks = graphicsTracks(doc, {
     voSceneIds: voResolved.keys(),
     musicOn: opts.musicPath != null,
+    voMsBySceneId,
   });
   const contractPlan = planFromTracks({ tracks }, doc.scenes.length);
   if (!contractPlan) {
@@ -450,7 +469,7 @@ export async function renderGraphics(
           // exact ms sum, not the frame-quantized boundary). A look-rate
           // (step 2) samples every OTHER frame at its exact doc time.
           const tMs = cursorMs + ((f * step) / doc.fps) * 1000;
-          const payload = graphicsFramePayload(frameAt(doc, tMs));
+          const payload = graphicsFramePayload(frameAt(doc, tMs, voMsBySceneId));
           // The whiteboard's evaluate law verbatim: the payload STRING is
           // double-encoded into a quoted literal — the applier JSON.parses
           // it inside the page. Interpolating the raw JSON here would pass
@@ -526,7 +545,7 @@ export async function renderGraphics(
     // interrupted run) is spent. Delete it so the next run starts fresh;
     // the scene mp4s stay (today's behavior).
     if (manifest !== null) fs.rmSync(renderManifestPath(opts.outDir), { force: true });
-    return { scenes: sceneFiles, file: finalFile, tracks, plan: contractPlan, events: graphicsEventList(doc, doc.fps) };
+    return { scenes: sceneFiles, file: finalFile, tracks, plan: contractPlan, events: graphicsEventList(doc, doc.fps, voMsBySceneId) };
   } finally {
     await browser.close();
   }

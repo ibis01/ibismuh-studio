@@ -71,8 +71,8 @@ const HARD_CUT_SETTINGS: TransitionSettings[] = [];
  *     or a sampled static run inside it is the DESIGN, not a defect (the
  *     kinetic-typography hold is the format's grammar). Empty window = the
  *     scene's motions run to its end (no legal hold). */
-export function graphicsExpectedCuts(doc: GraphicsDoc): ExpectedCuts {
-  const durSec = graphicsSceneDurationsMs(doc).map((ms) => ms / 1000);
+export function graphicsExpectedCuts(doc: GraphicsDoc, voMsBySceneId?: Map<string, number>): ExpectedCuts {
+  const durSec = graphicsSceneDurationsMs(doc, voMsBySceneId).map((ms) => ms / 1000);
   // The settings array is INDEXED BY BOUNDARY (n−1 entries); an empty
   // array means "every boundary defaults to the cut style" — but the
   // builder needs the style, so pass explicit hard cuts.
@@ -94,8 +94,8 @@ export interface GraphicsHoldWindow {
  *  mapped onto the doc clock through the exact scene cursors. A freeze or
  *  static run STARTING inside a window is designed; starting elsewhere is
  *  a dead compositor. */
-export function graphicsHoldWindows(doc: GraphicsDoc): GraphicsHoldWindow[] {
-  const sceneMs = graphicsSceneDurationsMs(doc);
+export function graphicsHoldWindows(doc: GraphicsDoc, voMsBySceneId?: Map<string, number>): GraphicsHoldWindow[] {
+  const sceneMs = graphicsSceneDurationsMs(doc, voMsBySceneId);
   const out: GraphicsHoldWindow[] = [];
   let cursorMs = 0;
   doc.scenes.forEach((scene, si) => {
@@ -173,8 +173,8 @@ export interface GraphicsReadcheckFinding {
  *  on-screen text must stay FULLY visible long enough to read. The window
  *  is enter-end → exit-start (exit absent → the scene's end). PURE. The
  *  caller passes a VALIDATED doc. */
-export function graphicsReadcheck(doc: GraphicsDoc): GraphicsReadcheckFinding[] {
-  const sceneMs = graphicsSceneDurationsMs(doc);
+export function graphicsReadcheck(doc: GraphicsDoc, voMsBySceneId?: Map<string, number>): GraphicsReadcheckFinding[] {
+  const sceneMs = graphicsSceneDurationsMs(doc, voMsBySceneId);
   const findings: GraphicsReadcheckFinding[] = [];
   doc.scenes.forEach((scene, si) => {
     for (const el of scene.elements) {
@@ -219,15 +219,15 @@ const DET_SAMPLES_MAX = 600;
  *  ≤600-point grid across the whole doc clock, twice, hashed. The unit
  *  pins proved this per-doc; the matrix makes it EVIDENCE every render
  *  can show. PURE (sha256 is a pure function of the bytes). */
-export function graphicsDeterminismSweep(doc: GraphicsDoc): GraphicsDeterminismSweep {
-  const totalMs = graphicsSceneDurationsMs(doc).reduce((a, b) => a + b, 0);
+export function graphicsDeterminismSweep(doc: GraphicsDoc, voMsBySceneId?: Map<string, number>): GraphicsDeterminismSweep {
+  const totalMs = graphicsSceneDurationsMs(doc, voMsBySceneId).reduce((a, b) => a + b, 0);
   const stepMs = Math.max(100, Math.ceil(totalMs / DET_SAMPLES_MAX));
   const hashes: string[] = [];
   let finite = true;
   for (let pass = 0; pass < 2; pass++) {
     const parts: string[] = [];
     for (let t = 0; t <= totalMs; t += stepMs) {
-      const f = frameAt(doc, t);
+      const f = frameAt(doc, t, voMsBySceneId);
       if (!frameStateFinite(f)) finite = false;
       parts.push(JSON.stringify(f));
     }
@@ -242,14 +242,20 @@ export function graphicsDeterminismSweep(doc: GraphicsDoc): GraphicsDeterminismS
 
 /** The pre-render matrix. `doc` must be a VALIDATED doc (the matrix is
  *  evidence, not the grammar gate — it re-derives independently, never
- *  re-implements the validator). */
-export function graphicsQcMatrix(doc: GraphicsDoc, voSceneCount: number): GraphicsQcReport {
+ *  re-implements the validator). S152 — `voMsBySceneId` is the measured
+ *  narration map (WAV truth), so the matrix judges the SAME extended
+ *  clock the renderer will deliver; absent → the estimate shape. */
+export function graphicsQcMatrix(
+  doc: GraphicsDoc,
+  voSceneCount: number,
+  voMsBySceneId?: Map<string, number>
+): GraphicsQcReport {
   const rows: GraphicsQcRow[] = [];
 
   // G1-PROJ-1 — the budget wall (re-derived through the preflight's
   // DELIVERED arithmetic, R-1; not the whole-doc figure).
   try {
-    const budget = graphicsBudgetReport(doc);
+    const budget = graphicsBudgetReport(doc, voMsBySceneId);
     rows.push(row(
       "G1-PROJ-1",
       `Delivered frames within the budget wall at doc.fps (${GRAPHICS_BUDGETS.scenesPerProject}-scene cap)`,
@@ -268,7 +274,7 @@ export function graphicsQcMatrix(doc: GraphicsDoc, voSceneCount: number): Graphi
   // the frame-quantized windows, contiguous by construction (re-derived
   // through graphicsTracks, not assumed from the plan).
   try {
-    const tracks = graphicsTracks(doc);
+    const tracks = graphicsTracks(doc, { voMsBySceneId });
     const visual = tracks.find((t) => t.kind === "graphics");
     const clips = visual?.clips ?? [];
     let contiguous = clips.length === doc.scenes.length;
@@ -303,16 +309,16 @@ export function graphicsQcMatrix(doc: GraphicsDoc, voSceneCount: number): Graphi
     `${voSceneCount}/${sceneCount} scenes voiced`,
     voSceneCount === 0
       ? "silent draft — a legal render shape (the battery judges the audio honestly)"
-      : "VO slots ride the scene windows (the doc clock owns duration; short slots pad, overruns truncate)"
+      : "VO slots ride the scene windows (S152: an unplanned scene extends to its measured narration + tail — narration is never cut; an EXPLICIT durationMs still owns the boundary and the battery judges it)"
   ));
 
   // G1-PROJ-4 — the frame counter: the doc-level count equals the wall's
   // plan at doc.fps (the two arithmetics the merge review pinned apart —
   // the matrix records the actual delta).
   try {
-    const budget = graphicsBudgetReport(doc);
+    const budget = graphicsBudgetReport(doc, voMsBySceneId);
     const wholeDocFrames = frameCountOf(
-      graphicsSceneDurationsMs(doc).reduce((a, b) => a + b, 0),
+      graphicsSceneDurationsMs(doc, voMsBySceneId).reduce((a, b) => a + b, 0),
       doc.fps
     );
     const delta = budget.frames - wholeDocFrames;
@@ -373,7 +379,7 @@ export function graphicsQcMatrix(doc: GraphicsDoc, voSceneCount: number): Graphi
   try {
     const texts = doc.scenes.reduce((a, s) => a + s.elements.filter((el) =>
       el.text !== undefined || el.callout !== undefined || el.bar !== undefined).length, 0);
-    const findings = graphicsReadcheck(doc);
+    const findings = graphicsReadcheck(doc, voMsBySceneId);
     rows.push(row(
       "G1-READ-1",
       "Every on-screen text stays fully visible long enough to read (S133)",
@@ -394,7 +400,7 @@ export function graphicsQcMatrix(doc: GraphicsDoc, voSceneCount: number): Graphi
   // never a doc author's fault — the render refuses rather than ship a
   // nondeterministic program).
   try {
-    const sweep = graphicsDeterminismSweep(doc);
+    const sweep = graphicsDeterminismSweep(doc, voMsBySceneId);
     rows.push(row(
       "G1-DET-1",
       "The frame sweep is finite and byte-identical across passes (S133)",

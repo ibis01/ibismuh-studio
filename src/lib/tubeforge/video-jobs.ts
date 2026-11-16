@@ -92,6 +92,7 @@ import { renderGraphics } from "./graphics/render";
 import { graphicsDraftDoc, graphicsDraftKey, isGraphicsDraftScale } from "./graphics/draft";
 import { resolveSpriteAssets } from "./graphics/import-store";
 import { graphicsExpectedCuts, graphicsHoldWindows } from "./graphics/qc";
+import { measureGraphicsVoMs } from "./graphics/vo-ms";
 import { parseGraphicsDoc, validGraphicsId } from "./graphics/types";
 import { loadVideoLibrary } from "./whiteboard/asset-store";
 import type { WhiteboardAsset } from "./whiteboard/assets";
@@ -2611,12 +2612,15 @@ export interface PublishJobOptions {
 
 /** S123 (G1) — the graphics lane's designed hold windows for the battery
  *  (absolute seconds, the doc's legal post-motion freezes). Other lanes:
- *  undefined — the pre-S123 judgment verbatim. */
+ *  undefined — the pre-S123 judgment verbatim. S152 — the windows derive
+ *  from the MEASURED narration clock (the WAV truth the render delivered),
+ *  not the estimate — the battery judges the delivered timeline. */
 function graphicsLaneQc(video: Video): [number, number][] | undefined {
   if (video.renderMode !== "graphics") return undefined;
   const doc = parseGraphicsDoc(video.graphicsDoc);
   if (!doc) return undefined;
-  return graphicsHoldWindows(doc).map((w) => [w.startSec, w.endSec] as [number, number]);
+  const voMs = measureGraphicsVoMs(videoDir(video.id), doc);
+  return graphicsHoldWindows(doc, voMs).map((w) => [w.startSec, w.endSec] as [number, number]);
 }
 
 /**
@@ -2652,8 +2656,13 @@ export async function runQcJob(videoId: string): Promise<void> {
     const graphicsDoc =
       video.renderMode === "graphics" ? parseGraphicsDoc(video.graphicsDoc) : null;
     const timeline = parseTimeline(video.timeline);
+    // S152 — the graphics cut expectation reads the MEASURED narration
+    // clock (the WAV truth the render extended its scenes to hold), so
+    // the delivered boundaries and the expectation agree by construction.
+    const graphicsVoMs =
+      graphicsDoc !== null ? measureGraphicsVoMs(videoDir(videoId), graphicsDoc) : undefined;
     let expectedCuts: ExpectedCuts | null =
-      graphicsDoc !== null ? graphicsExpectedCuts(graphicsDoc) : null;
+      graphicsDoc !== null ? graphicsExpectedCuts(graphicsDoc, graphicsVoMs) : null;
     if (graphicsDoc === null && timeline && timeline.scenes.length > 0) {
       const docDur = timeline.scenes.map(
         (s) => (typeof s.durationSec === "number" && Number.isFinite(s.durationSec) && s.durationSec > 0 ? s.durationSec : 0)
