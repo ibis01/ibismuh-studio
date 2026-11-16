@@ -20,6 +20,7 @@
 // the planner). $0 work — no AI call anywhere (design law 5).
 import { splitSentences } from "../whiteboard/beat-plan";
 import type { Placement } from "../whiteboard/svg";
+import { staggerDelayMs } from "../anim/stagger";
 import {
   GRAPHICS_BUDGETS,
   GRAPHICS_SURFACES,
@@ -175,7 +176,11 @@ export function nativeEnterFor(kind: GraphicsElementKind, order: number): Elemen
     case "subhead":
       return { kind: "fade", durationMs: 500, delayMs: 250, ease: "ease-out" };
     case "bullet":
-      return { kind: "slide", durationMs: 400, delayMs: 400 + 350 * Math.max(0, order), ease: "ease-out" };
+      // MG-1 — the cascade rides the substrate's registered rhythm (the
+      // bullets profile reproduces the hand-coded 400 + 350·order
+      // byte-identically; the wall clamp is unreachable — order <
+      // elementsPerScene = 32 = STAGGER_ORDER_MAX).
+      return { kind: "slide", durationMs: 400, delayMs: staggerDelayMs(order), ease: "ease-out" };
     case "counter":
       return { kind: "count", durationMs: 1200, delayMs: 300, ease: "linear" };
     case "bar":

@@ -14539,8 +14539,8 @@ suiteStart("Stage S — anim/: easing, keyframes, the clock (S120 §8)");
 
 await test("S easing: the table is complete, pure, clamped — and the overshoot curves actually overshoot", async () => {
   const { EASE_CURVES, evalEase, isEaseName } = await import("../src/lib/tubeforge/anim/easing");
-  eq(Object.keys(EASE_CURVES).sort(), ["ease-back", "ease-in-out", "ease-out", "linear", "pop"], "five named curves, closed table");
-  ok(isEaseName("pop") && !isEaseName("spring"), "the guard knows the table");
+  eq(Object.keys(EASE_CURVES).sort(), ["anticipation", "ease-back", "ease-in-out", "ease-out", "linear", "pop", "spring"], "seven named curves, closed table (MG-1 grew anticipation + spring by design doc)");
+  ok(isEaseName("pop") && isEaseName("spring") && isEaseName("anticipation") && !isEaseName("bounce"), "the guard knows the table");
   for (const [name, fn] of Object.entries(EASE_CURVES)) {
     eq(fn(-0.5), 0, `${name} clamps below the domain`);
     eq(fn(0), 0, `${name} starts at 0`);
@@ -14548,6 +14548,12 @@ await test("S easing: the table is complete, pure, clamped — and the overshoot
     eq(fn(1.5), 1, `${name} clamps above the domain`);
     eq(fn(NaN), 0, `${name} maps non-finite to 0`);
     eq(fn(0.3), fn(0.3), `${name} is pure (same input → same output)`);
+  }
+  // The MONOTONE curves never retrograde. anticipation (the backward
+  // wind-up) and spring (the damped oscillation) retrograde BY DESIGN and
+  // carry their own laws below (MG-1 §2).
+  for (const name of ["linear", "ease-in-out", "ease-out", "pop", "ease-back"] as const) {
+    const fn = EASE_CURVES[name];
     ok(fn(0.7) >= fn(0.2), `${name} never retrogrades`);
   }
   // The overshoot curves overshoot (their entire reason to exist) — the
@@ -14557,13 +14563,42 @@ await test("S easing: the table is complete, pure, clamped — and the overshoot
   // …and settle exactly.
   eq(EASE_CURVES.pop(1), 1, "pop settles");
   eq(EASE_CURVES["ease-back"](1), 1, "ease-back settles");
+  // MG-1 anticipation: the wind-up dips BELOW 0 (the backward reach),
+  // recovers to 0 exactly at the wind-up's end, then settles monotonically.
+  const ant = EASE_CURVES.anticipation;
+  const W = 0.28, D = 0.12;
+  approx(ant(W / 2), -D, 1e-12, "the wind-up reaches the design dip at its midpoint");
+  approx(ant(W), 0, 1e-12, "the wind-up recovers to 0 at its end");
+  ok(ant(0.5) > 0, "the settle phase has left the ground");
+  ok(ant(0.9) > ant(0.5) && ant(0.5) > ant(W), "the settle never retrogrades");
+  // MG-1 spring: overshoots, oscillates exactly two visible swings, is
+  // 6-dp quantized (the transcendental-curve law), settles at 1.
+  const sp = EASE_CURVES.spring;
+  let overshoot = 0;
+  let crossings = 0;
+  let prev = sp(0);
+  // The half-step sample grid NEVER lands on the cos-zero rest crossings
+  // (k=2 puts them at u = 1/8, 3/8, 5/8, 7/8 — the naive i/200 grid hits
+  // all four exactly, and the 6-dp quantization pins those samples AT 1,
+  // which a strict-sign detector cannot see through).
+  for (let i = 0; i < 200; i++) {
+    const u = (i + 0.5) / 201;
+    const v = sp(u);
+    overshoot = Math.max(overshoot, v);
+    if ((prev - 1) * (v - 1) < 0) crossings++;
+    prev = v;
+    eq(v, Math.round(v * 1e6) / 1e6, `spring quantizes at u=${u}`);
+  }
+  ok(overshoot > 1.15, `spring overshoots visibly (peak ${overshoot.toFixed(3)})`);
+  eq(crossings, 4, "spring crosses the rest line exactly 4 times (two full oscillations)");
+  eq(sp(1), 1, "spring settles exactly (the clamp law owns the residue)");
   // easeInOut is the WHITEBOARD's own cubic family — one motion feel.
   const u = 0.3;
   eq(EASE_CURVES["ease-in-out"](u), u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2, "the cubic closed form matches");
   eq(evalEase("ease-out", 0.5), 1 - Math.pow(0.5, 3), "evalEase reads the table");
   let threw = false;
   try {
-    evalEase("spring" as never, 0.5);
+    evalEase("bounce" as never, 0.5);
   } catch {
     threw = true;
   }
@@ -14578,6 +14613,96 @@ await test("S easing: the zoompan expressions reproduce motion.ts's shapes byte-
   const motionSrc = fs.readFileSync("src/lib/tubeforge/motion.ts", "utf8");
   ok(motionSrc.includes("(0.5-0.5*cos(PI*on/"), "motion.ts's own source carries the same smooth shape (one family)");
   eq(zoomProgressExpr("ease-back", 60), "(1+2.70158*pow(on/60-1,3)+1.70158*pow(on/60-1,2))", "ease-back compiles to its closed form");
+  // MG-1 — the two new curves compile to their closed forms, and the
+  // compiled STRINGS evaluate (JS-side) within the recorded tolerance of
+  // the table's own curves (the ffmpeg transcendental bound: 0.02).
+  eq(zoomProgressExpr("anticipation", 100), "(if(lte(on/100,0.28),-0.12*4*(on/100)*(0.28-(on/100))/0.0784,if(lt(((on/100)-0.28)/(1-0.28),0.5),4*pow(((on/100)-0.28)/(1-0.28),3),1-pow(-2*((on/100)-0.28)/(1-0.28)+2,3)/2)))", "anticipation compiles to its piecewise polynomial");
+  eq(zoomProgressExpr("spring", 90), "(if(gte(on/90,1),1,1-exp(-5.2*on/90)*cos(2*PI*2*on/90)))", "spring compiles to its damped cosine with the boundary clamp inside");
+  // The compiled strings are EVALUATED — a tiny ffmpeg-expression subset
+  // (numbers, on, PI, + - * /, unary minus, lte/lt/gte/gt/pow/exp/cos, and
+  // if(c,a,b) as the ternary) — so the parity against the table's own
+  // curves is measured on the compiled LITERAL, not a re-derivation.
+  const evalFfmpegExpr = (expr: string, on: number): number => {
+    let i = 0;
+    const peek = () => expr[i];
+    const skipWs = () => {
+      while (i < expr.length && expr[i] === " ") i++;
+    };
+    const parseExpr = (): number => {
+      let v = parseTerm();
+      for (;;) {
+        skipWs();
+        if (peek() === "+") { i++; v += parseTerm(); }
+        else if (peek() === "-") { i++; v -= parseTerm(); }
+        else return v;
+      }
+    };
+    const parseTerm = (): number => {
+      let v = parseUnary();
+      for (;;) {
+        skipWs();
+        if (peek() === "*") { i++; v *= parseUnary(); }
+        else if (peek() === "/") { i++; v /= parseUnary(); }
+        else return v;
+      }
+    };
+    const parseUnary = (): number => {
+      skipWs();
+      if (peek() === "-") { i++; return -parseUnary(); }
+      if (peek() === "+") { i++; return parseUnary(); }
+      return parseAtom();
+    };
+    const callFn = (name: string, a: number[]): number => {
+      if (name === "if") return a[0] !== 0 ? a[1] : a[2];
+      if (name === "lte") return a[0] <= a[1] ? 1 : 0;
+      if (name === "lt") return a[0] < a[1] ? 1 : 0;
+      if (name === "gte") return a[0] >= a[1] ? 1 : 0;
+      if (name === "gt") return a[0] > a[1] ? 1 : 0;
+      if (name === "pow") return Math.pow(a[0], a[1]);
+      if (name === "exp") return Math.exp(a[0]);
+      if (name === "cos") return Math.cos(a[0]);
+      throw new Error(`unknown fn ${name}`);
+    };
+    const parseAtom = (): number => {
+      skipWs();
+      const c = peek();
+      if (c === "(") { i++; const v = parseExpr(); skipWs(); if (peek() === ")") i++; return v; }
+      if (c && /[0-9.]/.test(c)) {
+        let s = "";
+        while (i < expr.length && /[0-9.]/.test(expr[i])) s += expr[i++];
+        return Number(s);
+      }
+      if (/[a-zA-Z]/.test(c ?? "")) {
+        let name = "";
+        while (i < expr.length && /[a-zA-Z0-9]/.test(expr[i])) name += expr[i++];
+        if (name === "on") return on;
+        if (name === "PI") return Math.PI;
+        skipWs();
+        if (peek() !== "(") throw new Error(`bare identifier ${name}`);
+        i++;
+        const args: number[] = [];
+        skipWs();
+        if (peek() === ")") { i++; return callFn(name, args); }
+        for (;;) {
+          args.push(parseExpr());
+          skipWs();
+          if (peek() === ",") { i++; continue; }
+          if (peek() === ")") { i++; break; }
+          throw new Error(`junk arg in ${name}`);
+        }
+        return callFn(name, args);
+      }
+      throw new Error(`unexpected token ${String(c)}`);
+    };
+    return parseExpr();
+  };
+  const { evalEase: evalOf } = await import("../src/lib/tubeforge/anim/easing");
+  for (const curve of ["anticipation", "spring"] as const) {
+    const expr = zoomProgressExpr(curve, 120);
+    for (const t of [0, 0.1, 0.28, 0.4, 0.5, 0.7, 0.9, 1]) {
+      approx(evalFfmpegExpr(expr, t * 120), evalOf(curve, t), 0.02, `${curve} expr parity at t=${t}`);
+    }
+  }
   let threw = false;
   try {
     zoomProgressExpr("linear", 0);
@@ -14654,13 +14779,122 @@ await test("S clock: framePlanWindows matches the whiteboard's framePlanClock by
 });
 
 await test("S purity: the substrate imports no fs, no clock, no randomness", async () => {
-  for (const f of ["src/lib/tubeforge/anim/easing.ts", "src/lib/tubeforge/anim/keyframe.ts", "src/lib/tubeforge/anim/clock.ts"]) {
+  for (const f of ["src/lib/tubeforge/anim/easing.ts", "src/lib/tubeforge/anim/keyframe.ts", "src/lib/tubeforge/anim/clock.ts", "src/lib/tubeforge/anim/stagger.ts", "src/lib/tubeforge/anim/presets.ts"]) {
     const src = fs.readFileSync(f, "utf8");
     ok(!/from\s+["'](fs|node:fs|path|node:path|os|node:os)["']/.test(src), `${f} touches no filesystem`);
     ok(!/Date\.now|performance\.now|setTimeout|Math\.random/.test(src), `${f} reads no clock and rolls no dice`);
     ok(!src.includes("tubeforge/whiteboard"), `${f} imports no whiteboard module (the substrate is engine-neutral)`);
   }
 });
+
+// ---------- suite: MG-1 (S148) — the motion-quality slice ----------
+
+suiteStart("MG-1 motion quality — stagger, the 3D ease field, the preset registry (S148)");
+
+await test("MG-1 stagger: the registered rhythms, the wall, and the planner's byte-identity", async () => {
+  const { staggerDelayMs, STAGGER_ORDER_MAX, STAGGER_PROFILES } = await import("../src/lib/tubeforge/anim/stagger");
+  const { nativeEnterFor } = await import("../src/lib/tubeforge/graphics/planner");
+  eq(STAGGER_ORDER_MAX, 32, "the wall is the graphics elementsPerScene budget");
+  eq(STAGGER_PROFILES.bullets.baseMs, 400, "the bullets profile keeps the planner's base");
+  eq(STAGGER_PROFILES.bullets.stepMs, 350, "the bullets profile keeps the planner's step");
+  eq(staggerDelayMs(0), 400, "the first item rides the base");
+  eq(staggerDelayMs(1), 750, "one step");
+  eq(staggerDelayMs(3), 1450, "three steps");
+  eq(staggerDelayMs(-5), 400, "a negative order rides the base (the old Math.max law)");
+  eq(staggerDelayMs(32), 400 + 350 * 32, "the wall order computes exactly");
+  eq(staggerDelayMs(33), staggerDelayMs(32), "beyond the wall clamps (the named bound)");
+  eq(staggerDelayMs(2, "cards"), 250 + 280 * 2, "the cards profile is its own rhythm");
+  eq(staggerDelayMs(NaN), 400, "a junk order is the base (total, never NaN)");
+  // THE PLANNER BYTE-IDENTITY: for every legal order the bullet cascade
+  // computes the exact hand-coded value (400 + 350·max(0, order)).
+  for (let order = 0; order <= 40; order++) {
+    const expected = { kind: "slide", durationMs: 400, delayMs: 400 + 350 * Math.max(0, Math.min(order, 32)), ease: "ease-out" };
+    const got = nativeEnterFor("bullet", order);
+    eq(JSON.stringify(got), JSON.stringify(expected), `bullet cascade byte-identical at order ${order}`);
+  }
+  // And the same call is deterministic (double-run byte-identity).
+  eq(JSON.stringify(nativeEnterFor("bullet", 7)), JSON.stringify(nativeEnterFor("bullet", 7)), "deterministic");
+});
+
+await test("MG-1 3D ease: the destination-key field shapes cameraAt/objectAt, absent = byte-identity", async () => {
+  const { cameraAt, objectAt, parseScene3D, serializeScene3D, scaffoldScene3D } = await import("../src/lib/tubeforge/scene3d");
+  const keys = [
+    { t: 0, position: [0, 0, 6] as [number, number, number], lookAt: [0, 0, 0] as [number, number, number] },
+    { t: 1, position: [4, 2, 6] as [number, number, number], lookAt: [0, 0, 0] as [number, number, number], ease: "ease-out" as const },
+  ];
+  const linear = cameraAt(keys.map(({ ease: _e, ...k }) => k), 0.5);
+  const eased = cameraAt(keys, 0.5);
+  eq(JSON.stringify(linear.position), JSON.stringify([2, 1, 6]), "the easeless doc interpolates linearly");
+  ok(eased.position[0] > 2.5, `ease-out arrives early (x=${eased.position[0].toFixed(3)} > 2)`);
+  eq(JSON.stringify(cameraAt(keys, 0).position), JSON.stringify([0, 0, 6]), "t=0 reads the first key");
+  eq(JSON.stringify(cameraAt(keys, 1).position), JSON.stringify([4, 2, 6]), "t=1 reads the destination key");
+  // The object path carries the same law per channel.
+  const obj = {
+    id: "cube",
+    kind: "box" as const,
+    position: [0, 0, 0] as [number, number, number],
+    keyframes: [
+      { t: 0, position: [0, 0, 0] as [number, number, number] },
+      { t: 1, position: [0, 2, 0] as [number, number, number], ease: "spring" as const },
+    ],
+  };
+  const mid = objectAt(obj, 0.5);
+  ok(mid.position[1] > 1, `the spring segment overshoots past the midpoint (y=${mid.position[1].toFixed(3)})`);
+  const plain = objectAt({ ...obj, keyframes: obj.keyframes.map(({ ease: _e, ...k }) => k) }, 0.5);
+  eq(plain.position[1], 1, "the easeless object interpolates linearly");
+  // Round-trip: the ease survives parse→serialize byte-stable, junk drops.
+  // (serializeScene3D ALREADY returns the JSON string — no extra stringify,
+  // which would double-encode and hide every quote.)
+  const doc = scaffoldScene3D("ease field");
+  doc.camera.keyframes[1] = { ...doc.camera.keyframes[1], ease: "anticipation" };
+  doc.objects[1] = { ...doc.objects[1], keyframes: [{ t: 0.5, position: [1, 1, 1], ease: "spring" }] };
+  const round = serializeScene3D(doc);
+  ok(round.includes('"ease":"anticipation"') && round.includes('"ease":"spring"'), "the strict write ships the shipped ease");
+  const reparsed = parseScene3D(round);
+  ok(reparsed != null, "the eased doc parses back");
+  if (reparsed) {
+    eq(reparsed.camera.keyframes[1].ease, "anticipation", "the camera ease round-trips");
+    eq(reparsed.objects[1].keyframes?.[0]?.ease, "spring", "the object ease round-trips");
+  }
+  const junked = parseScene3D(round.replace(/"ease":"anticipation"/g, '"ease":"bounce"'));
+  ok(junked != null, "junk ease never refuses the doc (the tolerant lane)");
+  if (junked) {
+    eq(junked.camera.keyframes[1].ease, undefined, "junk ease warn-drops (the key keeps its channels)");
+  }
+  // The absent-ease scaffold serializes with NO ease field (strict write).
+  const plainDoc = scaffoldScene3D("no ease");
+  ok(!serializeScene3D(plainDoc).includes('"ease"'), "parse must not invent, serialize must not fill");
+});
+
+await test("MG-1 presets: the registry compiles closed-form specs; unknown refuses safe", async () => {
+  const { presetNames, isPresetName, compilePreset } = await import("../src/lib/tubeforge/anim/presets");
+  const { GRAPHICS_MOTION_KINDS } = await import("../src/lib/tubeforge/graphics/types");
+  const { isEaseName } = await import("../src/lib/tubeforge/anim/easing");
+  eq(presetNames().sort(), ["cards-in", "draw-on", "fade-hold", "pop-emphasis", "rise-reveal", "stagger-in"], "six registered presets");
+  ok(isPresetName("stagger-in") && !isPresetName("hyper-drive"), "the guard knows the registry");
+  const staggerIn = compilePreset("stagger-in", 2);
+  eq(JSON.stringify(staggerIn), JSON.stringify({ kind: "slide", durationMs: 400, delayMs: 1100, ease: "ease-out" }), "stagger-in compiles the bullets cascade");
+  eq(JSON.stringify(compilePreset("cards-in", 1)), JSON.stringify({ kind: "rise", durationMs: 500, delayMs: 530, ease: "ease-out" }), "cards-in compiles the cards cascade");
+  eq(JSON.stringify(compilePreset("pop-emphasis", 9)), JSON.stringify({ kind: "pop", durationMs: 500, delayMs: 0, ease: "pop" }), "pop-emphasis ignores the order");
+  eq(compilePreset("hyper-drive", 0), null, "an unknown preset refuses safe (null, never a throw)");
+  eq(compilePreset("stagger-in", NaN)?.delayMs, 400, "a junk order rides the base (total)");
+  // Every compiled spec is legal against the graphics grammar's closed
+  // tables (the compile-in validation the engine re-runs).
+  for (const name of presetNames()) {
+    for (const order of [0, 1, 5, 17]) {
+      const spec = compilePreset(name, order);
+      ok(spec != null, `${name} compiles`);
+      if (spec) {
+        ok(GRAPHICS_MOTION_KINDS.includes(spec.kind as never), `${name}[${order}] kind "${spec.kind}" is a legal motion kind`);
+        ok(isEaseName(spec.ease), `${name}[${order}] ease "${spec.ease}" is a Stage-S curve`);
+        ok(spec.durationMs > 0 && spec.delayMs >= 0, `${name}[${order}] spans are validator-legal`);
+      }
+    }
+    // Determinism: the same call compiles byte-identically.
+    eq(JSON.stringify(compilePreset(name, 3)), JSON.stringify(compilePreset(name, 3)), `${name} is deterministic`);
+  }
+});
+
 
 // ---------- suite: W5 — the content-driven camera director ----------
 

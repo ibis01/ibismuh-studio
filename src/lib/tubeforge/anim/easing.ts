@@ -11,7 +11,23 @@
 // clock, no randomness (the S64 law generalizes). easeInOut is the SAME
 // cubic family the whiteboard's own scheduler uses — one formula family,
 // two consumers, documented.
-export type EaseName = "linear" | "ease-in-out" | "ease-out" | "pop" | "ease-back";
+//
+// MG-1 (S148, docs/design/mg1-motion-quality.md — the design-doc slice the
+// closed-table law requires): the table grows "anticipation" (the pure
+// polynomial wind-up) and "spring" (the damped settle). A curve built on
+// transcendental functions (exp/cos) QUANTIZES its output — V8's
+// transcendentals are not language-specified the way + − × ÷ are, so the
+// 6-dp rounding (the whiteboard's 4-dp cosine precedent, tighter) keeps
+// the golden pins engine-stable. The polynomial wind-up needs no such
+// care: + − × ÷ are exactly specified.
+export type EaseName =
+  | "linear"
+  | "ease-in-out"
+  | "ease-out"
+  | "pop"
+  | "ease-back"
+  | "anticipation"
+  | "spring";
 
 const clamp01 = (t: number): number => (Number.isFinite(t) ? Math.min(1, Math.max(0, t)) : 0);
 
@@ -72,6 +88,52 @@ const easeBack = backWith(BACK_S1, BACK_C3);
 /** Settle with a loud overshoot (~20%) — the emphasis pop. */
 const pop = backWith(POP_S1, POP_C3);
 
+// MG-1 design-time constants (docs/design/mg1-motion-quality.md §2):
+// parameters are FIXED here, never caller-supplied — a curve is a table
+// entry, not a parametric family (the determinism law: frame N is a pure
+// function of (project, library, N)).
+const ANTICIPATION_WINDUP = 0.28; // the backward wind-up spans this fraction of the move
+const ANTICIPATION_DIP = 0.12; // how far past the start the wind-up reaches
+// The wind-up denominator W² as an EXACT DECIMAL STRING for the ffmpeg
+// expression — computing 0.28*0.28 in JS prints 0.07840000000000001, and
+// the compiled literal is byte-pinned (the same law as the back-overshoot
+// constants above).
+const ANTICIPATION_W2 = "0.0784";
+const SPRING_DECAY = 5.2; // the damping λ — ~27% first overshoot, two visible swings
+const SPRING_CYCLES = 2; // the damped cosine completes exactly this many oscillations
+const SPRING_QUANTUM = 1e6; // the 6-dp quantization (the transcendental-curve law)
+
+/** The wind-up: dip BACKWARD to −D at the wind-up's midpoint, then settle
+ *  with the cubic ease-in-out (the file's own family). Phase 1 is the
+ *  IEEE-exact backward parabola −D·4·u·(W−u)/W² — 0 at u=0, −D at W/2,
+ *  0 at W=W — every step multiplication/division. Phase 2 reuses
+ *  easeInOut on the normalized remainder. The recorded feel: the velocity
+ *  rests at the wind-up apex and again at the handback (the anticipation
+ *  pause animators draw on purpose) before the eased settle. */
+function anticipation(t: number): number {
+  const u = clamp01(t);
+  if (u <= 0) return 0;
+  if (u >= 1) return 1;
+  if (u <= ANTICIPATION_WINDUP) {
+    const w = ANTICIPATION_WINDUP;
+    return (-ANTICIPATION_DIP * 4 * u * (w - u)) / (w * w);
+  }
+  const v = (u - ANTICIPATION_WINDUP) / (1 - ANTICIPATION_WINDUP);
+  return easeInOut(v);
+}
+
+/** The damped settle: 1 − e^(−λu)·cos(2πku), quantized to 6 dp (the
+ *  transcendental-curve law above — exp/cos are not language-specified).
+ *  f(0) = 0 exactly; f(1) is exact by the clamp law (the closed form's
+ *  e^(−λ) ≈ 0.55% residue never leaks through the boundary). */
+function spring(t: number): number {
+  const u = clamp01(t);
+  if (u <= 0) return 0;
+  if (u >= 1) return 1;
+  const v = 1 - Math.exp(-SPRING_DECAY * u) * Math.cos(2 * Math.PI * SPRING_CYCLES * u);
+  return Math.round(v * SPRING_QUANTUM) / SPRING_QUANTUM;
+}
+
 /** The table — complete and closed: a new curve is a design-doc slice. */
 export const EASE_CURVES: Readonly<Record<EaseName, (t: number) => number>> = Object.freeze({
   linear,
@@ -79,6 +141,8 @@ export const EASE_CURVES: Readonly<Record<EaseName, (t: number) => number>> = Ob
   "ease-out": easeOut,
   pop,
   "ease-back": easeBack,
+  anticipation,
+  spring,
 });
 
 export function isEaseName(name: string): name is EaseName {
@@ -119,5 +183,18 @@ export function zoomProgressExpr(name: EaseName | "smooth", last: number): strin
       return `(1+${BACK_C3}*pow(${n}-1,3)+${BACK_S1}*pow(${n}-1,2))`;
     case "pop":
       return `(1+${POP_C3}*pow(${n}-1,3)+${POP_S1}*pow(${n}-1,2))`;
+    case "anticipation": {
+      // The piecewise polynomial, ffmpeg-side: the wind-up parabola, then
+      // the cubic in-out on the normalized remainder (the same closed
+      // forms as the JS curve — MG-1 §2).
+      const w = ANTICIPATION_WINDUP;
+      const v = `((${n})-${w})/(1-${w})`;
+      return `(if(lte(${n},${w}),-${ANTICIPATION_DIP}*4*(${n})*(${w}-(${n}))/${ANTICIPATION_W2},if(lt(${v},0.5),4*pow(${v},3),1-pow(-2*${v}+2,3)/2)))`;
+    }
+    case "spring":
+      // The damped cosine with the boundary clamp INSIDE the expression —
+      // the final frame reads the exact 1 the JS curve's clamp law
+      // guarantees (the e^(−λ) residue never reaches the pixel).
+      return `(if(gte(${n},1),1,1-exp(-${SPRING_DECAY}*${n})*cos(2*PI*${SPRING_CYCLES}*${n})))`;
   }
 }

@@ -19,6 +19,8 @@
 // unreadable — junk fields fall back honestly), strict write (exactly the
 // declared fields, version first), byte-stable round-trip.
 
+import { isEaseName, evalEase, type EaseName } from "./anim/easing";
+
 export const SCENE3D_VERSION = 1;
 
 export const SCENE3D_OBJECT_KINDS = ["box", "sphere", "plane"] as const;
@@ -55,12 +57,15 @@ export interface Scene3DObject {
 
 /** One object keyframe: normalized time + any subset of the channels it
  *  drives at that moment (absent channels hold — strict optionality, the
- *  byte-stable round-trip law). */
+ *  byte-stable round-trip law). MG-1 (S148): the ADDITIVE OPTIONAL ease —
+ *  the destination-key convention (the segment ARRIVING at this key is
+ *  shaped by it; default linear = the pre-MG-1 byte-identity). */
 export interface Scene3DObjectKeyframe {
   t: number;
   position?: [number, number, number];
   rotation?: [number, number, number];
   scale?: [number, number, number];
+  ease?: EaseName;
 }
 
 /** The keyframe cap per object — mirrors the graphics lane's
@@ -81,6 +86,10 @@ export interface Scene3DCameraKeyframe {
   t: number;
   position: [number, number, number];
   lookAt: [number, number, number];
+  /** MG-1 (S148) — the destination-key ease (the segment ARRIVING at this
+   *  key; default linear = the byte-identity). The Stage-S table's names.
+   *  Tolerant read: a legal name rides, junk warn-drops. */
+  ease?: EaseName;
 }
 
 export interface Scene3D {
@@ -137,6 +146,10 @@ function parseObject(raw: unknown): Scene3DObject | null {
       if (Array.isArray(kk.position)) key.position = vec3(kk.position, [0, 0, 0]);
       if (Array.isArray(kk.rotation)) key.rotation = vec3(kk.rotation, [0, 0, 0]);
       if (Array.isArray(kk.scale)) key.scale = vec3(kk.scale, [1, 1, 1]);
+      // MG-1 — the tolerant ease read: only a legal Stage-S name rides;
+      // junk warn-drops (the key keeps its channels — the tolerant lane
+      // never refuses).
+      if (typeof kk.ease === "string" && isEaseName(kk.ease)) key.ease = kk.ease;
       if (key.position === undefined && key.rotation === undefined && key.scale === undefined) return null;
       return key;
     })
@@ -200,11 +213,14 @@ export function parseScene3D(json: string | null | undefined): Scene3D | null {
         const kk = (k ?? {}) as Record<string, unknown>;
         const t = Number(kk.t);
         if (!Number.isFinite(t)) return null;
-        return {
+        const key = {
           t: clamp(t, 0, 1),
           position: vec3(kk.position, [0, 0, 6]),
           lookAt: vec3(kk.lookAt, [0, 0, 0]),
         } as Scene3DCameraKeyframe;
+        // MG-1 — the tolerant ease read (the object keyframe's law).
+        if (typeof kk.ease === "string" && isEaseName(kk.ease)) key.ease = kk.ease;
+        return key;
       })
       .filter((k): k is Scene3DCameraKeyframe => k != null);
     const objects = (Array.isArray(raw.objects) ? raw.objects : [])
@@ -257,6 +273,7 @@ function serializeObject(o: Scene3DObject): Record<string, unknown> {
       ...(k.position ? { position: [...k.position] } : {}),
       ...(k.rotation ? { rotation: [...k.rotation] } : {}),
       ...(k.scale ? { scale: [...k.scale] } : {}),
+      ...(k.ease ? { ease: k.ease } : {}),
     }));
   }
   return out;
@@ -278,6 +295,7 @@ export function serializeScene3D(doc: Scene3D): string {
         t: k.t,
         position: [...k.position],
         lookAt: [...k.lookAt],
+        ...(k.ease ? { ease: k.ease } : {}),
       })),
     },
     objects: doc.objects.map(serializeObject),
@@ -363,9 +381,10 @@ const lerp3 = (a: [number, number, number], b: [number, number, number], f: numb
 ];
 
 /**
- * The camera at normalized time t (0..1): linear interpolation between
- * the bracketing keyframes. Deterministic, pure — the pins hold it and
- * the renderer evaluates exactly this.
+ * The camera at normalized time t (0..1): interpolation between the
+ * bracketing keyframes, shaped by the DESTINATION key's ease (MG-1 —
+ * absent ease = linear = the pre-MG-1 byte-identity). Deterministic,
+ * pure — the pins hold it and the renderer evaluates exactly this.
  */
 export function cameraAt(
   keyframes: Scene3DCameraKeyframe[],
@@ -381,7 +400,8 @@ export function cameraAt(
     const b = keys[i + 1];
     if (clamped >= a.t && clamped <= b.t) {
       const f = (clamped - a.t) / Math.max(b.t - a.t, 1e-9);
-      return { position: lerp3(a.position, b.position, f), lookAt: lerp3(a.lookAt, b.lookAt, f) };
+      const g = evalEase(b.ease ?? "linear", f);
+      return { position: lerp3(a.position, b.position, g), lookAt: lerp3(a.lookAt, b.lookAt, g) };
     }
   }
   return { position: [...last.position], lookAt: [...last.lookAt] };
@@ -426,7 +446,10 @@ export function objectAt(obj: Scene3DObject, t: number): Scene3DObjectState {
       const b = ks[i + 1];
       if (clamped >= a.t && clamped <= b.t) {
         const f = (clamped - a.t) / Math.max(b.t - a.t, 1e-9);
-        return lerp3(a[channel], b[channel], f);
+        // MG-1 — the destination key's ease shapes the segment (absent =
+        // linear = the byte-identity).
+        const g = evalEase(b.ease ?? "linear", f);
+        return lerp3(a[channel], b[channel], g);
       }
     }
     return [...last[channel]];
