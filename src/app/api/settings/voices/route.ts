@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   const config = await getCapability("tts");
   const model =
     config.provider === "openai"
-      ? config.model?.trim() || "tts-1"
+      ? config.model?.trim() || "gpt-4o-mini-tts"
       : config.model?.trim();
   let voices = voiceCatalog(config.provider, model);
 

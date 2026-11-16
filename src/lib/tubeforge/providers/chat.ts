@@ -92,13 +92,13 @@ export async function chatComplete(
 function modelFor(provider: string, config: CapabilityConfig): string {
   if (OPENAI_COMPATIBLE.has(provider)) {
     const meta = providerMeta("chat", provider);
-    return config.model?.trim() || meta?.models[0]?.id || "gpt-4o-mini";
+    return config.model?.trim() || meta?.models[0]?.id || "gpt-6.1-terra";
   }
   switch (provider) {
     case "anthropic":
       return config.model?.trim() || "claude-sonnet-4-5";
     case "gemini":
-      return config.model?.trim() || "gemini-2.5-flash";
+      return config.model?.trim() || "gemini-3.6-flash";
     default:
       return config.model?.trim() || DEFAULT_CHAT_MODEL;
   }
@@ -139,7 +139,7 @@ async function openaiChat(
     config.baseUrl?.trim() ||
     meta?.defaultBaseUrl ||
     "https://api.openai.com/v1";
-  const model = config.model?.trim() || meta?.models[0]?.id || "gpt-4o-mini";
+  const model = config.model?.trim() || meta?.models[0]?.id || "gpt-6.1-terra";
   const key = config.apiKey?.trim();
 
   // FIXED: This now works because meta has requiresKey in the new registry.ts
@@ -232,7 +232,7 @@ async function geminiChat(
 ): Promise<string> {
   const meta = providerMetaRequired("chat", "gemini");
   const baseUrl = config.baseUrl?.trim() || meta.defaultBaseUrl;
-  const model = config.model?.trim() || "gemini-2.5-flash";
+  const model = config.model?.trim() || "gemini-3.6-flash";
   const key = config.apiKey?.trim();
   if (!key)
     throw new Error("Gemini needs an API key (Settings → AI Providers)");

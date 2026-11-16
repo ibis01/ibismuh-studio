@@ -56,7 +56,7 @@ function diskPath(key: string) {
  *  mysteriously falling back to the default voice. */
 export async function resolvePreviewVoice(voice: string) {
   const config = await getCapability("tts");
-  const model = config.provider === "openai" ? config.model.trim() || "tts-1" : config.model.trim();
+  const model = config.provider === "openai" ? config.model.trim() || "gpt-4o-mini-tts" : config.model.trim();
   const catalog = voiceCatalog(config.provider, model);
   let known = catalog.some((v) => v.id === voice);
   // Cartesia — the pickers serve the ACCOUNT's live voice list, which is a
