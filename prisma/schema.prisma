@@ -772,6 +772,7 @@ model VoiceProfile {
   name            String
   provider        String       @default("zhipu") // platform that holds the cloned voice
   providerVoiceId String // voice_clone_20240315_143052_001
+  remoteVoiceId   String? // S121 — VoiceStudio clones: the SERVER-registered profile id the synthesis call must ride
   sourceLabel     String? // original sample file name / URL label
   durationSec     Float? // length of the source sample
   auditionWav     String? // base64 WAV returned by the clone call (short preview)

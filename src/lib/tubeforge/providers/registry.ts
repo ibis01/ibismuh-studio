@@ -217,6 +217,65 @@ export const TTS_PROVIDERS: ProviderMeta[] = [
     keyUrl: "https://elevenlabs.io/app/settings/api-keys",
     models: [{ id: "eleven_multilingual_v2" }, { id: "eleven_turbo_v2_5" }],
   },
+  {
+    id: "gemini",
+    kind: "gemini",
+    label: "Gemini TTS",
+    defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
+    keyUrl: "https://aistudio.google.com/apikey",
+    models: [
+      { id: "gemini-3.8-flash-tts", hint: "recommended" },
+    ],
+    note: "Prebuilt Google voices (Puck by default) through generateContent with AUDIO response modality. Key from Google AI Studio.",
+  },
+  {
+    id: "cartesia",
+    kind: "native",
+    label: "Cartesia Sonic",
+    defaultBaseUrl: "https://api.cartesia.ai",
+    keyUrl: "https://play.cartesia.ai/console",
+    models: [
+      { id: "sonic-3.6", hint: "recommended" },
+      { id: "sonic-3" },
+      { id: "sonic-2" },
+    ],
+    note: "Ultra-low latency, highly emotive TTS. X-API-Key + Cartesia-Version headers. Voice pickers load YOUR account's voices live (custom voices included) — anything else falls back to a real account voice, never a stale hard-coded id.",
+  },
+  {
+    id: "deepgram",
+    kind: "native",
+    label: "Deepgram Aura",
+    defaultBaseUrl: "https://api.deepgram.com/v1",
+    keyUrl: "https://console.deepgram.com",
+    models: [
+      { id: "aura-2-thalia-en", hint: "recommended English voice" },
+    ],
+    note: "Aura-2 voices ride the model id (e.g. aura-2-thalia-en) via POST /speak?model={model} — Authorization: Token header, not Bearer.",
+  },
+  {
+    id: "playht",
+    kind: "native",
+    label: "PlayHT",
+    defaultBaseUrl: "https://api.play.ht/api/v2",
+    keyUrl: "https://play.ht/studio/api-access",
+    models: [
+      { id: "Play3.0-mini", hint: "recommended" },
+    ],
+    note: "Paste BOTH credentials as 'userId:apiKey' (get both from studio/api-access) — PlayHT requires the X-USER-ID and Authorization headers together.",
+  },
+  {
+    id: "voicestudio",
+    kind: "native",
+    label: "VoiceStudio (self-hosted)",
+    defaultBaseUrl: "http://127.0.0.1:3900",
+    keyUrl: "https://github.com/debpalash/VoiceStudio",
+    models: [
+      { id: "voxcpm2", hint: "permissive recommended lane" },
+      { id: "tts-1", hint: "classic alias" },
+    ],
+    requiresKey: false,
+    note: "Your OWN VoiceStudio server's OpenAI-compatible speech (POST /v1/audio/speech, wav). Loopback runs keyless; a saved key rides Bearer for remote deployments. The engine-license law (omnivoice can never bill by silence) is enforced at the pricing layer, not here.",
+  },
 ];
 
 // ───────────────────────────── IMAGE ─────────────────────────────

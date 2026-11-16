@@ -156,6 +156,26 @@ export async function voiceProfileProvider(
   }
 }
 
+/** S121 — the SERVER-registered voice id a VoiceStudio clone speaks. The
+ *  local row's id is a voice_clone_vs_… alias; the synthesis call must ride
+ *  the profile id the VoiceStudio server itself registered (remoteVoiceId).
+ *  Null when the row predates the column, the profile is gone, or the id is
+ *  not a stored clone — callers then send the alias verbatim (the server
+ *  still answers aliases) or surface their own readable error. */
+export async function voiceProfileRemoteVoiceId(
+  voiceId: string,
+): Promise<string | null> {
+  try {
+    const row = await db.voiceProfile.findFirst({
+      where: { providerVoiceId: voiceId },
+      select: { remoteVoiceId: true },
+    });
+    return row?.remoteVoiceId ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function toVoiceProfileDTO(row: {
   id: string;
   name: string;

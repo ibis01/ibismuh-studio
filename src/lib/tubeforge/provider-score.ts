@@ -79,6 +79,13 @@ const TTS_PRIORS: Record<string, ProviderPriors> = {
   selfhost: { quality: 0.7, latency: 0.3, fit: 0.85 }, // free forever, CPU speed, cloning
   openai: { quality: 0.82, latency: 0.85, fit: 0.78 },
   elevenlabs: { quality: 0.95, latency: 0.8, fit: 0.9 },
+  // The expanded TTS lanes — starting beliefs from the registry notes (the
+  // S96 pattern); the org's own observations blend in from the first calls.
+  gemini: { quality: 0.8, latency: 0.72, fit: 0.6 }, // prebuilt voices via generateContent; hardcoded Puck, no clone lane
+  cartesia: { quality: 0.84, latency: 0.9, fit: 0.78 }, // sonic-3.6: ultra-low latency, emotive; live account voices, no clone-from-sample
+  deepgram: { quality: 0.78, latency: 0.88, fit: 0.62 }, // Aura-2 rides the model id; single voice per model, no cloning
+  playht: { quality: 0.8, latency: 0.76, fit: 0.65 }, // Play3.0-mini streaming; userId:apiKey pair, no clone-from-sample lane
+  voicestudio: { quality: 0.72, latency: 0.3, fit: 0.8 }, // the user's own server: free, CPU-bound, S121 speech schema
 };
 
 /** Image priors — fit is dominated by identity-locked EDIT support. */

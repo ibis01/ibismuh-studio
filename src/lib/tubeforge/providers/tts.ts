@@ -6,9 +6,12 @@
 //   heygen  → HeyGen Voice (api.heygen.com/v3, free tier)
 //   openai  → POST {baseUrl}/audio/speech (tts-1 / tts-1-hd / gpt-4o-mini-tts,
 //             response_format "wav" so downstream WAV merging keeps working)
-//
-// Voices are sanitized to the provider's catalog so a video saved with a Z.ai
-// voice keeps working after switching to OpenAI (falls back to "alloy").
+//   gemini  → POST {baseUrl}/models/{model}:generateContent (responseModalities: ["AUDIO"])
+//   cartesia → POST {baseUrl}/tts/bytes (X-API-Key + Cartesia-Version headers)
+//   deepgram → POST {baseUrl}/speak?model={model} (Authorization: Token)
+//   playht   → POST {baseUrl}/tts/stream (X-USER-ID + Authorization)
+//   voicestudio → S121 — the USER-MANAGED VoiceStudio server's OpenAI-
+//             compatible API: POST {baseUrl}/v1/audio/speech.
 
 import { zaiClientFor } from "../zai-client";
 import {
@@ -19,7 +22,11 @@ import {
 import { providerMeta, OPENAI_VOICES, type ProviderId } from "./registry";
 import { VOICES } from "../types";
 import { joinUrl, providerFetch, ProviderHttpError } from "./http";
-import { getSampleWavByVoiceId, voiceProfileProvider } from "../voice-clone";
+import {
+  getSampleWavByVoiceId,
+  voiceProfileProvider,
+  voiceProfileRemoteVoiceId,
+} from "../voice-clone";
 import { applyPronunciations, loadPronunciations } from "../pronounce";
 import { selfhostEndpoint, sharedVoiceServer } from "../shared-voice";
 
@@ -40,6 +47,127 @@ export function isClonedVoiceId(voice: string): boolean {
   return voice.startsWith(CLONED_VOICE_PREFIX);
 }
 
+// ---------- Cartesia voice resolution (the 404 fix) ----------
+
+/** Cartesia voices are UUIDs. Anything else ("jam", "tongtong", a clone id…
+ *  — voices saved under another provider) is NOT speakable by Cartesia and
+ *  would answer HTTP 404 "Voice not found". */
+export function isCartesiaVoiceId(voice: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    voice ?? "",
+  );
+}
+
+/** The static last-resort catalog — used only when the LIVE account list is
+ *  unreachable AND the requested voice is not a UUID. Kept in sync with the
+ *  registry note: the live list is the truth, this is the safety net. */
+const CARTESIA_STATIC_VOICES = [
+  { id: "b24f41fd-00a3-4cd8-992a-a0c9f13f3ef1", label: "Clive" },
+  { id: "30894953-bcce-41fe-892c-15ce19c843ff", label: "Parker" },
+  { id: "694f9389-aac1-45b6-b726-9d9369183238", label: "Bright Female" },
+  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", label: "Barbershop Man" },
+  { id: "a81b5a35-9d67-4dfc-b4d5-5e167c31a385", label: "Wise Woman" },
+  { id: "c2eb8f44-49cd-4a6a-9a0e-c7d6cc13f9a0", label: "Friendly Man" },
+  { id: "a01f57e5-4c4a-4a26-a26b-3d1e1b89a4c5", label: "Calm Female" },
+  { id: "bf991597-6c13-47e4-8411-91c9b9d5c5a7", label: "Soft Female" },
+  { id: "d46abd1d-2d02-43e8-819f-51fb652c1c61", label: "Narrator" },
+  { id: "8a1b5a35-9d67-4dfc-b4d5-5e167c31a385", label: "Deep Male" },
+];
+
+/** In-memory cache for the live voice list — keyed by baseUrl + key
+ *  fingerprint so switching accounts never serves the wrong account's
+ *  voices. 5-minute TTL: new custom voices appear within a settings
+ *  coffee break, without hammering GET /voices on every synthesis. */
+let cartesiaVoiceCache: {
+  key: string;
+  at: number;
+  voices: { id: string; label: string }[];
+} | null = null;
+const CARTESIA_VOICE_TTL_MS = 5 * 60 * 1000;
+
+function cartesiaCacheKey(config: {
+  baseUrl?: string;
+  apiKey?: string;
+}): string {
+  const fp = config.apiKey
+    ? config.apiKey.slice(-6)
+    : "";
+  return `${config.baseUrl?.trim() || "-"}|${fp}`;
+}
+
+/** GET {baseUrl}/voices — the ACCOUNT's real voices (public + the user's
+ *  custom clones). Never throws: on any failure it returns [] so callers
+ *  fall back to the static catalog instead of breaking synthesis. */
+export async function listCartesiaVoices(
+  config: CapabilityConfig,
+  opts?: { refresh?: boolean },
+): Promise<{ id: string; label: string }[]> {
+  const key = config.apiKey?.trim();
+  if (!key) return [];
+
+  const cacheKey = cartesiaCacheKey(config);
+  if (!opts?.refresh && cartesiaVoiceCache && cartesiaVoiceCache.key === cacheKey) {
+    if (Date.now() - cartesiaVoiceCache.at < CARTESIA_VOICE_TTL_MS) {
+      return cartesiaVoiceCache.voices;
+    }
+  }
+
+  const baseUrl =
+    config.baseUrl?.trim() ||
+    providerMeta("tts", "cartesia")?.defaultBaseUrl ||
+    "https://api.cartesia.ai";
+  try {
+    const res = await providerFetch(
+      "Cartesia voices",
+      joinUrl(baseUrl, "voices"),
+      {
+        method: "GET",
+        headers: {
+          "X-API-Key": key,
+          "Cartesia-Version": CARTESIA_VERSION,
+        },
+      },
+      { capability: "tts" },
+    );
+    const data = (await res.json()) as
+      | { voices?: unknown[] }
+      | unknown[]
+      | { data?: unknown[] };
+    const rows: unknown[] = Array.isArray(data)
+      ? data
+      : ((data as { voices?: unknown[] }).voices ??
+        (data as { data?: unknown[] }).data ??
+        []);
+    const voices = rows
+      .map((r) => r as { id?: string; name?: string })
+      .filter((r) => typeof r.id === "string" && r.id)
+      .map((r) => ({ id: r.id as string, label: (r.name as string) || (r.id as string) }));
+    cartesiaVoiceCache = { key: cacheKey, at: Date.now(), voices };
+    return voices;
+  } catch {
+    return [];
+  }
+}
+
+/** Resolve the voice to send to Cartesia:
+ *  1. A UUID (picked from the live list, or a valid account voice) → verbatim.
+ *  2. Anything else (a Z.ai voice name, a clone id, an empty string — the
+ *     Settings Test button) → the FIRST voice of the account's live list, so
+ *     the synthesis lands on a REAL existing voice.
+ *  3. Live list unreachable → the static catalog's first entry (readable
+ *     Cartesia 404 if even that is stale for the account, instead of a
+ *     mystery). */
+async function resolveCartesiaVoiceId(
+  voice: string,
+  config: CapabilityConfig,
+): Promise<string> {
+  const requested = voice?.trim() ?? "";
+  if (isCartesiaVoiceId(requested)) return requested;
+  const live = await listCartesiaVoices(config);
+  if (live.length) return live[0].id;
+  return CARTESIA_STATIC_VOICES[0].id;
+}
+
 /** The voice catalog for a provider (drives UI pickers + sanitization). */
 export function voiceCatalog(provider: ProviderId, model = "") {
   if (provider === "openai") {
@@ -52,6 +180,21 @@ export function voiceCatalog(provider: ProviderId, model = "") {
       : [...OPENAI_VOICES];
     return list.map((v) => ({ id: v.id, label: v.label }));
   }
+  if (provider === "voicestudio") {
+    // S121 — the ALIAS catalog: the server owns the real catalog (its
+    // /v1/audio/voices answers ids + names); TubeForge serves the OpenAI
+    // voice aliases the audited speech schema accepts, so pickers offer
+    // honest values without a live probe. Any other id still passes through
+    // verbatim (sanitizeVoice below never rewrites a voicestudio voice).
+    return OPENAI_VOICES.map((v) => ({ id: v.id, label: v.label }));
+  }
+  if (provider === "cartesia") {
+    // Static fallback catalog — the live account list overlays it in the
+    // voices route (the one truth for pickers). UUIDs pass through
+    // sanitizeVoice verbatim, so any account voice picked in the UI rides
+    // to Cartesia untouched.
+    return CARTESIA_STATIC_VOICES.map((v) => ({ ...v }));
+  }
   // zai + zhipu share the same 7 studio voices; zhipu additionally accepts
   // cloned ids (appended to the catalog by the API layer, which can hit the DB).
   return VOICES.map((v) => ({ id: v.id, label: v.label }));
@@ -60,7 +203,11 @@ export function voiceCatalog(provider: ProviderId, model = "") {
 /** Map any stored voice onto the provider's catalog.
  *  Cloned voice ids are preserved for providers that can speak them
  *  (zhipu, selfhost) — switching to a provider that cannot falls back to the
- *  catalog's first entry, exactly like a zai-only voice switching to OpenAI. */
+ *  catalog's first entry, exactly like a zai-only voice switching to OpenAI.
+ *  Cartesia: UUID-shaped ids are the account's own voices (served live by the
+ *  voices route) and pass through verbatim; anything else maps to the static
+ *  fallback — the ADAPTER additionally upgrades that fallback to the
+ *  account's live first voice at synthesis time. */
 export function sanitizeVoice(
   provider: ProviderId,
   voice: string,
@@ -71,6 +218,8 @@ export function sanitizeVoice(
     isClonedVoiceId(voice)
   )
     return voice;
+  if (provider === "voicestudio") return voice; // verbatim — the server owns the catalog
+  if (provider === "cartesia" && isCartesiaVoiceId(voice)) return voice;
   const catalog = voiceCatalog(provider, model);
   return catalog.some((v) => v.id === voice) ? voice : catalog[0].id;
 }
@@ -119,10 +268,22 @@ export async function ttsSynthesize(
       // a clear "configure the self-hosted server URL+key" error, or fall
       // back to a stock voice on the active provider.
     }
+    // S121 — a VoiceStudio clone speaks its SERVER-registered profile id (the
+    // row's remoteVoiceId), never the local voice_clone_vs_… alias. Cast:
+    // this tree's CloneProvider union doesn't seat voicestudio yet — the
+    // provider lands with the S121 clone wiring; the branch must compile
+    // (and stay inert) until then.
+    if ((ownerProvider as string) === "voicestudio") {
+      const remote = await voiceProfileRemoteVoiceId(request.voice);
+      if (remote) request = { ...request, voice: remote };
+    }
   }
 
   if (config.provider === "openai") {
     return openaiTts(request, config);
+  }
+  if (config.provider === "voicestudio") {
+    return voicestudioTts(request, config);
   }
   if (config.provider === "zhipu") {
     return zhipuTts(request, config);
@@ -132,6 +293,18 @@ export async function ttsSynthesize(
   }
   if (config.provider === "heygen") {
     return heygenTts(request, config);
+  }
+  if (config.provider === "gemini") {
+    return geminiTts(request, config);
+  }
+  if (config.provider === "cartesia") {
+    return cartesiaTts(request, config);
+  }
+  if (config.provider === "deepgram") {
+    return deepgramTts(request, config);
+  }
+  if (config.provider === "playht") {
+    return playhtTts(request, config);
   }
   return zaiTts(request, config);
 }
@@ -279,6 +452,271 @@ export async function heygenTts(
 
   const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
   if (buffer.length < 44) throw new Error("HeyGen TTS returned empty audio");
+  return buffer;
+}
+
+// ---------- Gemini TTS (Google AI Studio) ----------
+
+async function geminiTts(
+  req: TtsRequest,
+  config: CapabilityConfig,
+): Promise<Buffer> {
+  const meta = providerMeta("tts", "gemini");
+  const baseUrl =
+    config.baseUrl?.trim() ||
+    meta?.defaultBaseUrl ||
+    "https://generativelanguage.googleapis.com/v1beta";
+  const model = config.model?.trim() || "gemini-3.8-flash-tts";
+  const key = config.apiKey?.trim();
+
+  if (!key) {
+    throw new Error(
+      "Gemini TTS needs an API key from aistudio.google.com (Settings → AI Providers)",
+    );
+  }
+
+  // Gemini requires the key as a query parameter, not a Bearer header.
+  const url = `${baseUrl}/models/${model}:generateContent?key=${key}`;
+
+  // Gemini TTS uses a hardcoded default voice (Puck) because the underlying
+  // generateContent API takes prebuilt voice names (Puck, Charon, Kore, etc.)
+  // rather than the Z.ai studio voice ids.
+  const voiceName = "Puck";
+
+  const response = await providerFetch("Gemini TTS", url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: req.input }] }],
+      generationConfig: {
+        responseModalities: ["AUDIO"],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName,
+            },
+          },
+        },
+      },
+    }),
+  });
+
+  const data = await response.json();
+  const audioB64 = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+
+  if (!audioB64) {
+    throw new Error(
+      `Gemini TTS returned no audio data — raw response: ${JSON.stringify(data).slice(0, 300)}`,
+    );
+  }
+
+  // Gemini returns base64-encoded audio (often WAV/L16).
+  const buffer = Buffer.from(audioB64, "base64");
+
+  if (buffer.length < 44) {
+    throw new Error("Gemini TTS returned empty or invalid audio");
+  }
+
+  return buffer;
+}
+
+// ---------- Cartesia (Sonic) ----------
+
+/** The Cartesia-Version header — one table, one truth (the same value rides
+ *  both the voices listing and the synthesis call). */
+export const CARTESIA_VERSION = "2025-04-16";
+
+async function cartesiaTts(
+  req: TtsRequest,
+  config: CapabilityConfig,
+): Promise<Buffer> {
+  const meta = providerMeta("tts", "cartesia");
+  const baseUrl =
+    config.baseUrl?.trim() || meta?.defaultBaseUrl || "https://api.cartesia.ai";
+  const model = config.model?.trim() || "sonic-3.6";
+  const key = config.apiKey?.trim();
+  if (!key) {
+    throw new Error(
+      "Cartesia needs an API key from play.cartesia.ai/console (Settings → AI Providers)",
+    );
+  }
+
+  // THE 404 FIX — resolve the voice against the ACCOUNT's real voices:
+  // UUID ids (picked from the live list in any picker) ride verbatim; a
+  // foreign voice name ("jam"), a clone id, or an empty string (the Settings
+  // Test button) resolves to the account's first live voice — never a stale
+  // hard-coded UUID.
+  const voiceId = await resolveCartesiaVoiceId(req.voice, config);
+
+  const response = await providerFetch(
+    "Cartesia TTS",
+    joinUrl(baseUrl, "tts/bytes"),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": key,
+        "Cartesia-Version": CARTESIA_VERSION,
+      },
+      body: JSON.stringify({
+        model_id: model,
+        transcript: req.input,
+        voice: {
+          mode: "id",
+          id: voiceId,
+        },
+        output_format: {
+          container: "wav",
+          encoding: "pcm_s16le",
+          sample_rate: 44100,
+        },
+      }),
+    },
+  );
+
+  const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+  if (buffer.length < 44) throw new Error("Cartesia TTS returned empty audio");
+  return buffer;
+}
+
+// ---------- Deepgram (Aura) ----------
+
+async function deepgramTts(
+  req: TtsRequest,
+  config: CapabilityConfig,
+): Promise<Buffer> {
+  const meta = providerMeta("tts", "deepgram");
+  const baseUrl =
+    config.baseUrl?.trim() ||
+    meta?.defaultBaseUrl ||
+    "https://api.deepgram.com/v1";
+  const model = config.model?.trim() || "aura-2-thalia-en";
+  const key = config.apiKey?.trim();
+  if (!key) {
+    throw new Error(
+      "Deepgram needs an API key from console.deepgram.com (Settings → AI Providers)",
+    );
+  }
+
+  const url = `${joinUrl(baseUrl, "speak")}?model=${encodeURIComponent(model)}`;
+
+  const response = await providerFetch("Deepgram TTS", url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Token ${key}`, // Note: Token, not Bearer
+    },
+    body: JSON.stringify({ text: req.input }),
+  });
+
+  const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+  if (buffer.length < 44) throw new Error("Deepgram TTS returned empty audio");
+  return buffer;
+}
+
+// ---------- PlayHT ----------
+
+async function playhtTts(
+  req: TtsRequest,
+  config: CapabilityConfig,
+): Promise<Buffer> {
+  const meta = providerMeta("tts", "playht");
+  const baseUrl =
+    config.baseUrl?.trim() ||
+    meta?.defaultBaseUrl ||
+    "https://api.play.ht/api/v2";
+  const model = config.model?.trim() || "Play3.0-mini";
+  const rawKey = config.apiKey?.trim();
+  if (!rawKey) {
+    throw new Error(
+      "PlayHT needs a userId:apiKey pair in the API key field (Settings → AI Providers)",
+    );
+  }
+
+  // PlayHT requires BOTH X-USER-ID and Authorization headers.
+  // We expect the key to be formatted as "userId:apiKey".
+  const idx = rawKey.indexOf(":");
+  if (idx === -1) {
+    throw new Error(
+      "PlayHT credentials must be formatted as 'userId:apiKey' (get both from play.ht/studio/api-access)",
+    );
+  }
+  const userId = rawKey.slice(0, idx).trim();
+  const apiKey = rawKey.slice(idx + 1).trim();
+
+  // PlayHT requires a valid voice ID. We default to a known public voice
+  // if the caller hasn't provided one, but the user can override it.
+  const voiceId = req.voice?.trim() || "larry";
+
+  const response = await providerFetch(
+    "PlayHT TTS",
+    joinUrl(baseUrl, "tts/stream"),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-USER-ID": userId,
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        text: req.input,
+        voice: voiceId,
+        voice_engine: model,
+        output_format: "wav",
+      }),
+    },
+  );
+
+  const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+  if (buffer.length < 44) throw new Error("PlayHT TTS returned empty audio");
+  return buffer;
+}
+
+// ---------- VoiceStudio (the user's own server — S121) ----------
+
+/** S121 — the VoiceStudio lane: the user's own server, OpenAI-compatible
+ *  speech (audited schema: model = the engine id, input ≤4096, voice id/name/
+ *  alias, speed 0.25–4.0, response_format wav). Loopback servers run keyless;
+ *  a saved key rides Bearer for remote deployments. The engine-license law
+ *  (omnivoice can never bill by silence) is enforced in model-license-policy
+ *  at the PRICING layer — the adapter speaks whatever the user's server runs.
+ *  Exported for the S121 pin suite — called with a caller-built config so
+ *  the pins run with no DB and no tenant context. */
+export async function voicestudioTts(
+  req: TtsRequest,
+  config: CapabilityConfig,
+): Promise<Buffer> {
+  const meta = providerMeta("tts", "voicestudio");
+  const baseUrl =
+    config.baseUrl?.trim() || meta?.defaultBaseUrl || "http://127.0.0.1:3900";
+  const key = config.apiKey?.trim();
+  const model = config.model?.trim() || "voxcpm2"; // the permissive recommended lane
+  const voice = req.voice; // VERBATIM — ids, names and aliases all answer
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (key) headers.Authorization = `Bearer ${key}`;
+
+  const response = await providerFetch(
+    "VoiceStudio TTS",
+    joinUrl(baseUrl, "v1/audio/speech"),
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model,
+        input: req.input.slice(0, 4096), // the audited input cap
+        voice,
+        speed: Math.min(4, Math.max(0.25, req.speed || 1)), // the audited speed range
+        response_format: "wav", // downstream WAV merging depends on it
+      }),
+    },
+    { capability: "tts" },
+  );
+  const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+  if (buffer.length < 44)
+    throw new Error("VoiceStudio TTS returned empty audio");
   return buffer;
 }
 

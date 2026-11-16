@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/tubeforge/tenant";
 import { getCapability, getProviderCredential } from "@/lib/tubeforge/providers/settings";
-import { voiceCatalog } from "@/lib/tubeforge/providers/tts";
+import { voiceCatalog, listCartesiaVoices } from "@/lib/tubeforge/providers/tts";
 import { providerMeta } from "@/lib/tubeforge/providers/registry";
 import {
   CLONE_PROVIDERS,
@@ -30,7 +30,20 @@ export async function GET(req: NextRequest) {
     config.provider === "openai"
       ? config.model?.trim() || "tts-1"
       : config.model?.trim();
-  const voices = voiceCatalog(config.provider, model);
+  let voices = voiceCatalog(config.provider, model);
+
+  // Cartesia — overlay the ACCOUNT's live voices (GET /voices): the public
+  // catalog plus every custom voice the user created. The static list stays
+  // only as a shape fallback when the live probe fails (no key, network).
+  // UUID ids pass sanitizeVoice verbatim, so anything picked here rides to
+  // Cartesia untouched — no more stale hard-coded id 404s.
+  if (config.provider === "cartesia") {
+    const live = await listCartesiaVoices(config);
+    if (live.length) {
+      const liveIds = new Set(live.map((v) => v.id));
+      voices = [...live, ...voices.filter((v) => !liveIds.has(v.id))];
+    }
+  }
 
   // Cloned voices are speakable when their owning provider has saved creds.
   // The active provider being clone-capable is the simple case; the auto-route

@@ -10,7 +10,7 @@ import { createHash } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { getCapability } from "./providers/settings";
-import { sanitizeVoice, ttsSynthesize, voiceCatalog, isClonedVoiceId } from "./providers/tts";
+import { sanitizeVoice, ttsSynthesize, voiceCatalog, isClonedVoiceId, isCartesiaVoiceId } from "./providers/tts";
 import { aiCall } from "./budget";
 import { listVoiceProfiles, cloneSynthesisAvailable, voiceProfileProvider } from "./voice-clone";
 
@@ -59,6 +59,12 @@ export async function resolvePreviewVoice(voice: string) {
   const model = config.provider === "openai" ? config.model.trim() || "tts-1" : config.model.trim();
   const catalog = voiceCatalog(config.provider, model);
   let known = catalog.some((v) => v.id === voice);
+  // Cartesia — the pickers serve the ACCOUNT's live voice list, which is a
+  // superset of the static catalog. Any UUID-shaped id is a real account
+  // voice and previews as itself (the adapter rides it verbatim).
+  if (!known && config.provider === "cartesia") {
+    known = isCartesiaVoiceId(voice);
+  }
   if (!known && isClonedVoiceId(voice)) {
     known = (await listVoiceProfiles()).some((c) => c.id === voice)
       ? await cloneSynthesisAvailable(voice)
