@@ -8026,6 +8026,46 @@ await test("S64 assets: loadLibrary builds the index + registers the scheduler's
   eq(TEXT_ANCHORS.get("heart-labels::hl-ra"), { x: 34, y: 120, size: 22 }, "text anchors registered");
 });
 
+await test("S142 the effects pack (audit P4) — the emphasis vocabulary registers clean and rides every law", async () => {
+  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { validateAsset } = await import("../src/lib/tubeforge/whiteboard/asset-validate");
+  const lib = loadLibrary();
+  const fxIds = [...lib.assets.values()].filter((a) => a.id.startsWith("fx-")).map((a) => a.id).sort();
+  eq(
+    fxIds,
+    ["fx-brace", "fx-burst", "fx-circle-mark", "fx-exclaim", "fx-mini-sparks", "fx-speed-lines", "fx-star-pop", "fx-underline"],
+    "the eight effects register beside the benchmark set"
+  );
+  for (const id of fxIds) {
+    const a = lib.assets.get(id);
+    ok(a !== undefined, `${id} is in the library`);
+    if (!a) continue;
+    const rep = validateAsset(a);
+    ok(rep.ok, `${id} validates clean (${rep.findings[0]?.reason ?? "ok"})`);
+    eq(a.role, "emphasis", `${id} rides the W3 emphasis role`);
+    ok(a.tags.includes("effects"), `${id} carries the effects tag`);
+  }
+  // The S139 sketch law rides at registration: every authored stroke grows
+  // exactly one -od retrace; no fills anywhere, so no -h anywhere.
+  const retrace = (id: string): { total: number; od: number; h: number } => {
+    const ids = [...(lib.libraryIndex.pathIdsByAsset.get(id) ?? [])];
+    return { total: ids.length, od: ids.filter((p) => p.endsWith("-od")).length, h: ids.filter((p) => p.endsWith("-h")).length };
+  };
+  for (const [id, authored] of [["fx-burst", 8], ["fx-circle-mark", 1], ["fx-underline", 2], ["fx-exclaim", 2], ["fx-star-pop", 1], ["fx-speed-lines", 3], ["fx-brace", 1]] as const) {
+    const r = retrace(id);
+    eq(r.total, authored * 2, `${id}: ${authored} authored strokes + ${authored} retraces`);
+    eq(r.h, 0, `${id}: no hatch (no fills — the fill-order law has nothing to judge)`);
+  }
+  // The retrace floor is the honest law for micro-strokes: every spark
+  // stroke sits UNDER the 26-unit retrace window, so the pack's smallest
+  // accents ride single-drawn (a double line on a 20-unit stroke is noise,
+  // not craft — overdrawStroke's own null return, pinned here).
+  const sparks = retrace("fx-mini-sparks");
+  eq(sparks.total, 6, "fx-mini-sparks: 6 authored strokes");
+  eq(sparks.od, 0, "fx-mini-sparks: zero retraces — every stroke is under the retrace floor");
+  eq(sparks.h, 0, "fx-mini-sparks: no hatch");
+});
+
 await test("S64 assets: extractAsset parses path data and text geometry", async () => {
   const { extractAsset } = await import("../src/lib/tubeforge/whiteboard/assets");
   const ex = extractAsset({

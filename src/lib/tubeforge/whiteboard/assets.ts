@@ -296,6 +296,95 @@ const BASE_ASSETS: WhiteboardAsset[] = [
     <path id="gn-line" d="M 28 96 C 70 90 152 90 212 94" fill="none" stroke="#1d3557" stroke-width="5" stroke-linecap="round"/>
     <text id="gn-word" x="44" y="66" font-family="DejaVu Sans, sans-serif" font-size="52" fill="#1d3557" font-weight="bold">Idea</text>
   `, { role: "emphasis", textMode: "glyph" }),
+
+  // ---------------------------------------------------------------------------
+  // S142 — the effects pack (the audit's P4): the emphasis vocabulary the
+  // planner can sprinkle when the narration PUNCTUATES rather than NAMES —
+  // bursts, marks, underlines, pops. Every asset rides the exact W3 law the
+  // rest of the library rides (one subpath per stroke — the teleport law;
+  // one pen per group — the validator's consistency check; house palette;
+  // no pure fills, so the fill-order law has nothing to judge) and every
+  // path grows its S139 -od retrace at registration like every other
+  // authored stroke. Roles all "emphasis" (the W3 vocabulary's own rung).
+  // ---------------------------------------------------------------------------
+  A("fx-burst", { w: 200, h: 200 }, ["effects", "burst", "impact", "punch", "wow"], `
+    <path id="fxb-1" d="M 100 70 L 100 25" fill="none" stroke="#e63946" stroke-width="5.5" stroke-linecap="round"/>
+    <path id="fxb-2" d="M 124 76 L 157 43" fill="none" stroke="#e9c46a" stroke-width="5.5" stroke-linecap="round"/>
+    <path id="fxb-3" d="M 130 100 L 175 100" fill="none" stroke="#e63946" stroke-width="5.5" stroke-linecap="round"/>
+    <path id="fxb-4" d="M 124 124 L 157 157" fill="none" stroke="#e9c46a" stroke-width="5.5" stroke-linecap="round"/>
+    <path id="fxb-5" d="M 100 130 L 100 175" fill="none" stroke="#e63946" stroke-width="5.5" stroke-linecap="round"/>
+    <path id="fxb-6" d="M 76 124 L 43 157" fill="none" stroke="#e9c46a" stroke-width="5.5" stroke-linecap="round"/>
+    <path id="fxb-7" d="M 70 100 L 25 100" fill="none" stroke="#e63946" stroke-width="5.5" stroke-linecap="round"/>
+    <path id="fxb-8" d="M 76 76 L 43 43" fill="none" stroke="#e9c46a" stroke-width="5.5" stroke-linecap="round"/>
+  `, {
+    role: "emphasis",
+    durWeight: 0.7,
+    alts: ["burst", "impact", "radial", "rays"],
+    a11y: "an emphasis burst: eight strokes radiating from an open center",
+    penGroups: { "pen-burst": ["fxb-1", "fxb-2", "fxb-3", "fxb-4", "fxb-5", "fxb-6", "fxb-7", "fxb-8"] },
+  }),
+  A("fx-circle-mark", { w: 200, h: 170 }, ["effects", "circle", "ring", "encircle", "around"], `
+    <path id="fxc-lap" d="M 128 52 C 178 42, 182 128, 128 146 C 84 158, 30 138, 34 96 C 37 62, 84 46, 124 54" fill="none" stroke="#e63946" stroke-width="6" stroke-linecap="round"/>
+  `, {
+    role: "emphasis",
+    alts: ["circle", "ring", "encircle", "loop around", "surround"],
+    a11y: "a hand-drawn emphasis oval left open at its start",
+  }),
+  A("fx-underline", { w: 300, h: 100 }, ["effects", "underline", "stress", "key", "important"], `
+    <path id="fxu-1" d="M 20 60 C 80 52, 180 52, 278 62" fill="none" stroke="#1d3557" stroke-width="7" stroke-linecap="round"/>
+    <path id="fxu-2" d="M 40 84 C 110 78, 210 78, 256 86" fill="none" stroke="#e63946" stroke-width="5" stroke-linecap="round"/>
+  `, {
+    role: "emphasis",
+    alts: ["underline", "stress", "emphasize", "key point"],
+    a11y: "a two-stroke hand underline: a heavy lead line and a lighter accent",
+  }),
+  A("fx-exclaim", { w: 200, h: 200 }, ["effects", "exclaim", "attention", "warning", "notice"], `
+    <path id="fxe-bar" d="M 100 24 C 106 60, 108 96, 100 128" fill="none" stroke="#e63946" stroke-width="9" stroke-linecap="round"/>
+    <path id="fxe-dot" d="M 91 158 A 9 9 0 1 0 109 158 A 9 9 0 1 0 91 158" fill="none" stroke="#e63946" stroke-width="8" stroke-linecap="round"/>
+  `, {
+    role: "emphasis",
+    alts: ["exclamation", "attention", "warning", "careful"],
+    a11y: "a hand-drawn exclamation mark: a wavering bar above a drawn dot",
+  }),
+  A("fx-star-pop", { w: 200, h: 200 }, ["effects", "star", "pop", "shine", "highlight"], `
+    <path id="fxs-star" d="M 100 30 C 106 74, 126 94, 170 100 C 126 106, 106 126, 100 170 C 94 126, 74 106, 30 100 C 74 94, 94 74, 100 30" fill="none" stroke="#e9c46a" stroke-width="5.5" stroke-linecap="round"/>
+  `, {
+    role: "emphasis",
+    alts: ["star", "pop", "twinkle", "shine"],
+    a11y: "a four-point star drawn in one continuous stroke",
+  }),
+  A("fx-speed-lines", { w: 160, h: 140 }, ["effects", "speed", "fast", "rush", "motion"], `
+    <path id="fxv-1" d="M 24 50 L 116 50" fill="none" stroke="#457b9d" stroke-width="6" stroke-linecap="round"/>
+    <path id="fxv-2" d="M 24 78 L 148 78" fill="none" stroke="#457b9d" stroke-width="6" stroke-linecap="round"/>
+    <path id="fxv-3" d="M 24 106 L 132 106" fill="none" stroke="#457b9d" stroke-width="6" stroke-linecap="round"/>
+  `, {
+    role: "emphasis",
+    durWeight: 0.6,
+    alts: ["speed lines", "fast", "quickly", "whoosh"],
+    a11y: "three trailing speed lines of different lengths",
+    penGroups: { "pen-speed": ["fxv-1", "fxv-2", "fxv-3"] },
+  }),
+  A("fx-brace", { w: 160, h: 160 }, ["effects", "brace", "group", "callout", "combine"], `
+    <path id="fxz-brace" d="M 128 20 C 100 20, 104 46, 88 62 C 76 74, 60 78, 44 80 C 60 82, 76 86, 88 98 C 104 114, 100 140, 128 140" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+  `, {
+    role: "emphasis",
+    alts: ["brace", "curly", "group these", "together"],
+    a11y: "a hand-drawn curly brace opening to the left",
+  }),
+  A("fx-mini-sparks", { w: 170, h: 170 }, ["effects", "sparkle", "twinkle", "magic", "accent"], `
+    <path id="fxk-1a" d="M 40 40 L 40 64" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+    <path id="fxk-1b" d="M 28 52 L 52 52" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+    <path id="fxk-2a" d="M 140 30 L 140 50" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+    <path id="fxk-2b" d="M 130 40 L 150 40" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+    <path id="fxk-3a" d="M 90 120 L 90 144" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+    <path id="fxk-3b" d="M 78 132 L 102 132" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+  `, {
+    role: "emphasis",
+    durWeight: 0.5,
+    alts: ["sparkle", "twinkle", "magic", "accents"],
+    a11y: "three small hand-drawn plus-shaped sparkles scattered across the field",
+    penGroups: { "pen-spark": ["fxk-1a", "fxk-1b", "fxk-2a", "fxk-2b", "fxk-3a", "fxk-3b"] },
+  }),
 ];
 
 /** The marker tip anchor of the drawing-hand assets (asset-space). Every
