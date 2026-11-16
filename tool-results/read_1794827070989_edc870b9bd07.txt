@@ -1,0 +1,262 @@
+     1→     1→# TubeForge Motion Graphics Engineering Audit — 2D + 3D Strategy Reconciliation
+     2→     2→
+     3→     3→| | |
+     4→     4→|---|---|
+     5→     5→| Date | 2026-11-16 |
+     6→     6→| Directive | "TubeForge Motion Graphics Upgrade: 2D + 3D Engineering Strategy" — audit first, implement second |
+     7→     7→| Baseline audited | `main` = `9b3b407e5d8d8e70f7a44e6013c4dc6e7d33a6ad` (S147, 2026-11-16 05:46 UTC), synced to origin, clean tree |
+     8→     8→| Method | Read-only. Fresh anonymous clone; four parallel inventory sweeps (anim substrate / graphics / characters / 3D+compositing+editing+CI); anonymous GitHub browser for PR and CI evidence; git patch-id containment (`git cherry`) for PR reconciliation. **No token used; all chat-tokens remain treated as compromised.** |
+     9→     9→| Verdict | The strategy's core fear — "PR #23/#24 work may have been discarded" — is disproven. The foundation is deeper than the directive assumed. The correct posture is **breadth on the existing substrate, never a second engine**. |
+    10→    10→
+    11→    11→---
+    12→    12→
+    13→    13→## §0 Executive verdict
+    14→    14→
+    15→    15→1. **The directive's checkpoint was stale, not wrong.** It records `37796ce` (2026-11-14). Actual history: `37796ce` → `f9f57c1` (S135 CI repair, verified ancestor) → `22b2a9b` (merge PR #28, the S136 Stabilisation Wave, CI run #327 green 8/8 jobs / 37/37 e2e) → **`9b3b407` (S147)**. 24 commits landed between the S135 baseline and HEAD, all with green CI on the Actions page.
+    16→    16→2. **PR #23 (K1) and PR #24 (G1) were closed unmerged, but nothing was lost.** Their substance was re-landed and far exceeded on `main` through re-authored stage commits (S121→S128). Merging either dead branch today would *delete* 23,625–27,689 lines of newer main work (§2). They are superseded, not discarded. Action: keep closed; do not resurrect.
+    17→    17→3. **G1/K1 machine-side acceptance is complete; the HUMAN gates are the only open acceptance rows.** Unit battery 846/0 (S145/S146 records); blind re-score kit session assembled on final head `a159f4b` (S144); composite ≥ 4/5 with ≥ 3 blind scorers deliberately pending for both G1 and K1 rubrics.
+    18→    18→4. **The Stabilisation Gate was sealed at 8/9 PASS** (condition 7 PARTIAL by design — per the sealed gate record), which is why feature stages S137–S147 legally resumed. The feature freeze the directive worried about is no longer in force; the house laws (no second renderer, one motion truth, determinism, named walls, AI-suggests/human-approves) still bind everything.
+    19→    19→5. **Capability posture vs the six workstreams** (registered here as **MG-1…MG-6** — `M1`/`M2` already mean AI Director milestones in-repo, per the external roadmap's own correction §0.2):
+    20→    20→   - MG-1 motion quality: strong deterministic core, missing anticipation / spring / follow-through / stagger / arc paths; four dormant S121 P2 modules (camera-keys, IK, contact, gait) are test-only.
+    21→    21→   - MG-2 2D graphics: the most rigorous surface in the repo; gaps are breadth (typography stack, editing UX for tweens/camera/events, chart vocabulary, transitions, masking, event consumption).
+    22→    22→   - MG-3 character: architecturally complete end-to-end with a triple-pinned B1 fix; gaps are expressiveness (blink/head/expression amplitude), gesture depth, authoring UI, identity human gate.
+    23→    23→   - MG-4 3D: **a real three.js/SwiftShader rasterizer already exists (S94)** with S134 keyframe adapter — but it is an orphan asset lane: no lane seat, no studio UI, no CI smoke.
+    24→    24→   - MG-5 compositing: honest flat compositor (xfade + engine-segment staging); zero shadow/blur/motion-blur/depth vocabulary.
+    25→    25→   - MG-6 editing: the most mature workstream (revisions, 409 concurrency now actually sent by the UI, repair ladder, per-scene invalidation, resume manifests); missing curve/keyframe authoring and engine-lane scene repair.
+    26→    26→6. **Recommended first implementation move after this audit** (mirrors the directive's execution order, reconciled with repo law): close the two human gates + doc-alignment commit → MG-1 easing/preset slice on the shared substrate → MG-2 typography + authoring UX → K1 expressiveness → MG-4 3D lane seat → Blender only as an out-of-process sidecar after the 3D contract is validated.
+    27→    27→
+    28→    28→---
+    29→    29→
+    30→    30→## §1 HEAD and CI reconciliation
+    31→    31→
+    32→    32→| Checkpoint | SHA | Evidence |
+    33→    33→|---|---|---|
+    34→    34→| Directive's recorded checkpoint | `37796ce` (2026-11-14) | `git merge-base --is-ancestor 37796ce main` → IS ancestor |
+    35→    35→| Prior session's baseline | `f9f57c1` (S135) | IS ancestor; `git log f9f57c1..main` = 24 commits |
+    36→    36→| Stabilisation Wave merge | `22b2a9b` (PR #28, S136) | CI run #327 green (8/8 jobs, 37/37 e2e) per sealed daily-check baseline |
+    37→    37→| **Current HEAD** | `9b3b407` (S147, 2026-11-16 05:46) | `git status` clean; local == `origin/main` via `git ls-remote`; Actions page shows the S147 run (and S145/S144/S143/S142/S141/S140/S139/s122-graft/PR#28/S136 runs) **"completed successfully"** |
+    38→    38→
+    39→    39→Commits S136→S147 in order: S136 Stabilisation Wave (gate proof infra + B1/B2 fixes, PR #28) → S121 VoiceStudio P0–P4 (provider, consent ledger, semantic directives, pause-aware captions, camera-keys/IK/contact/gait substrate, dub client, security posture) → s122 wire-path graft → S137 whiteboard scaffold → R1 opening-stroke guarantee → S138 music bed heal-or-fallback → S139 naturalist pen (+ pin) → S140 import admission wall → S141 BVH admission wall → S142 effects asset library → **S143 Stage X-full (per-scene mixed-engine dispatch)** → S144 blind re-score kit session → S145 PAE Phase 3 production benchmarks → S146 stabilized baseline + W1 "before" receipt → S147 rhetorical beat layer.
+    40→    40→
+    41→    41→The S146 record additionally proves on a fresh database: typecheck/lint ✓, unit 846/0 ✓, test:billing 40/0 ✓, test:storage ✓, test:rate ✓, **test:scene-revisions 29/0** ✓, test:drill ✓, alert:probe ✓ — and a frozen five-scene W1 benchmark rendered at three aspects with byte-identical determinism pins (16:9 re-render hashes identical).
+    42→    42→
+    43→    43→---
+    44→    44→
+    45→    45→## §2 PR #23 and PR #24 reconciliation
+    46→    46→
+    47→    47→**Method:** anonymous GitHub page reads + `git fetch origin refs/pull/{23,24}/head` + `git merge-base --is-ancestor` + `git cherry -v main pr/N` (patch-id equivalence) + `git diff --stat main pr/N`.
+    48→    48→
+    49→    49→### PR #24 — "S123 — motion graphics P0–P5: merge the G1 chain…" — **Closed, not merged — SUPERSEDED**
+    50→    50→- Head `350bec6` (S123 close record, 2026-11-14 19:12). `pr/24` NOT contained in main.
+    51→    51→- `git cherry` shows 8 of 9 branch commits without patch-id equivalents in main — **as commits**. **As content**, the chain landed on main via re-authored stages: S123 P0–P2 pre-PR, then S124 (element editor, canvas overlay, Layout mode, z-order strip, close record `43556c3`), S126 (import lane `1bc089e`), S128 (char walls closing review F1/F2 `d9e3256`, integration close incl. the PR #24 review `60a87e4`, `docs/audits/pr24-security-integration-review.md`, `docs/audits/s128-integration-playbook.md`), S129–S134 (PAE 1–6), S140, S145.
+    52→    52→- `git diff --stat main pr/24`: 156 files, +3,430 / **−23,625** — merging the branch now would regress main massively.
+    53→    53→- **Verdict: the G1 work is IN main, richer than the branch. The branch is a superseded artifact. Do not restore; rely on `docs/audits/s123-motion-graphics.md` + the S128 integration close as the record.**
+    54→    54→
+    55→    55→### PR #23 — "S122 K1 slice 1 — the 2D character-engine substrate…" — **Closed, not merged — SUPERSEDED**
+    56→    56→- Head `7bd5b8a` (2026-11-14 13:35). NOT contained in main.
+    57→    57→- One commit is patch-id-identical in main (`-` mark: the consent ledger), six are `+` (no patch equivalent) — but main's S121 P0–P4 re-authored the same scopes (`97f1c65`, `255d721`, `223783b`, `15e72cc`, `5a129df`) and S125 then built the full character engine in seven+ commits (rig grammar `a36b4fe`, pose truth `d6e7323`, contract seats `7a04778`, rig director `f0c0924`, native-rig `deac924`, parts pass `3f46c79`, studio seat + K1 smoke `410d7d9`, FreeMoCap sidecar `df8b59f`), later hardened by S136 (B1 fix) and S141 (BVH wall). The branch's lint fix re-landed as `3c370ed` ("the lint stack moves off the cliff edge" — same language).
+    58→    58→- `git diff --stat main pr/23`: 137 files, +972 / **−27,689**.
+    59→    59→- **Verdict: identical to PR #24 — superseded by a strictly larger main-line implementation.**
+    60→    60→
+    61→    61→### G1 acceptance state (the directive's specific concern)
+    62→    62→- Machine side **done**: 846/0 unit battery; S123 graphics proof 21 passed / 576 frames through the real engine; S140 drill 16/16; e2e + S87 Part C (decode-side ffprobe) green; S145 benchmarks (frameAt 3.9–7.6 µs; md5-equal decoded streams across two renders; SIGKILL-resume byte-identical).
+    63→    63→- Human side **pending by design**: `docs/audits/s123-blind-rescore.md` — "composite ≥ 4/5, ≥ 3 human scorers… PENDING"; the S144 kit session on HEAD `a159f4b` is assembled and waiting for scorers. The only human-proxy score recorded is the S146 W1 whiteboard baseline (operator proxy, non-blind, honestly labeled, 3.0/5 vs 2.4/5 prior baseline — **not** a G1 gate).
+    64→    64→
+    65→    65→---
+    66→    66→
+    67→    67→## §3 Inventory (condensed from the four read-only sweeps; full detail preserved in the sweep transcripts)
+    68→    68→
+    69→    69→### 3.1 Shared animation substrate (`src/lib/tubeforge/anim/`, 7 pure files)
+    70→    70→- `easing.ts` — closed 5-curve table: `linear`, `ease-in-out` (IEEE-exact cubic, the e11eaec node22-vs-24 fix), `ease-out`, `pop` (~20% overshoot), `ease-back` (~10% overshoot); ffmpeg zoompan-expression compiler. A new curve is a design-doc slice by law.
+    71→    71→- `keyframe.ts` — ordered keys, clamped holds, destination-key ease, strict validators, `LerpFn` hook (test-only).
+    72→    72→- `clock.ts` — `ANIM_FRAME_BUDGET = 25,920` frames, `quantizeClock`, `framePlanWindows` (byte-behavior-identical to the whiteboard's own plan clock — pinned).
+    73→    73→- `camera.ts` / `ik.ts` / `contact.ts` / `gait.ts` (S121 P2) — validated 3D camera keys with fov/yaw/pitch + pinhole projection; two-bone IK with pole law; contact/handoff ownership; distance-driven gait phase. **All four: ZERO production imports — test-only dormant substrate.**
+    74→    74→- Determinism: golden-frame hashes (ms-grid + 24/30 fps series), purity source-scan pins, S133 determinism sweep, whiteboard tree frozen by S120 §8 (its private `Math.pow` cubic is deliberate).
+    75→    75→
+    76→    76→### 3.2 2D motion-graphics lane (G1)
+    77→    77→- Grammar: `graphics/types.ts` (1,965 lines) — closed 11 element kinds, 8 motion kinds, compatibility table, per-kind payloads, strict/tolerant parse split, required-reject vs optional-drop discipline, named walls (25,920 frames; `iconPathCommandBudget` 512; `textCharsMax` 2,000; `iconPathCharsMax` 4,096; tweens/element 4, keys/channel 16, camera keys 16, events/scene 16).
+    78→    78→- Frame truth: `graphics/frame.ts` `frameAt` — pure, byte-identical; fixed composition order enter → tweens → exit → emphasis; 6 keyframable channels (dx, dy, scale, rotateDeg, opacity, progress); additive-sum / multiplicative-multiply fold.
+    79→    79→- S130 scene camera (zoom [1,4], the ONE world→screen function, `#gcam` applier); S131 event channel (`sfx|hit|cue` → `graphicsEventList` projection — **carried in the render result but consumed by nobody**); S132 resume manifest (fingerprint fail-closed; S145 caught and fixed the dead fresh-path seam); S133 QC lenses (readcheck, determinism sweep) elevated to per-render evidence.
+    80→    80→- Render: chromium engine with budget-first admission, contract read-back (plan≡tracks), per-scene context recycling, yuv420p/apad encode, probe-before-put wall; S143 `buildEngineSegments` per-scene dispatch; import lane (sheet/sequence/WebM→alpha frames, seven gates, S140 atomic admission with in-transaction count wall + compensation sweep + serialized admission queue).
+    81→    81→- Studio: `graphics-studio.tsx` + `graphics-canvas.tsx` — same compose+applier in a sandboxed iframe ("what the studio shows at t=12.4s is what the MP4 contains"), Layout mode, drag/scale with hit-test, z-order strip, placement fields. **No tween/camera/event/keyframe editing UI exists.**
+    82→    82→
+    83→    83→### 3.3 Character engine (K1)
+    84→    84→- Rig grammar `characters/rig2d.ts`: CharacterRigDoc v1, closed slot vocabulary (head/torso/brow/eye/arm-l/arm-r/forearm-l/forearm-r/hand-l/hand-r/leg-l/leg-r/mouth/prop), standard pose sheet (`rest|raise|point` arms, `rest|raise` brow), budgets (parts 24, poses 24, joints/pose 16, rows 64, svg 24k chars), acyclic parent law, complete-mouth-set law, byte-stable writes, additive Prisma columns (`Character.rigDoc/parts`).
+    85→    85→- `rig-frame.ts` poseAt: FK matrices, 320 ms pose-tween windows, destination ease default `ease-in-out`, rest-fill, unknown-pose→rest, inline joint override; deterministic, byte-identity pinned.
+    86→    86→- Mouth: five shapes as art swap; **beat-sync, not phoneme lip-sync** (scope-claimed everywhere); W4 word anchors → syllable beats (cap 5), every open beat strictly inside its word span; `smile` is gesture-only.
+    87→    87→- Gestures: `rig-director.ts` compile-only — purpose→pose candidates table over the SHARED sentence classifier (`whiteboard/beat-plan.ts classifySentence`, deliberately untouched by S147); support sentences never gesture; `MIN_GESTURE_MS = 240`.
+    88→    88→- Renderer: native-rig channel (rule 4.5, native-first) inside kenburns scenes — **a channel, not a RENDER_MODES lane**; chromium loop with fps cap, preflight-before-spend, two-clock assert (±0.011 s), sha256-sidecar hash-keyed clip cache.
+    89→    89→- Mocap/BVH: clean-room parser ("our parser, their files, no linkage" — FreeMoCap AGPL data-protocol boundary), S141 admission wall (8M chars/1,024 joints/512 columns/200k frames), O(1) joint map (quadratic find dead), slot-keyed joints + **S136 `jointsReachableByParts` bridge** (part-id senior, slot binds through carrying parts, unknown inert) — triple-pinned: unit fixture with `x-` prefixed ids ≠ slots (45° measured), k1 smoke OFFSLOT rendered-pixel proof (0°→80°, frames move then hold), route 422 "nothing would move" guard.
+    90→    90→- K1 smoke wired in CI (`ci.yml:531–532`, "ids ≠ slots"). Identity: VCE ≥ 80 pre-gate records SKIP (no VLM configured); blind rubric PENDING (humans).
+    91→    91→- **Not present**: blink, head poses/gesture entries, expression channels beyond brow-raise + smile-as-gesture, verb-timed gestures, S147 rhetorical consumption, locomotion (gait dormant), pose editor UI (route exists, no UI), mocap upload UI (API-only), Stage X seat.
+    92→    92→
+    93→    93→### 3.4 3D, compositor, Stage X
+    94→    94→- **True 3D exists (S94)**: `three@^0.187` under SwiftShader software GL (`render3d.ts`: WebGLRenderer, Box/Sphere/Plane, MeshStandardMaterial color/metalness/roughness/opacity, Ambient+Directional lights, PerspectiveCamera+lookAt, per-frame screenshot → libx264). **No shadows, textures, particles, fog, post, scene-graph hierarchy.**
+    95→    95→- S134 object keyframes on the normalized clock (position/rotation/scale, per-channel tracks, cap 16, clamped holds) — **linear-only, no ease field** (the "one vocabulary, two adapters" is partial on the ease axis).
+    96→    96→- **3D has no lane seat**: `PlanVisualKind` has no `3d`; no RENDER_MODES entry; no studio UI; `scripts/s94-3d-smoke.mts` is **not in CI**.
+    97→    97→- Stage X-full (S143): `buildEngineSegments` (video-jobs.ts:829–932) renders whiteboard/graphics scenes as single-scene full-quality artifacts; `engineSegmentVerdict` (composition-plan.ts:88–101) is fail-closed — engine kind without its segment refuses the whole plan; letterboxed staging transcode with the engine clock senior.
+    98→    98→- Compositor: xfade/acrossfade chains (memory-bounded groups), stream-copy concat for hard cuts, amix audio; **zero blur/shadow/motion-blur/depth anywhere**; single visual track — no overlay stacking.
+    99→    99→
+   100→   100→### 3.5 Editing, repair, regeneration
+   101→   101→- Append-only scene revisions + optimistic concurrency **fixed and wired (S136)**: scene-editor now sends `expectedSceneVersion`; 409 + head mapping + unique-index floor.
+   102→   102→- Repair ladder (propose→approve→run, idempotent enqueue), declarative blast radius (`scene-deps.ts`), cached clip reuse, S117 staleness gates, S132 graphics resume manifest. Editing one scene does NOT rebuild other scenes' clips; the final still needs re-assembly.
+   103→   103→- Authoring gaps: no curve editor anywhere (enum ease picks + numeric fields only, incl. whiteboard camera-key table and timeline-studio two-key framing); graphics `ElementTween` and scene3d keyframes are machine-written only; engine-lane scenes have no repair path (full-lane re-render); whiteboard "Phase B" per-scene re-render is store-only (no swapper).
+   104→   104→
+   105→   105→### 3.6 CI wiring (`.github/workflows/ci.yml`, 8 jobs, node 24)
+   106→   106→| Suite | Status |
+   107→   107→|---|---|
+   108→   108→| gitleaks | wired (`secrets` job) |
+   109→   109→| typecheck + lint + unit (`npm run test`) | wired (check) — includes the S136 narration-sync QC fixtures (+0.5 s drift passes / 6 s-short fails) |
+   110→   110→| `test:scene-revisions` | **wired** (`ci.yml:204–205`) |
+   111→   111→| `test:billing/storage/rate/drill`, alert:probe | wired |
+   112→   112→| S87 acceptance battery (Part C = decode-side ffprobe of delivered artifacts) | wired (e2e job, `ci.yml:520–521`) |
+   113→   113→| K1 rig smoke (rendered movement, ids ≠ slots) | **wired** (`ci.yml:531–532`) |
+   114→   114→| E12 queue drill (cancellation + live recovery) | **wired** (`ci.yml:543–544`) |
+   115→   115→| Coverage (50 % floor), PostgreSQL, clean-clone, Docker smoke, Playwright e2e | wired |
+   116→   116→| **NOT wired**: `scripts/s94-3d-smoke.mts` (3D lane), `test:import-wall` (s140) | gap |
+   117→   117→
+   118→   118→The prior audit's Wave 1 items ①–⑤ are therefore all landed (S136 + S143 era). B1/B2 fixed and pinned. The former 5 PARTIAL gate conditions closed; the gate was sealed 8/9 PASS.
+   119→   119→
+   120→   120→---
+   121→   121→
+   122→   122→## §4 Capability matrix — directive workstreams vs repo reality
+   123→   123→
+   124→   124→| Workstream | Exists today | Missing / next |
+   125→   125→|---|---|---|
+   126→   126→| **MG-1 Motion quality** | 5-curve closed table incl. 2 overshoot curves; IEEE-exact; 6 keyframable 2D channels + 3 3D channels; camera pan/zoom per lane; naturalist pen (eased lockstep, tremble, breathing ink, sketch pass); narration-anchored beat scheduler; rhetorical beat layer (S147, whiteboard) | Anticipation curve; spring/elastic/bounce/follow-through family; stagger primitive (only hand-coded `400+350·order` bullet delays); arc/trajectory channel (per-axis offsets only); ease field on 3D keys; wire dormant `anim/{gait,ik,contact,camera}.ts`; physics/momentum (none) |
+   127→   127→| **MG-2 2D graphics** | 11-kind grammar, deterministic frame truth, budgets + QC lenses, resume, import admission wall, e2e + decode verification, studio with canvas overlay + z-order strip | Font selection (hardcoded Arial stack), per-char/word animation, auto-wrap, text-draw; tween/camera/keyframe/event editing UX; chart vocabulary beyond bar (line/pie/axes/palette); scene transitions (hard cuts pinned; `transitionIn/Out` null); masking beyond wipe clipPath; event-channel consumers (SFX arm; QC lens; persistence) |
+   128→   128→| **MG-3 Character** | Full chain: rig grammar → poseAt FK truth → beat-sync mouths → gesture table → native-first render channel → hash cache → BVH sidecar + walls → B1 triple-pinned fix → CI smoke | Blink cycle; head poses; mouth-openness amplitude (binary swap today); verb-level gesture windows + S147 rhetorical consumption; hand/forearm poses; pose editor UI; mocap upload UI; identity gates (VLM VCE + blind rubric); Stage X citizenship (`PlanVisualKind "character"`) |
+   129→   129→| **MG-4 3D** | three.js/SwiftShader rasterizer; Scene3D doc + camera + object keyframes; standalone scaffold route; crash-resumable job | Lane seat (RENDER_MODES / PlanVisualKind / engine-segment builder); studio UI; shadows/textures/normal maps/more materials; particles; LLM 3D scene planner; CI smoke; Blender adapter (later, sidecar) |
+   130→   130→| **MG-5 Compositing** | One compositor; xfade chains; letterboxed engine-segment staging; SVG layering + group opacity; amix audio graph | Drop shadows; blur/motion blur (deterministic, QC-passing); depth channel / depth-aware compositing; overlay track grammar (per-layer stacking across engines); 3D-over-ink layering |
+   131→   131→| **MG-6 Editing** | Revisions + 409 concurrency (wired); repair ladder; per-scene invalidation + clip cache; S117 + S132 manifests; Layout-mode element editor; camera-key numeric UIs | Curve editor (bezier handles, multi-channel timeline); graphics tween/keyframe authoring UI; 3D keyframe UI; engine-lane scene repair; whiteboard per-scene swapper (Phase B store-only) |
+   132→   132→
+   133→   133→Rough coverage against "professional" bar per the directive's own framing: MG-1 ≈ 40–45 %, MG-2 deep-but-narrow (breadth gaps), MG-3 architecture-complete / expression-thin, MG-4 embryonic-but-real, MG-5 flat, MG-6 ≈ 70 %.
+   134→   134→
+   135→   135→---
+   136→   136→
+   137→   137→## §5 Reference repositories — mapping onto the binding license matrix
+   138→   138→
+   139→   139→The repo already holds a **binding** reception record (`docs/audits/external-six-repo-reception.md`, 2026-11-14) with a verified license matrix and clean-room boundaries. Its rule: **no dependency from any received repo, ever; GPL/AGPL = concept/data-protocol only; asset bytes provenance-tagged; re-verify licenses at each consuming stage.** The directive's repo list reconciles as follows:
+   140→   140→
+   141→   141→| Directive repo | Directive priority | Binding disposition in TubeForge |
+   142→   142→|---|---|---|
+   143→   143→| Motion Canvas | P1 | **New name — receive with license verification at adoption stage** (expected MIT). Take: sequencing/voice-sync concepts, stagger/spring vocabulary. Do NOT embed the runtime (it owns a clock — violates one-clock law). Presets re-derived natively on `anim/`. |
+   144→   144→| Blender | P1 | **GPL-3.0 — out-of-process sidecar ONLY** (the FreeMoCap precedent: our adapter, their binary, no linkage). Sequence AFTER the 3D scene contract + render handoff are validated (the directive's own step 5 agrees). Nothing from Blender source enters the tree. |
+   145→   145→| Three.js | P1 | **Already a dependency** (`three@^0.187`, MIT) and already rendering under SwiftShader. Extend in-place (MG-4): shadows, materials, textures — each addition must hold the determinism contract (same GL stack, golden hashes where applicable). |
+   146→   146→| EffectCraft | P1/P3 | **New name — architecture study only** (alpha; verify MIT/Apache per package). No runtime. |
+   147→   147→| Synfig | P2 | **GPL-3.0 — clean-room concept only** (already received, binding). K1's FK+delta rig already covers the needed subset; borrow vocabulary, never code. |
+   148→   148→| OpenToonz | P2 | **modified BSD — received**; asset-bytes/rig-format vocabulary only. |
+   149→   149→| Effekseer | P2/P3 | **MIT — received**; future particle/FX grammar donor at concept level; asset bytes provenance-tagged via S126 import lane. No runtime/SDK. |
+   150→   150→| Theatre.js | P2 | **Root Apache-2.0; the Studio package is AGPL — re-verify per package before its bytes influence anything** (binding). Take keyframe-editor UX concepts clean-room for MG-6; do not embed the state runtime (second clock). |
+   151→   151→| Manim | P2 | **New name — receive** (expected MIT). Concept donor for math/diagram animation atop the graphics grammar (future chart/graph slices). |
+   152→   152→| Natron | P2 | **New name — verify license (GPL family expected) — concept reference only** for node-compositing vocabulary (MG-5). |
+   153→   153→| Opus Motion Library | P1 | **MIT expected — verify**; preset inspiration. CRITICAL caveat (the directive's own): it targets Remotion — **Remotion is NOT adoptable** (custom source-available license + it owns a React-video runtime + a second render path, all three violating house law). Re-express presets natively on `anim/`. |
+   154→   154→| PrevisForge | P2 | **MIT expected — verify**; camera-keyframe/scene-spec schema inspiration for MG-4 — compare against the already-landed `anim/camera.ts` + `scene3d.ts` vocabulary; adopt only what fills gaps (fov/yaw/pitch fields exist). |
+   155→   155→| VectorForge | P3 | **New name — verify**; articulated-vector-character concepts overlap K1 — reference only. |
+   156→   156→| Remotion | (Tier 3) | **Rejected as a dependency** — license + architecture (second engine, second clock). |
+   157→   157→| friction | (prior) | **GPL-3.0 — received; clean-room** (S124 editor study precedent). |
+   158→   158→| FreeMoCap | (prior) | **AGPL-3.0 — received; data-protocol boundary only**; sidecar ALREADY LANDED (S125-ext BVH adapter + S141 wall). |
+   159→   159→| OpenVDB | (prior) | **Apache-2.0 — received; evaluation-only**, likely never. |
+   160→   160→
+   161→   161→**Doctrine (binding, restated):** no second renderer; one motion truth per engine; determinism (frame N = f(project, library, N)); compile into existing grammars; timeline is a projection; named walls on every unbounded dimension; AI suggests / human approves; no new dependencies from reference repos.
+   162→   162→
+   163→   163→---
+   164→   164→
+   165→   165→## §6 Anti-duplication findings (the "don't build a second engine" checklist)
+   166→   166→
+   167→   167→1. **Four camera models coexist**: `anim/camera.ts` (rich, dormant), `graphics/camera.ts` (S130 pan/zoom), whiteboard camera director + drift, `scene3d.ts cameraAt` (linear). The directive's "neither Three.js nor Blender introduces an independent timeline/clock" is already house law — the MG-4/MG-1 work should **unify camera vocabulary incrementally** (extend `scene3d` keys with ease; consider `anim/camera.ts` as the eventual shared vocabulary) rather than adding a fifth.
+   168→   168→2. **Motion presets must be data, not a framework**: a preset registry on `EASE_CURVES`/`evalAt`/`ElementTween` (the directive's Opus-derived idea) requires zero new runtime — presets compile into existing tween directives.
+   169→   169→3. **Lip-sync already exists beat-sync**: do not rebuild viseme pipelines; the scope claim is pinned in grammar, UI, and audits. Phoneme lip-sync would be a scope change, not a gap fix.
+   170→   170→4. **Voice-over sync already exists**: W4 word anchors + captions ASR/silencedetect ladder are landed; Motion Canvas's voice-sync value is already internalized.
+   171→   171→5. **The "AI Director determines why/when/how" requirement is partially met** (semantic directives, beat classifier, rhetorical layer, advisory engine pick) — the missing half is *consumption by lanes* (rhetorical purposes → gestures; cues → SFX), which is exactly MG-3/MG-2 wiring, not new architecture.
+   172→   172→
+   173→   173→---
+   174→   174→
+   175→   175→## §7 File-by-file implementation plan (phased; every phase = design record + tests + CI-green push)
+   176→   176→
+   177→   177→### Phase A — Acceptance closure + doc alignment (no new features; unblocks everything)
+   178→   178→| Item | Files | Acceptance |
+   179→   179→|---|---|---|
+   180→   180→| A1 G1 blind re-score session executed | `scripts/blind-rescore-kit.mts` output + scorer sheets → `docs/audits/s123-blind-rescore.md` updated | ≥ 3 human scorers, composite ≥ 4/5, sheets unblinded after; verdict recorded either way |
+   181→   181→| A2 K1 blind re-score + VCE-on-rig-frames pre-gate | same kit; `docs/audits/k1-blind-rubric.md`; needs a configured VLM for VCE | rubric composite recorded; VCE ≥ 80 or honest SKIP documented |
+   182→   182→| A3 Doc drift commit | `ROADMAP.md` (status block stops at S135; S136–S147 + Stage X-full + gate seal missing), `README` status block, `docs/audits/s87-acceptance-battery-record.md` (lags the script's Part C), missing S135 close record, `ARCHITECTURE.md` model count | each doc states the S147-era truth with commit hashes |
+   183→   183→| A4 Public-tree hygiene carryover | `public/` ZIP/patch investigation + untrack decision (prior audit item, still open) | no source/secret-bearing archives tracked; gitleaks green |
+   184→   184→
+   185→   185→Risk: none (docs + operator actions). Tests: none required; CI must stay green.
+   186→   186→
+   187→   187→### Phase B — MG-1 motion-quality slice (the directive's "reusable motion library", native)
+   188→   188→- **B1 Easing-table extension slice** (a design-doc slice by the closed-table law):
+   189→   189→  - `src/lib/tubeforge/anim/easing.ts`: add `anticipation` (dip-below-0 wind-up then settle), `spring`/`elastic` family as IEEE-exact closed forms (damped cosine; parameters fixed at design time — no runtime randomness), keep purity + clamping laws; `EaseName` grows; every consumer (tweens, pose rows, camera keys) inherits.
+   190→   190→  - Re-pin golden hashes in the IEEE-exact form (`scripts/test-unit.mts:14540–14663` region; the e11eaec receipt is the template).
+   191→   191→  - Tests: purity/clamp pins; golden-frame re-pin; whiteboard byte-identity **unaffected** (frozen tree, private table).
+   192→   192→  - Risk: hash churn — mitigated by the established re-pin procedure; node 22/24 parity receipt required.
+   193→   193→- **B2 Stagger primitive**: `anim/stagger.ts` (pure helper: `(baseMs, stepMs, order)` or per-element derivation) consumed by `graphics/planner.ts` (replace the hardcoded bullet delays) and exposed in the tween grammar as a planner-side convenience (grammar stays closed; stagger is compile-time sugar).
+   194→   194→  - Tests: determinism pins; planner byte-identity except explicit stagger use.
+   195→   195→- **B3 3D ease field**: `scene3d.ts` `Scene3DObjectKeyframe` + `cameraAt`/`objectAt` gain optional `ease` (default `linear` = today's byte-identity), evaluated via `evalEase`.
+   196→   196→  - Tests: keyless byte-identity pin (exists, extend), eased-path golden values.
+   197→   197→- **B4 Wire dormant substrate**: K1 rig renderer consumes `anim/gait.ts` + `anim/ik.ts` for locomotion rungs (gait phase drives leg pose rows; IK for reach poses); `anim/camera.ts` adopted as the graphics camera's long-term vocabulary (non-breaking: introduce as the validator behind S130 keys).
+   198→   198→  - Tests: gait-driven walk fixture (foot arc phase pinned); IK reach poses on the rig; camera-validation parity.
+   199→   199→- **B5 Preset registry**: `anim/presets.ts` — named motion presets (stagger-in, pop-emphasis, rise-reveal, walk-cycle, camera-orbit) compiled into existing directives; Studio exposes a preset picker per element (ties to Phase C UX).
+   200→   200→  - Tests: preset → directive compilation determinism; round-trip writes.
+   201→   201→- Acceptance: `EASE_CURVES` extension documented as a design record; all goldens re-pinned; unit battery green; CI green.
+   202→   202→
+   203→   203→### Phase C — MG-2 2D breadth (typography, authoring UX, charts, transitions, masking, events)
+   204→   204→- **C1 Typography stack**: `graphics/compose.ts` font-family per payload (additive optional `font?: "system" | <licensed face>`), per-word/per-char ranges as new optional payload fields compiled to tspan groups animated through existing tween channels (grammar minor version bump), auto-wrap (measure via the composed page, deterministic at write time), optional text-draw reveal for text kinds reusing whiteboard glyph machinery *as a concept* (clean-room re-implementation in graphics, since whiteboard tree is frozen).
+   205→   205→  - Tests: wrap determinism across widths; per-char range pins; budget walls fire (textCharsMax required-reject unchanged).
+   206→   206→- **C2 Tween/camera/event authoring UX**: `graphics-studio.tsx` + a new `tween-editor.tsx` — per-element tween list (delay/duration/channels/keys), camera-key list, event-cue list; writes go through validated PUT (the wall stays); preview via the ONE applier.
+   207→   207→  - Tests: Playwright e2e — author a tween, render, probed behavior; 409 concurrency still enforced.
+   208→   208→- **C3 Chart vocabulary**: `types.ts` + `compose.ts` — line/area (polyline progress draw), donut/pie (arc sweep via progress), axes/ticks as shape composition; per-bar palette as the recorded design slice.
+   209→   209→  - Tests: golden frame hashes per chart fixture; readcheck lens compatibility.
+   210→   210→- **C4 Scene transitions**: extend the projection/grammar with `transitionIn/Out` (fade/wipe through the compositor's existing xfade vocabulary — render-side only; engine segments stage through S143 already).
+   211→   211→  - Tests: battery cut-alignment laws updated; QC thresholds; e2e decode.
+   212→   212→- **C5 Masking**: additive optional `mask` on elements (rect/circle/path clip — generalize the existing wipe clipPath); group-level masks gated by budget walls.
+   213→   213→- **C6 Event consumption**: SFX arm in graphics assembly (`render.ts` audio graph) reading `graphicsEventList` (bed/VO/SFX gains pinned); QC lens reads cue coverage; events persisted on the row's render manifest.
+   214→   214→  - Tests: loudness/true-peak QC on SFX-bearing fixtures; determinism of the mix.
+   215→   215→- Risk: grammar sprawl (G1's named risk) — every addition rides the minor-version additive law with warn-drop for unknown fields; budget walls precede features.
+   216→   216→
+   217→   217→### Phase D — MG-3 character expressiveness + authoring + citizenship
+   218→   218→- **D1 Expression slice**: blink cycle (deterministic timer channel on `eye` part — authored, not random: seeded per character id); head poses (`head-*` standard sheet + gesture-table entries); mouth-openness amplitude (per-variant scale channel instead of binary swap).
+   219→   219→  - Tests: poseAt determinism extended; blink windows pinned; UI scope strings stay honest.
+   220→   220→- **D2 Gesture depth**: `rig-director.ts` consumes S147 rhetorical purposes (`claim → point`, `evidence → brow-raise`, `conclusion → welcoming`), verb-level windows optional per row; hand/forearm poses join the standard sheet.
+   221→   221→  - Tests: classifier→gesture pins; byte-identity when rhetorical fields absent.
+   222→   222→- **D3 Authoring**: pose-timeline editor UI on the rig seat (PUT route exists), mocap upload seat in scene/character studio.
+   223→   223→- **D4 Identity gates**: from Phase A2; plus record VCE-on-rig-frames wiring when a VLM provider exists.
+   224→   224→- **D5 Stage X citizenship**: `PlanVisualKind "character"` + compositor segment builder + RENDER_MODES/lane row so rig scenes mix with KB/i2v/graphics per scene (S143's verdict registry makes this a bounded slice).
+   225→   225→  - Tests: mixed-plan verdict pins; segment builder contract read-back; e2e.
+   226→   226→
+   227→   227→### Phase E — MG-4 3D lane seat (before Blender, per the directive's own order)
+   228→   228→- **E1 Lane admission**: `RENDER_MODES` + `resolveRenderLane` + `PlanVisualKind` + `COMPOSITOR_SEGMENT_KINDS` gain `3d`; `buildEngineSegments` 3D branch (per-scene `render3d` segments); fail-closed verdict unchanged.
+   229→   229→- **E2 Studio seat**: 3D scaffold/preview panel consuming the SAME Scene3D doc + clock (preview is the page, delivery is the pipeline — no second clock).
+   230→   230→- **E3 Render depth**: shadows (`renderer.shadowMap` under SwiftShader — verify determinism per frame hash), materials/textures set, optional fog — each a golden-hash-pinned increment.
+   231→   231→- **E4 CI**: `s94-3d-smoke.mts` wired into the e2e job (SwiftShader on runners — the decisive unknown; if runner GL is unstable, pin a CPU-raster fallback receipt).
+   232→   232→- **E5 (later, gated)**: Blender sidecar adapter — out-of-process CLI render of exported scene specs, letterboxed through the SAME engine-segment staging; GPL boundary = process boundary; only after E1–E4 hold.
+   233→   233→
+   234→   234→### Phase F — MG-5 compositing vocabulary
+   235→   235→- Drop shadows + blur/motion-blur as deterministic, QC-passing post ops (SVG filters for graphics; ffmpeg `gblur`/`tblend` steps pinned as args); depth/overlay grammar (layered composition plan) is a design-record slice — sequence after E so a 3D object can layer over engine ink.
+   236→   236→
+   237→   237→### Phase G — MG-6 authoring depth
+   238→   238→- Curve editor (clean-room Theatre.js concepts): bezier handles + multi-channel timeline writing into `ElementTween`/camera keys/3D keys; engine-lane scene repair (per-scene re-render + swapper — completes whiteboard "Phase B"); unify with scene revisions/409 laws.
+   239→   239→
+   240→   240→**Sequencing recommendation**: A → B1/B2/B3 → C1/C2 → D1/D2/D5 → E1–E4 → C3–C6 → F → G → E5. Each phase ships with CI green per the standing directive ("solve all, push, keep CI green"); the two human-gate rows (A1/A2) can run in parallel with B/C at zero code risk.
+   241→   241→
+   242→   242→---
+   243→   243→
+   244→   244→## §8 Operator actions (non-code)
+   245→   245→
+   246→   246→1. **Human scoring sessions** for G1 (S144 session ready) and K1 (kit ready) — ≥ 3 scorers each; this is the only acceptance row code cannot close.
+   247→   247→2. **PAT hygiene**: all chat-transmitted tokens remain treated as compromised — confirm revocation of every leaked token (standing rule; the six-repo reception record itself re-states it).
+   248→   248→3. **Deploy key**: the sandbox reset destroyed `~/.ssh/id_ed25519_tubeforge` and the rootless OpenSSH install — before the next push, re-provision the deploy key (or approve a new one). Fetch/push verification will re-run the SSH + anonymous-HTTPS double-channel check.
+   249→   249→4. **Lost local artifact note**: `/home/z/tubeforge-gate-reports/2026-11-15-stabilisation-gate.md` (local copy) was lost with the sandbox reset; the authoritative gate record survives in-repo at `docs/audits/s136-stabilisation-gate.md`, and the sealed state is 8/9 PASS (condition 7 PARTIAL by design). This document supersedes the local copy as the audit-of-record for the motion-graphics program.
+   250→   250→5. **Crons survived the reset** (harness-side): daily PR/CI check (job 531897) and weekly readiness review (job 531659) are active; both ran today.
+   251→   251→
+   252→   252→---
+   253→   253→
+   254→   254→## §9 Evidence appendix
+   255→   255→
+   256→   256→- Clone: `git clone https://github.com/ibis01/tubeforge.git` (anonymous); HEAD `9b3b407`; `git ls-remote origin main` match; tree clean.
+   257→   257→- PR refs fetched: `refs/pull/23/head`, `refs/pull/24/head`; containment + `git cherry -v main pr/N` + `git diff --stat main pr/N` outputs captured in-session.
+   258→   258→- PR pages read anonymously via headless browser: #24 state "Closed — ibis01 closed this"; #23 state "Closed" with the K1 scope description quoted on-page.
+   259→   259→- CI: Actions page shows S136→S147 runs "completed successfully"; sealed baseline run #327 (PR #28) 8/8 jobs, 37/37 e2e.
+   260→   260→- Inventory sweeps: four read-only Explore agents (MG-2a anim substrate; MG-2b graphics; MG-2c characters; MG-2d 3D/compositing/editing/CI), each returning file:line evidence; key citations retained in §3.
+   261→   261→- Prior-art records relied on: `docs/audits/external-2d-animation-roadmap.md` (re-baselined at `37796ce`, statuses reconciled), `docs/audits/external-six-repo-reception.md` (binding license matrix), `docs/audits/s136-stabilisation-gate.md`, `docs/audits/s144-blind-rescore-session.md`, `docs/audits/s145-pae-phase3-benchmarks.md`, `docs/audits/s146-fresh-baseline.md`, `docs/audits/s147-rhetorical-beat-layer.md`, `docs/audits/pae-architecture-audit-and-spec.md`.
+   262→   262→
