@@ -307,6 +307,35 @@ export const ASR_PROVIDERS: ProviderMeta[] = [
     note: "Word-level timestamps upgrade captions and the whiteboard anchors from derived to MEASURED timing. Same server as the VoiceStudio TTS row.",
   },
   {
+    id: "groq",
+    kind: "openai",
+    label: "Groq (Whisper)",
+    defaultBaseUrl: "https://api.groq.com/openai/v1",
+    keyUrl: "https://console.groq.com/keys",
+    models: [
+      {
+        id: "whisper-large-v3-turbo",
+        hint: "fast, free tier — word timestamps",
+      },
+      { id: "whisper-large-v3", hint: "more accurate, slower" },
+    ],
+    note: "Free tier: 20 RPM, 2,000 RPD, 28,800 audio-seconds/day. Word-level timestamps via verbose_json. Uses the same API key as your Groq chat provider.",
+  },
+  {
+    id: "assemblyai",
+    kind: "native",
+    label: "AssemblyAI",
+    defaultBaseUrl: "https://api.assemblyai.com/v2",
+    keyUrl: "https://www.assemblyai.com/dashboard/signup",
+    models: [
+      {
+        id: "universal-3.5-pro",
+        hint: "word-level timestamps, 100 min/month free",
+      },
+    ],
+    note: "Free tier: 100 minutes/month. Returns word-level timestamps in a single request.",
+  },
+  {
     id: "openai",
     kind: "openai",
     label: "OpenAI Whisper",

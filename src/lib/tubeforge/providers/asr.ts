@@ -6,12 +6,11 @@
 //
 //   zai         → bundled SDK asr (file_base64) — no word timestamps
 //   openai      → POST {baseUrl}/audio/transcriptions (whisper-1, multipart)
+//   groq        → POST {baseUrl}/audio/transcriptions (whisper-large-v3-turbo;
+//                 same OpenAI-compatible wire, different host)
+//   assemblyai  → upload → POST /v2/transcript → poll (word-level timestamps)
 //   voicestudio → POST {baseUrl}/v1/audio/transcriptions — the USER-MANAGED
-//                 VoiceStudio server's OpenAI-compatible API. The AGPL app is
-//                 never bundled; TubeForge talks the wire only. Its verified
-//                 headline win: response_format=verbose_json +
-//                 timestamp_granularities[]=word → words:[{word,start,end}]
-//                 (whisperx wav2vec2 forced alignment, ±10-30 ms).
+//                 VoiceStudio server's OpenAI-compatible API.
 //
 // Used by the optional "verify narration" feature, the smart-captions ladder
 // and the whiteboard anchors. Input is always a WAV buffer (the caller
@@ -21,7 +20,13 @@
 import { zaiClientFor } from "../zai-client";
 import { getCapability, type CapabilityConfig } from "./settings";
 import { providerMetaRequired } from "./registry";
-import { joinUrl, providerFetchJson, ProviderHttpError, timeoutFor } from "./http";
+import {
+  joinUrl,
+  providerFetch,
+  providerFetchJson,
+  ProviderHttpError,
+  timeoutFor,
+} from "./http";
 
 // ---------------------------------------------------------------------------
 // The word support table — which ASR providers can answer the detailed pass.
@@ -33,6 +38,8 @@ export const ASR_WORD_TIMESTAMP_SUPPORT: Readonly<Record<string, boolean>> =
   Object.freeze({
     voicestudio: true, // verbose_json + timestamp_granularities[]=word (verified)
     openai: true, // whisper-1 verbose_json word granularity
+    groq: true, // whisper-large-v3-turbo verbose_json word granularity
+    assemblyai: true, // word_timestamps:true returns [{text,start,end}]
     zai: false, // the bundled SDK answers text only
   });
 
@@ -82,7 +89,11 @@ export function buildAsrDetailedForm(
   model: string,
 ): FormData {
   const form = new FormData();
-  form.append("file", new Blob([new Uint8Array(wavBuffer)], { type: "audio/wav" }), "chunk.wav");
+  form.append(
+    "file",
+    new Blob([new Uint8Array(wavBuffer)], { type: "audio/wav" }),
+    "chunk.wav",
+  );
   form.append("model", model);
   form.append("response_format", "verbose_json");
   form.append("timestamp_granularities[]", "word");
@@ -97,7 +108,10 @@ export function buildAsrDetailedForm(
  * _openai_words: an entry without BOTH finite start/end or without a string
  * word is SKIPPED, never guessed into a span.
  */
-export function parseVerboseJsonWords(payload: unknown): { text: string; words: AsrWord[] } {
+export function parseVerboseJsonWords(payload: unknown): {
+  text: string;
+  words: AsrWord[];
+} {
   const obj = (payload ?? {}) as Record<string, unknown>;
   const text = typeof obj.text === "string" ? obj.text : "";
 
@@ -130,15 +144,22 @@ export function parseVerboseJsonWords(payload: unknown): { text: string; words: 
 // fix, and every documented status class maps exactly once.
 // ---------------------------------------------------------------------------
 
-export function asrErrorText(provider: string, status: number, body: string): string {
+export function asrErrorText(
+  provider: string,
+  status: number,
+  body: string,
+): string {
   // OpenAI-shaped body first — the server's own message is the best signal.
   let detail = body.slice(0, 200);
   try {
-    const parsed = JSON.parse(body) as { error?: { message?: unknown } | string };
+    const parsed = JSON.parse(body) as {
+      error?: { message?: unknown } | string;
+    };
     if (parsed?.error) {
       const msg =
         typeof parsed.error === "string" ? parsed.error : parsed.error.message;
-      if (typeof msg === "string" && msg.trim()) detail = msg.trim().slice(0, 200);
+      if (typeof msg === "string" && msg.trim())
+        detail = msg.trim().slice(0, 200);
     }
   } catch {
     /* plain-text body — keep the slice */
@@ -200,12 +221,20 @@ async function voicestudioAsr(
         ? await providerFetchJson<unknown>(
             "VoiceStudio ASR",
             transcriptionUrl("voicestudio", baseUrl),
-            { method: "POST", headers, body: buildAsrDetailedForm(wavBuffer, model) },
+            {
+              method: "POST",
+              headers,
+              body: buildAsrDetailedForm(wavBuffer, model),
+            },
             { capability: "asr" },
           )
         : await (async () => {
             const plain = new FormData();
-            plain.append("file", new Blob([new Uint8Array(wavBuffer)], { type: "audio/wav" }), "chunk.wav");
+            plain.append(
+              "file",
+              new Blob([new Uint8Array(wavBuffer)], { type: "audio/wav" }),
+              "chunk.wav",
+            );
             plain.append("model", model);
             plain.append("response_format", "json");
             return providerFetchJson<{ text?: string }>(
@@ -224,12 +253,17 @@ async function voicestudioAsr(
       if (!text) throw new Error("ASR returned an empty transcript");
       return { text, words: parsed.words.length > 0 ? parsed.words : null };
     } catch (err) {
-      if (err instanceof ProviderHttpError && shouldRetryAsr(err.status, attempt)) {
+      if (
+        err instanceof ProviderHttpError &&
+        shouldRetryAsr(err.status, attempt)
+      ) {
         await new Promise((r) => setTimeout(r, ASR_RETRY_DELAY_MS));
         continue;
       }
       if (err instanceof ProviderHttpError)
-        throw new Error(asrErrorText("VoiceStudio", err.status, extractBody(err)));
+        throw new Error(
+          asrErrorText("VoiceStudio", err.status, extractBody(err)),
+        );
       throw err;
     }
   }
@@ -276,12 +310,155 @@ async function openaiAsr(
     return { text, words: parsed.words.length > 0 ? parsed.words : null };
   } catch (err) {
     if (err instanceof ProviderHttpError)
-      throw new Error(asrErrorText("OpenAI-compatible", err.status, extractBody(err)));
+      throw new Error(
+        asrErrorText("OpenAI-compatible", err.status, extractBody(err)),
+      );
     throw err;
   }
 }
 
-async function zaiAsr(wavBuffer: Buffer): Promise<{ text: string; words: AsrWord[] | null }> {
+// ---------- Groq Whisper (OpenAI-compatible wire, different host) ----------
+
+async function groqAsr(
+  wavBuffer: Buffer,
+  config: CapabilityConfig,
+  detailed: boolean,
+): Promise<{ text: string; words: AsrWord[] | null }> {
+  const meta = providerMetaRequired("asr", "groq");
+  const baseUrl = config.baseUrl?.trim() || meta.defaultBaseUrl;
+  const key = config.apiKey?.trim();
+  if (!key) throw new Error("Groq transcription needs an API key");
+
+  const model = config.model?.trim() || "whisper-large-v3-turbo";
+  try {
+    const data = await providerFetchJson<unknown>(
+      "Groq ASR",
+      joinUrl(baseUrl, "audio/transcriptions"),
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}` },
+        body: buildAsrDetailedForm(wavBuffer, model),
+      },
+      { capability: "asr" },
+    );
+    if (!detailed) {
+      const text = ((data as { text?: string }).text ?? "").trim();
+      if (!text) throw new Error("ASR returned an empty transcript");
+      return { text, words: null };
+    }
+    const parsed = parseVerboseJsonWords(data);
+    const text = parsed.text.trim();
+    if (!text) throw new Error("ASR returned an empty transcript");
+    return { text, words: parsed.words.length > 0 ? parsed.words : null };
+  } catch (err) {
+    if (err instanceof ProviderHttpError)
+      throw new Error(asrErrorText("Groq", err.status, extractBody(err)));
+    throw err;
+  }
+}
+
+// ---------- AssemblyAI (upload → transcript → poll) ----------
+
+async function assemblyAiAsr(
+  wavBuffer: Buffer,
+  config: CapabilityConfig,
+  detailed: boolean,
+): Promise<{ text: string; words: AsrWord[] | null }> {
+  const meta = providerMetaRequired("asr", "assemblyai");
+  const baseUrl = config.baseUrl?.trim() || meta.defaultBaseUrl;
+  const key = config.apiKey?.trim();
+  if (!key) throw new Error("AssemblyAI transcription needs an API key");
+
+  try {
+    // Step 1: upload the audio. AssemblyAI accepts the raw bytes on
+    // POST /v2/upload with the API key in the Authorization header (no
+    // "Bearer " prefix — their own wire contract).
+    const uploadRes = await providerFetch(
+      "AssemblyAI upload",
+      joinUrl(baseUrl, "upload"),
+      {
+        method: "POST",
+        headers: { Authorization: key },
+        body: new Uint8Array(wavBuffer),
+      },
+      { capability: "asr" },
+    );
+    const uploadData = (await uploadRes.json()) as { upload_url?: string };
+    if (!uploadData.upload_url) {
+      throw new Error("AssemblyAI upload returned no upload_url");
+    }
+
+    // Step 2: request the transcript.
+    const createRes = await providerFetch(
+      "AssemblyAI transcript",
+      joinUrl(baseUrl, "transcript"),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: key,
+        },
+        body: JSON.stringify({
+          audio_url: uploadData.upload_url,
+          word_timestamps: detailed,
+        }),
+      },
+      { capability: "asr" },
+    );
+    const createData = (await createRes.json()) as { id?: string };
+    if (!createData.id) {
+      throw new Error("AssemblyAI transcript request returned no id");
+    }
+
+    // Step 3: poll for completion.
+    for (let attempt = 0; attempt < 60; attempt++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      const pollRes = await providerFetch(
+        "AssemblyAI poll",
+        joinUrl(baseUrl, `transcript/${createData.id}`),
+        { headers: { Authorization: key } },
+        { capability: "asr" },
+      );
+      const task = (await pollRes.json()) as {
+        status?: string;
+        text?: string;
+        words?: { text?: string; start?: number; end?: number }[];
+        error?: string;
+      };
+      if (task.status === "completed") {
+        const text = (task.text ?? "").trim();
+        if (!text) throw new Error("AssemblyAI returned an empty transcript");
+        if (!detailed) return { text, words: null };
+        const words: AsrWord[] = (task.words ?? [])
+          .filter(
+            (w) =>
+              typeof w.text === "string" &&
+              typeof w.start === "number" &&
+              typeof w.end === "number",
+          )
+          .map((w) => ({
+            word: String(w.text).trim(),
+            start: Number(w.start) / 1000, // AssemblyAI emits ms
+            end: Number(w.end) / 1000,
+          }));
+        return { text, words: words.length > 0 ? words : null };
+      }
+      if (task.status === "error") {
+        throw new Error(`AssemblyAI failed: ${task.error ?? "unknown error"}`);
+      }
+      // queued / processing → keep polling
+    }
+    throw new Error("AssemblyAI timed out");
+  } catch (err) {
+    if (err instanceof ProviderHttpError)
+      throw new Error(asrErrorText("AssemblyAI", err.status, extractBody(err)));
+    throw err;
+  }
+}
+
+async function zaiAsr(
+  wavBuffer: Buffer,
+): Promise<{ text: string; words: AsrWord[] | null }> {
   const zai = await zaiClientFor("asr");
   const response = await zai.audio.asr.create({
     file_base64: wavBuffer.toString("base64"),
@@ -306,7 +483,7 @@ async function zaiAsr(wavBuffer: Buffer): Promise<{ text: string; words: AsrWord
 async function asrPass(
   wavBuffer: Buffer,
   detailed: boolean,
-  overrides?: Partial<CapabilityConfig>
+  overrides?: Partial<CapabilityConfig>,
 ): Promise<{ text: string; words: AsrWord[] | null }> {
   const config = await getCapability("asr", overrides);
   const provider = config.provider;
@@ -321,13 +498,19 @@ async function asrPass(
   if (provider === "openai") {
     return openaiAsr(wavBuffer, config, detailed);
   }
+  if (provider === "groq") {
+    return groqAsr(wavBuffer, config, detailed);
+  }
+  if (provider === "assemblyai") {
+    return assemblyAiAsr(wavBuffer, config, detailed);
+  }
   return zaiAsr(wavBuffer);
 }
 
 /** Plain-text transcription (the historical seam — narration checks). */
 export async function asrTranscribe(
   wavBuffer: Buffer,
-  overrides?: Partial<CapabilityConfig>
+  overrides?: Partial<CapabilityConfig>,
 ): Promise<string> {
   const { text } = await asrPass(wavBuffer, false, overrides);
   return text;
@@ -341,7 +524,7 @@ export async function asrTranscribe(
  */
 export async function asrTranscribeDetailed(
   wavBuffer: Buffer,
-  overrides?: Partial<CapabilityConfig>
+  overrides?: Partial<CapabilityConfig>,
 ): Promise<{ text: string; words: AsrWord[]; provider: string }> {
   const { text, words } = await asrPass(wavBuffer, true, overrides);
   const provider = (await getCapability("asr", overrides)).provider;
