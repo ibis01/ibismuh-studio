@@ -37,6 +37,7 @@ import { countPathCommands, type Placement } from "../whiteboard/svg";
 import { ANIM_FRAME_BUDGET } from "../anim/clock";
 import { isEaseName, type EaseName } from "../anim/easing";
 import { estimateNarrationMs } from "../whiteboard/timing";
+import { countRevealUnits, type RevealMode } from "./text";
 
 // ---------------------------------------------------------------------------
 // Version + id law
@@ -268,6 +269,22 @@ export interface TextPayload {
   /** #rrggbb. */
   color?: string;
   align?: "left" | "center" | "right";
+  /** S150 — the closed face table (C1 typography): "system" renders exactly
+   *  as today (the page CSS Arial stack — explicit "system" ≡ absent);
+   *  "caveat" is the repo's one committed licensed face (OFL, the whiteboard
+   *  glyph table's own source). Junk drops with a warning. */
+  font?: "system" | "caveat";
+  /** S150 — the per-unit reveal cascade (C1): each word/char becomes a
+   *  tspan unit riding the element's EXISTING progress channel (the applier
+   *  distributes progress across units — no new frame field, no clock).
+   *  "none" ≡ absent; the textRevealUnitsMax wall drops the cascade with a
+   *  warning when the text holds too many units. */
+  reveal?: "none" | "word" | "char";
+  /** S150 — max line width in scene px (C1 auto-wrap): each explicit \n line
+   *  greedily word-wraps to this width at compose via the house char-width
+   *  estimate (deterministic, estimator-only — the render never measures
+   *  layout). Clamped 12..4096 with a warning on clamp; junk drops. */
+  wrapPx?: number;
 }
 
 export interface CounterPayload {
@@ -516,6 +533,12 @@ export const GRAPHICS_BUDGETS = {
   /** S131 — max chars per event label (optional decoration; junk drops,
    *  the event stays). */
   eventLabelMax: 64,
+  /** S150 — max reveal units (words or chars) per text element (the C1
+   *  cascade: the applier loops per unit per frame). A text with more units
+   *  than this loses the reveal (warning — the text stays whole, the
+   *  warn-drop law); the cascade belongs on headline-sized text, not a
+   *  2,000-char paragraph. */
+  textRevealUnitsMax: 256,
 } as const;
 
 /** Borrowed readable-ink wall (the whiteboard's WB_STROKE_WIDTH_MAX
@@ -569,7 +592,7 @@ const SCENE_KEYS = new Set(["id", "narration", "durationMs", "background", "rout
 
 const ROUTING_KEYS = new Set(["suggestedEngine", "confidence", "reason"]);
 
-const TEXT_PAYLOAD_KEYS = new Set(["text", "sizePx", "weight", "color", "align"]);
+const TEXT_PAYLOAD_KEYS = new Set(["text", "sizePx", "weight", "color", "align", "font", "reveal", "wrapPx"]);
 const COUNTER_PAYLOAD_KEYS = new Set(["from", "to", "unit", "decimals"]);
 const BAR_PAYLOAD_KEYS = new Set(["data", "unit", "max", "horizontal"]);
 const ICON_PAYLOAD_KEYS = new Set(["paths", "color", "strokeWidth"]);
@@ -1096,6 +1119,29 @@ function parseTextPayload(raw: unknown, where: string, warnings: string[], error
   const align = str(raw.align);
   if (align === "left" || align === "center" || align === "right") out.align = align;
   else if (raw.align !== undefined) warnings.push(`${where}: align dropped — not left|center|right`);
+  // S150 — the C1 typography fields (closed tables; junk warn-drops).
+  const font = str(raw.font);
+  if (font === "system" || font === "caveat") out.font = font;
+  else if (raw.font !== undefined) warnings.push(`${where}: font dropped — not system|caveat`);
+  const reveal = str(raw.reveal);
+  if (reveal === "word" || reveal === "char") {
+    const units = countRevealUnits(text, reveal);
+    if (units > GRAPHICS_BUDGETS.textRevealUnitsMax) {
+      warnings.push(
+        `${where}: reveal dropped — ${units} ${reveal} units exceeds the textRevealUnitsMax wall (${GRAPHICS_BUDGETS.textRevealUnitsMax}); the text stays whole`,
+      );
+    } else out.reveal = reveal satisfies RevealMode;
+  } else if (reveal === "none") out.reveal = reveal;
+  else if (raw.reveal !== undefined) warnings.push(`${where}: reveal dropped — not none|word|char`);
+  const wrapPx = num(raw.wrapPx);
+  if (wrapPx !== null) {
+    if (wrapPx < 12 || wrapPx > 4096) {
+      warnings.push(`${where}: wrapPx ${wrapPx} clamped to 12..4096`);
+      out.wrapPx = clamp(wrapPx, 12, 4096);
+    } else out.wrapPx = wrapPx;
+  } else if (raw.wrapPx !== undefined) {
+    warnings.push(`${where}: wrapPx dropped — not a finite number`);
+  }
   warnUnknownKeys(raw, TEXT_PAYLOAD_KEYS, `${where} text payload`, warnings);
   return out;
 }
@@ -1852,6 +1898,9 @@ function serializePayload(kind: GraphicsElementKind, el: GraphicsElement): Rec |
       if (p.weight !== undefined) out.weight = p.weight;
       if (p.color !== undefined) out.color = p.color;
       if (p.align !== undefined) out.align = p.align;
+      if (p.font !== undefined) out.font = p.font;
+      if (p.reveal !== undefined) out.reveal = p.reveal;
+      if (p.wrapPx !== undefined) out.wrapPx = p.wrapPx;
       return out;
     }
     case "counter": {

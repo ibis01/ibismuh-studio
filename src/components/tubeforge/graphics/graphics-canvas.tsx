@@ -45,6 +45,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   APPLY_GRAPHICS_FRAME_FN,
   composeGraphicsScene,
+  caveatFontFaceCss,
+  docUsesFont,
   graphicsFramePayload,
   graphicsGroupClaims,
   placedGraphicsFrame,
@@ -199,13 +201,22 @@ export default function GraphicsCanvas({
 
   // The srcdoc swap — when the ACTIVE scene changes (whole-doc playback).
   // The composed skeleton is the deterministic poster frame; the applier
-  // drives every later frame from it.
+  // drives every later frame from it. S150 (C1): a doc carrying a webfont
+  // face gains the same-origin URL @font-face (the srcdoc iframe inherits
+  // the app origin; CSP font-src 'self' data: allows both routes — the
+  // RENDERER's data-URI form lives in render.ts, this is the editor's).
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
     const scene = doc.scenes[activeScene];
     if (!scene) return;
-    const composed = composeGraphicsScene(scene, doc, spriteAssets ? { spriteAssets } : undefined);
+    const fontCss = docUsesFont(doc, "caveat")
+      ? caveatFontFaceCss("/fonts/caveat/Caveat%5Bwght%5D.ttf")
+      : undefined;
+    const composed = composeGraphicsScene(scene, doc, {
+      ...(spriteAssets ? { spriteAssets } : {}),
+      ...(fontCss !== undefined ? { fontCss } : {}),
+    });
     iframe.srcdoc = composed.html;
     loadedSceneRef.current = activeScene;
   }, [doc, activeScene, spriteAssets]);

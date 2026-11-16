@@ -45,7 +45,7 @@ import { WB_CHROMIUM_LAUNCH_ARGS, normalizeVoSlot } from "../whiteboard/render";
 import { framePlanWindows } from "../anim/clock";
 import { planFromTracks, type CompositionPlan } from "../composition-plan";
 import type { TimelineTrack } from "../timeline";
-import { APPLY_GRAPHICS_FRAME_FN, composeGraphicsScene, graphicsFramePayload } from "./compose";
+import { APPLY_GRAPHICS_FRAME_FN, composeGraphicsScene, caveatFontFaceCss, docUsesFont, graphicsFramePayload } from "./compose";
 import { validateGraphicsCameraKeys } from "./camera";
 import { graphicsEventList, type GraphicsEventSlot } from "./events";
 import { frameAt, graphicsSceneDurationsMs } from "./frame";
@@ -326,6 +326,24 @@ export async function renderGraphics(
     if (scene.camera !== undefined) validateGraphicsCameraKeys(scene.camera);
   }
 
+  // S150 (C1) — the typography seam: when the doc carries a webfont face,
+  // the bytes ride the page as a data-URI @font-face (the render context
+  // aborts ALL network — a URL face could never load there). A missing face
+  // file is a NAMED failure before any chromium work (fail-closed — a
+  // fallback-font render would be a silent lie). Read once per render; a
+  // faceless doc never gains a style block (the minimal-html law).
+  let fontCss: string | null = null;
+  if (docUsesFont(doc, "caveat")) {
+    const facePath = path.join(process.cwd(), "public", "fonts", "caveat", "Caveat[wght].ttf");
+    try {
+      fontCss = caveatFontFaceCss(`data:font/ttf;base64,${fs.readFileSync(facePath).toString("base64")}`);
+    } catch {
+      throw new Error(
+        `the Caveat face file is missing at ${facePath} — the doc's font:"caveat" text cannot render deterministically; restore public/fonts/caveat/`,
+      );
+    }
+  }
+
   // The clock — ONE derivation shared with the wall and the tracks.
   const sceneMs = graphicsSceneDurationsMs(doc);
   const plan = framePlanWindows(sceneMs, doc.fps);
@@ -441,7 +459,10 @@ export async function renderGraphics(
           `scene ${si + 1}/${doc.scenes.length} ("${scene.id}"): composing`,
           si / doc.scenes.length
         );
-        const composed = composeGraphicsScene(scene, doc, { spriteAssets: opts.spriteAssets });
+        const composed = composeGraphicsScene(scene, doc, {
+          spriteAssets: opts.spriteAssets,
+          ...(fontCss !== null ? { fontCss } : {}),
+        });
         // S126 — fail-closed on unresolved imports: the compose records the
         // missing keys; the render refuses BEFORE any chromium work on
         // them (a silently missing sprite would ship a lie).
@@ -451,6 +472,11 @@ export async function renderGraphics(
           );
         }
         await page.setContent(composed.html, { waitUntil: "load" });
+        // S150 — the face must finish loading before the first pinned frame
+        // (a half-loaded webfont rasterizes fallback glyphs); a no-op for
+        // docs without a webfont. Deterministic: fonts.ready resolves once
+        // every pending load settles.
+        await page.evaluate("document.fonts.ready.then(() => null)");
 
         const framesDir = path.join(opts.outDir, `scene-${si + 1}-frames`);
         fs.mkdirSync(framesDir, { recursive: true });

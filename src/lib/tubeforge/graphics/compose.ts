@@ -78,8 +78,9 @@ import {
   pathSegments,
   totalLength,
 } from "../whiteboard/svg";
-import type { GraphicsDoc, GraphicsElement, GraphicsScene } from "./types";
+import type { GraphicsDoc, GraphicsElement, GraphicsScene, TextPayload } from "./types";
 import type { GraphicsFrameState } from "./frame";
+import { TEXT_WRAP_CHAR_W, wrapTextToWidth, countRevealUnits } from "./text";
 
 // ---------------------------------------------------------------------------
 // The compose-time defaults — ONE table, cited by the skeleton and the pins
@@ -113,14 +114,47 @@ export const GRAPHICS_COMPOSE_DEFAULTS = {
   shapeH: 240,
   shapeR: 120,
   lineW: 320,
-  /** Callout bubble padding / minimum width / char-width estimate. */
+  /** Callout bubble padding / minimum width / char-width estimate. The
+   *  estimate reads text.ts's ONE constant (S150) — value-identical to the
+   *  G1.3 literal it replaces. */
   bubblePadPx: 16,
   bubbleMinW: 140,
-  bubbleCharW: 0.6,
+  bubbleCharW: TEXT_WRAP_CHAR_W,
   bubbleLineHeight: 1.3,
   /** Callout tail dot radius. */
   tailDotR: 4,
 } as const;
+
+// ---------------------------------------------------------------------------
+// S150 — the C1 font face seam: the closed payload value → the CSS family,
+// the ONE @font-face builder, and the ONE doc scan the renderer and the
+// editor share.
+// ---------------------------------------------------------------------------
+
+/** The face table — the payload's closed values map to CSS families. Only
+ *  non-"system" values appear here ("system" ≡ the page CSS default). */
+export const TEXT_FONT_FAMILY_CSS = { caveat: "Caveat,cursive" } as const;
+
+/** The ONE @font-face builder — the callers pass the src (the RENDERER
+ *  passes a data: URI because the render context aborts ALL network; the
+ *  editor passes the same-origin public URL). The family name "Caveat" is
+ *  the contract the inline styles reference. */
+export function caveatFontFaceCss(src: string): string {
+  return `@font-face{font-family:"Caveat";font-style:normal;font-weight:100 900;src:url(${src}) format("truetype");}`;
+}
+
+/** The ONE doc scan: does any text payload carry the face? (Only the
+ *  TextPayload kinds carry `font` — counter/callout/bar labels stay the
+ *  page default.) The renderer and the studio call this before composing;
+ *  an unused face never lands in the page (the minimal-html law). */
+export function docUsesFont(doc: GraphicsDoc, face: "caveat"): boolean {
+  for (const scene of doc.scenes) {
+    for (const el of scene.elements) {
+      if (el.text?.font === face) return true;
+    }
+  }
+  return false;
+}
 
 // ---------------------------------------------------------------------------
 // Escaping + formatting (module-private, pure)
@@ -195,6 +229,10 @@ interface TextOpts {
   extraAttrs?: string;
   /** Pre-formatted single-line content (the counter's poster value). */
   content?: string;
+  /** S150 — the payload's face (C1): an INLINE style beats the page CSS
+   *  `text{font-family:…}` rule — a presentation attribute would lose the
+   *  cascade, which is why the attribute route was rejected. */
+  fontFamily?: string;
 }
 
 /** The shared text block: tspans per line, block centered on the anchor
@@ -211,20 +249,80 @@ function textBlock(o: TextOpts): string {
   return (
     `<text text-anchor="${anchor}" dominant-baseline="middle"` +
     ` font-size="${fmt(o.sizePx)}" font-weight="${o.weight}" fill="${o.color}"` +
-    ` xml:space="preserve"${o.extraAttrs ?? ""}>${tspans}</text>`
+    ` xml:space="preserve"${o.fontFamily ? ` style="font-family:${o.fontFamily}"` : ""}${o.extraAttrs ?? ""}>${tspans}</text>`
   );
 }
 
 function textInner(el: GraphicsElement): string {
   const p = el.text;
   if (p === undefined) return ""; // absent payload → empty element (validator warned)
-  return textBlock({
-    lines: p.text.split("\n"),
-    sizePx: p.sizePx ?? GRAPHICS_COMPOSE_DEFAULTS.sizePx,
+  const sizePx = p.sizePx ?? GRAPHICS_COMPOSE_DEFAULTS.sizePx;
+  // S150 — the C1 wrap: only when the payload asks for it (the no-silent-
+  // rewrite law); the estimator is deterministic and total (text.ts).
+  const lines = p.wrapPx !== undefined
+    ? wrapTextToWidth(p.text, p.wrapPx, sizePx)
+    : p.text.split("\n");
+  const base = {
+    lines,
+    sizePx,
     weight: p.weight ?? GRAPHICS_COMPOSE_DEFAULTS.weight,
     color: p.color ?? GRAPHICS_COMPOSE_DEFAULTS.ink,
-    align: p.align ?? "center",
-  });
+    align: p.align ?? "center" as const,
+    fontFamily: p.font !== undefined && p.font !== "system" ? TEXT_FONT_FAMILY_CSS[p.font] : undefined,
+  };
+  // S150 — the per-unit cascade: the element's EXISTING progress channel
+  // distributed across per-unit tspans (the applier's reveal branch); the
+  // count is the tokenizer's ONE truth (text.ts) — the wall and the markup
+  // can never drift.
+  if (p.reveal === "word" || p.reveal === "char") {
+    return revealedTextBlock(base, p, lines);
+  }
+  return textBlock(base);
+}
+
+/** The revealed text block (S150): each line's positioned tspan carries
+ *  nested unit tspans (`data-ui`, global index continuous across lines);
+ *  the <text> carries `data-reveal` + `data-count` for the ONE applier's
+ *  reveal branch. NO fill-opacity is baked — the poster (progress 1) shows
+ *  every unit, which IS the placed state. Separators walk the RAW line so
+ *  the original spacing rides the markup (word mode: one space per token
+ *  gap; char mode: each space char stays a separator). */
+function revealedTextBlock(
+  o: TextOpts,
+  p: TextPayload,
+  lines: string[],
+): string {
+  const mode = p.reveal === "char" ? "char" : "word";
+  const anchor = o.align === "left" ? "start" : o.align === "right" ? "end" : "middle";
+  const lh = o.sizePx * GRAPHICS_COMPOSE_DEFAULTS.textLineHeight;
+  const n = lines.length;
+  const total = countRevealUnits(lines.join("\n"), mode);
+  let ui = 0;
+  const tspans = lines
+    .map((line, i) => {
+      let inner = "";
+      if (mode === "word") {
+        const tokens = line.split(" ");
+        for (let t = 0; t < tokens.length; t++) {
+          if (t > 0) inner += " ";
+          const tok = tokens[t] ?? "";
+          if (tok.length > 0) inner += `<tspan data-ui="${ui++}">${esc(tok)}</tspan>`;
+        }
+      } else {
+        for (const ch of Array.from(line)) {
+          inner += ch === " " ? " " : `<tspan data-ui="${ui++}">${esc(ch)}</tspan>`;
+        }
+      }
+      return `<tspan x="0" y="${fmt((i - (n - 1) / 2) * lh)}">${inner}</tspan>`;
+    })
+    .join("");
+  return (
+    `<text text-anchor="${anchor}" dominant-baseline="middle"` +
+    ` font-size="${fmt(o.sizePx)}" font-weight="${o.weight}" fill="${o.color}"` +
+    ` xml:space="preserve" data-reveal="${mode}" data-count="${total}"` +
+    (o.fontFamily ? ` style="font-family:${o.fontFamily}"` : "") +
+    `>${tspans}</text>`
+  );
 }
 
 function counterInner(el: GraphicsElement): string {
@@ -604,7 +702,7 @@ export interface ComposedGraphicsScene {
 export function composeGraphicsScene(
   scene: GraphicsScene,
   doc: GraphicsDoc,
-  opts?: { spriteAssets?: Map<string, string[]> }
+  opts?: { spriteAssets?: Map<string, string[]>; fontCss?: string }
 ): ComposedGraphicsScene {
   const ctx: ComposeCtx = {
     spriteAssets: opts?.spriteAssets,
@@ -635,7 +733,7 @@ export function composeGraphicsScene(
 html,body{margin:0;padding:0;background:${scene.background};overflow:hidden}
 svg{display:block}
 text{font-family:Arial,Helvetica,sans-serif}
-</style></head><body>
+</style>${opts?.fontCss ? `<style>${opts.fontCss}</style>` : ""}</head><body>
 <svg id="board" width="${doc.width}" height="${doc.height}" viewBox="0 0 ${doc.width} ${doc.height}" xmlns="http://www.w3.org/2000/svg">
 <rect x="0" y="0" width="${doc.width}" height="${doc.height}" fill="${scene.background}"/>
 ${scene.camera !== undefined ? `<g id="gcam">${parts.join("\n")}</g>` : parts.join("\n")}
@@ -734,6 +832,20 @@ export const APPLY_GRAPHICS_FRAME_FN = `(payloadJson) => {
     // Wipe — the baked clip rect's width rides progress.
     const clipRect = g.querySelector(":scope > clipPath rect[data-w]");
     if (clipRect) clipRect.setAttribute("width", String(Number(clipRect.dataset.w) * prog));
+    // S150 — the text reveal cascade: the element's ONE progress channel
+    // distributed across the baked unit tspans (unit i of n is visible on
+    // the clamp(prog·n − i, 0, 1) law — sequential, total, no constants).
+    // Absolute sets only: apply-twice ≡ once; scoped to the element's OWN
+    // text node.
+    const rev = g.querySelector(":scope > text[data-reveal]");
+    if (rev) {
+      const n = Number(rev.getAttribute("data-count")) || 0;
+      for (const t of rev.querySelectorAll("tspan[data-ui]")) {
+        const i = Number(t.getAttribute("data-ui"));
+        const lp = Math.max(0, Math.min(1, prog * n - i));
+        t.setAttribute("fill-opacity", String(lp));
+      }
+    }
     // S126 — the sprite's frame channel: the sheet's viewBox window slides
     // (x = index × frameW); the sequence's stacked images display-toggle
     // (the mouth-swap discipline). Both are absolute sets — idempotent.

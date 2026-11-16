@@ -160,6 +160,13 @@ import {
   type GraphicsDoc,
   type GraphicsScene,
 } from "../src/lib/tubeforge/graphics/types";
+// S150 — the C1 typography stack's pure helpers (wrap + the ONE tokenizer).
+import {
+  countRevealUnits,
+  revealUnitsPerLine,
+  TEXT_WRAP_CHAR_W,
+  wrapTextToWidth,
+} from "../src/lib/tubeforge/graphics/text";
 import { scaffoldGraphicsDoc } from "../src/lib/tubeforge/graphics/planner";
 import {
   frameAt,
@@ -170,12 +177,15 @@ import {
 } from "../src/lib/tubeforge/graphics/frame";
 import {
   APPLY_GRAPHICS_FRAME_FN,
+  caveatFontFaceCss,
   composeGraphicsScene,
+  docUsesFont,
   formatCounter,
   GRAPHICS_COMPOSE_DEFAULTS,
   graphicsFramePayload,
   graphicsGroupClaims,
   placedGraphicsFrame,
+  TEXT_FONT_FAMILY_CSS,
 } from "../src/lib/tubeforge/graphics/compose";
 import {
   assertGraphicsBudget,
@@ -21546,6 +21556,179 @@ await test("S140 F2 — the count wall rides the admission transaction (the S101
   const pkg = JSON.parse(fs.readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
   ok(Boolean(pkg.scripts["test:import-wall"]), "the concurrent import-wall drill is wired into the package scripts");
   ok(fs.existsSync("scripts/s140-import-wall-drill.mts"), "the drill script exists (the REAL race proof lives there, not in pins)");
+});
+
+// ---------------------------------------------------------------------------
+// S150 — the C1 typography stack: the wrap estimator, the ONE reveal
+// tokenizer, the font face seam, the compose/applier structure, the walls.
+// Design record: docs/design/s150-typography.md.
+// ---------------------------------------------------------------------------
+
+suiteStart("graphics — S150 the C1 typography stack (wrap · reveal · font)");
+
+await test("S150 the wrap estimator is deterministic, greedy and total", () => {
+  const sizePx = 48;
+  const charW = sizePx * TEXT_WRAP_CHAR_W; // 28.8 — the ONE estimate
+  eq(TEXT_WRAP_CHAR_W, 0.6, "the estimate constant is the house 0.6");
+  eq(GRAPHICS_COMPOSE_DEFAULTS.bubbleCharW, TEXT_WRAP_CHAR_W, "the callout's estimate reads the ONE constant (one source)");
+  // Hand-computed greedy packing: budget 288px = 10 estimated chars.
+  const lines = wrapTextToWidth("aa bb cc dd ee", 288, sizePx);
+  eq(lines.join("\n"), "aa bb cc\ndd ee", "the greedy pack matches the hand computation");
+  eq(wrapTextToWidth("aa bb cc dd ee", 288, sizePx).join("|"), wrapTextToWidth("aa bb cc dd ee", 288, sizePx).join("|"), "same inputs → identical lines");
+  // A wider budget never produces more lines.
+  const narrow = wrapTextToWidth("aa bb cc dd ee ff gg", 144, sizePx);
+  const wide = wrapTextToWidth("aa bb cc dd ee ff gg", 1440, sizePx);
+  ok(wide.length <= narrow.length, "wider budget → fewer-or-equal lines");
+  // Explicit \n lines wrap INDEPENDENTLY (an author's break is never merged).
+  const kept = wrapTextToWidth("aa bb\ncc dd", 2880, sizePx);
+  eq(kept.length, 2, "the author's break survives");
+  eq(kept[0], "aa bb", "line one untouched");
+  // A word wider than the whole budget stays whole — honest overflow.
+  const long = wrapTextToWidth("aaaaaaaaaaaa bb", 288, sizePx);
+  eq(long[0], "aaaaaaaaaaaa", "the oversized word is never broken");
+  eq(long[1], "bb", "the next word rides its own line");
+  // Total on junk.
+  eq(wrapTextToWidth("", 288, sizePx).join(""), "", "empty text → one empty line");
+  eq(wrapTextToWidth("aa bb", 0, sizePx).join(""), "aa bb", "zero width → honest passthrough (the caller clamps)");
+  eq(wrapTextToWidth("aa bb", Number.NaN, sizePx).join(""), "aa bb", "NaN width → honest passthrough");
+  ok(Number.isFinite(charW) && charW > 0, "the char width is finite and positive");
+});
+
+await test("S150 the ONE reveal tokenizer — count equals the per-line sum", () => {
+  const text = "Hello world, two lines\nagain here";
+  const words = revealUnitsPerLine(text, "word");
+  eq(words.length, 2, "two lines");
+  eq(words[0]?.join("|"), "Hello|world,|two|lines", "word units per line");
+  eq(words[1]?.join("|"), "again|here", "the second line's units");
+  eq(countRevealUnits(text, "word"), words.reduce((a, l) => a + l.length, 0), "the count is the sum (one truth)");
+  eq(countRevealUnits(text, "word"), 6, "six word units");
+  const chars = revealUnitsPerLine(text, "char");
+  eq(countRevealUnits(text, "char"), 28, "28 non-space chars (astral-safe counting)");
+  eq(chars.every((l) => l.every((c) => c !== " ")), true, "spaces never ride as char units");
+  eq(countRevealUnits("a\u{10300}b", "char"), 3, "an astral char is ONE unit");
+  eq(countRevealUnits("", "word"), 0, "empty text → zero units");
+});
+
+await test("S150 the compose reveal structure — nested unit tspans, global index, poster fully visible", () => {
+  const doc = mustParse(
+    JSON.stringify(gDoc([gScene("s1", [gEl("h1", "headline", {
+      text: { text: "One two three", reveal: "word", font: "caveat" },
+    })])])),
+    "the reveal doc",
+  );
+  const { html } = composeGraphicsScene(doc.scenes[0] as GraphicsScene, doc);
+  ok(html.includes('data-reveal="word"'), "the cascade mode rides the text");
+  ok(html.includes('data-count="3"'), "the count is the tokenizer's truth baked on the text");
+  eq(countRevealUnits("One two three", "word"), 3, "the count and the markup agree by construction");
+  for (let i = 0; i < 3; i++) ok(html.includes(`data-ui="${i}"`), `unit ${i} carries its global index`);
+  ok(!html.includes("fill-opacity"), "the poster bakes NO fill-opacity (progress 1 = every unit visible = the placed state)");
+  ok(html.includes('style="font-family:Caveat,cursive"'), "the face rides an INLINE style (beats the page CSS rule)");
+  ok(html.includes(`<style>`), "the plain template holds");
+});
+
+await test("S150 the cascade crosses wrapped lines with a continuous global index", () => {
+  const doc = mustParse(
+    JSON.stringify(gDoc([gScene("s1", [gEl("h1", "headline", {
+      text: { text: "aa bb cc dd ee", reveal: "char", wrapPx: 288, sizePx: 48 },
+    })])])),
+    "the wrapped reveal doc",
+  );
+  const { html } = composeGraphicsScene(doc.scenes[0] as GraphicsScene, doc);
+  ok(html.includes('data-reveal="char"'), "char mode rides");
+  // 10 non-space chars across the wrapped lines — the count is the tokenizer's.
+  eq(countRevealUnits("aa bb cc dd ee", "char"), 10, "10 char units (spaces are separators, never units)");
+  ok(html.includes('data-count="10"'), "the baked count matches the tokenizer");
+  for (let i = 0; i < 10; i++) ok(html.includes(`data-ui="${i}"`), `unit ${i} present (index continuous across lines)`);
+  ok(!html.includes("data-ui=\"10\""), "no phantom unit beyond the count");
+});
+
+await test("S150 a no-new-fields doc composes WITHOUT the new surfaces (the byte-identity pin)", () => {
+  const doc = mustParse(
+    JSON.stringify(gDoc([gScene("s1", [gEl("h1", "headline")])])),
+    "the plain doc",
+  );
+  const { html } = composeGraphicsScene(doc.scenes[0] as GraphicsScene, doc);
+  ok(!html.includes("data-reveal"), "no cascade markup");
+  ok(!html.includes("data-ui"), "no unit tspans");
+  ok(!html.includes("font-family:Caveat"), "no face style");
+  ok(!html.includes("@font-face"), "no font block");
+  eq((html.match(/<style>/g) ?? []).length, 1, "exactly the one base style block");
+});
+
+await test("S150 the font seam — docUsesFont, the CSS builder, the page slot", () => {
+  const plain = mustParse(JSON.stringify(gDoc([gScene("s1", [gEl("h1", "headline")])])), "plain");
+  const face = mustParse(JSON.stringify(gDoc([gScene("s1", [
+    gEl("h1", "headline", { text: { text: "x", font: "caveat" } }),
+    gEl("co", "callout"), // other kinds never carry the face
+  ])])), "face");
+  eq(docUsesFont(plain, "caveat"), false, "a plain doc uses no webfont");
+  eq(docUsesFont(face, "caveat"), true, "the face doc scans true");
+  const css = caveatFontFaceCss("data:font/ttf;base64,QUJD");
+  ok(css.includes('font-family:"Caveat"'), "the family name is the contract");
+  ok(css.includes("src:url(data:font/ttf;base64,QUJD)"), "the src rides verbatim");
+  ok(css.includes('format("truetype")'), "the format pin holds");
+  const doc = face;
+  const withCss = composeGraphicsScene(doc.scenes[0] as GraphicsScene, doc, { fontCss: css });
+  ok(withCss.html.includes("@font-face"), "the fontCss slot lands the block");
+  const withoutCss = composeGraphicsScene(doc.scenes[0] as GraphicsScene, doc);
+  ok(!withoutCss.html.includes("@font-face"), "absent fontCss → no block (the minimal-html law)");
+  eq(TEXT_FONT_FAMILY_CSS.caveat, "Caveat,cursive", "the face table maps caveat → the CSS family");
+});
+
+await test("S150 the validator: closed tables, the clamp band, the reveal wall", () => {
+  const junkFont = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { text: { text: "x", font: "roboto" } })])]));
+  ok(junkFont.doc !== null, "junk font never refuses the doc");
+  ok(junkFont.warnings.some((w) => w.includes("font dropped")), "the font warns by name");
+  const junkReveal = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { text: { text: "x", reveal: "rainbow" } })])]));
+  ok(junkReveal.doc !== null, "junk reveal never refuses");
+  ok(junkReveal.warnings.some((w) => w.includes("reveal dropped")), "the reveal warns by name");
+  const none = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline", { text: { text: "x", reveal: "none", font: "system" } })])]), "none");
+  eq(none.scenes[0]?.elements[0]?.text?.reveal, "none", "explicit none rides");
+  eq(none.scenes[0]?.elements[0]?.text?.font, "system", "explicit system rides");
+  const clamped = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline", { text: { text: "x", wrapPx: 5 } })])]), "clamp");
+  eq(clamped.scenes[0]?.elements[0]?.text?.wrapPx, 12, "wrapPx clamps to the 12 floor");
+  const clampedHigh = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline", { text: { text: "x", wrapPx: 9000 } })])]), "clamp high");
+  eq(clampedHigh.scenes[0]?.elements[0]?.text?.wrapPx, 4096, "wrapPx clamps to the 4096 ceiling");
+  const junkWrap = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { text: { text: "x", wrapPx: "wide" } })])]));
+  ok(junkWrap.warnings.some((w) => w.includes("wrapPx dropped")), "junk wrapPx warns");
+  // The S150 wall: 300 char units > 256 — the reveal drops, the text stays.
+  const longText = "a".repeat(300);
+  eq(countRevealUnits(longText, "char"), 300, "the fixture really exceeds the wall");
+  const walled = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { text: { text: longText, reveal: "char" } })])]));
+  ok(walled.doc !== null, "the wall never refuses the doc");
+  ok(walled.warnings.some((w) => w.includes("textRevealUnitsMax")), "the wall names itself");
+  const kept = walled.doc?.scenes[0]?.elements[0]?.text;
+  eq(kept?.reveal, undefined, "the reveal dropped (warn-drop law)");
+  eq(kept?.text, longText, "the TEXT stays whole (content is never dropped)");
+  eq(GRAPHICS_BUDGETS.textRevealUnitsMax, 256, "the named wall is 256");
+});
+
+await test("S150 textCharsMax required-reject unchanged + the three fields round-trip byte-stable", () => {
+  const over = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline", { text: { text: "a".repeat(2001) } })])]));
+  ok(over.doc === null, "2001 chars still refuses (the S128 wall holds)");
+  ok(over.errors.some((e) => e.includes("textCharsMax")), "the refusal names the wall");
+  const doc = mustParse(
+    JSON.stringify(gDoc([gScene("s1", [gEl("h1", "headline", {
+      text: { text: "wrapped title", font: "caveat", reveal: "word", wrapPx: 600, sizePx: 72 },
+    })])])),
+    "the typography doc",
+  );
+  const json1 = writeGraphicsDoc(doc);
+  const doc2 = mustParse(json1, "the written doc");
+  eq(doc2.scenes[0]?.elements[0]?.text?.font, "caveat", "font round-trips");
+  eq(doc2.scenes[0]?.elements[0]?.text?.reveal, "word", "reveal round-trips");
+  eq(doc2.scenes[0]?.elements[0]?.text?.wrapPx, 600, "wrapPx round-trips");
+  eq(writeGraphicsDoc(doc2), json1, "write→parse→write is byte-identical");
+});
+
+await test("S150 the applier's reveal branch holds the construction laws", () => {
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('querySelector(":scope > text[data-reveal]")'), "the reveal query is scoped to the element's OWN text");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('querySelectorAll("tspan[data-ui]")'), "the units ride the baked data-ui");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes("Math.max(0, Math.min(1, prog * n - i))"), "the cascade law is the exact clamp(prog·n − i, 0, 1)");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('setAttribute("fill-opacity", String(lp))'), "the write is an absolute set-only fill-opacity");
+  ok(APPLY_GRAPHICS_FRAME_FN.includes('getAttribute("data-count")'), "the count is baked — no layout, no recomputation");
+  const banned = ["new Date", "Date.now", "Math.random", "performance.now", "requestAnimationFrame"];
+  for (const b of banned) ok(!APPLY_GRAPHICS_FRAME_FN.includes(b), `no ${b} — the grown applier stays idempotent by construction`);
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

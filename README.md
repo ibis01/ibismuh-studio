@@ -43,8 +43,15 @@ destination-key ease field, and the six-preset motion registry landed);
 the gait walk compiles gait-driven leg rows (the phase rides the body's own
 distance, the foot arc pinned), the IK reach solves the rig's own arm chain
 (refuse-not-clamp), and the graphics camera gained the validate-once
-discipline behind the S130 keys. CI is
-8/8 green on `main` with the 860-test unit battery. The production loop is
+discipline behind the S130 keys. **S150** landed the motion-graphics audit's
+Phase-C1 typography stack: a closed face table (`font`, Caveat rides the
+committed OFL face as a data-URI `@font-face`), the per-word/per-char reveal
+cascade (unit tspans riding the element's ONE progress channel, the
+clamp(prog·n − i) law in the applier), and `wrapPx` — the deterministic
+estimator wrap (no live layout ever touches the frame path); the proof renders
+the real engine twice and pins byte-identical MP4s with the cascade and the
+face measured in pixels. CI is
+8/8 green on `main` with the 869-test unit battery. The production loop is
 feature-complete, and the production-readiness arc (S99–S108) closed every
 reliability gate with CI evidence — clean-clone bootstrap, queue leases +
 fencing, atomic storage admission, shared rate limiting + trusted-proxy IP law,
