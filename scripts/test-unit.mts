@@ -21486,6 +21486,115 @@ await test("S152 the renderer measures its own slots before the wall — the clo
   ok(jobs.includes("graphicsHoldWindows(doc, voMs)"), "the lane's hold windows ride the measured clock");
 });
 
+// ---------- suite: S153 — the kinetic slides engine ----------
+
+suiteStart("S153 — the keynote deck animates: kinetic typography is the render, the still deck is the honest fallback");
+
+await test("S153 frame truth: word stagger advances, the counter counts up, the sweep is byte-identical", async () => {
+  const { slideFrameAt, slideKineticSweepHash } = await import("../src/lib/tubeforge/slides-kinetic");
+  const { sanitizeSlideSpec } = await import("../src/lib/tubeforge/slides");
+  const spec = sanitizeSlideSpec({
+    layout: "counter",
+    accent: "yellow",
+    badge: "TIP",
+    headline: "Your laptop drinks power",
+    accentWord: "power",
+    number: "27.4",
+    unit: "W",
+    footer: "MEASURED AT THE WALL",
+    bars: [
+      { label: "ASLEEP", valueText: "UNDER 2 W", weight: 0.2 },
+      { label: "AWAKE", valueText: "27.4 W", weight: 0.9, highlight: true },
+    ],
+  });
+  const cam = { kind: "push" as const, amp: 0.028 };
+  const early = slideFrameAt(spec, 200, 6000, cam);
+  const late = slideFrameAt(spec, 5600, 6000, cam);
+  ok(early.words[0].opacity > early.words[3].opacity, "word 0 leads the stagger");
+  ok(late.words.every((w) => w.opacity === 1), "every word lands by the hold");
+  ok(late.counterText === "27.4", "the counter reads the spec value at the hold");
+  ok(early.counterText !== null && early.counterText !== "27.4", "the counter is mid-count early (it counts UP)");
+  ok(late.barProgress[0] === 1 && late.barProgress[1] === 1, "the bars reach full fill");
+  ok(late.cameraScale > 1 && early.cameraScale < late.cameraScale, "the camera pushes through the scene");
+  ok(slideKineticSweepHash(spec, 6000, cam) === slideKineticSweepHash(spec, 6000, cam), "the sweep hash is deterministic (two runs, one hash)");
+});
+
+await test("S153 the counter: parse + grouped format, never locale math", async () => {
+  const { parseCounterValue, formatCounterValue } = await import("../src/lib/tubeforge/slides-kinetic");
+  const big = parseCounterValue("29,239,000,000");
+  ok(big !== null && formatCounterValue(big, big.value) === "29,239,000,000", "billions group deterministically");
+  const dec = parseCounterValue("27.4");
+  ok(dec !== null && dec.decimals === 1 && formatCounterValue(dec, 27.4) === "27.4", "one decimal survives the round trip");
+  const money = parseCounterValue("$2,599");
+  ok(money !== null && formatCounterValue(money, 2599) === "$2,599", "the currency prefix rides");
+  const neg = parseCounterValue("-12%");
+  ok(neg !== null && formatCounterValue(neg, -12) === "-12%", "signed + suffixed parses");
+  ok(parseCounterValue("about 3 cats") === null, "junk text is not a counter — the literal holds, honest and static");
+});
+
+await test("S153 the camera mirrors the zoompan endpoints: push/pull/punch/hold, rehook → punch, every third beat pulls", async () => {
+  const { kineticCameraKind, kineticCameraScale, kineticCameraAmp } = await import("../src/lib/tubeforge/slides-kinetic");
+  const settings = { mode: "on", intensity: 10 };
+  ok(kineticCameraKind({ index: 1 }, settings) === "push", "a normal beat pushes");
+  ok(kineticCameraKind({ index: 3 }, settings) === "pull", "every third beat breathes the other way");
+  ok(kineticCameraKind({ index: 4, rehook: true }, settings) === "punch", "a rehook gets the punch");
+  ok(kineticCameraKind({ index: 1 }, { mode: "off", intensity: 10 }) === "hold", "motion off holds");
+  const amp = kineticCameraAmp(settings);
+  ok(Math.abs(kineticCameraScale(0, "push", amp) - 1) < 1e-9, "the push starts at 1");
+  ok(Math.abs(kineticCameraScale(1, "push", amp) - (1 + amp)) < 1e-9, "the push ends at 1+amp (the zoompan endpoint)");
+  ok(Math.abs(kineticCameraScale(1, "punch", amp) - (1 + amp * 1.4)) < 1e-9, "the punch is amp × 1.4 (the zoompan endpoint)");
+  ok(Math.abs(kineticCameraScale(0, "pull", amp) - (1 + amp)) < 1e-9, "the pull starts pushed-in");
+  ok(kineticCameraScale(1, "hold", amp) === 1, "the hold never moves");
+});
+
+await test("S153 the composer: kinetic annotations are additive — the static output is byte-identical", async () => {
+  const { slideHtml, sanitizeSlideSpec } = await import("../src/lib/tubeforge/slides");
+  const spec = sanitizeSlideSpec({
+    layout: "counter",
+    badge: "TIP",
+    headline: "Battery life measured properly",
+    accentWord: "properly",
+    number: "1,024",
+    unit: "mAh",
+    footer: "MEASURED AT THE WALL",
+    bars: [{ label: "A", valueText: "1 W", weight: 0.5 }],
+    cardLines: [],
+    steps: [],
+  });
+  const still = slideHtml(spec, null, null);
+  const again = slideHtml(spec, null, null, false);
+  ok(still === again, "the default composer call is byte-stable");
+  ok(!still.includes("data-w=") && !still.includes('data-k='), "the static composer carries NO animation hooks");
+  const kin = slideHtml(spec, null, null, true);
+  ok((kin.match(/data-w=/g) ?? []).length === 4, "every headline word is an indexed animation target");
+  ok(kin.includes('data-k="badge"') && kin.includes('data-k="counter-value"') && kin.includes('data-k="focal"') && kin.includes('data-k="bar"') && kin.includes('data-k="footer"'), "the applier's hooks are present");
+  ok(kin.includes(">1,024</span>") && kin.includes("data-k=\"counter-value\""), "the counter value sits in its own rewritable span");
+  ok(kin.includes("<span data-w=\"3\"><span class=\"accent\"") && kin.includes(">properly</span></span>"), "the accent word keeps its slot and its accent styling (case-insensitive match)");
+});
+
+await test("S153 the seat: video-only clips, the sidecar cache, the honest fallback, cancellation never degrades", async () => {
+  const enc = (await import("../src/lib/tubeforge/slides-kinetic")).slideKineticEncodeArgs({
+    framesDir: "/d", fps: 30, durSec: 4.5, sceneFile: "/d/clip.mp4",
+  });
+  const encStr = enc.join(" ");
+  ok(encStr.includes("-framerate") && encStr.includes("f%05d.jpg") && encStr.includes("-t ") && encStr.includes("lanczos"), "the clip encode: frame sequence, supersample downscale, -t bounded");
+  ok(!encStr.includes(".wav") && !enc.includes("-c:a"), "the clip carries NO audio — buildSegment owns the mix (the rig law)");
+
+  const eng = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  ok(eng.includes("renderKineticSlideClips(dir, kineticItems"), "the deck block runs the kinetic pass");
+  ok(eng.includes("SLIDES_KINETIC_FRAME_BUDGET") && eng.includes("totalKineticFrames > SLIDES_KINETIC_FRAME_BUDGET"), "the deck-total frame wall refuses the pass with a note");
+  ok(eng.includes('err.name === "JobCancelledError") throw err'), "cancellation propagates — a cancel never degrades to the still deck");
+  ok(eng.includes("slideKinetic:") && eng.includes("kineticClips[i] ?? null"), "the segment loop hands each scene its clip");
+  ok(eng.includes("onKineticFallback"), "the per-scene fallback is visible (ledger + note)");
+  ok(eng.includes("kinetic per-frame deck (camera:"), "the ledger records what actually played, per scene");
+
+  const kin = await fsp.readFile("src/lib/tubeforge/slides-kinetic.ts", "utf8");
+  ok(kin.includes("slide-anim-") && kin.includes(".hash"), "the cache: clip slot + sha256 sidecar (the rig law)");
+  ok(kin.includes('e.name === "JobCancelledError"'), "the renderer rethrows cancellation instead of answering null");
+  ok(kin.includes('route.abort()'), "chromium launches with ALL network routes aborted (the security posture)");
+  ok(kin.includes("Math.min(opts.fps, 30)"), "the D3 shared timebase: clips render at min(fps, 30)");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

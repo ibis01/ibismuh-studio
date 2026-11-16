@@ -765,64 +765,108 @@ export function renderHeadline(spec: SlideSpec, brand: SlideBrand | null = null)
   return h;
 }
 
-function barsHtml(spec: SlideSpec): string {
+/** S153 — the kinetic composer's headline: EVERY word wrapped in an
+ *  indexed span (the applier's per-word animation targets). Same accent
+ *  semantics as renderHeadline (first case-insensitive match wins; the
+ *  whole-headline box wraps the word spans, so the box lands with the
+ *  slide and the words stagger inside it). Each word is escaped
+ *  INDIVIDUALLY — escapes never cross word boundaries, so the rendered
+ *  words are byte-identical to the static composer's. */
+export function renderHeadlineKinetic(spec: SlideSpec, brand: SlideBrand | null = null): string {
+  const accentHex =
+    brand?.accentHex && spec.accent !== "mono" ? brand.accentHex : ACCENT_HEX[spec.accent];
+  const words = spec.headline.split(/\s+/).filter(Boolean);
+  const accentLower = spec.accentWord?.toLowerCase() ?? null;
+  let accentTaken = false;
+  const ink = brand?.accentHex ? readableInk(brand.accentHex) : spec.accent === "yellow" || spec.accent === "mono" ? "#0D0D0F" : "#fff";
+  const spans = words.map((w, i) => {
+    const e = esc(w);
+    const isAccent = accentLower !== null && !accentTaken && w.toLowerCase() === accentLower;
+    if (isAccent) accentTaken = true;
+    let inner: string;
+    if (isAccent && spec.highlight) {
+      inner = `<span class="accent hl" style="background:${accentHex};color:${ink}">${e}</span>`;
+    } else if (isAccent) {
+      inner = `<span class="accent" style="color:${accentHex}">${e}</span>`;
+    } else {
+      inner = e;
+    }
+    return `<span data-w="${i}">${inner}</span>`;
+  });
+  if (spec.highlight && !spec.accentWord) {
+    return `<span class="accent" style="background:${accentHex};color:${ink}">${spans.join(" ")}</span>`;
+  }
+  return spans.join(" ");
+}
+
+function barsHtml(spec: SlideSpec, kinetic = false): string {
   if (!spec.bars.length) return "";
-  return `<div class="bars">${spec.bars
+  return `<div class="bars"${kinetic ? ' data-k="focal"' : ""}>${spec.bars
     .map(
       (b) => `<div class="bar-row">
         <div class="bar-head"><span class="bar-label">${esc(b.label)}</span><span class="bar-value">${esc(b.valueText)}</span></div>
-        <div class="bar-track"><div class="bar-fill${b.highlight ? " hot" : ""}" style="width:${Math.round(b.weight * 100)}%"></div></div>
+        <div class="bar-track"><div class="bar-fill${b.highlight ? " hot" : ""}"${kinetic ? ' data-k="bar"' : ""} style="width:${Math.round(b.weight * 100)}%"></div></div>
       </div>`
     )
     .join("")}</div>`;
 }
 
-/** spec → complete standalone HTML document at 1080x1920. */
+/** spec → complete standalone HTML document at 1080x1920. `kinetic` (S153)
+ *  adds the applier's animation targets (indexed word spans, `data-k`
+ *  hooks, the inline-block rule) — purely additive: the default output is
+ *  BYTE-IDENTICAL to the pre-S153 composer (the static PNG path's pinned
+ *  contract). */
 export function slideHtml(
   spec: SlideSpec,
   imageUrl: string | null = null,
-  brand: SlideBrand | null = null
+  brand: SlideBrand | null = null,
+  kinetic = false
 ): string {
-  const badge = spec.badge ? `<div class="badge">${esc(spec.badge)}</div>` : "";
-  const footer = spec.footer ? `<div class="footer">${esc(spec.footer)}</div>` : "";
-  const source = spec.source ? `<div class="source">${esc(spec.source)}</div>` : "";
+  const ka = (name: string): string => (kinetic ? ` data-k="${name}"` : "");
+  const badge = spec.badge ? `<div class="badge"${ka("badge")}>${esc(spec.badge)}</div>` : "";
+  const footer = spec.footer ? `<div class="footer"${ka("footer")}>${esc(spec.footer)}</div>` : "";
+  const source = spec.source ? `<div class="source"${ka("source")}>${esc(spec.source)}</div>` : "";
   const logo = brand?.logoUrl ? `<img class="brand-badge" src="${esc(brand.logoUrl)}" alt=""/>` : "";
   const headlineStyle = `font-size:${headlineFontPx(spec.headline.length)}px;`;
-  const headline = `<div class="headline${spec.strike ? " strike" : ""}" style="${headlineStyle}">${renderHeadline(spec, brand)}</div>`;
+  const headline = `<div class="headline${spec.strike ? " strike" : ""}" style="${headlineStyle}">${kinetic ? renderHeadlineKinetic(spec, brand) : renderHeadline(spec, brand)}</div>`;
 
   let focal = "";
   if (spec.layout === "icon" && spec.icon) {
-    focal = `<div class="icon-wrap">${iconSvg(spec.icon, spec.accent, brand)}</div>`;
+    focal = `<div class="icon-wrap"${ka("focal")}>${iconSvg(spec.icon, spec.accent, brand)}</div>`;
   } else if (spec.layout === "photo" && imageUrl) {
-    focal = `<div class="photo-card"><img src="${esc(imageUrl)}"/></div>`;
+    focal = `<div class="photo-card"${ka("focal")}><img src="${esc(imageUrl)}"/></div>`;
   } else if ((spec.layout === "counter" || spec.layout === "bars") && spec.number) {
     const num = esc(spec.number);
-    focal = `<div class="num">${num}${spec.unit ? `<span class="unit">${esc(spec.unit)}</span>` : ""}</div>
-      ${spec.subLabel ? `<div class="sub">${esc(spec.subLabel)}</div>` : ""}
-      ${barsHtml(spec)}`;
+    focal = `<div class="num"${ka("focal")}>${kinetic ? `<span data-k="counter-value">${num}</span>` : num}${spec.unit ? `<span class="unit">${esc(spec.unit)}</span>` : ""}</div>
+      ${spec.subLabel ? `<div class="sub"${ka("focal")}>${esc(spec.subLabel)}</div>` : ""}
+      ${barsHtml(spec, kinetic)}`;
   } else if (spec.layout === "card" && spec.cardLines.length) {
-    focal = `<div class="spec-card">
+    focal = `<div class="spec-card"${ka("focal")}>
       ${spec.cardTitle ? `<div class="card-title">${esc(spec.cardTitle)}</div>` : ""}
-      ${spec.cardLines.map((l) => `<div class="spec-line"><div class="big">${esc(l.big)}</div>${l.small ? `<div class="small">${esc(l.small)}</div>` : ""}</div>`).join("")}
+      ${spec.cardLines.map((l) => `<div class="spec-line"${ka("row")}><div class="big">${esc(l.big)}</div>${l.small ? `<div class="small">${esc(l.small)}</div>` : ""}</div>`).join("")}
     </div>`;
   } else if (spec.layout === "steps" && spec.steps.length) {
-    focal = `<div class="steps-card">${spec.steps
-      .map((s) => `<div class="step-row"><span class="label">${esc(s.label)}</span><span class="n">${esc(s.n)}</span></div>`)
+    focal = `<div class="steps-card"${ka("focal")}>${spec.steps
+      .map((s) => `<div class="step-row"${ka("row")}><span class="label">${esc(s.label)}</span><span class="n">${esc(s.n)}</span></div>`)
       .join("")}</div>`;
   } else if (spec.layout === "price" && spec.priceValue) {
-    focal = `<div class="price-chip">
+    focal = `<div class="price-chip"${ka("focal")}>
       ${spec.priceLabel ? `<div class="from">${esc(spec.priceLabel)}</div>` : ""}
       <div class="value">${esc(spec.priceValue)}</div>
     </div>
-    ${spec.icon ? `<div class="icon-wrap" style="margin-top:72px">${iconSvg(spec.icon, spec.accent, brand)}</div>` : ""}`;
+    ${spec.icon ? `<div class="icon-wrap" style="margin-top:72px"${ka("focal")}>${iconSvg(spec.icon, spec.accent, brand)}</div>` : ""}`;
   }
 
   // Layouts whose focal element is missing degrade to a statement slide —
   // a beat must never render as just a floating label.
   const effective = focal ? spec.layout : "statement";
 
+  const kineticCss = kinetic
+    ? `<style>.headline [data-w]{display:inline-block;will-change:opacity,transform}</style>`
+    : "";
+
   return `<!doctype html>
-<html><head><meta charset="utf-8"><style>${brandCssVars(brand)}${BASE_CSS}</style></head>
+<html><head><meta charset="utf-8"><style>${brandCssVars(brand)}${BASE_CSS}</style>${kineticCss}</head>
 <body data-layout="${effective}">
 ${logo}
 <div class="stage">

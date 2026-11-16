@@ -50,7 +50,15 @@ import {
   slideMotionPlan,
   slideSegmentGraph,
   type SlideBrand,
+  type SlideSpec,
 } from "./slides";
+import {
+  renderKineticSlideClips,
+  kineticCameraKind,
+  SLIDES_KINETIC_FRAME_BUDGET,
+  type KineticClipItem,
+} from "./slides-kinetic";
+import { frameCountOf } from "./anim/clock";
 import { engineSegmentVerdict, type CompositionPlan, type PlanVisualKind } from "./composition-plan";
 import {
   planSceneMovements,
@@ -747,6 +755,16 @@ async function buildSegment(opts: {
   /** S125 (K1) — fired when the native-rig channel degrades to Ken Burns
    *  (the i2v degradation shape: visible, never silent). */
   onRigFallback?: (sceneIndex: number, reason: string) => void;
+  /** S153 — the scene's kinetic deck clip (video-only, the animated
+   *  keynote render). Present + on disk → the slides branch muxes it with
+   *  the audio graph instead of the still+zoompan graph; null when the
+   *  kinetic pass was attempted but this scene fell back (the still deck
+   *  plays, and onKineticFallback records the honest reason). Absent →
+   *  kinetic was never attempted (the byte-identical legacy path). */
+  slideKinetic?: { clip: string | null } | null;
+  /** S153 — fired when the kinetic clip is unavailable (failed or over the
+   *  wall) and the still deck plays instead (visible, never silent). */
+  onKineticFallback?: (sceneIndex: number, reason: string) => void;
 }): Promise<void> {
   const { scene, dur, mode, motion, plan, shotPlan, outPath } = opts;
   const dir = videoDir(opts.videoId);
@@ -855,14 +873,36 @@ async function buildSegment(opts: {
     "-y", outPath,
   ];
 
-  // Keynote slides: the designed PNG IS the frame — 9:16 geometry, the
-  // pipeline's finishing grade would only muddy its tuned palette. The still
-  // enters ONCE and zoompan emits the shot (no looped-image demuxer — large
-  // looped PNGs deadlock this ffmpeg build's teardown).
+  // Keynote slides: the designed deck animates (S153 — the kinetic pass:
+  // word stagger, counter count-ups, bar growth, the camera as a CSS scale)
+  // through a video-only clip muxed with the scene's audio graph. The still
+  // PNG remains the poster (thumbnails, the studio) AND the fallback: any
+  // scene without its clip plays the proven still+zoompan path — the S153-
+  // era shape, byte-identical. The still enters ONCE (no looped-image
+  // demuxer — large looped PNGs deadlock this ffmpeg build's teardown).
   if (isImage) {
     const slidePath = slidePngPath(opts.videoId, scene.index);
     if (!fs.existsSync(slidePath))
       throw new Error(`Scene ${scene.index} has no slide image — the slide deck step was skipped`);
+    const kineticClip = opts.slideKinetic?.clip ?? null;
+    if (kineticClip && fs.existsSync(kineticClip)) {
+      await run("ffmpeg", [
+        "-i", kineticClip,
+        "-i", wav,
+        ...audio.inputs,
+        "-filter_complex", audio.graph,
+        ...common,
+      ]);
+      return;
+    }
+    if (opts.slideKinetic) {
+      // Kinetic was ATTEMPTED for this deck but this scene has no clip —
+      // the fallback is visible (the ledger + progress note), never silent.
+      opts.onKineticFallback?.(
+        scene.index,
+        "the kinetic clip failed to render — the still deck with camera moves plays"
+      );
+    }
     const vChain = slideSegmentGraph({
       dur,
       plan:
@@ -1997,11 +2037,18 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
       return ambienceCache.get(kind) ?? null;
     };
 
-    // 1.5) Keynote slides — design the deck (LLM, cached) and screenshot it.
-    // (Cancellation rides the same onProgress checkpoints as every stage —
-    // the deck render itself is ~1 s per slide, no mid-pass checkpoint.)
-    // S87 slice 2 — the gate reads the composition plan's kinds (allImage
-    // carries the mode fallback for plan-less renders).
+    // 1.5) Keynote slides — design the deck (LLM, cached), screenshot the
+    // stills (the posters + the fallback), and S153: animate the deck — the
+    // kinetic pass renders one video-only clip per scene (word stagger,
+    // accent pop, counter count-ups, bar growth, the camera as a CSS scale
+    // with the SAME endpoints the zoompan fallback uses). The still deck
+    // remains the honest degradation: any scene without its clip (failed,
+    // over the wall, or the whole pass refused by the frame budget) plays
+    // the S153-era still+zoompan shape, and the ledger + progress feed say
+    // so — never silent. Cancellation propagates (a cancel must abort the
+    // render, never degrade it).
+    let slideSpecs: SlideSpec[] | null = null;
+    let kineticClips: (string | null)[] | null = null;
     if (allImage) {
       report(scenes.length, "Designing slide deck");
       const deck = await planSlides(opts.videoId, scenes, {
@@ -2009,6 +2056,7 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
         niche: opts.motionContext?.niche ?? null,
         tone: opts.motionContext?.tone ?? null,
       });
+      slideSpecs = deck.specs;
       try {
         await renderSlidePngs(
           opts.videoId,
@@ -2024,6 +2072,62 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
         throw new Error(
           `Slide rendering failed — Playwright/Chromium is required for keynote slides (${String(err).slice(0, 160)})`
         );
+      }
+
+      // S153 — THE KINETIC PASS. One browser for the deck; the cache sidecar
+      // makes re-renders free. The DECK-TOTAL wall: the whole pass refuses
+      // (with a visible note) when the program would exceed the engine's
+      // frame budget — the still deck carries that video instead.
+      const kineticItems: KineticClipItem[] = scenes.map((scene, i) => ({
+        scene,
+        spec: deck.specs[i],
+        durationMs: Math.round(durations[i] * 1000),
+        imageUrl: deck.specs[i].useImage
+          ? path.join(dir, `scene-${String(scene.index).padStart(2, "0")}.png`)
+          : null,
+      }));
+      const kineticFps = Math.min(motionFps, 30); // the D3 shared timebase
+      const totalKineticFrames = kineticItems.reduce(
+        (a, it) => a + frameCountOf(it.durationMs, kineticFps),
+        0
+      );
+      if (totalKineticFrames > SLIDES_KINETIC_FRAME_BUDGET) {
+        const note = `the deck exceeds the kinetic frame budget (${totalKineticFrames} frames) — the still deck with camera moves plays`;
+        opts.onProgress?.(scenes.length, scenes.length + 1, note);
+        for (const d of liveliness) {
+          if (d.reason.length === 0) d.reason = note;
+        }
+      } else {
+        try {
+          const clips = await renderKineticSlideClips(dir, kineticItems, {
+            outDir: dir,
+            brand: opts.brand ?? null,
+            motion,
+            fps: motionFps,
+            onProgress: (done, _total, label) => {
+              opts.onProgress?.(done + 1, scenes.length + 1, label);
+            },
+          });
+          kineticClips = clips;
+          // The ledger records what actually played, per scene.
+          for (const [i, clip] of clips.entries()) {
+            const d = liveliness.find((x) => x.sceneIndex === scenes[i].index);
+            if (d) {
+              d.reason = clip
+                ? `kinetic per-frame deck (camera: ${kineticCameraKind(scenes[i], motion)})`
+                : "the kinetic clip failed — the still deck with camera moves plays";
+            }
+          }
+        } catch (err) {
+          // Cancellation rethrows (abort, never degrade); a browser-level
+          // failure falls back deck-wide with ONE honest note.
+          if (err instanceof Error && err.name === "JobCancelledError") throw err;
+          const note = `the kinetic pass failed (${String(err).slice(0, 110)}) — the still deck with camera moves plays`;
+          opts.onProgress?.(scenes.length, scenes.length + 1, note);
+          for (const d of liveliness) {
+            if (d.reason.length === 0) d.reason = note;
+          }
+        }
       }
     }
 
@@ -2125,6 +2229,18 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
             d.reason = `native rig unavailable — Ken Burns fallback (${reason.slice(0, 90)})`;
           }
           report(i, `Composing scene ${i + 1} — rig unavailable, Ken Burns fallback`);
+        },
+        // S153 — the kinetic deck clip rides ONLY on the slides lanes (the
+        // byte-identical rollback law: other modes never see the arg).
+        slideKinetic:
+          slideSpecs !== null && kineticClips !== null
+            ? { clip: kineticClips[i] ?? null }
+            : null,
+        onKineticFallback: (sceneIndex, reason) => {
+          const d = liveliness.find((x) => x.sceneIndex === sceneIndex);
+          if (d && d.reason.length === 0) {
+            d.reason = reason.slice(0, 120);
+          }
         },
         motion,
         plan: plans[i],
