@@ -100,6 +100,11 @@ const ASR_PRIORS: Record<string, ProviderPriors> = {
   voicestudio: { quality: 0.85, latency: 0.5, fit: 0.95 }, // verbose_json word timestamps
   openai: { quality: 0.82, latency: 0.75, fit: 0.8 }, // whisper-1 word granularity
   zai: { quality: 0.78, latency: 0.85, fit: 0.6 }, // no word timestamps — the silence ladder covers timing
+  // S150 — the operator's ASR expansion (groq + assemblyai) joins the
+  // priors table (the sync law: a priors row for EVERY registry provider;
+  // starting beliefs per the registry notes, the file header's rule).
+  groq: { quality: 0.8, latency: 0.9, fit: 0.78 }, // whisper-large-v3-turbo on Groq — free tier, word timestamps via verbose_json; Groq's latency is the reputation
+  assemblyai: { quality: 0.82, latency: 0.68, fit: 0.8 }, // universal-3.5-pro — word-level timestamps in a single request; 100 min/month free
 };
 
 /** Image priors — fit is dominated by identity-locked EDIT support. */
