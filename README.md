@@ -38,8 +38,13 @@ registry and their missing S90 priors rows — the CI regression they briefly
 caused — were repaired; **S148** landed the MG-1 motion-quality slice (the
 easing table grew `anticipation` + `spring` per the MG-1 design record, the
 stagger primitive became substrate data, the 3D keyframes gained the
-destination-key ease field, and the six-preset motion registry landed). CI is
-8/8 green on `main` with the 852-test unit battery. The production loop is
+destination-key ease field, and the six-preset motion registry landed);
+**S149** woke the dormant anim substrate (the motion-graphics audit's B4):
+the gait walk compiles gait-driven leg rows (the phase rides the body's own
+distance, the foot arc pinned), the IK reach solves the rig's own arm chain
+(refuse-not-clamp), and the graphics camera gained the validate-once
+discipline behind the S130 keys. CI is
+8/8 green on `main` with the 860-test unit battery. The production loop is
 feature-complete, and the production-readiness arc (S99–S108) closed every
 reliability gate with CI evidence — clean-clone bootstrap, queue leases +
 fencing, atomic storage admission, shared rate limiting + trusted-proxy IP law,

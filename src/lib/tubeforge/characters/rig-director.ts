@@ -24,6 +24,13 @@
 import { classifySentence, splitSentences, words } from "../whiteboard/beat-plan";
 import type { WordAnchors } from "../whiteboard/timing";
 import {
+  planWalkRows,
+  reachPose,
+  sentenceWalks,
+  walkRowCount,
+  type RigReachBeat,
+} from "./locomote";
+import {
   mouthSchedule,
   wordSpansFromAnchors,
   wordSpansFromEstimate,
@@ -52,6 +59,11 @@ export interface RigDirectorInput {
   durationMs: number;
   /** W4 word anchors when the captions lane answered; null → the estimator. */
   anchors?: WordAnchors | null;
+  /** S149 (B4) — authored reach beats (planning input, never doc grammar):
+   *  IK places the arm's hand on the stage target; an unreachable or
+   *  degenerate reach degrades honestly (no row — refuse-not-clamp).
+   *  Absent → byte-identical compile (the B4 law). */
+  reaches?: RigReachBeat[];
 }
 
 export interface RigDirectorPlan {
@@ -97,7 +109,15 @@ function pickPose(sheet: ReadonlySet<string>, purpose: string, sentenceIndex: nu
 }
 
 /** Compile the scene's pose timeline + mouth schedule. The renderer's ONLY
- *  planner entry — the timeline is consumed and discarded (compile-only). */
+ *  planner entry — the timeline is consumed and discarded (compile-only).
+ *
+ *  S149 (B4) — the substrate rungs, in the ladder's order: authored mocap
+ *  (the render hook's branch) > reach beats (IK, compiled FIRST, each
+ *  owning its MIN_GESTURE_MS window) > the gait walk (a sentence whose own
+ *  words name a walk, on a legged rig, REPLACING that sentence's gesture
+ *  pair) > the gesture table > rest. Byte-identity: narrations without
+ *  walk words and plans without reaches compile byte-identical timelines
+ *  (the B4 law — the S125 pins are the proof on legless fixtures). */
 export function planRigTimeline(input: RigDirectorInput): RigDirectorPlan {
   const { narration, rig, durationMs } = input;
   const speech = mouthSchedule({ narration, anchors: input.anchors ?? null, durationMs });
@@ -106,9 +126,45 @@ export function planRigTimeline(input: RigDirectorInput): RigDirectorPlan {
   }
   const sheet = new Set(rig.poses.map((p) => p.id));
   const rows: RigPoseRow[] = [];
+
+  // The reach rung first (senior to the sentence loop): each beat's pose
+  // comes from IK on the rig's own chain; a refusal degrades to nothing
+  // (refuse-not-clamp). A solved reach pairs with a rest row so the pose
+  // holds honestly and tweens home.
+  const reachWindows: { startMs: number; endMs: number }[] = [];
+  for (const beat of input.reaches ?? []) {
+    if (rows.length + 2 > RIG_BUDGETS.timelineRows) break; // the compile wall
+    if (!(beat.atMs >= 0 && beat.atMs < durationMs)) continue;
+    const pose = reachPose(rig, beat);
+    if (!pose) continue; // unreachable / degenerate / missing chain — honest rest
+    const restAt = Math.min(beat.atMs + MIN_GESTURE_MS, durationMs);
+    rows.push({ tMs: Math.round(beat.atMs), poseId: null, joints: pose.joints });
+    rows.push({ tMs: Math.round(restAt), poseId: null }); // the arm tweens home
+    reachWindows.push({ startMs: beat.atMs, endMs: restAt });
+  }
+  const inReachWindow = (tMs: number) =>
+    reachWindows.some((w) => tMs >= w.startMs && tMs < w.endMs);
+
+  // The legs the walk rung needs (a legless rig skips the walk entirely —
+  // the gesture table owns the sentence, byte-identical).
+  const legL = rig.parts.find((p) => p.slot === "leg-l");
+  const legR = rig.parts.find((p) => p.slot === "leg-r");
+
   for (const [i, win] of sentenceWindows(narration, durationMs, input.anchors ?? null).entries()) {
     if (rows.length + 2 > RIG_BUDGETS.timelineRows) break; // the compile wall
     if (win.endMs - win.startMs < MIN_GESTURE_MS) continue;
+    if (inReachWindow(win.startMs) || inReachWindow(win.endMs)) continue;
+    // The gait walk: a sentence whose own words name a walk, on a legged
+    // rig, walks its window INSTEAD of gesturing. The full walk must fit
+    // the wall — one that doesn't falls through to the gesture pair (the
+    // honest smaller beat, deterministic).
+    if (legL && legR && sentenceWalks(win.text)) {
+      const beat = { startMs: win.startMs, endMs: win.endMs };
+      if (rows.length + walkRowCount(beat) <= RIG_BUDGETS.timelineRows) {
+        rows.push(...planWalkRows(beat, { left: legL.id, right: legR.id }));
+        continue;
+      }
+    }
     const poseId = pickPose(sheet, classifySentence(win.text, i), i);
     if (!poseId) continue; // support (or an unwinnable purpose) — rest stays
     rows.push({ tMs: win.startMs, poseId });

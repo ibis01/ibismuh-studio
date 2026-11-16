@@ -42,6 +42,16 @@ keyframes gain the destination-key ease field (default linear =
 byte-identity), and the motion-preset registry lands
 (`anim/presets.ts` — six presets compiled into the existing directives;
 849 → 852 tests; record: docs/audits/s148-mg1-motion-quality.md).
+**S149 = the B4 substrate wiring** — the dormant anim substrate wakes:
+the gait walk compiles gait-driven leg rows (`characters/locomote.ts` —
+the phase rides the body's OWN distance through `gaitPhaseAt`, the foot
+arc IS `footArcAt`, the legs ride anti-phase, the lexicon is tight, the
+compile wall falls an oversized walk through to its gesture pair), the
+IK reach solves the rig's own arm chain (refuse-not-clamp; the fk
+round-trip lands the hand EXACTLY on the target), and the graphics
+camera gains the validate-once discipline behind the S130 keys
+(`validateGraphicsCameraKeys`, named refusals, the render-seam tripwire;
+860 tests; record: docs/audits/s149-substrate-wiring.md).
 **Last updated:** 2026-11-16 (the motion-graphics audit's phased
 MG-1…MG-6 program is executing — Phase A docs + Phase B motion quality
 landed; Phase C breadth is next)

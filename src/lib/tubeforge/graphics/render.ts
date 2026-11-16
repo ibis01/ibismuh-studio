@@ -46,6 +46,7 @@ import { framePlanWindows } from "../anim/clock";
 import { planFromTracks, type CompositionPlan } from "../composition-plan";
 import type { TimelineTrack } from "../timeline";
 import { APPLY_GRAPHICS_FRAME_FN, composeGraphicsScene, graphicsFramePayload } from "./compose";
+import { validateGraphicsCameraKeys } from "./camera";
 import { graphicsEventList, type GraphicsEventSlot } from "./events";
 import { frameAt, graphicsSceneDurationsMs } from "./frame";
 import { assertGraphicsBudget } from "./preflight";
@@ -314,6 +315,16 @@ export async function renderGraphics(
   // renderer) — the DELIVERED frame arithmetic at doc.fps (R-1), before
   // chromium launches.
   assertGraphicsBudget(doc);
+
+  // S149 (B4) — the validator behind the S130 keys (the anim/camera
+  // validateCameraMove discipline): every scene's camera validates ONCE at
+  // the seam, before any frame loop, with named refusals — the engine-bug
+  // tripwire that turns a silent desync into a named refusal. cameraAt
+  // stays hot and trusts. A doc that passed parseCamera passes here
+  // byte-identically — never a second admission gate.
+  for (const scene of doc.scenes) {
+    if (scene.camera !== undefined) validateGraphicsCameraKeys(scene.camera);
+  }
 
   // The clock — ONE derivation shared with the wall and the tracks.
   const sceneMs = graphicsSceneDurationsMs(doc);

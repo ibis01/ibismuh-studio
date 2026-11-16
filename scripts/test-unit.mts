@@ -14896,6 +14896,8 @@ await test("MG-1 presets: the registry compiles closed-form specs; unknown refus
 });
 
 
+
+
 // ---------- suite: W5 — the content-driven camera director ----------
 
 suiteStart("W5 camera director — content-driven framing, the drift demoted to fallback (S120 §3)");
@@ -20048,6 +20050,219 @@ await test("S125 the clip hash — deterministic, sensitive to every render inpu
     rigClipHash({ ...baseArgs, speech: { segments: [{ startMs: 0, endMs: 100, variant: "open" as const }], speaking: true } }) !== a,
     "a speech change re-renders"
   );
+});
+
+// ---------------------------------------------------------------------------
+// S149 (B4) — the substrate wiring: the dormant anim substrate (gait, IK)
+// wakes as the rig director's compile-time vocabulary (the walk's leg rows
+// ride footArcAt, the reach solves the rig's own chain), and the graphics
+// camera gains the validate-once discipline behind the S130 keys
+// (design record docs/design/s149-substrate-wiring.md).
+// ---------------------------------------------------------------------------
+
+suiteStart("S149 substrate wiring — the gait walk, the IK reach, the camera parity");
+
+import {
+  WALK_TUNING,
+  armChainOf,
+  reachPose,
+  sentenceWalks,
+  walkPhaseAt,
+  walkRowCount,
+} from "../src/lib/tubeforge/characters/locomote";
+import { footArcAt } from "../src/lib/tubeforge/anim/gait";
+import { validateCameraMove } from "../src/lib/tubeforge/anim/camera";
+import { validateGraphicsCameraKeys } from "../src/lib/tubeforge/graphics/camera";
+import type { GraphicsCameraKeyframe } from "../src/lib/tubeforge/graphics/types";
+
+const LEGGED_ART: RigPartArt[] = [
+  ...ART,
+  rigArt({ id: "leg-l-art", slot: "leg-l" }),
+  rigArt({ id: "leg-r-art", slot: "leg-r" }),
+];
+
+function leggedDoc() {
+  return mustValidateDoc(
+    rigDocInput({
+      parts: [
+        ...(rigDocInput().parts as Record<string, unknown>[]),
+        { id: "leg-l", slot: "leg-l", svgRef: "leg-l-art", z: 8, pivot: { x: 490, y: 820 }, parent: "torso", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+        { id: "leg-r", slot: "leg-r", svgRef: "leg-r-art", z: 12, pivot: { x: 590, y: 820 }, parent: "torso", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      ],
+    }),
+    LEGGED_ART,
+    "legged fixture"
+  );
+}
+
+const REACH_DOC = mustValidateDoc(
+  rigDocInput({
+    parts: [
+      ...(rigDocInput().parts as Record<string, unknown>[]),
+      { id: "forearm-l", slot: "forearm-l", svgRef: "arm-l-art", z: 9, pivot: { x: 360, y: 700 }, parent: "arm-l", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      { id: "hand-l", slot: "hand-l", svgRef: "arm-l-art", z: 9, pivot: { x: 360, y: 820 }, parent: "forearm-l", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+    ],
+  }),
+  ART, // the reach parts reuse the arm art row (the svgRefs resolve)
+  "reach fixture"
+);
+
+await test("S149 the phase-rides-distance law at the call site — the phase is the covered distance in strides, never the bare clock", () => {
+  eq(walkPhaseAt(0), 0, "the walk starts at heel strike");
+  eq(walkPhaseAt(1000), WALK_TUNING.cadenceSps, "one second of genuine translation = cadence strides");
+  eq(walkPhaseAt(2000), 2 * WALK_TUNING.cadenceSps, "two seconds = twice the distance");
+});
+
+await test("S149 the gait walk — the leg rows ARE footArcAt (stance lift exactly zero, swing on the sine arc, anti-phase), the beat ends home", () => {
+  const doc = leggedDoc();
+  const plan = planRigTimeline({ narration: "Then she walks to the door.", rig: doc, durationMs: 3000, anchors: null });
+  const rows = plan.timeline.rows;
+  eq(rows.length, 29, "28 stride samples + the home row");
+  eq(rows.length, walkRowCount({ startMs: 0, endMs: 3000 }), "the row count is the window's arithmetic");
+  for (const row of rows) {
+    if (!row.joints) continue; // the home row
+    const arc = footArcAt(walkPhaseAt(row.tMs), 1); // the beat starts at 0
+    const l = row.joints["leg-l"];
+    const r = row.joints["leg-r"];
+    ok(!!l && !!r, "both legs ride the row");
+    eq(l.y, -WALK_TUNING.liftPx * arc.y, "the lift rides the arc's y (stance EXACTLY zero)");
+    ok(Math.abs(l.rotateDeg - WALK_TUNING.sweepDeg * Math.cos(2 * Math.PI * arc.x)) < 1e-9, "the sweep rides the arc's x");
+    ok(Math.abs(l.rotateDeg + r.rotateDeg) < 1e-9, "the legs ride anti-phase");
+  }
+  eq((rows[0].joints as Record<string, { rotateDeg: number; y: number }>)["leg-l"].y, 0, "the first row plants (heel strike, stance)");
+  eq((rows[0].joints as Record<string, { rotateDeg: number; y: number }>)["leg-l"].rotateDeg, WALK_TUNING.sweepDeg, "phase 0 → the leg forward");
+  eq(rows[rows.length - 1].poseId, null, "the home row's id is rest");
+  eq(rows[rows.length - 1].joints, undefined, "the legs tween home over POSE_TWEEN (no joints on the home row)");
+  const again = planRigTimeline({ narration: "Then she walks to the door.", rig: doc, durationMs: 3000, anchors: null });
+  eq(JSON.stringify(again), JSON.stringify(plan), "the walk compiles byte-identically");
+});
+
+await test("S149 the walk lexicon is tight; a legless rig skips the walk honestly (the byte-identity law)", () => {
+  ok(sentenceWalks("Then she walks to the door."), "walks fires");
+  ok(sentenceWalks("They march across the yard."), "march fires");
+  ok(sentenceWalks("Step forward and look."), "step fires");
+  ok(!sentenceWalks("The machine moves the part forward."), "'moves' is not a walk word");
+  ok(!sentenceWalks("Then the pipeline runs to completion."), "'runs' is not a walk word");
+  ok(!sentenceWalks("The shots cross-fade nicely."), "'cross-fades' is not a walk word (word boundaries)");
+  const legless = planRigTimeline({ narration: "Then she walks to the door.", rig: RIG_DOC, durationMs: 3000, anchors: null });
+  ok(legless.timeline.rows.every((r) => r.joints === undefined), "no walk rows on a legless rig — the gesture table owns the sentence");
+  const legged = planRigTimeline({ narration: "Then she walks to the door.", rig: leggedDoc(), durationMs: 3000, anchors: null });
+  ok(legged.timeline.rows.some((r) => r.joints !== undefined), "the legged rig walks the same sentence");
+});
+
+await test("S149 walks and gestures coexist; the wall holds and the rows ascend", () => {
+  const doc = leggedDoc();
+  const narration = Array.from({ length: 8 }, (_, i) =>
+    i % 2 === 0 ? "Then the machine pushes the part forward." : "Then she walks a little while."
+  ).join(" ");
+  const plan = planRigTimeline({ narration, rig: doc, durationMs: 40_000, anchors: null });
+  ok(plan.timeline.rows.length <= RIG_BUDGETS.timelineRows, `the wall holds (${plan.timeline.rows.length} rows)`);
+  for (let i = 1; i < plan.timeline.rows.length; i++) {
+    ok(plan.timeline.rows[i].tMs >= plan.timeline.rows[i - 1].tMs, "rows are time-ascending");
+  }
+  ok(plan.timeline.rows.some((r) => r.joints !== undefined), "walks compiled");
+  ok(plan.timeline.rows.some((r) => r.poseId !== null), "gestures compiled");
+});
+
+await test("S149 a walk that cannot fit the wall falls through to its gesture pair (deterministic, honest)", () => {
+  eq(walkRowCount({ startMs: 0, endMs: 20_000 }), Math.ceil(20_000 / WALK_TUNING.rowStepMs) + 1, "the count arithmetic");
+  ok(walkRowCount({ startMs: 0, endMs: 20_000 }) > RIG_BUDGETS.timelineRows, "such a walk cannot fit");
+  const plan = planRigTimeline({ narration: "Walk.", rig: leggedDoc(), durationMs: 20_000, anchors: null });
+  ok(plan.timeline.rows.every((r) => r.joints === undefined), "the oversized walk fell through — no stride rows");
+  ok(plan.timeline.rows.some((r) => r.poseId !== null), "the gesture pair rode instead");
+});
+
+await test("S149 the IK reach — the hand lands EXACTLY on the target on the rig's own chain (the fk round-trip), the director wires it", () => {
+  const chain = armChainOf(REACH_DOC, "arm-l");
+  ok(chain !== null, "the full three-part chain resolves from the pivots");
+  const target = { x: 560, y: 520 };
+  const pose = reachPose(REACH_DOC, { atMs: 400, target, arm: "arm-l" });
+  ok(pose !== null, "a reachable target solves");
+  const solved = chain as NonNullable<typeof chain>;
+  const poseOk = pose as NonNullable<typeof pose>;
+  const d1 = poseOk.joints["arm-l"].rotateDeg;
+  const d2 = poseOk.joints["forearm-l"].rotateDeg;
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  const ex = solved.shoulder.x + solved.chain.upper * Math.cos(rad(solved.restUpperDeg + d1));
+  const ey = solved.shoulder.y + solved.chain.upper * Math.sin(rad(solved.restUpperDeg + d1));
+  const hx = ex + solved.chain.fore * Math.cos(rad(solved.restForeDeg + d1 + d2));
+  const hy = ey + solved.chain.fore * Math.sin(rad(solved.restForeDeg + d1 + d2));
+  ok(Math.abs(hx - target.x) < 1e-6 && Math.abs(hy - target.y) < 1e-6, `the hand lands on the target (got ${hx.toFixed(6)}, ${hy.toFixed(6)})`);
+  const plan = planRigTimeline({
+    narration: "Imagine a tiny workshop.",
+    rig: REACH_DOC,
+    durationMs: 2000,
+    anchors: null,
+    reaches: [{ atMs: 400, target, arm: "arm-l" }],
+  });
+  const reachRows = plan.timeline.rows.filter((r) => r.joints !== undefined);
+  eq(reachRows.length, 1, "the reach row rides its inline joints");
+  eq(reachRows[0].tMs, 400, "the reach lands at its beat");
+  const home = plan.timeline.rows.find((r) => r.tMs === 640);
+  ok(home !== undefined && home.poseId === null && home.joints === undefined, "the arm tweens home after MIN_GESTURE_MS (the rest row at 640)");
+  const plain = planRigTimeline({ narration: "Imagine a tiny workshop.", rig: REACH_DOC, durationMs: 2000, anchors: null });
+  ok(plain.timeline.rows.every((r) => r.joints === undefined), "no reaches → no reach rows (the byte-identity law)");
+});
+
+await test("S149 the reach refuses honestly — unreachable, degenerate, missing chain (refuse-not-clamp); a reach owns its window", () => {
+  eq(reachPose(REACH_DOC, { atMs: 100, target: { x: 5000, y: 5000 }, arm: "arm-l" }), null, "an unreachable target refuses (never clamped onto the boundary)");
+  eq(reachPose(REACH_DOC, { atMs: 100, target: { x: 420, y: 560 }, arm: "arm-l" }), null, "a target ON the shoulder refuses (the degeneracy)");
+  const twoPart = mustValidateDoc(
+    rigDocInput({
+      parts: [
+        ...(rigDocInput().parts as Record<string, unknown>[]),
+        { id: "forearm-l", slot: "forearm-l", svgRef: "arm-l-art", z: 9, pivot: { x: 360, y: 700 }, parent: "arm-l", rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 } },
+      ],
+    }),
+    ART,
+    "two-part arm fixture"
+  );
+  eq(armChainOf(twoPart, "arm-l"), null, "no hand → no chain (no invented bones)");
+  eq(reachPose(twoPart, { atMs: 100, target: { x: 560, y: 520 }, arm: "arm-l" }), null, "the two-part arm's reach degrades");
+  const refused = planRigTimeline({ narration: "Imagine a tiny workshop.", rig: REACH_DOC, durationMs: 2000, anchors: null, reaches: [{ atMs: 100, target: { x: 5000, y: 5000 }, arm: "arm-l" }] });
+  ok(refused.timeline.rows.every((r) => r.joints === undefined), "the refused reach compiles no rows");
+  ok(refused.timeline.rows.length > 0, "the plan still compiles (the gestures ride)");
+  const owns = planRigTimeline({ narration: "The pump pushes water through the pipe.", rig: REACH_DOC, durationMs: 3000, anchors: null, reaches: [{ atMs: 0, target: { x: 560, y: 520 }, arm: "arm-l" }] });
+  const suppressed = owns.timeline.rows.filter((r) => r.poseId !== null && r.tMs < 240);
+  eq(suppressed.length, 0, "no gesture row lands inside the reach's window");
+});
+
+await test("S149 the camera parity — the S130 keys gain the validateCameraMove discipline (named refusals, mirrored taxonomy), the render seam carries it", async () => {
+  const { CAMERA_BOUNDS } = await import("../src/lib/tubeforge/graphics/types");
+  const key = (over: Partial<GraphicsCameraKeyframe> = {}): GraphicsCameraKeyframe => ({ tMs: 0, zoom: 1, tx: 0, ty: 0, ...over });
+  let threw: Error | null = null;
+  try { validateGraphicsCameraKeys([]); } catch (e) { threw = e as Error; }
+  ok(threw !== null && threw.message.includes("empty"), "empty refuses (named)");
+  threw = null;
+  try { validateGraphicsCameraKeys([key({ tMs: Number.NaN })]); } catch (e) { threw = e as Error; }
+  ok(threw !== null && threw.message.includes("non-finite"), "a non-finite field refuses (named)");
+  threw = null;
+  try { validateGraphicsCameraKeys([key({ ease: "bounce" as never })]); } catch (e) { threw = e as Error; }
+  ok(threw !== null && threw.message.includes("closed curve table"), "an ease outside the table refuses");
+  threw = null;
+  try { validateGraphicsCameraKeys([key(), key({ tMs: 0 })]); } catch (e) { threw = e as Error; }
+  ok(threw !== null && threw.message.includes("strictly ascend"), "un-ascending keys refuse");
+  for (const zoom of [CAMERA_BOUNDS.zoomMin - 0.1, CAMERA_BOUNDS.zoomMax + 0.1]) {
+    threw = null;
+    try { validateGraphicsCameraKeys([key({ zoom })]); } catch (e) { threw = e as Error; }
+    ok(threw !== null && threw.message.includes("domain"), `zoom ${zoom} refuses (named)`);
+  }
+  validateGraphicsCameraKeys([
+    key(),
+    { tMs: 500, zoom: 1.4, tx: 10, ty: 0, ease: "ease-in-out" },
+    { tMs: 1000, zoom: 1, tx: 0, ty: 0 },
+  ]);
+  let animThrew = 0;
+  for (const attempt of [
+    () => validateCameraMove({ intent: "x", keys: [] }),
+    () => validateCameraMove({ intent: "x", keys: [{ t: Number.NaN, x: 0, y: 0, z: 0, fov: 50 }] }),
+    () => validateCameraMove({ intent: "x", keys: [{ t: 0, x: 0, y: 0, z: 0, fov: 50 }, { t: 0, x: 1, y: 0, z: 0, fov: 50 }] }),
+  ]) {
+    try { attempt(); } catch { animThrew++; }
+  }
+  eq(animThrew, 3, "the anim validator refuses empty / non-finite / un-ascending — the SAME taxonomy");
+  const renderSrc = await fsp.readFile("src/lib/tubeforge/graphics/render.ts", "utf8");
+  ok(renderSrc.includes("validateGraphicsCameraKeys(scene.camera)"), "the render seam validates every scene's camera once (the source-pin pattern)");
 });
 
 // ---------------------------------------------------------------------------
