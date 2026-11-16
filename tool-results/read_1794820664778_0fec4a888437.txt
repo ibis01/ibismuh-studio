@@ -1,0 +1,797 @@
+     1→// S64 — the Whiteboard Engine: narration timing, draw scheduling, and the
+     2→// frame plan. PURE — the deterministic heart the renderer merely applies.
+     3→//
+     4→// Laws:
+     5→//   - Narration rules the clock: a scene's duration is its VO file's
+     6→//     measured length when one exists, else the house 2.6-wps estimate
+     7→//     (the same constant the director lane uses), clamped to [4s, 30s].
+     8→//   - Drawing fills the narration window: after a lead-in (400ms) every
+     9→//     drawable path gets a length-weighted slice of the draw budget; the
+    10→//     scene closes on a hold (900ms) so the last stroke can breathe.
+    11→//   - The frame plan is a pure function of (project, assets, durations):
+    12→//     same inputs, same frames — the determinism the S64 record froze.
+    13→import {
+    14→  pathSegments,
+    15→  sampleAtLength,
+    16→  totalLength,
+    17→  transformPoint,
+    18→  type PathSegment,
+    19→  type Placement,
+    20→} from "./svg";
+    21→import {
+    22→  BOARD_EXIT_DEFAULT_MS,
+    23→  type AnimationEvent,
+    24→  type BoardExit,
+    25→  type BoardPolicy,
+    26→  type WhiteboardProject,
+    27→  type WhiteboardScene,
+    28→} from "./storyboard";
+    29→// Type-only: erased at runtime, so the timing ← assets cycle cannot exist
+    30→// (assets.ts imports this module's text registries at init).
+    31→import type { AssetRole, HandPose } from "./assets";
+    32→
+    33→/** The house narration pace (words/sec) — the director lane's constant. */
+    34→export const WORDS_PER_SEC = 2.6;
+    35→export const LEAD_IN_MS = 400;
+    36→export const HOLD_END_MS = 900;
+    37→// W2: exported for beat-plan.ts — the beat compiler reuses the fill law's
+    38→// arithmetic (ONE scheduler's numbers; never a second implementation).
+    39→export const PATH_GAP_MS = 130; // pen lift between strokes
+    40→export const MIN_PATH_MS = 260; // even a dot takes a moment
+    41→export const MAX_PATH_MS = 2600; // even a long contour stays snappy
+    42→export const MS_PER_CHAR = 55; // text writing speed
+    43→
+    44→// S139 — the naturalist pen laws.
+    45→
+    46→/** The eased within-stroke progress (sine-in-out): the pen accelerates
+    47→ *  out of each stroke's start and settles into its end — constant-speed
+    48→ *  dash fronts read robotic; every reference engine eases per stroke.
+    49→ *  Endpoints exact (p=0→0, p=1→1): schedules, carried ink and the QC
+    50→ *  envelopes are untouched. THE one progress both the ink front and the
+    51→ *  hand ride (the lockstep law — the hand may never lead or trail the
+    52→ *  ink it is laying down). */
+    53→export function penProgress(p: number): number {
+    54→  const c = Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : 0;
+    55→  // 4dp quantization: sub-pixel on any board (1000-unit stroke → 0.1-unit
+    56→  // steps), byte-stable across machines, and the mid-stroke half point
+    57→  // stays EXACTLY 0.5 (the wire-format pins ride through unchanged).
+    58→  return Math.round((0.5 - 0.5 * Math.cos(Math.PI * c)) * 10000) / 10000;
+    59→}
+    60→
+    61→/** The hand's micro-tremble: two sines perpendicular to the stroke
+    62→ *  tangent (the 7.3:3 ratio pair the reference study credits), wrapped
+    63→ *  in sin(π·u) so the amplitude is ZERO at stroke ends, phase advanced
+    64→ *  by the golden angle per stroke ordinal — deterministic, never loops
+    65→ *  visibly. Scene units on the 1920-wide board. */
+    66→export const HAND_TREMBLE_SCALE = 1.15;
+    67→export function handTrembleOffset(u: number, ordinal: number): number {
+    68→  const p = Number.isFinite(u) ? Math.max(0, Math.min(1, u)) : 0;
+    69→  if (p <= 0 || p >= 1) return 0; // exact endpoints — floating π residue never leaks
+    70→  const wrap = Math.sin(Math.PI * p);
+    71→  if (wrap <= 0) return 0;
+    72→  const ph = 2.399963 * ordinal;
+    73→  const o1 = Math.sin(2 * Math.PI * 7.3 * p + ph) * 1.8;
+    74→  const o2 = Math.sin(2 * Math.PI * 3.0 * p + ph * 1.7) * 0.7;
+    75→  return (o1 + o2) * wrap * HAND_TREMBLE_SCALE;
+    76→}
+    77→
+    78→/** The pen-width breathing mirror constant — the applier multiplies the
+    79→ *  authored stroke-width by (0.78 + 0.22·sin(π·progress)) so the ink
+    80→ *  swells mid-stroke like real marker pressure. The SAME arithmetic is
+    81→ *  embedded in wb-page.ts's applier string (one formula, two riders —
+    82→ *  pinned together). */
+    83→export const PEN_WIDTH_BREATHE = { base: 0.78, amp: 0.22 } as const;
+    84→
+    85→export interface AssetGeometry {
+    86→  /** Flattened segments per drawable path id. */
+    87→  paths: Map<string, PathSegment[]>;
+    88→  /** Total path length per asset. */
+    89→  totalLen: number;
+    90→}
+    91→
+    92→/** Estimated scene duration from narration (ms). */
+    93→export function estimateNarrationMs(text: string): number {
+    94→  const words = text.trim().split(/\s+/).filter(Boolean).length;
+    95→  return Math.round(Math.max(4000, Math.min(30_000, (words / WORDS_PER_SEC) * 1000)));
+    96→}
+    97→
+    98→/** Effective scene duration: explicit > VO-provided > estimated. The
+    99→ *  caller supplies measured VO durations (renderer-side ffprobe); this
+   100→ *  module stays pure. */
+   101→export function sceneDurationMs(scene: WhiteboardScene, voMs: number | null): number {
+   102→  if (scene.durationMs && scene.durationMs > 0) return Math.round(scene.durationMs);
+   103→  if (voMs && voMs > 0) return Math.round(voMs + 350); // small tail for the last stroke
+   104→  return estimateNarrationMs(scene.narration);
+   105→}
+   106→
+   107→// ---------------------------------------------------------------------------
+   108→// W4 — word anchors (S120 §3 W4): the ASR/captions lane's per-word timing,
+   109→// passed as an INPUT to the scheduler — never a doc field (the
+   110→// compile-only law: the validator and the serializer never see it).
+   111→// ---------------------------------------------------------------------------
+   112→
+   113→/** One word's spoken span. `index` is the word's position in the scene's
+   114→ *  narration (0-based, the SAME tokenization the beat compiler's `words()`
+   115→ *  uses) — the captions lane's contract, enforced by the envelope's
+   116→ *  validation below. */
+   117→export interface WordAnchor {
+   118→  index: number;
+   119→  startMs: number;
+   120→  endMs: number;
+   121→}
+   122→
+   123→export interface WordAnchors {
+   124→  byWord: WordAnchor[];
+   125→}
+   126→
+   127→/** Validate + collapse anchors to their envelope [firstStart, lastEnd].
+   128→ *  Returns null when the anchors are absent or DEGENERATE (empty spans,
+   129→ *  non-monotonic indexes, negative starts, an envelope past the scene
+   130→ *  clock) — the caller then schedules exactly as if no anchors existed
+   131→ *  (the tolerant-read law: misheard ASR degrades to the estimator, it
+   132→ *  never corrupts the schedule). */
+   133→export function anchorEnvelope(
+   134→  anchors: WordAnchors | undefined,
+   135→  durationMs = Number.POSITIVE_INFINITY
+   136→): { startMs: number; endMs: number } | null {
+   137→  if (!anchors || anchors.byWord.length === 0) return null;
+   138→  const sorted = [...anchors.byWord].sort((a, b) => a.index - b.index);
+   139→  let prevIndex = -1;
+   140→  let startMs = Number.POSITIVE_INFINITY;
+   141→  let endMs = Number.NEGATIVE_INFINITY;
+   142→  for (const w of sorted) {
+   143→    if (!Number.isFinite(w.startMs) || !Number.isFinite(w.endMs)) return null;
+   144→    if (w.endMs < w.startMs) return null;
+   145→    if (w.index <= prevIndex) return null; // duplicate or unordered indexes
+   146→    prevIndex = w.index;
+   147→    if (w.startMs < startMs) startMs = w.startMs;
+   148→    if (w.endMs > endMs) endMs = w.endMs;
+   149→  }
+   150→  if (!(endMs > startMs) || startMs < 0 || endMs > durationMs) return null;
+   151→  return { startMs: Math.round(startMs), endMs: Math.round(endMs) };
+   152→}
+   153→
+   154→/**
+   155→ * Schedule a scene: fill in animation events for every drawable path and
+   156→ * text element the placements bring, in draw order, inside the narration
+   157→ * window. Pre-existing events for an element are RESPECTED (the editor's
+   158→ * explicit timing is senior — the studio's precedence law).
+   159→ */
+   160→export function scheduleScene(
+   161→  scene: WhiteboardScene,
+   162→  durationMs: number,
+   163→  geometry: Map<string, AssetGeometry>,
+   164→  anchors?: WordAnchors
+   165→): AnimationEvent[] {
+   166→  const events: AnimationEvent[] = [];
+   167→  const claimed = new Set<string>(); // "assetId::pathId" / "assetId::text:textId" / "assetId::color[:pathId]"
+   168→  for (const e of scene.animations) {
+   169→    if (e.type === "draw_path") claimed.add(`${e.assetId}::${e.pathId}`);
+   170→    else if (e.type === "write_text") claimed.add(`${e.assetId}::text:${e.textId}`);
+   171→    else if (e.type === "reveal_color") claimed.add(`${e.assetId}::color${e.pathId ? ":" + e.pathId : ""}`);
+   172→    events.push(e);
+   173→  }
+   174→
+   175→  // Collect work items in (placement order × asset draw order).
+   176→  interface Work {
+   177→    kind: "path" | "text";
+   178→    assetId: string;
+   179→    id: string;
+   180→    weight: number; // relative cost
+   181→  }
+   182→  // S139 — the sketch pass's derived strokes ride the same window with
+   183→  // their own cost laws: a retrace (-od) moves faster than its main
+   184→  // stroke (the pen re-traces with confidence, not care), and a hatch
+   185→  // (-h) scribbles quicker still. Weights keep the window arithmetic
+   186→  // one-law: only the cost model changes.
+   187→  const derivedFactor = (id: string): number =>
+   188→    id.endsWith("-od") ? 0.45 : id.endsWith("-h") ? 0.55 : 1;
+   189→  const work: Work[] = [];
+   190→  const ordered = [...scene.placements].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+   191→  for (const pl of ordered) {
+   192→    const geo = geometry.get(pl.assetId);
+   193→    if (!geo) continue;
+   194→    for (const [pathId, segs] of geo.paths) {
+   195→      if (claimed.has(`${pl.assetId}::${pathId}`)) continue;
+   196→      const len = totalLength(segs) * pl.placement.scale;
+   197→      work.push({ kind: "path", assetId: pl.assetId, id: pathId, weight: Math.max(120, len) * derivedFactor(pathId) });
+   198→    }
+   199→    const texts = TEXT_IDS_BY_ASSET.get(pl.assetId) ?? [];
+   200→    for (const textId of texts) {
+   201→      if (claimed.has(`${pl.assetId}::text:${textId}`)) continue;
+   202→      const chars = TEXT_CHARS_BY_ID.get(`${pl.assetId}::${textId}`) ?? 12;
+   203→      work.push({ kind: "text", assetId: pl.assetId, id: textId, weight: 40 * chars });
+   204→    }
+   205→  }
+   206→  if (work.length === 0) return events;
+   207→
+   208→  // Budget: the draw window minus lead-in/hold/gaps. W4: when word
+   209→  // anchors are present AND sane, the draw fills the SPOKEN window
+   210→  // [firstWord.start, lastWord.end] — the strokes land on the words that
+   211→  // introduce them, and the hold extends to the scene clock's own edge.
+   212→  // Absent/degenerate anchors → today's nominal window, byte-for-byte.
+   213→  const spoken = anchorEnvelope(anchors, durationMs);
+   214→  const winStart = spoken ? spoken.startMs : LEAD_IN_MS;
+   215→  const winEnd = spoken ? spoken.endMs : durationMs - HOLD_END_MS;
+   216→  // S139 — sparse boards breathe: a scene with ≤3 strokes is a big-draw
+   217→  // scene, and its pen lifts carry a beat longer (the robotic-constant-
+   218→  // gap receipt). Dense boards keep the tight 130ms cadence.
+   219→  const gapMs = work.length > 0 && work.length <= 3 ? PATH_GAP_MS + 90 : PATH_GAP_MS;
+   220→  const gaps = gapMs * Math.max(0, work.length - 1);
+   221→  const avail = Math.max(1200, winEnd - winStart - gaps);
+   222→  const totalWeight = work.reduce((a, w) => a + w.weight, 0);
+   223→  // Raw durations: weight-shared ideals, snappiness-clamped; texts ride
+   224→  // their character-count model.
+   225→  let rawSum = 0;
+   226→  const raw: number[] = work.map((w) => {
+   227→    const ideal = (w.weight / totalWeight) * avail;
+   228→    const d =
+   229→      w.kind === "path"
+   230→        ? Math.max(MIN_PATH_MS, Math.min(MAX_PATH_MS, ideal))
+   231→        : Math.max(500, (TEXT_CHARS_BY_ID.get(`${w.assetId}::${w.id}`) ?? 12) * MS_PER_CHAR);
+   232→    rawSum += d;
+   233→    return d;
+   234→  });
+   235→  // The fill law (the S64 QC receipts): scale uniformly so the draw span
+   236→  // ENDS at the window's right edge (nominal: durationMs − HOLD_END_MS;
+   237→  // W4: the last spoken word's end) — capped raw schedules finished 3–6s
+   238→  // early, and the static tails failed frozen-frames/static-shots.
+   239→  const f = rawSum > 0 ? Math.min(2.8, Math.max(0.5, avail / rawSum)) : 1;
+   240→  let t = winStart;
+   241→  work.forEach((w, i) => {
+   242→    const durationMs = Math.max(120, Math.round(raw[i] * f));
+   243→    if (w.kind === "path") {
+   244→      events.push({ type: "draw_path", assetId: w.assetId, pathId: w.id, startMs: Math.round(t), durationMs });
+   245→    } else {
+   246→      events.push({ type: "write_text", assetId: w.assetId, textId: w.id, startMs: Math.round(t), durationMs });
+   247→    }
+   248→    t += durationMs + gapMs;
+   249→  });
+   250→  return events.sort((a, b) => a.startMs - b.startMs);
+   251→}
+   252→
+   253→// Filled by assets.ts at module init (the asset library is static data —
+   254→// the pure scheduler needs its text lengths without touching markup).
+   255→export const TEXT_IDS_BY_ASSET = new Map<string, string[]>();
+   256→export const TEXT_CHARS_BY_ID = new Map<string, number>();
+   257→
+   258→// ---------------------------------------------------------------------------
+   259→// The frame plan
+   260→// ---------------------------------------------------------------------------
+   261→
+   262→export interface FrameHandState {
+   263→  visible: boolean;
+   264→  /** Scene-space point of the pen tip. */
+   265→  x: number;
+   266→  y: number;
+   267→  /** Pen rotation (radians) — path tangent + placement rotation. */
+   268→  angle: number;
+   269→  /** W7 — the pose: which hand sub-asset the page shows (write/draw ride
+   270→   *  the style hand; point/circle ride hand-point; rest rides hand-rest). */
+   271→  pose: HandPose;
+   272→  /** W7 — per-frame scale multiplier (the pen-lift breathe; 1 = none).
+   273→   *  The applier multiplies it with the project's hand.scale. */
+   274→  scale: number;
+   275→}
+   276→
+   277→export interface FrameCameraState {
+   278→  cx: number;
+   279→  cy: number;
+   280→  scale: number;
+   281→}
+   282→
+   283→export interface FrameState {
+   284→  /** Scene-relative time (ms). */
+   285→  tMs: number;
+   286→  /** pathId → draw progress 0..1, keyed "assetId::pathId". */
+   287→  draws: Map<string, number>;
+   288→  /** textId → write progress 0..1, keyed "assetId::text:textId". */
+   289→  texts: Map<string, number>;
+   290→  /** assetId (+"::"+pathId) → color reveal progress 0..1. */
+   291→  colors: Map<string, number>;
+   292→  /** assetId → animated placement (move_object applied). */
+   293→  placements: Map<string, Placement>;
+   294→  /** W6 — the carried-ink layer (null = clean scene, no carry). The
+   295→   *  carried ink rides the SAME maps above (injected fully drawn), so the
+   296→   *  page's one applier needs no second machinery. */
+   297→  carried: CarriedFrameLayer | null;
+   298→  hand: FrameHandState;
+   299→  camera: FrameCameraState;
+   300→}
+   301→
+   302→function easeInOut(t: number): number {
+   303→  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+   304→}
+   305→
+   306→/** The permanent gentle camera drift (a two-axis Lissajous, PURE and
+   307→ *  deterministic). Whiteboard ink growth is spatially tiny — a stroke
+   308→ *  extending one pixel per frame reads as a frozen frame to the house QC
+   309→ *  lenses, which are calibrated on cinematic FULL-FRAME motion (the slides
+   310→ *  mode survives them via constant zoompan). The drift keeps every frame
+   311→ *  alive; it swells ×3 while the canvas is still empty (the scene-open
+   312→ *  receipts: the freeze runs sat exactly on thin-ink scene starts) and
+   313→ *  settles to ±32px once the drawing is established. */
+   314→export function cameraDrift(tMs: number): { dx: number; dy: number } {
+   315→  const settle = 1 + 2 * Math.max(0, 1 - tMs / 4500);
+   316→  return {
+   317→    dx: 32 * settle * Math.sin((2 * Math.PI * tMs) / 3400),
+   318→    dy: 22 * settle * Math.sin((2 * Math.PI * tMs) / 5300 + 1.3),
+   319→  };
+   320→}
+   321→
+   322→/** The DIRECTED lane's motion floor (W5). The QC lenses are calibrated on
+   323→ *  FULL-FRAME motion — a static camera starves them even while strokes
+   324→ *  draw (the W5 proof receipts: a fully-static directed camera failed
+   325→ *  frozen-frames at thin-ink stretches; a slower breath starved the
+   326→ *  noise floor at 0.3px/frame). So the motion floor is the SAME
+   327→ *  calibrated Lissajous the fallback uses — but its MEANING differs by
+   328→ *  lane: for a cameraless scene it is the blind absolute wander; for a
+   329→ *  keyed scene it is CONTENT-ANCHORED — it breathes around whatever the
+   330→ *  director framed (the keys lead, the floor follows). The demotion is
+   331→ *  real in the only sense that matters: the camera now goes where the
+   332→ *  CONTENT says, and the calibrated micro-motion can no longer wander
+   333→ *  away from it. */
+   334→export function directedBreath(tMs: number): { dx: number; dy: number } {
+   335→  return cameraDrift(tMs);
+   336→}
+   337→
+   338→/** Interpolate the camera at scene time t (ms). S68: the empty-camera
+   339→ *  fallback centers on the PROJECT's own dimensions — the hardcoded 16:9
+   340→ *  center (960, 540) put a 9:16 board's viewport at its right edge (cx 960
+   341→ *  of a 1080-wide canvas). The validator leaves cameraless docs EMPTY and
+   342→ *  this fallback covers them, so stored docs and in-memory scenes agree.
+   343→ *
+   344→ *  W5 — the drift demotion (landed in the same slice as the director,
+   345→ *  camera-director.ts): the permanent Lissajous drift is the
+   346→ *  NO-CAMERA-KEYS fallback ONLY. A scene carrying camera keys — the
+   347→ *  content-driven director's or the author's — rides them with NO drift:
+   348→ *  the content decides where the camera looks. A cameraless scene keeps
+   349→ *  today's behavior byte-for-byte (the W1 baseline pin: the drift is
+   350→ *  load-bearing for the QC frozen-frame/static-shot lenses). */
+   351→export function cameraAt(
+   352→  scene: WhiteboardScene,
+   353→  width: number,
+   354→  height: number,
+   355→  tMs: number
+   356→): FrameCameraState {
+   357→  const keys = scene.camera.length > 0
+   358→    ? scene.camera
+   359→    : [{ cx: width / 2, cy: height / 2, scale: 1, startMs: 0, durationMs: 0 }];
+   360→  let state = { cx: keys[0].cx, cy: keys[0].cy, scale: keys[0].scale };
+   361→  for (let i = 1; i < keys.length; i++) {
+   362→    const k = keys[i];
+   363→    if (tMs < k.startMs) break;
+   364→    const prev = keys[i - 1];
+   365→    const span = Math.max(1, k.durationMs);
+   366→    const u = Math.max(0, Math.min(1, (tMs - k.startMs) / span));
+   367→    const e = easeInOut(u);
+   368→    state = {
+   369→      cx: prev.cx + (k.cx - prev.cx) * e,
+   370→      cy: prev.cy + (k.cy - prev.cy) * e,
+   371→      scale: prev.scale + (k.scale - prev.scale) * e,
+   372→    };
+   373→  }
+   374→  if (scene.camera.length === 0) {
+   375→    const drift = cameraDrift(tMs);
+   376→    return { cx: state.cx + drift.dx, cy: state.cy + drift.dy, scale: state.scale };
+   377→  }
+   378→  // W5: a keyed scene rides the DIRECTED lane's own motion floor — the
+   379→  // breathing around the content framing (NOT the fallback drift).
+   380→  const breath = directedBreath(tMs);
+   381→  return { cx: state.cx + breath.dx, cy: state.cy + breath.dy, scale: state.scale };
+   382→}
+   383→
+   384→// ---------------------------------------------------------------------------
+   385→// W6 — the carried-ink layer (S120 §3): a continuous scene inherits the
+   386→// previous scene's ink as DATA — the carry plan is resolved from the
+   387→// PREVIOUS SCENE's placements (move_object applied at its end clock) and
+   388→// rides the SAME frame maps the scene's own strokes use (draws/texts/
+   389→// colors), so the page's one applier carries it with zero new machinery.
+   390→// ---------------------------------------------------------------------------
+   391→
+   392→/** The carried ink PLAN for one scene (fixed for the scene's duration). */
+   393→export interface CarriedInkPlan {
+   394→  /** Carried placements keyed by the REAL assetId (a carried asset cannot
+   395→   *  be re-placed — the validator pins that), each resolved to its
+   396→   *  END-OF-PREVIOUS-SCENE placement. */
+   397→  placements: Map<string, Placement>;
+   398→  /** The previous scene's reveal_color state at ITS end clock (key →
+   399→   *  progress), so fills carry AS SEEN. */
+   400→  colors: Map<string, number>;
+   401→  exit: BoardExit;
+   402→  transitionMs: number;
+   403→}
+   404→
+   405→/** The shared exit state, precomputed per frame (the applier stays dumb). */
+   406→export interface CarriedExitState {
+   407→  /** fade: 1 → 0. */
+   408→  opacity: number;
+   409→  /** erase: the un-draw progress 0 → 1 (the dash law runs backwards). */
+   410→  erase: number;
+   411→  /** pan-away offset in scene units (dx negative = off the left edge). */
+   412→  dx: number;
+   413→  dy: number;
+   414→}
+   415→
+   416→/** The carried layer of one frame (null = this scene carries nothing). */
+   417→export interface CarriedFrameLayer {
+   418→  placements: Map<string, Placement>;
+   419→  exit: CarriedExitState;
+   420→}
+   421→
+   422→/** pan-away slides the layer by this multiple of the board width — two
+   423→ *  widths clear any sane placement (content fully on-board, the studio's
+   424→ *  and planner's invariant) without needing geometry at exit time. */
+   425→const PAN_AWAY_BOARD_WIDTHS = 2;
+   426→
+   427→/**
+   428→ * Resolve what scene K+1 inherits from scene K, PURE. `prevDurationMs` is
+   429→ * the clock the previous scene actually ran (the estimator's clamped
+   430→ * value — the same one the render loop and the editor preview use).
+   431→ * Returns null for clean boards (the caller schedules exactly as before).
+   432→ */
+   433→export function resolveCarriedInk(
+   434→  prev: WhiteboardScene,
+   435→  prevDurationMs: number,
+   436→  board: BoardPolicy
+   437→): CarriedInkPlan | null {
+   438→  if (board.mode !== "continuous") return null;
+   439→  const wanted =
+   440→    board.carryPlacements && board.carryPlacements.length > 0
+   441→      ? new Set(board.carryPlacements)
+   442→      : null; // null = every placement carries
+   443→  const placements = new Map<string, Placement>();
+   444→  for (const pl of prev.placements) {
+   445→    if (wanted && !wanted.has(pl.assetId)) continue;
+   446→    // The END-OF-PREVIOUS-SCENE placement: move_object runs to completion
+   447→    // (placementAt clamps progress at the scene's own clock).
+   448→    placements.set(pl.assetId, placementAt(prev, pl.assetId, pl.placement, prevDurationMs));
+   449→  }
+   450→  const colors = new Map<string, number>();
+   451→  for (const e of prev.animations) {
+   452→    if (e.type !== "reveal_color") continue;
+   453→    const p = Math.max(0, Math.min(1, (prevDurationMs - e.startMs) / e.durationMs));
+   454→    if (p <= 0) continue;
+   455→    if (wanted && !wanted.has(e.assetId)) continue;
+   456→    colors.set(`${e.assetId}${e.pathId ? "::" + e.pathId : ""}`, p);
+   457→  }
+   458→  return {
+   459→    placements,
+   460→    colors,
+   461→    exit: board.exit ?? "keep",
+   462→    transitionMs: board.transitionMs ?? BOARD_EXIT_DEFAULT_MS,
+   463→  };
+   464→}
+   465→
+   466→/**
+   467→ * The exit state at scene time t (PURE, deterministic, continuous at both
+   468→ * joints): fade unweights opacity, erase un-draws (dashoffset runs from 0
+   469→ * back to each stroke's length — the ink retreats along the stroke),
+   470→ * pan-away slides the layer off the left edge. All eased with the SAME
+   471→ * easeInOut the camera and move_object ride — one easing vocabulary.
+   472→ */
+   473→export function carriedExitAt(
+   474→  plan: CarriedInkPlan,
+   475→  width: number,
+   476→  tMs: number
+   477→): CarriedExitState {
+   478→  if (plan.exit === "keep") return { opacity: 1, erase: 0, dx: 0, dy: 0 };
+   479→  const u = Math.max(0, Math.min(1, tMs / Math.max(1, plan.transitionMs)));
+   480→  if (u >= 1) {
+   481→    switch (plan.exit) {
+   482→      case "fade": return { opacity: 0, erase: 0, dx: 0, dy: 0 };
+   483→      case "erase": return { opacity: 1, erase: 1, dx: 0, dy: 0 };
+   484→      default: return { opacity: 1, erase: 0, dx: -width * PAN_AWAY_BOARD_WIDTHS, dy: 0 };
+   485→    }
+   486→  }
+   487→  const e = easeInOut(u);
+   488→  switch (plan.exit) {
+   489→    case "fade": return { opacity: 1 - e, erase: 0, dx: 0, dy: 0 };
+   490→    case "erase": return { opacity: 1, erase: e, dx: 0, dy: 0 };
+   491→    default: return { opacity: 1, erase: 0, dx: -width * PAN_AWAY_BOARD_WIDTHS * e, dy: 0 };
+   492→  }
+   493→}
+   494→
+   495→/** Placement at time t with move_object animations applied. */
+   496→export function placementAt(
+   497→  scene: WhiteboardScene,
+   498→  assetId: string,
+   499→  base: Placement,
+   500→  tMs: number
+   501→): Placement {
+   502→  let pl = { ...base };
+   503→  for (const e of scene.animations) {
+   504→    if (e.type !== "move_object" || e.assetId !== assetId) continue;
+   505→    const u = Math.max(0, Math.min(1, (tMs - e.startMs) / e.durationMs));
+   506→    if (u <= 0) continue;
+   507→    const w = easeInOut(u);
+   508→    pl = {
+   509→      x: pl.x + (e.to.x - pl.x) * w,
+   510→      y: pl.y + (e.to.y - pl.y) * w,
+   511→      scale: pl.scale + (e.to.scale - pl.scale) * w,
+   512→      rotateDeg: pl.rotateDeg + (e.to.rotateDeg - pl.rotateDeg) * w,
+   513→    };
+   514→  }
+   515→  return pl;
+   516→}
+   517→
+   518→/** The pen state at time t: follow the ACTIVE stroke; glide in before the
+   519→ *  first stroke; TRAVEL between strokes (W7 — the hand follows the path
+   520→ *  between a stroke's end and the next stroke's start instead of vanish-
+   521→ *  reappear: an eased lerp with a pen-lift bump, bounded by the two
+   522→ *  endpoints by construction); rest (wobbling) after the last. The S64
+   523→ *  freeze receipts: a hidden pen leaves stretches pixel-identical and the
+   524→ *  QC frozen-frames lens fires.
+   525→ *
+   526→ *  W7 poses: selected by the W3 role metadata of the target stroke
+   527→ *  (label → write, arrow → point, emphasis → circle, else draw; text
+   528→ *  targets write) — `roles` maps assetId → AssetRole (the library build).
+   529→ *  Determinism: same events + roles, byte-identical state. */
+   530→export function handAt(
+   531→  events: AnimationEvent[],
+   532→  scene: WhiteboardScene,
+   533→  geometry: Map<string, AssetGeometry>,
+   534→  tMs: number,
+   535→  roles?: Map<string, AssetRole>
+   536→): FrameHandState {
+   537→  const hidden: FrameHandState = { visible: false, x: 0, y: 0, angle: 0, pose: "rest", scale: 1 };
+   538→  type PenEvent = Extract<AnimationEvent, { type: "draw_path" | "write_text" }>;
+   539→  const pen: PenEvent[] = [];
+   540→  for (const e of events) {
+   541→    if (e.type === "draw_path" || e.type === "write_text") pen.push(e);
+   542→  }
+   543→  if (pen.length === 0) return hidden;
+   544→  // Chronological order for the gap scan (stable: startMs, then duration).
+   545→  const ordered = [...pen].sort((a, b) => a.startMs - b.startMs || a.durationMs - b.durationMs);
+   546→  // S139 — the tremble's per-stroke phase: the golden-angle ordinal of the
+   547→  // chronological order (stable across calls; the same events → the same
+   548→  // phase book, so the tremble never re-rolls between frames).
+   549→
+   550→  const poseOf = (e: PenEvent): HandPose => {
+   551→    if (e.type === "write_text") return "write";
+   552→    const role = roles?.get(e.assetId);
+   553→    if (role === "label") return "write";
+   554→    if (role === "arrow") return "point";
+   555→    if (role === "emphasis") return "circle";
+   556→    return "draw"; // outline, fill, and role-less assets
+   557→  };
+   558→
+   559→  const ordinalOf = new Map<PenEvent, number>();
+   560→  ordered.forEach((e, i) => ordinalOf.set(e, i));
+   561→
+   562→  // The pen-tip state on ONE stroke at progress p — the SAME evaluation the
+   563→  // active branch and the travel endpoints ride (one follow math).
+   564→  const strokePoint = (e: PenEvent, p: number): FrameHandState | null => {
+   565→    const placement = scene.placements.find((pl) => pl.assetId === e.assetId)?.placement;
+   566→    const base = placement ? placementAt(scene, e.assetId, placement, tMs) : { x: 0, y: 0, scale: 1, rotateDeg: 0 };
+   567→    if (e.type === "write_text") {
+   568→      // The pen rides the text baseline: measured bbox is a renderer concern;
+   569→      // the plan approximates with the character-count width model.
+   570→      const chars = TEXT_CHARS_BY_ID.get(`${e.assetId}::${e.textId}`) ?? 12;
+   571→      const widthUnits = chars * 11; // ≈ DejaVu Sans 32px average advance at asset scale
+   572→      const anchor = TEXT_ANCHORS.get(`${e.assetId}::${e.textId}`) ?? { x: 20, y: 40, size: 32 };
+   573→      const local = { x: anchor.x + widthUnits * p, y: anchor.y };
+   574→      const pt = transformPoint(local, base);
+   575→      return { visible: true, x: pt.x, y: pt.y, angle: (base.rotateDeg * Math.PI) / 180, pose: poseOf(e), scale: 1 };
+   576→    }
+   577→    const segs = geometry.get(e.assetId)?.paths.get(e.pathId);
+   578→    if (!segs) return null;
+   579→    const s = sampleAtLength(segs, p * totalLength(segs));
+   580→    const pt = transformPoint(s.point, base);
+   581→    // S139 — the micro-tremble rides the stroke's LOCAL normal (the hand
+   582→    // quivers across the line it is laying, amplitude zero at both ends,
+   583→    // phase owned by the stroke's ordinal). Applied after the placement
+   584→    // transform, using the SAME angle the hand pose consumes — one frame
+   585→    // of reference, no divergence.
+   586→    const off = handTrembleOffset(p, ordinalOf.get(e) ?? 0);
+   587→    return {
+   588→      visible: true,
+   589→      x: pt.x - Math.sin(s.angle) * off,
+   590→      y: pt.y + Math.cos(s.angle) * off,
+   591→      angle: s.angle + (base.rotateDeg * Math.PI) / 180,
+   592→      pose: poseOf(e),
+   593→      scale: 1,
+   594→    };
+   595→  };
+   596→
+   597→  // The ACTIVE stroke: the most recently started one with progress in [0,1).
+   598→  let active: PenEvent | null = null;
+   599→  for (const e of ordered) {
+   600→    const p = (tMs - e.startMs) / e.durationMs;
+   601→    if (p >= 0 && p < 1 && (!active || e.startMs >= active.startMs)) active = e;
+   602→  }
+   603→
+   604→  const first = ordered[0];
+   605→  const last = pen.reduce((a, b) => (a.startMs + a.durationMs >= b.startMs + b.durationMs ? a : b));
+   606→
+   607→  if (active) {
+   608→    // S139 — the hand rides the EASED progress (the same penProgress the
+   609→    // ink front consumes): the lockstep law survives the naturalist speed
+   610→    // law — the tip can never lead or trail the ink it lays down.
+   611→    const s = strokePoint(active, penProgress((tMs - active.startMs) / active.durationMs));
+   612→    return s ?? hidden;
+   613→  }
+   614→
+   615→  // W7 — PEN-UP TRAVEL: the window between a stroke's end and the next
+   616→  // stroke's start (where the old plan hid the pen — the vanish-reappear
+   617→  // teleport). The hand crosses the gap on an eased line between the two
+   618→  // stroke endpoints, with a sine pen-lift bump (y up, slight scale) that
+   619→  // is ZERO at both joints — the tip never teleports, and the whole path
+   620→  // sits inside the two endpoints' bounding box minus the lift.
+   621→  for (let i = 0; i < ordered.length - 1; i++) {
+   622→    const a = ordered[i];
+   623→    const b = ordered[i + 1];
+   624→    const gapStart = a.startMs + a.durationMs;
+   625→    const gapEnd = b.startMs;
+   626→    if (gapEnd <= gapStart || tMs < gapStart || tMs >= gapEnd) continue;
+   627→    const from = strokePoint(a, 1);
+   628→    const to = strokePoint(b, 0);
+   629→    if (!from || !to) return hidden; // degenerate geometry keeps the old mask
+   630→    const u = (tMs - gapStart) / (gapEnd - gapStart);
+   631→    const g = easeInOut(Math.max(0, Math.min(1, u)));
+   632→    const lift = Math.sin(Math.PI * u);
+   633→    // Shortest-path angle lerp (tangents can wrap ±π between strokes).
+   634→    let dAngle = (to.angle - from.angle) % (Math.PI * 2);
+   635→    if (dAngle > Math.PI) dAngle -= Math.PI * 2;
+   636→    if (dAngle < -Math.PI) dAngle += Math.PI * 2;
+   637→    return {
+   638→      visible: true,
+   639→      x: from.x + (to.x - from.x) * g,
+   640→      y: from.y + (to.y - from.y) * g - HAND_TRAVEL_LIFT * lift,
+   641→      angle: from.angle + dAngle * g,
+   642→      pose: poseOf(b), // the hand arrives holding the next stroke's tool
+   643→      scale: 1 + HAND_TRAVEL_SCALE_BUMP * lift,
+   644→    };
+   645→  }
+   646→
+   647→  if (tMs <= first.startMs) {
+   648→    const rest = strokePoint(first, 0);
+   649→    if (!rest) return hidden;
+   650→    if (first.startMs > 0) {
+   651→      // The pen ENTERS the frame fast and decelerates into the first
+   652→      // stroke (ease-out) — the scene-open receipt: a resting pen on an
+   653→      // empty canvas is indistinguishable from a frozen frame.
+   654→      const u = 1 - Math.pow(1 - Math.max(0, Math.min(1, tMs / first.startMs)), 2);
+   655→      const entryX = Math.min(1860, rest.x + 420);
+   656→      const entryY = Math.max(60, rest.y - 240);
+   657→      return { visible: true, x: entryX + (rest.x - entryX) * u, y: entryY + (rest.y - entryY) * u, angle: rest.angle, pose: rest.pose, scale: 1 };
+   658→    }
+   659→    return rest;
+   660→  }
+   661→  const tail = strokePoint(last, 1);
+   662→  // W7 — the tail holds the REST pose (the open hand, tool lowered): the
+   663→  // hold's micro-motion keeps the lens fed while the grip visibly relaxes.
+   664→  return tail ? { ...tail, pose: "rest" } : hidden;
+   665→}
+   666→
+   667→// W7 — the pen-lift bump during inter-stroke travel: the tip rises this
+   668→// many scene units at mid-gap (zero at both joints — the sine keeps the
+   669→// continuity) and the hand grows by this scale fraction while lifted.
+   670→export const HAND_TRAVEL_LIFT = 26;
+   671→export const HAND_TRAVEL_SCALE_BUMP = 0.05;
+   672→
+   673→// Text anchors (asset-space) — registered by assets.ts.
+   674→export const TEXT_ANCHORS = new Map<string, { x: number; y: number; size: number }>();
+   675→
+   676→/** Compute one frame's full state. PURE.
+   677→ *
+   678→ *  W6 — `carried` is the resolved carry plan (resolveCarriedInk); the
+   679→ *  carried ink injects into the SAME maps the scene's own strokes use:
+   680→ *  every path fully drawn, every text fully written, fills as the
+   681→ *  previous scene left them. Absent/null → byte-for-byte today's frame. */
+   682→export function frameAt(
+   683→  project: WhiteboardProject,
+   684→  scene: WhiteboardScene,
+   685→  events: AnimationEvent[],
+   686→  geometry: Map<string, AssetGeometry>,
+   687→  tMs: number,
+   688→  carried?: CarriedInkPlan | null,
+   689→  roles?: Map<string, AssetRole>
+   690→): FrameState {
+   691→  const draws = new Map<string, number>();
+   692→  const texts = new Map<string, number>();
+   693→  const colors = new Map<string, number>();
+   694→  for (const e of events) {
+   695→    const p = Math.max(0, Math.min(1, (tMs - e.startMs) / e.durationMs));
+   696→    // S139 — every reveal rides the eased pen progress (one speed law for
+   697→    // ink, text wipes and the hand); carried ink pins p=1 which penProgress
+   698→    // preserves exactly.
+   699→    const pe = penProgress(p);
+   700→    if (e.type === "draw_path") draws.set(`${e.assetId}::${e.pathId}`, pe);
+   701→    else if (e.type === "write_text") texts.set(`${e.assetId}::text:${e.textId}`, pe);
+   702→    else if (e.type === "reveal_color") colors.set(`${e.assetId}${e.pathId ? "::" + e.pathId : ""}`, pe);
+   703→  }
+   704→  const placements = new Map<string, Placement>();
+   705→  for (const pl of scene.placements) {
+   706→    placements.set(pl.assetId, placementAt(scene, pl.assetId, pl.placement, tMs));
+   707→  }
+   708→  let carriedLayer: CarriedFrameLayer | null = null;
+   709→  if (carried && carried.placements.size > 0) {
+   710→    for (const [assetId, pl] of carried.placements) {
+   711→      placements.set(assetId, pl);
+   712→      // The scheduler's fill law draws EVERY drawable path of a placed
+   713→      // asset by scene end (the W2/W4 schedules included), so carrying all
+   714→      // of the asset's paths ≡ the previous scene's end visual.
+   715→      const geo = geometry.get(assetId);
+   716→      if (geo) for (const pathId of geo.paths.keys()) draws.set(`${assetId}::${pathId}`, 1);
+   717→      for (const textId of TEXT_IDS_BY_ASSET.get(assetId) ?? []) {
+   718→        texts.set(`${assetId}::text:${textId}`, 1);
+   719→      }
+   720→      for (const [k, v] of carried.colors) {
+   721→        if (k === assetId || k.startsWith(assetId + "::")) colors.set(k, v);
+   722→      }
+   723→    }
+   724→    carriedLayer = {
+   725→      placements: carried.placements,
+   726→      exit: carriedExitAt(carried, project.width, tMs),
+   727→    };
+   728→  }
+   729→  return {
+   730→    tMs,
+   731→    draws,
+   732→    texts,
+   733→    colors,
+   734→    placements,
+   735→    carried: carriedLayer,
+   736→    hand: handAt(events, scene, geometry, tMs, roles),
+   737→    camera: cameraAt(scene, project.width, project.height, tMs),
+   738→  };
+   739→}
+   740→
+   741→/** Frame count for a scene duration. */
+   742→export function frameCount(durationMs: number, fps: number): number {
+   743→  return Math.max(1, Math.round((durationMs / 1000) * fps));
+   744→}
+   745→
+   746→// ---------------------------------------------------------------------------
+   747→// S65 (E1) — the render frame budget (pure, so CI can pin it).
+   748→//
+   749→// The renderer MUST refuse a project whose estimated frame count exceeds
+   750→// this budget BEFORE chromium launches (E0 audit §6 risk 4: chromium memory
+   751→// on 4GB workers for long videos). 25,920 frames = 18 min at 24 fps — the
+   752→// validator's explicit-duration budgets (storyboard.ts WB_BUDGETS) already
+   753→// cap author intent at 15 min; this is the hard wall that also bounds
+   754→// VO-measured durations the validator cannot see. Arithmetic for the
+   755→// record: 24 fps × 1080 s = 25,920; a 30 fps project hits it at 14.4 min.
+   756→// ---------------------------------------------------------------------------
+   757→
+   758→export const WB_RENDER_FRAME_BUDGET = 25_920;
+   759→
+   760→/**
+   761→ * Total estimated frames for a project — the exact durations the renderer
+   762→ * will use (explicit > VO-measured > narration estimate), so the pre-flight
+   763→ * and the render loop can never disagree. Pure: the caller supplies VO
+   764→ * durations (renderer-side ffprobe); this module stays pure.
+   765→ */
+   766→export function estimateProjectFrames(
+   767→  project: WhiteboardProject,
+   768→  voMsBySceneId: Map<string, number>
+   769→): { totalFrames: number; sceneMs: number[] } {
+   770→  const sceneMs: number[] = [];
+   771→  let totalFrames = 0;
+   772→  for (const scene of project.scenes) {
+   773→    const ms = sceneDurationMs(scene, voMsBySceneId.get(scene.id) ?? null);
+   774→    sceneMs.push(ms);
+   775→    totalFrames += frameCount(ms, project.fps);
+   776→  }
+   777→  return { totalFrames, sceneMs };
+   778→}
+   779→
+   780→/** Build the asset geometry map from raw path data (renderer-agnostic). */
+   781→export function buildGeometry(
+   782→  assets: { id: string; paths: { id: string; d: string }[] }[]
+   783→): Map<string, AssetGeometry> {
+   784→  const geo = new Map<string, AssetGeometry>();
+   785→  for (const a of assets) {
+   786→    const paths = new Map<string, PathSegment[]>();
+   787→    let totalLen = 0;
+   788→    for (const p of a.paths) {
+   789→      const segs = pathSegments(p.d);
+   790→      paths.set(p.id, segs);
+   791→      totalLen += totalLength(segs);
+   792→    }
+   793→    geo.set(a.id, { paths, totalLen });
+   794→  }
+   795→  return geo;
+   796→}
+   797→

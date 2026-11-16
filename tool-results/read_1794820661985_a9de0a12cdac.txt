@@ -1,0 +1,670 @@
+     1→// S64 — the Whiteboard Engine: the starter vector asset library.
+     2→//
+     3→// Hand-authored SVG, each drawable element carrying a stable id. Drawing
+     4→// order = document order (the scheduler's default). All assets run through
+     5→// sanitizeSvg on load — trusted or not, the gate applies (the security
+     6→// law is a property of the PIPELINE, not of the caller's mood).
+     7→//
+     8→// The library is intentionally small in P0 (the benchmark set + generics);
+     9→// the categorized education/science/business/history library is the
+    10→// dedicated asset phase (plan §C / Phase 2). Coordinates are asset-space
+    11→// (see each viewBox); the scene places them via Placement.
+    12→import { countPathCommands, sanitizeSvg } from "./svg";
+    13→import { TEXT_CHARS_BY_ID, TEXT_IDS_BY_ASSET, TEXT_ANCHORS } from "./timing";
+    14→import { applyGlyphTextMode } from "./text-draw";
+    15→import { withSketchPasses } from "./sketch";
+    16→import { validWhiteboardId } from "./storyboard";
+    17→import { validateAsset } from "./asset-validate";
+    18→
+    19→/** W3 (reconciliation §5.3): the role an asset plays in the stroke
+    20→ *  grammar — advisory metadata the validator (and later the W4/W5/W7
+    21→ *  schedulers) read when present. Optional + tolerant-read: parsers and
+    22→ *  docs written before W3 ignore these fields entirely. */
+    23→export type AssetRole = "outline" | "fill" | "label" | "arrow" | "emphasis";
+    24→
+    25→export interface WhiteboardAsset {
+    26→  id: string;
+    27→  /** Sanitized SVG markup (a fragment usable inside a <g>). */
+    28→  svg: string;
+    29→  viewBox: { w: number; h: number };
+    30→  tags: string[];
+    31→  /** W3 additive metadata — all optional, ignored by old parsers. */
+    32→  role?: AssetRole;
+    33→  /** Pen groups: groupId → member path ids. One group, one pen —
+    34→   *  the validator pins stroke-width/linecap consistency inside. */
+    35→  penGroups?: Record<string, string[]>;
+    36→  /** Explicit path draw order (default: document order). */
+    37→  drawOrder?: string[];
+    38→  /** Per-asset duration weight for the fill law's W4 successor. */
+    39→  durWeight?: number;
+    40→  /** Placement framing hint for the W5 camera director. */
+    41→  framing?: { pad?: number };
+    42→  /** Alternative match names the W2 mention matcher may consult. */
+    43→  alts?: string[];
+    44→  /** Accessibility description (screen readers, alt text). */
+    45→  a11y?: string;
+    46→  /** W4 slice 2: "glyph" replaces this asset's <text> elements with the
+    47→   *  committed handwriting outlines at registration (the single-face law);
+    48→   *  absent/"marker" keeps the marker wipe byte-for-byte. */
+    49→  textMode?: "glyph" | "marker";
+    50→}
+    51→
+    52→const A = (
+    53→  id: string,
+    54→  viewBox: { w: number; h: number },
+    55→  tags: string[],
+    56→  svg: string,
+    57→  meta: Partial<Pick<WhiteboardAsset, "role" | "penGroups" | "drawOrder" | "durWeight" | "framing" | "alts" | "a11y" | "textMode">> = {}
+    58→): WhiteboardAsset => ({ id, viewBox, tags, svg: sanitizeSvg(svg), ...meta });
+    59→
+    60→// ---------------------------------------------------------------------------
+    61→// The benchmark set — "How Your Heart Works"
+    62→// ---------------------------------------------------------------------------
+    63→
+    64→const HEART_OUTLINE =
+    65→  "M 100 62 C 74 26, 24 44, 24 94 C 24 136, 62 162, 100 184 C 138 162, 176 136, 176 94 C 176 44, 126 26, 100 62 Z";
+    66→
+    67→// W7 — the tool hands as named consts: the LEFT mirrors derive from these
+    68→// (one art source, zero drift), and the style map selects among them.
+    69→const ASSET_HAND_MARKER = A("hand-marker", { w: 140, h: 170 }, ["hand", "marker"], `
+    70→  <path id="hd-nib" d="M 70 150 L 60 126 L 80 126 Z" fill="#1d3557" stroke="none"/>
+    71→  <path id="hd-body" d="M 60 126 L 80 126 L 82 66 L 58 66 Z" fill="#e63946" stroke="#1d3557" stroke-width="3"/>
+    72→  <path id="hd-band" d="M 58 66 L 82 66 L 84 50 L 56 50 Z" fill="#1d3557" stroke="none"/>
+    73→  <path id="hd-cap" d="M 56 50 L 84 50 L 84 38 L 56 38 Z" fill="#457b9d" stroke="#1d3557" stroke-width="3"/>
+    74→  <path id="hd-fingers" d="M 82 118 C 108 110, 118 82, 108 56 C 102 40, 88 34, 78 38 L 80 52 C 94 52, 100 66, 98 82 C 96 98, 90 106, 82 104 Z" fill="#f1faee" stroke="#1d3557" stroke-width="3.5"/>
+    75→  <path id="hd-thumb" d="M 60 106 C 46 102, 38 88, 46 78 C 51 71, 60 72, 64 78" fill="none" stroke="#1d3557" stroke-width="3.5" stroke-linecap="round"/>
+    76→  <path id="hd-palm" d="M 84 52 C 96 54, 102 62, 100 72" fill="none" stroke="#1d3557" stroke-width="3" stroke-linecap="round"/>
+    77→`);
+    78→const ASSET_HAND_PENCIL = A("hand-pencil", { w: 140, h: 170 }, ["hand", "pencil"], `
+    79→  <path id="hp-tip" d="M 70 150 L 62 132 L 78 132 Z" fill="#1d3557" stroke="none"/>
+    80→  <path id="hp-wood" d="M 62 132 L 78 132 L 84 112 L 56 112 Z" fill="#e9c46a" stroke="#1d3557" stroke-width="3"/>
+    81→  <path id="hp-body" d="M 56 112 L 84 112 L 86 46 L 54 46 Z" fill="#f4a261" stroke="#1d3557" stroke-width="3"/>
+    82→  <path id="hp-ferrule" d="M 54 46 L 86 46 L 88 34 L 52 34 Z" fill="#457b9d" stroke="none"/>
+    83→  <path id="hp-eraser" d="M 52 34 L 88 34 L 88 24 L 52 24 Z" fill="#e76f51" stroke="#1d3557" stroke-width="3"/>
+    84→  <path id="hp-fingers" d="M 82 118 C 108 110, 118 82, 108 56 C 102 40, 88 34, 78 38 L 80 52 C 94 52, 100 66, 98 82 C 96 98, 90 106, 82 104 Z" fill="#f1faee" stroke="#1d3557" stroke-width="3.5"/>
+    85→  <path id="hp-thumb" d="M 60 106 C 46 102, 38 88, 46 78 C 51 71, 60 72, 64 78" fill="none" stroke="#1d3557" stroke-width="3.5" stroke-linecap="round"/>
+    86→`);
+    87→const ASSET_HAND_CHALK = A("hand-chalk", { w: 140, h: 170 }, ["hand", "chalk"], `
+    88→  <path id="hk-tip" d="M 70 150 L 62 134 L 78 134 Z" fill="#f1faee" stroke="#1d3557" stroke-width="2.5"/>
+    89→  <path id="hk-stick" d="M 62 134 L 78 134 L 84 58 L 56 58 Z" fill="#f1faee" stroke="#1d3557" stroke-width="3"/>
+    90→  <path id="hk-fingers" d="M 82 118 C 108 110, 118 82, 108 56 C 102 40, 88 34, 78 38 L 80 52 C 94 52, 100 66, 98 82 C 96 98, 90 106, 82 104 Z" fill="#f1faee" stroke="#1d3557" stroke-width="3.5"/>
+    91→  <path id="hk-thumb" d="M 60 106 C 46 102, 38 88, 46 78 C 51 71, 60 72, 64 78" fill="none" stroke="#1d3557" stroke-width="3.5" stroke-linecap="round"/>
+    92→`);
+    93→
+    94→const BASE_ASSETS: WhiteboardAsset[] = [
+    95→  A("heart-main", { w: 200, h: 200 }, ["science", "heart", "benchmark"], `
+    96→    <path id="hm-outline" d="${HEART_OUTLINE}" fill="#e63946" fill-opacity="0" stroke="#1d3557" stroke-width="5" stroke-linecap="round"/>
+    97→    <path id="hm-aorta" d="M 96 44 C 92 22, 112 8, 130 16 C 148 24, 150 46, 136 56" fill="none" stroke="#1d3557" stroke-width="4.5" stroke-linecap="round"/>
+    98→    <path id="hm-pulmonary" d="M 116 42 C 124 24, 146 18, 158 30" fill="none" stroke="#457b9d" stroke-width="4.5" stroke-linecap="round"/>
+    99→    <path id="hm-septum" d="M 100 62 C 96 100, 96 140, 100 184" fill="none" stroke="#1d3557" stroke-width="4" stroke-linecap="round"/>
+   100→    <path id="hm-chamber-r" d="M 34 96 C 56 88, 80 90, 96 100" fill="none" stroke="#457b9d" stroke-width="3.5" stroke-linecap="round"/>
+   101→    <path id="hm-chamber-l" d="M 104 100 C 122 90, 146 88, 166 96" fill="none" stroke="#e63946" stroke-width="3.5" stroke-linecap="round"/>
+   102→  `),
+   103→  A("heart-labels", { w: 200, h: 200 }, ["science", "heart", "labels"], `
+   104→    <text id="hl-ra" x="34" y="120" font-family="DejaVu Sans, sans-serif" font-size="22" fill="#457b9d" font-weight="bold">RA</text>
+   105→    <text id="hl-rv" x="40" y="164" font-family="DejaVu Sans, sans-serif" font-size="22" fill="#457b9d" font-weight="bold">RV</text>
+   106→    <text id="hl-la" x="150" y="120" font-family="DejaVu Sans, sans-serif" font-size="22" fill="#e63946" font-weight="bold">LA</text>
+   107→    <text id="hl-lv" x="144" y="164" font-family="DejaVu Sans, sans-serif" font-size="22" fill="#e63946" font-weight="bold">LV</text>
+   108→    <text id="hl-septum" x="88" y="52" font-family="DejaVu Sans, sans-serif" font-size="15" fill="#1d3557">septum</text>
+   109→  `),
+   110→  A("lungs", { w: 200, h: 200 }, ["science", "lungs"], `
+   111→    <path id="lg-trachea" d="M 100 12 L 100 48" fill="none" stroke="#1d3557" stroke-width="5" stroke-linecap="round"/>
+   112→    <path id="lg-left" d="M 100 48 C 74 52, 52 74, 44 110 C 38 146, 52 174, 76 170 C 96 166, 100 140, 100 108 Z" fill="#a8dadc" fill-opacity="0" stroke="#457b9d" stroke-width="4.5" stroke-linecap="round"/>
+   113→    <path id="lg-right" d="M 100 48 C 126 52, 148 74, 156 110 C 162 146, 148 174, 124 170 C 104 166, 100 140, 100 108 Z" fill="#a8dadc" fill-opacity="0" stroke="#457b9d" stroke-width="4.5" stroke-linecap="round"/>
+   114→  `),
+   115→  A("ecg-pulse", { w: 400, h: 120 }, ["science", "ecg", "pulse"], `
+   116→    <path id="ecg-line" d="M 8 70 L 90 70 L 106 42 L 124 98 L 142 24 L 160 112 L 178 70 L 392 70" fill="none" stroke="#e63946" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+   117→  `),
+   118→  A("spark", { w: 120, h: 120 }, ["science", "spark", "energy"], `
+   119→    <path id="sp-1" d="M 60 14 L 60 42" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+   120→    <path id="sp-2" d="M 26 28 L 42 48" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+   121→    <path id="sp-3" d="M 94 28 L 78 48" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+   122→    <path id="sp-4" d="M 18 62 L 44 62" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+   123→    <path id="sp-5" d="M 102 62 L 76 62" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+   124→    <path id="sp-core" d="M 53 62 A 7 7 0 1 0 67 62 A 7 7 0 1 0 53 62 Z" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+   125→  `),
+   126→  A("arrow-curve", { w: 200, h: 200 }, ["generic", "arrow", "flow"], `
+   127→    <path id="ac-stem" d="M 30 170 C 40 100, 90 60, 160 44" fill="none" stroke="#1d3557" stroke-width="5" stroke-linecap="round"/>
+   128→    <path id="ac-head" d="M 138 28 L 164 43 L 148 68" fill="none" stroke="#1d3557" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+   129→  `, { role: "arrow" }),
+   130→  A("arrow-return", { w: 200, h: 200 }, ["generic", "arrow", "flow", "return"], `
+   131→    <path id="ar-stem" d="M 30 170 C 40 100, 90 60, 160 44" fill="none" stroke="#457b9d" stroke-width="5" stroke-linecap="round"/>
+   132→    <path id="ar-head" d="M 138 28 L 164 43 L 148 68" fill="none" stroke="#457b9d" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+   133→  `, { role: "arrow" }),
+   134→  A("title-hero", { w: 800, h: 200 }, ["generic", "title"], `
+   135→    <text id="th-line1" x="60" y="92" font-family="DejaVu Sans, sans-serif" font-size="76" fill="#1d3557" font-weight="bold">How Your Heart</text>
+   136→    <text id="th-line2" x="60" y="176" font-family="DejaVu Sans, sans-serif" font-size="76" fill="#1d3557" font-weight="bold">Works</text>
+   137→    <path id="th-underline" d="M 60 190 C 200 178, 420 198, 560 186" fill="none" stroke="#e63946" stroke-width="6" stroke-linecap="round"/>
+   138→  `),
+   139→  A("close-card", { w: 800, h: 220 }, ["generic", "close", "stat"], `
+   140→    <text id="cc-big" x="60" y="110" font-family="DejaVu Sans, sans-serif" font-size="84" fill="#1d3557" font-weight="bold">60-100</text>
+   141→    <text id="cc-small" x="60" y="164" font-family="DejaVu Sans, sans-serif" font-size="40" fill="#457b9d">beats every minute</text>
+   142→    <path id="cc-box" d="M 48 34 L 48 190 L 640 190 L 640 34 Z" fill="none" stroke="#e63946" stroke-width="5" stroke-linecap="round"/>
+   143→  `),
+   144→  // ---------------------------------------------------------------------------
+   145→  // S67 — the E2 reconciliation port: eight concept assets from the archived
+   146→  // prototype library (contrib/whiteboard-e2, shapes preserved). Two honest
+   147→  // adaptations, both recorded in docs/audits/s67-…record.md:
+   148→  //   1. Ink recolored to the house palette (#1d3557, accents #e63946 /
+   149→  //      #457b9d / #e9c46a) so the library sits beside the benchmark set —
+   150→  //      the prototype's near-black #111827 read as a different pen.
+   151→  //   2. Every path is a SINGLE subpath: the prototype packed multi-M paths
+   152→  //      (growth-axis, chart-axis, coin-dollar, bulb-screw), but the S64
+   153→  //      dash-reveal + hand-follow geometry is benchmark-proven on
+   154→  //      single-subpath paths only (a mid-path M teleports the hand). The
+   155→  //      split is semantic, not cosmetic — each subpath becomes its own
+   156→  //      drawable the scheduler times separately.
+   157→  // ---------------------------------------------------------------------------
+   158→  A("arrow-growth", { w: 200, h: 200 }, ["business", "growth", "trend", "up", "arrow"], `
+   159→    <path id="ag-axis-y" d="M 30 170 L 30 40" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   160→    <path id="ag-axis-x" d="M 30 170 L 170 170" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   161→    <path id="ag-line" d="M 40 150 L 70 120 L 100 130 L 140 70" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   162→    <path id="ag-head" d="M 130 60 L 150 60 L 150 80" fill="none" stroke="#e63946" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   163→  `, { role: "arrow" }),
+   164→  A("bar-chart", { w: 200, h: 200 }, ["business", "data", "chart", "stat", "graph"], `
+   165→    <path id="bc-axis-y" d="M 30 170 L 30 30" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   166→    <path id="bc-axis-x" d="M 30 170 L 180 170" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   167→    <path id="bc-bar1" d="M 50 130 L 80 130 L 80 170 L 50 170 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   168→    <path id="bc-bar2" d="M 90 110 L 120 110 L 120 170 L 90 170 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   169→    <path id="bc-bar3" d="M 130 70 L 160 70 L 160 170 L 130 170 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   170→    <path id="bc-trend" d="M 60 100 L 90 80 L 130 50" fill="none" stroke="#e63946" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   171→  `),
+   172→  A("check-badge", { w: 200, h: 200 }, ["business", "check", "done", "quality", "verified"], `
+   173→    <path id="cb-outer" d="M 100 25 L 115 35 L 130 30 L 138 45 L 155 50 L 152 67 L 165 80 L 155 93 L 162 110 L 145 117 L 145 135 L 128 135 L 120 150 L 105 142 L 90 152 L 82 137 L 65 137 L 65 120 L 48 113 L 55 97 L 45 82 L 60 70 L 55 53 L 72 48 L 78 33 L 95 38 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   174→    <path id="cb-check" d="M 75 95 L 95 115 L 130 75" fill="none" stroke="#e63946" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+   175→  `),
+   176→  A("clock", { w: 200, h: 200 }, ["time", "clock", "deadline", "schedule"], `
+   177→    <path id="cl-outer" d="M 100 30 C 60 30 30 60 30 100 C 30 140 60 170 100 170 C 140 170 170 140 170 100 C 170 60 140 30 100 30 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   178→    <path id="cl-tick12" d="M 100 40 L 100 55" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   179→    <path id="cl-tick3" d="M 160 100 L 145 100" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   180→    <path id="cl-tick6" d="M 100 160 L 100 145" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   181→    <path id="cl-tick9" d="M 40 100 L 55 100" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   182→    <path id="cl-hour" d="M 100 100 L 100 70" fill="none" stroke="#457b9d" stroke-width="6" stroke-linecap="round"/>
+   183→    <path id="cl-minute" d="M 100 100 L 130 100" fill="none" stroke="#e63946" stroke-width="6" stroke-linecap="round"/>
+   184→  `),
+   185→  A("coin", { w: 200, h: 200 }, ["money", "coin", "cost", "price", "revenue"], `
+   186→    <path id="cn-outer" d="M 100 30 C 60 30 30 60 30 100 C 30 140 60 170 100 170 C 140 170 170 140 170 100 C 170 60 140 30 100 30 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   187→    <path id="cn-inner" d="M 100 50 C 70 50 50 70 50 100 C 50 130 70 150 100 150 C 130 150 150 130 150 100 C 150 70 130 50 100 50 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   188→    <path id="cn-dollar-stem" d="M 100 70 L 100 130" fill="none" stroke="#e9c46a" stroke-width="6" stroke-linecap="round"/>
+   189→    <path id="cn-dollar-s" d="M 85 85 C 85 75 95 70 100 75 C 105 70 115 75 115 85 C 115 95 105 95 100 100 C 95 105 85 105 85 115 C 85 125 95 130 100 125 C 105 130 115 125 115 115" fill="none" stroke="#e9c46a" stroke-width="6" stroke-linecap="round"/>
+   190→  `),
+   191→  A("globe", { w: 200, h: 200 }, ["world", "global", "internet", "international"], `
+   192→    <path id="gl-outer" d="M 100 30 C 60 30 30 60 30 100 C 30 140 60 170 100 170 C 140 170 170 140 170 100 C 170 60 140 30 100 30 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   193→    <path id="gl-equator" d="M 30 100 L 170 100" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   194→    <path id="gl-meridian" d="M 100 30 L 100 170" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   195→    <path id="gl-arc-west" d="M 60 50 C 80 80 80 120 60 150" fill="none" stroke="#457b9d" stroke-width="6" stroke-linecap="round"/>
+   196→    <path id="gl-arc-east" d="M 140 50 C 120 80 120 120 140 150" fill="none" stroke="#457b9d" stroke-width="6" stroke-linecap="round"/>
+   197→  `),
+   198→  A("lightbulb", { w: 200, h: 200 }, ["idea", "innovation", "insight", "think"], `
+   199→    <path id="lb-glass" d="M 100 30 C 60 30 40 70 60 110 C 70 125 70 140 70 150 L 130 150 C 130 140 130 125 140 110 C 160 70 140 30 100 30 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   200→    <path id="lb-filament" d="M 80 90 C 80 70 90 60 100 70 C 110 60 120 70 120 90" fill="none" stroke="#e9c46a" stroke-width="6" stroke-linecap="round"/>
+   201→    <path id="lb-screw-1" d="M 75 160 L 125 160" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   202→    <path id="lb-screw-2" d="M 78 170 L 122 170" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   203→    <path id="lb-screw-3" d="M 82 180 L 118 180" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   204→  `),
+   205→  A("rocket", { w: 200, h: 200 }, ["launch", "startup", "speed", "rocket", "growth"], `
+   206→    <path id="rk-body" d="M 100 30 C 120 50 130 90 130 130 L 70 130 C 70 90 80 50 100 30 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   207→    <path id="rk-window" d="M 100 70 C 95 70 90 75 90 80 C 90 85 95 90 100 90 C 105 90 110 85 110 80 C 110 75 105 70 100 70 Z" fill="none" stroke="#457b9d" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   208→    <path id="rk-fin-l" d="M 70 110 L 50 150 L 70 150 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   209→    <path id="rk-fin-r" d="M 130 110 L 150 150 L 130 150 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   210→    <path id="rk-flame" d="M 85 140 C 90 160 95 175 100 175 C 105 175 110 160 115 140" fill="none" stroke="#e63946" stroke-width="6" stroke-linecap="round"/>
+   211→  `),
+   212→  // The drawing hand: a marker held in a stylized hand. The marker tip is
+   213→  // the asset's anchor: (70, 150). The renderer translates the hand so the
+   214→  // TIP lands on the path point (asset inner translate −tip) and applies a
+   215→  // gentle fixed tilt + wobble — the hand FOLLOWS the true path point at
+   216→  // every frame (the plan's hard requirement); the tilt is aesthetic only.
+   217→  ASSET_HAND_MARKER,
+   218→
+   219→  // ---------------------------------------------------------------------------
+   220→  // W7 — the hand family (S120 §3 W7): style variants (pencil, chalk) and
+   221→  // the pose sub-assets (point for arrow/emphasis strokes, rest for the
+   222→  // scene tail). Every hand shares ONE tip anchor — HAND_TIP (70, 150) —
+   223→  // so the page's inner translate and the plan's follow math stay
+   224→  // style/pose-agnostic. All art: single-subpath paths (the teleport
+   225→  // law), house stroke colors, tag "hand" (the drawing-agent exemption).
+   226→  // The LEFT-hand mirrors of the tool hands register below, derived.
+   227→  // ---------------------------------------------------------------------------
+   228→  ASSET_HAND_PENCIL,
+   229→  ASSET_HAND_CHALK,
+   230→
+   231→  // ---------------------------------------------------------------------------
+   232→  // W3 — the extended starter pack: education / business / science /
+   233→  // process. Every path is ONE subpath (the teleport law), every closed
+   234→  // shape winds, every arrow's head sits on its stem's tip — the validator
+   235→  // (asset-validate.ts) gates all of it, and the suite pins every built-in
+   236→  // through validateAsset.
+   237→  // ---------------------------------------------------------------------------
+   238→  A("graduation-cap", { w: 200, h: 200 }, ["education", "school", "learn", "graduate", "study"], `
+   239→    <path id="gc-board" d="M 100 60 L 180 95 L 100 130 L 20 95 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   240→    <path id="gc-band" d="M 70 126 C 74 144, 126 144, 130 126" fill="none" stroke="#457b9d" stroke-width="5.5" stroke-linecap="round"/>
+   241→    <path id="gc-tassel" d="M 180 95 C 184 115, 176 132, 180 152" fill="none" stroke="#e63946" stroke-width="5" stroke-linecap="round"/>
+   242→  `),
+   243→  A("open-book", { w: 200, h: 200 }, ["education", "book", "read", "learn", "story"], `
+   244→    <path id="ob-spine" d="M 100 70 L 100 150" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   245→    <path id="ob-page-l" d="M 100 70 C 70 58, 40 58, 24 66 L 24 146 C 40 138, 70 138, 100 150" fill="none" stroke="#1d3557" stroke-width="5.5" stroke-linecap="round"/>
+   246→    <path id="ob-page-r" d="M 100 70 C 130 58, 160 58, 176 66 L 176 146 C 160 138, 130 138, 100 150" fill="none" stroke="#457b9d" stroke-width="5.5" stroke-linecap="round"/>
+   247→  `),
+   248→  A("target", { w: 200, h: 200 }, ["business", "goal", "target", "aim", "focus"], `
+   249→    <path id="tg-outer" d="M 30 100 A 70 70 0 1 0 170 100 A 70 70 0 1 0 30 100 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   250→    <path id="tg-mid" d="M 55 100 A 45 45 0 1 0 145 100 A 45 45 0 1 0 55 100 Z" fill="none" stroke="#457b9d" stroke-width="5.5" stroke-linecap="round"/>
+   251→    <path id="tg-inner" d="M 80 100 A 20 20 0 1 0 120 100 A 20 20 0 1 0 80 100 Z" fill="none" stroke="#e63946" stroke-width="5" stroke-linecap="round"/>
+   252→  `),
+   253→  A("pie-chart", { w: 200, h: 200 }, ["business", "data", "chart", "share", "percent", "pie"], `
+   254→    <path id="pc-circle" d="M 30 100 A 70 70 0 1 0 170 100 A 70 70 0 1 0 30 100 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   255→    <path id="pc-slice" d="M 100 100 L 100 30 A 70 70 0 0 1 160.6 65 Z" fill="none" stroke="#e63946" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+   256→  `),
+   257→  A("flask", { w: 200, h: 200 }, ["science", "lab", "experiment", "chemistry", "test"], `
+   258→    <path id="fl-body" d="M 85 30 L 85 70 L 45 150 C 40 162, 48 170, 60 170 L 140 170 C 152 170, 160 162, 155 150 L 115 70 L 115 30" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   259→    <path id="fl-rim" d="M 73 30 L 127 30" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   260→    <path id="fl-liquid" d="M 60 122 C 80 130, 120 130, 140 122" fill="none" stroke="#457b9d" stroke-width="5" stroke-linecap="round"/>
+   261→  `),
+   262→  A("atom", { w: 200, h: 200 }, ["science", "atom", "physics", "energy", "nucleus"], `
+   263→    <path id="at-nucleus" d="M 88 100 A 12 12 0 1 0 112 100 A 12 12 0 1 0 88 100 Z" fill="none" stroke="#e63946" stroke-width="5" stroke-linecap="round"/>
+   264→    <path id="at-orbit-h" d="M 20 100 A 80 32 0 1 0 180 100 A 80 32 0 1 0 20 100 Z" fill="none" stroke="#1d3557" stroke-width="5" stroke-linecap="round"/>
+   265→    <path id="at-orbit-v" d="M 100 20 A 32 80 0 1 0 100 180 A 32 80 0 1 0 100 20 Z" fill="none" stroke="#457b9d" stroke-width="5" stroke-linecap="round"/>
+   266→  `),
+   267→  A("gear", { w: 200, h: 200 }, ["process", "machine", "gear", "system", "work", "engine"], `
+   268→    <path id="gr-outer" d="M 40 100 A 60 60 0 1 0 160 100 A 60 60 0 1 0 40 100 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   269→    <path id="gr-hub" d="M 80 100 A 20 20 0 1 0 120 100 A 20 20 0 1 0 80 100 Z" fill="none" stroke="#457b9d" stroke-width="6" stroke-linecap="round"/>
+   270→    <path id="gr-t1" d="M 160 100 L 175 100" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   271→    <path id="gr-t2" d="M 142.4 57.6 L 153 47" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   272→    <path id="gr-t3" d="M 100 40 L 100 25" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   273→    <path id="gr-t4" d="M 57.6 57.6 L 47 47" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   274→    <path id="gr-t5" d="M 40 100 L 25 100" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   275→    <path id="gr-t6" d="M 57.6 142.4 L 47 153" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   276→    <path id="gr-t7" d="M 100 160 L 100 175" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   277→    <path id="gr-t8" d="M 142.4 142.4 L 153 153" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   278→  `, {
+   279→    // One gear, one pen: the whole asset shares a single declared pen group
+   280→    // (the validator's group-consistency check has a passing home).
+   281→    penGroups: { "pen-gear": ["gr-outer", "gr-hub", "gr-t1", "gr-t2", "gr-t3", "gr-t4", "gr-t5", "gr-t6", "gr-t7", "gr-t8"] },
+   282→  }),
+   283→  A("flow-steps", { w: 200, h: 200 }, ["process", "flow", "steps", "sequence", "workflow"], `
+   284→    <path id="fs-box1" d="M 20 40 L 80 40 L 80 80 L 20 80 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   285→    <path id="fs-box2" d="M 120 40 L 180 40 L 180 80 L 120 80 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   286→    <path id="fs-box3" d="M 70 120 L 130 120 L 130 160 L 70 160 Z" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+   287→    <path id="fs-arrow1" d="M 85 60 L 112 60" fill="none" stroke="#e63946" stroke-width="5" stroke-linecap="round"/>
+   288→    <path id="fs-head1" d="M 104 52 L 114 60 L 104 68" fill="none" stroke="#e63946" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+   289→    <path id="fs-arrow2" d="M 150 85 L 118 112" fill="none" stroke="#e63946" stroke-width="5" stroke-linecap="round"/>
+   290→    <path id="fs-head2" d="M 124 104 L 113 116 L 127 121" fill="none" stroke="#e63946" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+   291→  `),
+   292→  // W4 slice 2 — the glyph-mode home asset: its <text> becomes committed
+   293→  // Caveat outlines at registration (the ONLY built-in that does), so the
+   294→  // W1 benchmark assets keep the marker wipe byte-for-byte.
+   295→  A("glyph-note", { w: 240, h: 120 }, ["generic", "note", "idea", "handwriting"], `
+   296→    <path id="gn-line" d="M 28 96 C 70 90 152 90 212 94" fill="none" stroke="#1d3557" stroke-width="5" stroke-linecap="round"/>
+   297→    <text id="gn-word" x="44" y="66" font-family="DejaVu Sans, sans-serif" font-size="52" fill="#1d3557" font-weight="bold">Idea</text>
+   298→  `, { role: "emphasis", textMode: "glyph" }),
+   299→
+   300→  // ---------------------------------------------------------------------------
+   301→  // S142 — the effects pack (the audit's P4): the emphasis vocabulary the
+   302→  // planner can sprinkle when the narration PUNCTUATES rather than NAMES —
+   303→  // bursts, marks, underlines, pops. Every asset rides the exact W3 law the
+   304→  // rest of the library rides (one subpath per stroke — the teleport law;
+   305→  // one pen per group — the validator's consistency check; house palette;
+   306→  // no pure fills, so the fill-order law has nothing to judge) and every
+   307→  // path grows its S139 -od retrace at registration like every other
+   308→  // authored stroke. Roles all "emphasis" (the W3 vocabulary's own rung).
+   309→  // ---------------------------------------------------------------------------
+   310→  A("fx-burst", { w: 200, h: 200 }, ["effects", "burst", "impact", "punch", "wow"], `
+   311→    <path id="fxb-1" d="M 100 70 L 100 25" fill="none" stroke="#e63946" stroke-width="5.5" stroke-linecap="round"/>
+   312→    <path id="fxb-2" d="M 124 76 L 157 43" fill="none" stroke="#e9c46a" stroke-width="5.5" stroke-linecap="round"/>
+   313→    <path id="fxb-3" d="M 130 100 L 175 100" fill="none" stroke="#e63946" stroke-width="5.5" stroke-linecap="round"/>
+   314→    <path id="fxb-4" d="M 124 124 L 157 157" fill="none" stroke="#e9c46a" stroke-width="5.5" stroke-linecap="round"/>
+   315→    <path id="fxb-5" d="M 100 130 L 100 175" fill="none" stroke="#e63946" stroke-width="5.5" stroke-linecap="round"/>
+   316→    <path id="fxb-6" d="M 76 124 L 43 157" fill="none" stroke="#e9c46a" stroke-width="5.5" stroke-linecap="round"/>
+   317→    <path id="fxb-7" d="M 70 100 L 25 100" fill="none" stroke="#e63946" stroke-width="5.5" stroke-linecap="round"/>
+   318→    <path id="fxb-8" d="M 76 76 L 43 43" fill="none" stroke="#e9c46a" stroke-width="5.5" stroke-linecap="round"/>
+   319→  `, {
+   320→    role: "emphasis",
+   321→    durWeight: 0.7,
+   322→    alts: ["burst", "impact", "radial", "rays"],
+   323→    a11y: "an emphasis burst: eight strokes radiating from an open center",
+   324→    penGroups: { "pen-burst": ["fxb-1", "fxb-2", "fxb-3", "fxb-4", "fxb-5", "fxb-6", "fxb-7", "fxb-8"] },
+   325→  }),
+   326→  A("fx-circle-mark", { w: 200, h: 170 }, ["effects", "circle", "ring", "encircle", "around"], `
+   327→    <path id="fxc-lap" d="M 128 52 C 178 42, 182 128, 128 146 C 84 158, 30 138, 34 96 C 37 62, 84 46, 124 54" fill="none" stroke="#e63946" stroke-width="6" stroke-linecap="round"/>
+   328→  `, {
+   329→    role: "emphasis",
+   330→    alts: ["circle", "ring", "encircle", "loop around", "surround"],
+   331→    a11y: "a hand-drawn emphasis oval left open at its start",
+   332→  }),
+   333→  A("fx-underline", { w: 300, h: 100 }, ["effects", "underline", "stress", "key", "important"], `
+   334→    <path id="fxu-1" d="M 20 60 C 80 52, 180 52, 278 62" fill="none" stroke="#1d3557" stroke-width="7" stroke-linecap="round"/>
+   335→    <path id="fxu-2" d="M 40 84 C 110 78, 210 78, 256 86" fill="none" stroke="#e63946" stroke-width="5" stroke-linecap="round"/>
+   336→  `, {
+   337→    role: "emphasis",
+   338→    alts: ["underline", "stress", "emphasize", "key point"],
+   339→    a11y: "a two-stroke hand underline: a heavy lead line and a lighter accent",
+   340→  }),
+   341→  A("fx-exclaim", { w: 200, h: 200 }, ["effects", "exclaim", "attention", "warning", "notice"], `
+   342→    <path id="fxe-bar" d="M 100 24 C 106 60, 108 96, 100 128" fill="none" stroke="#e63946" stroke-width="9" stroke-linecap="round"/>
+   343→    <path id="fxe-dot" d="M 91 158 A 9 9 0 1 0 109 158 A 9 9 0 1 0 91 158" fill="none" stroke="#e63946" stroke-width="8" stroke-linecap="round"/>
+   344→  `, {
+   345→    role: "emphasis",
+   346→    alts: ["exclamation", "attention", "warning", "careful"],
+   347→    a11y: "a hand-drawn exclamation mark: a wavering bar above a drawn dot",
+   348→  }),
+   349→  A("fx-star-pop", { w: 200, h: 200 }, ["effects", "star", "pop", "shine", "highlight"], `
+   350→    <path id="fxs-star" d="M 100 30 C 106 74, 126 94, 170 100 C 126 106, 106 126, 100 170 C 94 126, 74 106, 30 100 C 74 94, 94 74, 100 30" fill="none" stroke="#e9c46a" stroke-width="5.5" stroke-linecap="round"/>
+   351→  `, {
+   352→    role: "emphasis",
+   353→    alts: ["star", "pop", "twinkle", "shine"],
+   354→    a11y: "a four-point star drawn in one continuous stroke",
+   355→  }),
+   356→  A("fx-speed-lines", { w: 160, h: 140 }, ["effects", "speed", "fast", "rush", "motion"], `
+   357→    <path id="fxv-1" d="M 24 50 L 116 50" fill="none" stroke="#457b9d" stroke-width="6" stroke-linecap="round"/>
+   358→    <path id="fxv-2" d="M 24 78 L 148 78" fill="none" stroke="#457b9d" stroke-width="6" stroke-linecap="round"/>
+   359→    <path id="fxv-3" d="M 24 106 L 132 106" fill="none" stroke="#457b9d" stroke-width="6" stroke-linecap="round"/>
+   360→  `, {
+   361→    role: "emphasis",
+   362→    durWeight: 0.6,
+   363→    alts: ["speed lines", "fast", "quickly", "whoosh"],
+   364→    a11y: "three trailing speed lines of different lengths",
+   365→    penGroups: { "pen-speed": ["fxv-1", "fxv-2", "fxv-3"] },
+   366→  }),
+   367→  A("fx-brace", { w: 160, h: 160 }, ["effects", "brace", "group", "callout", "combine"], `
+   368→    <path id="fxz-brace" d="M 128 20 C 100 20, 104 46, 88 62 C 76 74, 60 78, 44 80 C 60 82, 76 86, 88 98 C 104 114, 100 140, 128 140" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/>
+   369→  `, {
+   370→    role: "emphasis",
+   371→    alts: ["brace", "curly", "group these", "together"],
+   372→    a11y: "a hand-drawn curly brace opening to the left",
+   373→  }),
+   374→  A("fx-mini-sparks", { w: 170, h: 170 }, ["effects", "sparkle", "twinkle", "magic", "accent"], `
+   375→    <path id="fxk-1a" d="M 40 40 L 40 64" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+   376→    <path id="fxk-1b" d="M 28 52 L 52 52" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+   377→    <path id="fxk-2a" d="M 140 30 L 140 50" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+   378→    <path id="fxk-2b" d="M 130 40 L 150 40" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+   379→    <path id="fxk-3a" d="M 90 120 L 90 144" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+   380→    <path id="fxk-3b" d="M 78 132 L 102 132" fill="none" stroke="#e9c46a" stroke-width="5" stroke-linecap="round"/>
+   381→  `, {
+   382→    role: "emphasis",
+   383→    durWeight: 0.5,
+   384→    alts: ["sparkle", "twinkle", "magic", "accents"],
+   385→    a11y: "three small hand-drawn plus-shaped sparkles scattered across the field",
+   386→    penGroups: { "pen-spark": ["fxk-1a", "fxk-1b", "fxk-2a", "fxk-2b", "fxk-3a", "fxk-3b"] },
+   387→  }),
+   388→];
+   389→
+   390→/** The marker tip anchor of the drawing-hand assets (asset-space). Every
+   391→ *  hand in the W7 family is AUTHORED to share this anchor — the tool tip,
+   392→ *  the pointing fingertip, the resting fingertip all contact the board at
+   393→ *  (70, 150) — so the page's inner translate and the plan's follow math
+   394→ *  stay style/pose-agnostic. A future pose needing a different contact
+   395→ *  point registers its own entry in HAND_TIPS (extending, never forking). */
+   396→export const HAND_TIP = { x: 70, y: 150 } as const;
+   397→
+   398→// ---------------------------------------------------------------------------
+   399→// W7 — the hand family registration: style variants, pose sub-assets, and
+   400→// the LEFT-hand mirrors derived mechanically (one art source — a mirrored
+   401→// clone can never drift from its right-hand original).
+   402→// ---------------------------------------------------------------------------
+   403→
+   404→/** The pose a hand asset renders for (W7). write/draw ride the style
+   405→ *  asset; point/circle ride hand-point; rest rides hand-rest. Selected by
+   406→ *  the W3 role metadata of the ACTIVE stroke (pose mapping in timing.ts). */
+   407→export type HandPose = "write" | "draw" | "point" | "circle" | "rest";
+   408→
+   409→/** Which hand asset id a project's `hand.style` (and side) selects. */
+   410→export const HAND_ASSET_BY_STYLE: Record<"marker" | "pencil" | "chalk", string> = {
+   411→  marker: "hand-marker",
+   412→  pencil: "hand-pencil",
+   413→  chalk: "hand-chalk",
+   414→};
+   415→
+   416→/** W7 — the page's tool hand for a project's style + side: the LEFT
+   417→ *  variants are the mirrored per-asset clones (one art source), so the
+   418→ *  side resolves to a DIFFERENT asset id, never a transform hack. */
+   419→export function handAssetIdFor(style: "marker" | "pencil" | "chalk", side?: "left" | "right"): string {
+   420→  const base = HAND_ASSET_BY_STYLE[style];
+   421→  return side === "left" ? `${base}-l` : base;
+   422→}
+   423→
+   424→/** Mirrored LEFT variant of a hand asset: the same art wrapped in a
+   425→ *  mirror group (the tip is the box's horizontal center, so the anchor
+   426→ *  survives the flip), tags extended with "left". Derived at module init
+   427→ *  — one art source, zero drift. */
+   428→function leftHandVariant(a: WhiteboardAsset, id: string): WhiteboardAsset {
+   429→  return {
+   430→    ...a,
+   431→    id,
+   432→    tags: [...a.tags, "left"],
+   433→    svg: `<g transform="translate(${a.viewBox.w} 0) scale(-1 1)">${a.svg}</g>`,
+   434→  };
+   435→}
+   436→
+   437→const HAND_POSE_POINT = A("hand-point", { w: 140, h: 170 }, ["hand", "point"], `
+   438→  <path id="hq-finger" d="M 64 150 C 60 134, 60 120, 62 110 C 64 102, 78 102, 78 110 L 76 150 Z" fill="#f1faee" stroke="#1d3557" stroke-width="3.5"/>
+   439→  <path id="hq-fist" d="M 58 118 C 40 118, 34 92, 48 76 C 58 64, 88 64, 98 76 C 110 90, 106 116, 92 124 C 84 128, 68 128, 58 118 Z" fill="#f1faee" stroke="#1d3557" stroke-width="3.5"/>
+   440→  <path id="hq-cuff" d="M 42 88 C 38 68, 40 54, 48 44 C 64 34, 84 34, 98 44 C 104 54, 104 70, 100 86" fill="#457b9d" stroke="#1d3557" stroke-width="3"/>
+   441→`);
+   442→const HAND_POSE_REST = A("hand-rest", { w: 140, h: 170 }, ["hand", "rest"], `
+   443→  <path id="hr-palm" d="M 48 150 C 42 128, 42 104, 50 88 C 58 74, 82 72, 92 84 C 102 96, 102 122, 96 142 C 94 150, 88 154, 80 154 L 56 154 Z" fill="#f1faee" stroke="#1d3557" stroke-width="3.5"/>
+   444→  <path id="hr-index" d="M 52 92 C 48 106, 48 128, 52 148" fill="none" stroke="#1d3557" stroke-width="3" stroke-linecap="round"/>
+   445→  <path id="hr-middle" d="M 66 88 C 62 106, 62 130, 66 150" fill="none" stroke="#1d3557" stroke-width="3" stroke-linecap="round"/>
+   446→  <path id="hr-ring" d="M 80 92 C 78 108, 78 130, 82 148" fill="none" stroke="#1d3557" stroke-width="3" stroke-linecap="round"/>
+   447→  <path id="hr-cuff" d="M 46 96 C 40 78, 44 60, 54 50 C 70 38, 90 40, 100 52 C 106 62, 106 76, 102 88" fill="#457b9d" stroke="#1d3557" stroke-width="3"/>
+   448→`);
+   449→
+   450→/** The named tip points, extending HAND_TIP: hand-asset id → tip. Every
+   451→ *  current entry IS HAND_TIP (the family's shared anchor); the map exists
+   452→ *  so a future pose with its own contact point registers here instead of
+   453→ *  forking the follow math. */
+   454→export const HAND_TIPS: Record<string, { x: number; y: number }> = {
+   455→  "hand-marker": { ...HAND_TIP },
+   456→  "hand-pencil": { ...HAND_TIP },
+   457→  "hand-chalk": { ...HAND_TIP },
+   458→  "hand-marker-l": { ...HAND_TIP },
+   459→  "hand-pencil-l": { ...HAND_TIP },
+   460→  "hand-chalk-l": { ...HAND_TIP },
+   461→  "hand-point": { ...HAND_TIP },
+   462→  "hand-rest": { ...HAND_TIP },
+   463→};
+   464→
+   465→export const ASSETS: WhiteboardAsset[] = [
+   466→  ...BASE_ASSETS,
+   467→  leftHandVariant(ASSET_HAND_MARKER, "hand-marker-l"),
+   468→  leftHandVariant(ASSET_HAND_PENCIL, "hand-pencil-l"),
+   469→  leftHandVariant(ASSET_HAND_CHALK, "hand-chalk-l"),
+   470→  HAND_POSE_POINT,
+   471→  HAND_POSE_REST,
+   472→];
+   473→
+   474→// ---------------------------------------------------------------------------
+   475→// Extraction + registration
+   476→// ---------------------------------------------------------------------------
+   477→
+   478→export interface ExtractedAsset {
+   479→  asset: WhiteboardAsset;
+   480→  /** Drawable path elements: id + raw path data (document order = draw
+   481→   *  order). W3: the pen attributes ride along (stroke / stroke-width /
+   482→   *  linecap / fill) — the validator's caps + fill law read them; old
+   483→   *  consumers reading {id, d} are untouched (additive, tolerant). */
+   484→  paths: { id: string; d: string; stroke?: string; strokeWidth?: number; linecap?: string; fill?: string }[];
+   485→  /** Text elements: id + visible content + anchor. */
+   486→  texts: { id: string; content: string; x: number; y: number; size: number }[];
+   487→  /** S65 (E1): elements excluded from the drawable index, with the budget
+   488→   *  law each one broke — surfaced for diagnostics instead of silently
+   489→   *  shrinking the drawable set (the E11 upload path rejects outright).
+   490→   *  W3: `detail` carries the exact numbers behind the reason. */
+   491→  rejected: { kind: "path" | "text"; id: string; reason: "id-charset" | "path-commands"; detail?: string }[];
+   492→}
+   493→
+   494→/** S65 (E1): per-path command budget, counted as EXPANDED commands through
+   495→ *  the real grammar (svg.ts countPathCommands — implicit repeats count),
+   496→ *  so a polyline of 10,000 implicit points counts as 10,000 — the
+   497→ *  flattening cost the timing engine and the rasterizer would both pay
+   498→ *  per frame. */
+   499→export const WB_PATH_COMMAND_BUDGET = 512;
+   500→
+   501→/** Extract drawable elements from an asset's markup (trusted, well-formed
+   502→ *  library markup — regex extraction; the sanitizer already ran on load).
+   503→ *  S65: the id-charset law and the per-path command budget apply HERE —
+   504→ *  an element that breaks either never reaches the drawable index, so no
+   505→ *  project event can address it and the renderer's namespace seam
+   506→ *  (`${assetId}--${pathId}` DOM ids, `assetId::pathId` frame-plan keys)
+   507→ *  can never be fed a corrupting id. */
+   508→export function extractAsset(asset: WhiteboardAsset): ExtractedAsset {
+   509→  const paths: { id: string; d: string }[] = [];
+   510→  const texts: ExtractedAsset["texts"] = [];
+   511→  const rejected: ExtractedAsset["rejected"] = [];
+   512→  const pathRe = /<path\b[^>]*>/g;
+   513→  for (const m of asset.svg.matchAll(pathRe)) {
+   514→    const tag = m[0];
+   515→    // Attribute-anchored regexes (\s prefix): a bare /d="…"/ would match
+   516→    // the tail of id="…" and extract the id as path data.
+   517→    const id = /\sid="([^"]+)"/.exec(tag)?.[1];
+   518→    const d = /\sd="([^"]+)"/.exec(tag)?.[1];
+   519→    if (!id || !d) continue;
+   520→    if (!validWhiteboardId(id)) {
+   521→      rejected.push({ kind: "path", id, reason: "id-charset", detail: `id "${id}" carries characters outside the namespace law` });
+   522→      continue;
+   523→    }
+   524→    const commands = countPathCommands(d);
+   525→    if (commands > WB_PATH_COMMAND_BUDGET) {
+   526→      rejected.push({ kind: "path", id, reason: "path-commands", detail: `${commands} expanded commands > ${WB_PATH_COMMAND_BUDGET} budget` });
+   527→      continue;
+   528→    }
+   529→    const strokeRaw = /\sstroke="([^"]*)"/.exec(tag)?.[1];
+   530→    const swRaw = /\sstroke-width="([-\d.]+)"/.exec(tag)?.[1];
+   531→    const capRaw = /\sstroke-linecap="([^"]*)"/.exec(tag)?.[1];
+   532→    const fillRaw = /\sfill="([^"]*)"/.exec(tag)?.[1];
+   533→    paths.push({
+   534→      id,
+   535→      d,
+   536→      ...(strokeRaw !== undefined ? { stroke: strokeRaw } : {}),
+   537→      ...(swRaw !== undefined ? { strokeWidth: Number(swRaw) } : {}),
+   538→      ...(capRaw !== undefined ? { linecap: capRaw } : {}),
+   539→      ...(fillRaw !== undefined ? { fill: fillRaw } : {}),
+   540→    });
+   541→  }
+   542→  for (const m of asset.svg.matchAll(/<text\b([^>]*)>([^<]*)<\/text>/g)) {
+   543→    const attrs = m[1];
+   544→    const content = m[2].trim();
+   545→    const id = /\sid="([^"]+)"/.exec(attrs)?.[1];
+   546→    if (!id || !content) continue;
+   547→    if (!validWhiteboardId(id)) {
+   548→      rejected.push({ kind: "text", id, reason: "id-charset", detail: `id "${id}" carries characters outside the namespace law` });
+   549→      continue;
+   550→    }
+   551→    texts.push({
+   552→      id,
+   553→      content,
+   554→      x: Number(/\sx="([-\d.]+)"/.exec(attrs)?.[1] ?? 0),
+   555→      y: Number(/\sy="([-\d.]+)"/.exec(attrs)?.[1] ?? 0),
+   556→      size: Number(/\sfont-size="([-\d.]+)"/.exec(attrs)?.[1] ?? 32),
+   557→    });
+   558→  }
+   559→  return { asset, paths, texts, rejected };
+   560→}
+   561→
+   562→/** Load + register the library: sanitize (already at construction), extract,
+   563→ *  and feed the pure scheduler's text registries.
+   564→ *
+   565→ *  S69 (E9 Phase C / E11 §7 gate 7): `uploaded` merges per-video uploaded
+   566→ *  assets AFTER the built-ins — the SAME registration path (sanitize on
+   567→ *  load, extraction, the scheduler's text registries), so a placement or
+   568→ *  event addressing an upload validates and renders through the exact code
+   569→ *  the built-ins ride. Id collisions (an upload vs a built-in, or two
+   570→ *  uploads) throw — the /asset route prevents them at write time, so a
+   571→ *  collision at load is data corruption and says so. */
+   572→export function loadLibrary(uploaded: WhiteboardAsset[] = []): {
+   573→  assets: Map<string, WhiteboardAsset>;
+   574→  extracted: Map<string, ExtractedAsset>;
+   575→  libraryIndex: {
+   576→    assetIds: Set<string>;
+   577→    pathIdsByAsset: Map<string, Set<string>>;
+   578→    textIdsByAsset: Map<string, Set<string>>;
+   579→  };
+   580→  /** W3: uploads the stroke-authored validator EXCLUDED (warn-and-
+   581→   *  exclude — the manifest row stays, the asset never registers, and no
+   582→   *  document is mutated; this module never sees one). Built-ins never
+   583→   *  land here: a built-in failing its own validator throws, because
+   584→   *  that is a programming error, not a data condition. */
+   585→  warnings: { assetId: string; reasons: string[] }[];
+   586→} {
+   587→  const assets = new Map<string, WhiteboardAsset>();
+   588→  const extracted = new Map<string, ExtractedAsset>();
+   589→  const pathIdsByAsset = new Map<string, Set<string>>();
+   590→  const textIdsByAsset = new Map<string, Set<string>>();
+   591→  const warnings: { assetId: string; reasons: string[] }[] = [];
+   592→  const register = (a: WhiteboardAsset, origin: string): void => {
+   593→    if (assets.has(a.id)) throw new Error(`duplicate whiteboard asset id: ${a.id} (${origin})`);
+   594→    // W4 slice 2 — glyph mode is per-asset metadata: the transform swaps
+   595→    // <text> for committed-outline paths BEFORE extraction, so geometry,
+   596→    // the scheduler, the page and the camera all ride the ordinary path
+   597→    // machinery. No metadata → the asset is byte-identical (the fallback law).
+   598→    let effective = a;
+   599→    if (a.textMode === "glyph") {
+   600→      const glyph = applyGlyphTextMode(a.svg);
+   601→      effective = { ...a, svg: glyph.svg };
+   602→      // replaced texts leave ex.texts — re-register their anchors so
+   603→      // checkReadability and the W5 framing policy still measure them
+   604→      for (const t of glyph.replacedAnchors) {
+   605→        TEXT_ANCHORS.set(`${a.id}::${t.id}`, { x: t.x, y: t.y, size: t.size });
+   606→      }
+   607→    }
+   608→    // S139 — the sketch pass: every stroke gains a seeded retrace, every
+   609→    // filled shape a clipped hatch, BEFORE extraction — the derived paths
+   610→    // ride the ordinary schedule/pen/page/camera machinery like authored
+   611→    // strokes. Hands are excluded (a hand is not drawn; it draws) — the
+   612→    // renderer embeds them verbatim and a dithered hand would look broken.
+   613→    if (!(a.id.startsWith("hand-") || a.tags.includes("hand"))) {
+   614→      const sk = withSketchPasses(effective.svg, a.id);
+   615→      effective = { ...effective, svg: sk.svg };
+   616→    }
+   617→    const ex = extractAsset(effective);
+   618→    // The PAGE seam rides the effective svg too: composeScene (the render
+   619→    // engine AND the editor canvas — one source) embeds asset.svg verbatim,
+   620→    // so storing the raw markup here would put the glyph contours in the
+   621→    // scheduler's work list while the page still carried the <text> — rows
+   622→    // for elements that do not exist, and a word that never renders (the
+   623→    // W4 glyph proof caught exactly that: pen rows green, pixels empty).
+   624→    // Non-glyph assets: effective === a, byte-identical (the fallback law).
+   625→    assets.set(a.id, effective);
+   626→    extracted.set(a.id, ex);
+   627→    pathIdsByAsset.set(a.id, new Set(ex.paths.map((p) => p.id)));
+   628→    textIdsByAsset.set(a.id, new Set(ex.texts.map((t) => t.id)));
+   629→    // Register the pure scheduler's text metadata.
+   630→    TEXT_IDS_BY_ASSET.set(a.id, ex.texts.map((t) => t.id));
+   631→    for (const t of ex.texts) {
+   632→      TEXT_CHARS_BY_ID.set(`${a.id}::${t.id}`, t.content.length);
+   633→      TEXT_ANCHORS.set(`${a.id}::${t.id}`, { x: t.x, y: t.y, size: t.size });
+   634→    }
+   635→  };
+   636→  // W3: every built-in rides its own validator — a failure is a bug in
+   637→  // the library itself and says so loudly (the suite pins all-pass).
+   638→  for (const a of ASSETS) {
+   639→    const report = validateAsset(a);
+   640→    if (!report.ok) {
+   641→      throw new Error(
+   642→        `built-in whiteboard asset "${a.id}" failed the W3 validator: ${report.findings.map((f) => f.reason).join(" · ")}`
+   643→      );
+   644→    }
+   645→    register(a, "built-in library");
+   646→  }
+   647→  for (const u of uploaded) {
+   648→    // The load-time sanitize law applies to uploads too — trusted-or-not,
+   649→    // the gate is a property of the pipeline (they were sanitized at upload
+   650→    // as well; this is defense in depth, not a second vocabulary).
+   651→    const sanitized: WhiteboardAsset = { ...u, svg: sanitizeSvg(u.svg) };
+   652→    // W3 — warn-and-exclude (the risk register's over-rejection answer):
+   653→    // an upload the validator refuses never reaches the drawable index;
+   654→    // the caller learns why through `warnings` and decides (the studio
+   655→    // surfaces, the renderer just renders what validated).
+   656→    const report = validateAsset(sanitized);
+   657→    if (!report.ok) {
+   658→      warnings.push({ assetId: u.id, reasons: report.findings.map((f) => f.reason ?? "invalid geometry") });
+   659→      continue;
+   660→    }
+   661→    register(sanitized, "upload manifest");
+   662→  }
+   663→  return {
+   664→    assets,
+   665→    extracted,
+   666→    libraryIndex: { assetIds: new Set(assets.keys()), pathIdsByAsset, textIdsByAsset },
+   667→    warnings,
+   668→  };
+   669→}
+   670→

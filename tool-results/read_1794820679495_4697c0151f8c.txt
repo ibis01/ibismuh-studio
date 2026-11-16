@@ -1,0 +1,711 @@
+     1→     1→// W2 — the Whiteboard semantic beat compiler (the reconciliation §9 W2).
+     2→     2→//
+     3→     3→// The fill law (timing.ts scheduleScene) schedules every drawable in
+     4→     4→// PLACEMENT order across the narration window — nothing knows WHAT the
+     5→     5→// narrator is saying while a stroke lands. This module is the semantic
+     6→     6→// layer the reconciliation ordered: the narration is split into sentences,
+     7→     7→// each sentence is classified (setup / subject / action / support /
+     8→     8→// emphasis) from cue rules, the scene's placements are matched to the
+     9→     9→// sentence that introduces them, and the match compiles into plain
+    10→    10→// `AnimationEvent[]` — the doc's existing rows, ZERO grammar growth.
+    11→    11→//
+    12→    12→// Laws this module keeps:
+    13→    13→//   - COMPILE-ONLY (decision §10.1): beats are a planning artifact. They
+    14→    14→//     never ride the doc, never reach the validator, never grow the S87
+    15→    15→//     grammar — they exist long enough to become events and die.
+    16→    16→//   - THE PRECEDENCE LAW (timing.ts:57-58): explicit events are SENIOR.
+    17→    17→//     Compiled work only fills what the author's events have not claimed,
+    18→    18→//     with the exact claimed-key grammar the fill law uses.
+    19→    19→//   - ORDER IS SENIOR TO MATCHING: a placement is never scheduled before
+    20→    20→//     an earlier-ordered placement. The author's/planner's `order` field
+    21→    21→//     is semantic intent; the beat layer aligns TIMING to the narration
+    22→    22→//     within that constraint (monotonic assignment), it does not overrule.
+    23→    23→//   - EVERY BEAT HAS AN ACTION: a placement joins a beat only when it
+    24→    24→//     carries unclaimed drawable work; a beat with no work never exists.
+    25→    25→//   - THE FILL LAW IS THE FALLBACK: no usable beat plan → the caller gets
+    26→    26→//     scheduleScene's output byte-for-byte. A beat plan that degenerates
+    27→    27→//     (no matches, no drawables, no sentences) never renders differently
+    28→    28→//     from today.
+    29→    29→//   - PURE AND DETERMINISTIC: same scene + duration + tags + geometry →
+    30→    30→//     the same events, byte-for-byte (the S64 law extends here). No clock,
+    31→    31→//     no randomness, no fs.
+    32→    32→//
+    33→    33→// The timing envelope reuses the house constants (LEAD_IN_MS, HOLD_END_MS,
+    34→    34→// PATH_GAP_MS, the stroke clamps, the text char model) — ONE scheduler's
+    35→    35→// arithmetic, two entry shapes (design §1's law: never a second
+    36→    36→// implementation of the schedule math).
+    37→    37→import {
+    38→    38→  HOLD_END_MS,
+    39→    39→  LEAD_IN_MS,
+    40→    40→  MAX_PATH_MS,
+    41→    41→  MIN_PATH_MS,
+    42→    42→  MS_PER_CHAR,
+    43→    43→  PATH_GAP_MS,
+    44→    44→  TEXT_CHARS_BY_ID,
+    45→    45→  TEXT_IDS_BY_ASSET,
+    46→    46→  anchorEnvelope,
+    47→    47→  scheduleScene,
+    48→    48→  type AssetGeometry,
+    49→    49→  type WordAnchors,
+    50→    50→} from "./timing";
+    51→    51→import { totalLength } from "./svg";
+    52→    52→import type { AnimationEvent, WhiteboardScene } from "./storyboard";
+    53→    53→
+    54→    54→// ---------------------------------------------------------------------------
+    55→    55→// The beat — the planning artifact (never persisted; compiles to events)
+    56→    56→// ---------------------------------------------------------------------------
+    57→    57→
+    58→    58→/** Why a beat exists in the narration. The reconciliation's W2 taxonomy:
+    59→    59→ *  sentence type + keywords + punctuation → purpose. */
+    60→    60→export type BeatPurpose = "setup" | "subject" | "action" | "support" | "emphasis";
+    61→    61→
+    62→    62→/** One semantic beat: a narration sentence, the window it owns inside the
+    63→    63→ *  scene's clock, and the placements the narrator introduces during it.
+    64→    64→ *  `assetIds` are in placement order (the order-monotonic law). */
+    65→    65→export interface WhiteboardBeat {
+    66→    66→  /** Stable id: `beat-<sentence index + 1>` — cited by the pins. */
+    67→    67→  id: string;
+    68→    68→  purpose: BeatPurpose;
+    69→    69→  /** 0-based index of the beat's sentence in splitSentences(narration). */
+    70→    70→  sentence: number;
+    71→    71→  /** The sentence itself (trimmed). */
+    72→    72→  phrase: string;
+    73→    73→  /** Placements assigned to this beat, in placement order. */
+    74→    74→  assetIds: string[];
+    75→    75→  /** The beat's window inside the scene clock (ms). Windows are
+    76→    76→   *  word-proportional slices of the draw span; for any clock the
+    77→    77→   *  estimator can produce (≥ 4 s) the last window ends at
+    78→    78→   *  durationMs − HOLD_END_MS exactly like the fill law's draw budget. */
+    79→    79→  startMs: number;
+    80→    80→  endMs: number;
+    81→    81→  /** S147 — the rhetorical lens (additive, optional; derived in planBeats).
+    82→    82→   *  Absent on old plans; nothing render-path consumes `rhetorical` yet. */
+    83→    83→  rhetorical?: RhetoricalPurpose;
+    84→    84→  /** What the hand does on screen during this beat. */
+    85→    85→  action?: BeatAction;
+    86→    86→  /** The emphasis level — high beats may fire their mark. */
+    87→    87→  emphasis?: BeatEmphasis;
+    88→    88→  /** The fx-* asset that punctuates this beat: compileBeats orders its
+    89→    89→   *  items LAST (the mark lands after the claim — the W4 law). Absent ⇒
+    90→    90→   *  the compiled events are byte-identical to the pre-S147 order. */
+    91→    91→  markAssetId?: string;
+    92→    92→}
+    93→    93→
+    94→    94→// ---------------------------------------------------------------------------
+    95→    95→// Sentence segmentation — the one split the LLM beat normalization shares
+    96→    96→// (llm-planner.ts imports this — one source).
+    97→    97→// ---------------------------------------------------------------------------
+    98→    98→
+    99→    99→/** Split narration into sentences: terminate on . ! ? (keeping the
+   100→   100→ *  punctuation — and any trailing quotes/brackets — attached), collapse
+   101→   101→ *  whitespace, drop empties. Text without terminal punctuation is ONE
+   102→   102→ *  sentence. Deterministic. */
+   103→   103→export function splitSentences(narration: string): string[] {
+   104→   104→  const text = narration.replace(/\s+/g, " ").trim();
+   105→   105→  if (!text) return [];
+   106→   106→  const parts = text.split(/(?<=[.!?]["')\]]*)\s+/);
+   107→   107→  const out = parts.map((s) => s.trim()).filter(Boolean);
+   108→   108→  return out.length > 0 ? out : [text];
+   109→   109→}
+   110→   110→
+   111→   111→/** The narration tokenizer — the ANCHOR INDEX SPACE's law: the W4 voice
+   112→   112→ *  anchors (voice-anchors.ts) index words in exactly this tokenization, so
+   113→   113→ *  the beat windows' per-sentence slices line up with the anchor list.
+   114→   114→ *  Exported (not duplicated) — one tokenizer, two consumers. */
+   115→   115→export function words(s: string): string[] {
+   116→   116→  return s.toLowerCase().split(/[^a-z0-9']+/).filter(Boolean);
+   117→   117→}
+   118→   118→
+   119→   119→// ---------------------------------------------------------------------------
+   120→   120→// The cue rules — sentence classification + asset mention matching
+   121→   121→// ---------------------------------------------------------------------------
+   122→   122→
+   123→   123→/** Sentence-purpose cues, checked in order (emphasis wins over everything:
+   124→   124→ *  an exclamation or a stakes phrase owns its sentence). Index 0 defaults
+   125→   125→ *  to setup when nothing stronger fires — the opener IS the setup. */
+   126→   126→const EMPHASIS_RE = /[!]|\b(key|crucial|critical|most important|remember|the trick|the whole point|never forget)\b/i;
+   127→   127→const SETUP_RE = /\b(imagine|picture|let's|lets|consider|suppose|first(ly)?|to start|to begin|welcome|what (if|is|are|do|does|did)|how (do|does|did)|why (do|does|did))\b/i;
+   128→   128→const SUBJECT_RE = /\b(is|are|means|refers?|called|known as|defined as|represents|stands for)\b/i;
+   129→   129→const ACTION_RE = /\b(then|next|after|now|push(es|ed)?|flows?|moves?|sends?|draws?|writes?|adds?|takes?|turns?|becomes?|starts?|begins?|runs?|grows?|rises?|falls?|beats?|pumps?|launch(es|ed)?)\b/i;
+   130→   130→
+   131→   131→// S125 (K1) — exported (was module-private): the rig director consumes the
+   132→   132→// SAME classifier for its gesture beats ("reusing beat-plan.ts#classifySentence
+   133→   133→// instead of duplicating it, one classifier, two consumers" — roadmap §6).
+   134→   134→// The cue rules and the precedence below are UNCHANGED; the whiteboard beat
+   135→   135→// plan's own outputs are byte-identical.
+   136→   136→export function classifySentence(sentence: string, index: number): BeatPurpose {
+   137→   137→  if (EMPHASIS_RE.test(sentence)) return "emphasis";
+   138→   138→  if (SETUP_RE.test(sentence)) return "setup";
+   139→   139→  if (SUBJECT_RE.test(sentence)) return "subject";
+   140→   140→  if (ACTION_RE.test(sentence)) return "action";
+   141→   141→  if (index === 0) return "setup";
+   142→   142→  return "support";
+   143→   143→}
+   144→   144→
+   145→   145→// ---------------------------------------------------------------------------
+   146→   146→// S147 — the rhetorical layer (the 2026-11-16 layer-upgrade directive's §2):
+   147→   147→// the beat gains its RHETORICAL purpose (what the sentence does in the
+   148→   148→// argument), its ACTION (what the hand does on screen), and its EMPHASIS
+   149→   149→// level — all ADDITIVE optional fields, derived deterministically, compiled
+   150→   150→// into the existing AnimationEvent grammar (no second timeline grammar).
+   151→   151→// The STRUCTURAL classifier above is UNTOUCHED — the K1 rig director consumes
+   152→   152→// it ("one classifier, two consumers") and its outputs stay byte-identical.
+   153→   153→// ---------------------------------------------------------------------------
+   154→   154→
+   155→   155→/** Why the sentence exists in the ARGUMENT — the directive's §2 taxonomy.
+   156→   156→ *  A second lens on the same sentence: derived from the same cue family as
+   157→   157→ *  the structural purpose plus the comparison/evidence/conclusion cues.
+   158→   158→ *  Old plans absent the field (the tolerant-read law); nothing consumes it
+   159→   159→ *  for rendering yet — the editor and the LLM planner read it. */
+   160→   160→export type RhetoricalPurpose =
+   161→   161→  | "setup"
+   162→   162→  | "claim"
+   163→   163→  | "mechanism"
+   164→   164→  | "comparison"
+   165→   165→  | "evidence"
+   166→   166→  | "conclusion";
+   167→   167→
+   168→   168→const CONCLUSION_RE = /\b(in short|in summary|the takeaway|bottom line|ultimately|the point is|never forget|remember this|the whole point|that's why|that is why|in the end|the key insight|the lesson|remember the)\b/i;
+   169→   169→const COMPARISON_RE = /\b(better|worse|faster|slower|cheaper|unlike|compared|whereas|instead|rather than|versus|vs\b\.?|more than|less than|the difference)\b/i;
+   170→   170→const EVIDENCE_RE = /\b(percent|study|studies|research|survey|measured|statistics|twice|half|double|triple|times)\b|%|\breported\b/i;
+   171→   171→
+   172→   172→/** The rhetorical classifier — PURE, deterministic, same cue-family laws as
+   173→   173→ *  classifySentence (checked in order; the last sentence IS the conclusion
+   174→   174→ *  slot — the grammar's close card already owns it). */
+   175→   175→export function classifyRhetorical(sentence: string, index: number, total: number): RhetoricalPurpose {
+   176→   176→  if (total >= 2 && index === total - 1) return "conclusion";
+   177→   177→  if (CONCLUSION_RE.test(sentence)) return "conclusion";
+   178→   178→  if (COMPARISON_RE.test(sentence)) return "comparison";
+   179→   179→  if (EVIDENCE_RE.test(sentence)) return "evidence";
+   180→   180→  // The claim outranks the mechanism — the structural classifier's own
+   181→   181→  // precedence (subject before action): "The heart IS a pump" is a claim
+   182→   182→  // even though it carries the verb-noun "pump".
+   183→   183→  if (SUBJECT_RE.test(sentence)) return "claim";
+   184→   184→  if (ACTION_RE.test(sentence)) return "mechanism";
+   185→   185→  if (SETUP_RE.test(sentence) || index === 0) return "setup";
+   186→   186→  return "claim";
+   187→   187→}
+   188→   188→
+   189→   189→/** The hand's emphasis level on this beat (the directive's §2 `emphasis`).
+   190→   190→ *  High rides the structural emphasis purpose (the cue family that already
+   191→   191→ *  owns exclamation + stakes phrases); low is reserved for the editor. */
+   192→   192→export type BeatEmphasis = "low" | "normal" | "high";
+   193→   193→
+   194→   194→export function beatEmphasisOf(purpose: BeatPurpose): BeatEmphasis {
+   195→   195→  return purpose === "emphasis" ? "high" : "normal";
+   196→   196→}
+   197→   197→
+   198→   198→/** What the hand DOES on screen during this beat (the directive's §2
+   199→   199→ *  `action`). Derived, never authored: draw/write/hold from the beat's
+   200→   200→ *  contents, the mark verbs (underline/circle/crossout) from a placed
+   201→   201→ *  fx-* effect on a HIGH-emphasis beat, reveal for a non-mark effect. */
+   202→   202→export type BeatAction =
+   203→   203→  | "draw"
+   204→   204→  | "write"
+   205→   205→  | "underline"
+   206→   206→  | "circle"
+   207→   207→  | "crossout"
+   208→   208→  | "reveal"
+   209→   209→  | "hold";
+   210→   210→
+   211→   211→/** The effects pack's frozen id prefix (S142) — the mark-capable assets. */
+   212→   212→const FX_PREFIX = "fx-";
+   213→   213→
+   214→   214→function markActionOf(fxAssetId: string): BeatAction | undefined {
+   215→   215→  if (fxAssetId === "fx-underline") return "underline";
+   216→   216→  if (fxAssetId === "fx-circle-mark") return "circle";
+   217→   217→  // fx-crossout does not exist yet — the action stays in the vocabulary for
+   218→   218→  // the editor and the future slice; the other effects punctuate (reveal).
+   219→   219→  return "reveal";
+   220→   220→}
+   221→   221→
+   222→   222→function beatActionOf(
+   223→   223→  assetIds: readonly string[],
+   224→   224→  geometry: Map<string, AssetGeometry>,
+   225→   225→  markAssetId: string | undefined
+   226→   226→): BeatAction {
+   227→   227→  if (markAssetId) return markActionOf(markAssetId) ?? "reveal";
+   228→   228→  let paths = 0;
+   229→   229→  let texts = 0;
+   230→   230→  for (const id of assetIds) {
+   231→   231→    paths += geometry.get(id)?.paths.size ?? 0;
+   232→   232→    texts += TEXT_IDS_BY_ASSET.get(id)?.length ?? 0;
+   233→   233→  }
+   234→   234→  if (paths === 0 && texts === 0) return "hold";
+   235→   235→  if (paths === 0 && texts > 0) return "write";
+   236→   236→  return "draw";
+   237→   237→}
+   238→   238→
+   239→   239→/** The per-asset metadata the matcher scores beyond tags: the S142 effects'
+   240→   240→ *  alts (their phrase vocabulary) and the W3 role. Optional — absent meta
+   241→   241→ *  degrades the matcher to today's cue+tag scoring byte-for-byte. */
+   242→   242→export interface AssetBeatMeta {
+   243→   243→  alts?: readonly string[];
+   244→   244→  role?: string;
+   245→   245→}
+   246→   246→
+   247→   247→/** Concept cue table — WHAT the narrator is mentioning, keyed by the
+   248→   248→ *  built-in concept ids. Mirrors the scaffold planner's KEYWORD_PICKS
+   249→   249→ *  (whiteboard-planner.ts) semantics: the planner picks the asset FROM the
+   250→   250→ *  narration, the beat layer places it AT the narration. */
+   251→   251→const ASSET_CUES: ReadonlyMap<string, RegExp> = new Map([
+   252→   252→  ["coin", /\b(money|dollar|cost|price|revenue|budget|profit|paid|expensive|cheap|cash|pay)\b/i],
+   253→   253→  ["arrow-growth", /\b(grow|growth|increase|rise|trend|boost|scale|higher|compound)\b/i],
+   254→   254→  ["bar-chart", /\b(data|chart|stat|percent|metric|measure|number|graph)\b/i],
+   255→   255→  ["lightbulb", /\b(idea|innovate|innovation|invent|insight|think|creative)\b/i],
+   256→   256→  ["globe", /\b(world|global|internet|country|countries|international|online)\b/i],
+   257→   257→  ["clock", /\b(time|deadline|schedule|minute|hour|fast|slow|wait)\b/i],
+   258→   258→  ["rocket", /\b(launch|start|begin|first|pilot|ship|release)\b/i],
+   259→   259→  ["check-badge", /\b(check|verify|correct|right|proven|safe|quality|benefit|advantage)\b/i],
+   260→   260→]);
+   261→   261→
+   262→   262→/** The scaffold-grammar cards: the title owns the opening sentence, the
+   263→   263→ *  close card owns the last one — the same grammar the native planner
+   264→   264→ *  places them with (first/last placement). */
+   265→   265→const CARD_FIRST = new Set(["title-hero"]);
+   266→   266→const CARD_LAST = new Set(["close-card"]);
+   267→   267→
+   268→   268→/** Tag-token stopwords: palette noise that would match every sentence. */
+   269→   269→const TAG_STOPWORDS = new Set([
+   270→   270→  "and", "the", "for", "with", "this", "that", "from", "into",
+   271→   271→  "upload", "svg", "icon", "symbol", "concept", "drawing", "illustration",
+   272→   272→  "white", "black", "simple", "flat", "line", "art", "outline", "style",
+   273→   273→]);
+   274→   274→
+   275→   275→function tagTokens(tags: readonly string[] | undefined): string[] {
+   276→   276→  if (!tags) return [];
+   277→   277→  const out: string[] = [];
+   278→   278→  for (const t of tags) {
+   279→   279→    for (const w of t.toLowerCase().split(/[^a-z0-9]+/)) {
+   280→   280→      if (w.length >= 3 && !TAG_STOPWORDS.has(w)) out.push(w);
+   281→   281→    }
+   282→   282→  }
+   283→   283→  return out;
+   284→   284→}
+   285→   285→
+   286→   286→/** Score how strongly a sentence introduces an asset: a cue-table hit is
+   287→   287→ *  the strongest signal (the planner's own vocabulary), tag overlap is the
+   288→   288→ *  generic signal (uploads, the benchmark library), silence scores 0. */
+   289→   289→function mentionScore(
+   290→   290→  sentenceTokens: string[],
+   291→   291→  sentence: string,
+   292→   292→  assetId: string,
+   293→   293→  tags: readonly string[] | undefined,
+   294→   294→  meta?: AssetBeatMeta
+   295→   295→): number {
+   296→   296→  let score = 0;
+   297→   297→  const cue = ASSET_CUES.get(assetId);
+   298→   298→  if (cue && cue.test(sentence)) score += 2;
+   299→   299→  const tokens = new Set(sentenceTokens);
+   300→   300→  for (const t of tagTokens(tags)) if (tokens.has(t)) score += 1;
+   301→   301→  // S147 — the S142 recorded follow-up: score the asset's ALTS (the
+   302→   302→  // effects' phrase vocabulary) into the candidate ranking, and give the
+   303→   303→  // emphasis role its edge — but ONLY on an emphasis-class sentence, so
+   304→   304→  // the marks sprinkle instead of wallpapering every board.
+   305→   305→  const lower = sentence.toLowerCase();
+   306→   306→  for (const alt of meta?.alts ?? []) {
+   307→   307→    if (alt && lower.includes(alt.toLowerCase())) score += 2;
+   308→   308→  }
+   309→   309→  if (meta?.role === "emphasis" && EMPHASIS_RE.test(sentence)) score += 2;
+   310→   310→  return score;
+   311→   311→}
+   312→   312→
+   313→   313→// ---------------------------------------------------------------------------
+   314→   314→// planBeats — narration → beats (windows + assignments)
+   315→   315→// ---------------------------------------------------------------------------
+   316→   316→
+   317→   317→/** Floor per-sentence weight: a three-word beat still gets a readable
+   318→   318→ *  slice of the draw span (4 words ≈ 1.5 s of narration at the house
+   319→   319→ *  2.6-wps pace). */
+   320→   320→const MIN_BEAT_WORDS = 4;
+   321→   321→
+   322→   322→/** The draw span's floor — the same envelope the fill law applies
+   323→   323→ *  (timing.ts:102: `Math.max(1200, …)`), so a beat plan and the fill law
+   324→   324→ *  agree on where drawing can live inside ANY scene clock. */
+   325→   325→const MIN_DRAW_SPAN_MS = 1200;
+   326→   326→
+   327→   327→/** R1 — the opening-stroke threshold (ANCHORS world). A board that sits
+   328→   328→ *  EMPTY past this many scene-milliseconds reads as dead air AND the QC
+   329→   329→ *  frozen-frames lens fails runs of the ~2.3s class on exactly those
+   330→   330→ *  stretches (the 265s rich-render receipt: frozen at scene-local 4.7s
+   331→   331→ *  and 7.4s where every placement had bound to a later sentence's SPOKEN
+   332→   332→ *  window). The first work-carrying beat that would open later than this
+   333→   333→ *  pulls its first placement forward to the opening sentence's window.
+   334→   334→ *  Chosen UNDER the lens's run class and ABOVE the W2 pins' estimator
+   335→   335→ *  openings (the pinned "coin → the money sentence" case opens at
+   336→   336→ *  ~2.08s — semantic binding survives). */
+   337→   337→export const OPENING_STROKE_MAX_MS = 2200;
+   338→   338→
+   339→   339→/** R1 — the estimator-world twin. The SAME dead-air shape receipts in the
+   340→   340→ *  estimator world too (the re-render's 174.4s freeze: an ASR word-count
+   341→   341→ *  mismatch on spoken numbers degraded the scene to the estimator, whose
+   342→   342→ *  word-proportional windows pushed the first asset ~8.9s deep). The
+   343→   343→ *  threshold is deliberately LENIENT: the W2 pins freeze the estimator's
+   344→   344→ *  semantic binding ("the coin WAITS for its sentence" at 3.75s), so the
+   345→   345→ *  guarantee fires only on waits that are unambiguously dead air. A blind
+   346→   346→ *  score can tighten this later — the operator call is recorded in the
+   347→   347→ *  R-plan's decision points. */
+   348→   348→export const OPENING_STROKE_ESTIMATOR_MAX_MS = 4000;
+   349→   349→
+   350→   350→export interface PlanBeatsOptions {
+   351→   351→  durationMs: number;
+   352→   352→  /** The scene's geometry — which placements still carry unclaimed
+   353→   353→   *  drawable work (a fully-claimed placement never joins a beat: the
+   354→   354→   *  precedence law decides, not the matcher). */
+   355→   355→  geometry: Map<string, AssetGeometry>;
+   356→   356→  /** Per-asset library tags (id → tags). Optional: absent tags degrade the
+   357→   357→   *  matcher to the cue table + the cards + deterministic grouping — the
+   358→   358→   *  plan still compiles, just with less vocabulary. */
+   359→   359→  assetTags?: ReadonlyMap<string, readonly string[]>;
+   360→   360→  /** W4: the captions lane's per-word spoken spans — an INPUT, never a
+   361→   361→   *  doc field. When the anchor count matches the narration's word
+   362→   362→   *  tokenization, each sentence's window IS its words' spoken span (the
+   363→   363→   *  strokes land on the clock the VO actually spoke); a mismatch
+   364→   364→   *  degrades to the word-proportional estimator byte-for-byte. */
+   365→   365→  anchors?: WordAnchors;
+   366→   366→  /** S147 — per-asset alts + role (the matcher's extended vocabulary).
+   367→   367→   *  Absent ⇒ byte-identical scoring (tags + cue table only). */
+   368→   368→  assetMeta?: ReadonlyMap<string, AssetBeatMeta>;
+   369→   369→}
+   370→   370→
+   371→   371→/** The exact claimed-key grammar the fill law uses (timing.ts:66-70). */
+   372→   372→function claimedKeys(scene: WhiteboardScene): Set<string> {
+   373→   373→  const claimed = new Set<string>();
+   374→   374→  for (const e of scene.animations) {
+   375→   375→    if (e.type === "draw_path") claimed.add(`${e.assetId}::${e.pathId}`);
+   376→   376→    else if (e.type === "write_text") claimed.add(`${e.assetId}::text:${e.textId}`);
+   377→   377→  }
+   378→   378→  return claimed;
+   379→   379→}
+   380→   380→
+   381→   381→/** Whether a placement still carries drawable work the beat layer may
+   382→   382→ *  schedule (unclaimed paths or texts). */
+   383→   383→function hasUnclaimedWork(
+   384→   384→  assetId: string,
+   385→   385→  scene: WhiteboardScene,
+   386→   386→  geometry: Map<string, AssetGeometry>,
+   387→   387→  claimed: Set<string>
+   388→   388→): boolean {
+   389→   389→  const geo = geometry.get(assetId);
+   390→   390→  if (geo) {
+   391→   391→    for (const pathId of geo.paths.keys()) {
+   392→   392→      if (!claimed.has(`${assetId}::${pathId}`)) return true;
+   393→   393→    }
+   394→   394→  }
+   395→   395→  const texts = TEXT_IDS_BY_ASSET.get(assetId) ?? [];
+   396→   396→  for (const textId of texts) {
+   397→   397→    if (!claimed.has(`${assetId}::text:${textId}`)) return true;
+   398→   398→  }
+   399→   399→  return false;
+   400→   400→}
+   401→   401→
+   402→   402→/**
+   403→   403→ * Plan the scene's beats. PURE. Returns [] when the plan degenerates —
+   404→   404→ * no sentences, no unclaimed drawables, a clock too short to beat — and
+   405→   405→ * the caller falls back to the fill law (the fallback-renders law).
+   406→   406→ *
+   407→   407→ * Assignment: placements are visited in ORDER (the fill law's own sort:
+   408→   408→ * the `order` field, ties by array position — stable, deterministic).
+   409→   409→ * Each placement joins the best-scoring sentence at or AFTER the previous
+   410→   410→ * placement's sentence (the order-monotonic law): title text draws with
+   411→   411→ * the opening sentence, the coin draws when the narrator says "money",
+   412→   412→ * labels ride the sentence that names them — but never ahead of an
+   413→   413→ * earlier-ordered placement. Unmatched placements stay grouped at the
+   414→   414→ * cursor.
+   415→   415→ */
+   416→   416→export function planBeats(
+   417→   417→  scene: WhiteboardScene,
+   418→   418→  opts: PlanBeatsOptions
+   419→   419→): WhiteboardBeat[] {
+   420→   420→  const sentences = splitSentences(scene.narration);
+   421→   421→  if (sentences.length === 0) return [];
+   422→   422→  if (!(opts.durationMs > 0)) return [];
+   423→   423→
+   424→   424→  const claimed = claimedKeys(scene);
+   425→   425→  const placements = [...scene.placements]
+   426→   426→    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+   427→   427→    .filter((pl) => hasUnclaimedWork(pl.assetId, scene, opts.geometry, claimed));
+   428→   428→  if (placements.length === 0) return [];
+   429→   429→
+   430→   430→  const sentenceTokens = sentences.map((s) => words(s));
+   431→   431→
+   432→   432→  // Assign every work-carrying placement to a sentence (order-monotonic,
+   433→   433→  // best mention wins; ties → the earliest sentence).
+   434→   434→  const bySentence = new Map<number, string[]>();
+   435→   435→  let cursor = 0;
+   436→   436→  for (const pl of placements) {
+   437→   437→    let target: number;
+   438→   438→    if (CARD_FIRST.has(pl.assetId)) {
+   439→   439→      target = 0;
+   440→   440→    } else if (CARD_LAST.has(pl.assetId)) {
+   441→   441→      target = sentences.length - 1;
+   442→   442→    } else {
+   443→   443→      target = cursor;
+   444→   444→      let best = 0;
+   445→   445→      for (let i = cursor; i < sentences.length; i++) {
+   446→   446→        const score = mentionScore(
+   447→   447→          sentenceTokens[i],
+   448→   448→          sentences[i],
+   449→   449→          pl.assetId,
+   450→   450→          opts.assetTags?.get(pl.assetId),
+   451→   451→          opts.assetMeta?.get(pl.assetId)
+   452→   452→        );
+   453→   453→        if (score > best) {
+   454→   454→          best = score;
+   455→   455→          target = i;
+   456→   456→        }
+   457→   457→      }
+   458→   458→    }
+   459→   459→    target = Math.min(Math.max(target, cursor), sentences.length - 1);
+   460→   460→    const bucket = bySentence.get(target) ?? [];
+   461→   461→    bucket.push(pl.assetId);
+   462→   462→    bySentence.set(target, bucket);
+   463→   463→    cursor = Math.max(cursor, target);
+   464→   464→  }
+   465→   465→  if (bySentence.size === 0) return [];
+   466→   466→
+   467→   467→  // W4 — the windows. Two sources, one law:
+   468→   468→  //   aligned anchors → each sentence's window is its words' spoken span
+   469→   469→  //   (the clock the VO actually spoke; the hold extends to the scene
+   470→   470→  //   clock's edge);
+   471→   471→  //   absent / mismatched / degenerate → the word-proportional estimator
+   472→   472→  //   across the fill law's envelope ([LEAD_IN, duration − HOLD]),
+   473→   473→  //   byte-for-byte the W2 behavior. Anchors are advisory inputs — a
+   474→   474→  //   misheard ASR pass degrades, it never corrupts the choreography.
+   475→   475→  const narrationWords = sentences.map((s) => words(s));
+   476→   476→  const flatWordCount = narrationWords.reduce((a, w) => a + w.length, 0);
+   477→   477→  const env = anchorEnvelope(opts.anchors, opts.durationMs);
+   478→   478→  const sortedWords =
+   479→   479→    opts.anchors && env ? [...opts.anchors.byWord].sort((a, b) => a.index - b.index) : null;
+   480→   480→  let windows: { startMs: number; endMs: number }[] | null = null;
+   481→   481→  let anchored = false;
+   482→   482→  if (sortedWords && sortedWords.length === flatWordCount) {
+   483→   483→    const candidate: { startMs: number; endMs: number }[] = [];
+   484→   484→    let off = 0;
+   485→   485→    let sane = true;
+   486→   486→    for (const toks of narrationWords) {
+   487→   487→      const first = sortedWords[off];
+   488→   488→      const last = sortedWords[off + toks.length - 1];
+   489→   489→      off += toks.length;
+   490→   490→      if (!first || !last || last.endMs <= first.startMs) {
+   491→   491→        sane = false;
+   492→   492→        break;
+   493→   493→      }
+   494→   494→      candidate.push({ startMs: Math.round(first.startMs), endMs: Math.round(last.endMs) });
+   495→   495→    }
+   496→   496→    // Windows must march forward (weird ASR spans never reorder the beats).
+   497→   497→    for (let i = 1; sane && i < candidate.length; i++) {
+   498→   498→      if (candidate[i].startMs < candidate[i - 1].endMs) sane = false;
+   499→   499→    }
+   500→   500→    if (sane) {
+   501→   501→      windows = candidate;
+   502→   502→      anchored = true;
+   503→   503→    }
+   504→   504→  }
+   505→   505→  if (!windows) {
+   506→   506→    // Word-proportional windows across the draw span (the fill law's
+   507→   507→    // envelope: [LEAD_IN, duration − HOLD], floored — timing.ts:102).
+   508→   508→    const weights = sentences.map((s) => Math.max(words(s).length, MIN_BEAT_WORDS));
+   509→   509→    const totalWeight = weights.reduce((a, b) => a + b, 0);
+   510→   510→    const drawSpan = Math.max(MIN_DRAW_SPAN_MS, opts.durationMs - LEAD_IN_MS - HOLD_END_MS);
+   511→   511→    let t = LEAD_IN_MS;
+   512→   512→    windows = weights.map((w) => {
+   513→   513→      const start = t;
+   514→   514→      t += (w / totalWeight) * drawSpan;
+   515→   515→      return { startMs: Math.round(start), endMs: Math.round(t) };
+   516→   516→    });
+   517→   517→  }
+   518→   518→
+   519→   519→  const beats: WhiteboardBeat[] = [];
+   520→   520→  for (const [sentence, assetIds] of bySentence) {
+   521→   521→    const window = windows[sentence];
+   522→   522→    const purpose = classifySentence(sentences[sentence], sentence);
+   523→   523→    // S147 — the additive fields. The mark: the FIRST fx-* asset assigned to
+   524→   524→    // a HIGH-emphasis beat (deterministic; a mark on a normal beat draws in
+   525→   525→    // order — the sprinkle law). The action rides the mark when one fires.
+   526→   526→    const emphasis = beatEmphasisOf(purpose);
+   527→   527→    const markAssetId =
+   528→   528→      emphasis === "high"
+   529→   529→        ? assetIds.find((id) => id.startsWith(FX_PREFIX))
+   530→   530→        : undefined;
+   531→   531→    beats.push({
+   532→   532→      id: `beat-${sentence + 1}`,
+   533→   533→      purpose,
+   534→   534→      sentence,
+   535→   535→      phrase: sentences[sentence],
+   536→   536→      assetIds,
+   537→   537→      startMs: window.startMs,
+   538→   538→      endMs: window.endMs,
+   539→   539→      rhetorical: classifyRhetorical(sentences[sentence], sentence, sentences.length),
+   540→   540→      action: beatActionOf(assetIds, opts.geometry, markAssetId),
+   541→   541→      emphasis,
+   542→   542→      markAssetId,
+   543→   543→    });
+   544→   544→  }
+   545→   545→  beats.sort((a, b) => a.sentence - b.sentence);
+   546→   546→
+   547→   547→  // R1 — the opening-stroke guarantee (see the two thresholds): when the
+   548→   548→  // earliest asset-carrying beat opens past its world's threshold, its
+   549→   549→  // FIRST placement (draw order) pulls forward to sentence 0's window; the
+   550→   550→  // rest of its mentions keep their sentence. A closer-card-only scene
+   551→   551→  // stays put — pulling a close card to the opening would invert the
+   552→   552→  // closer's design. Deterministic.
+   553→   553→  const firstBeat = beats[0];
+   554→   554→  const closerOnly =
+   555→   555→    firstBeat.sentence === sentences.length - 1 &&
+   556→   556→    beats.length === 1 &&
+   557→   557→    firstBeat.assetIds.every((id) => CARD_LAST.has(id));
+   558→   558→  const openingMax = anchored ? OPENING_STROKE_MAX_MS : OPENING_STROKE_ESTIMATOR_MAX_MS;
+   559→   559→  if (firstBeat.sentence > 0 && firstBeat.startMs > openingMax && !closerOnly) {
+   560→   560→    const moved = firstBeat.assetIds.shift();
+   561→   561→    if (firstBeat.assetIds.length === 0) beats.shift();
+   562→   562→    if (moved) {
+   563→   563→      const purpose = classifySentence(sentences[0], 0);
+   564→   564→      const emphasis = beatEmphasisOf(purpose);
+   565→   565→      const markAssetId =
+   566→   566→        emphasis === "high" && moved.startsWith(FX_PREFIX) ? moved : undefined;
+   567→   567→      beats.unshift({
+   568→   568→        id: "beat-1",
+   569→   569→        purpose,
+   570→   570→        sentence: 0,
+   571→   571→        phrase: sentences[0],
+   572→   572→        assetIds: [moved],
+   573→   573→        startMs: windows[0].startMs,
+   574→   574→        endMs: windows[0].endMs,
+   575→   575→        rhetorical: classifyRhetorical(sentences[0], 0, sentences.length),
+   576→   576→        action: beatActionOf([moved], opts.geometry, markAssetId),
+   577→   577→        emphasis,
+   578→   578→        markAssetId,
+   579→   579→      });
+   580→   580→    }
+   581→   581→  }
+   582→   582→  return beats;
+   583→   583→}
+   584→   584→
+   585→   585→// ---------------------------------------------------------------------------
+   586→   586→// compileBeats — beats → AnimationEvent[] (the doc's existing grammar)
+   587→   587→// ---------------------------------------------------------------------------
+   588→   588→
+   589→   589→/**
+   590→   590→ * Compile a beat plan into the scene's event list: the author's explicit
+   591→   591→ * events pass through untouched (senior — the precedence law), every beat
+   592→   592→ * fills its window with the unclaimed drawables of its placements, using
+   593→   593→ * the fill law's own arithmetic (weight = scaled stroke length / text
+   594→   594→ * char count; per-item clamps; the stroke gap; a uniform fit factor).
+   595→   595→ * An item never outlasts the scene clock. PURE.
+   596→   596→ */
+   597→   597→export function compileBeats(
+   598→   598→  beats: WhiteboardBeat[],
+   599→   599→  scene: WhiteboardScene,
+   600→   600→  durationMs: number,
+   601→   601→  geometry: Map<string, AssetGeometry>
+   602→   602→): AnimationEvent[] {
+   603→   603→  const events: AnimationEvent[] = [...scene.animations];
+   604→   604→  const claimed = claimedKeys(scene);
+   605→   605→
+   606→   606→  for (const beat of beats) {
+   607→   607→    interface Item {
+   608→   608→      kind: "path" | "text";
+   609→   609→      assetId: string;
+   610→   610→      id: string;
+   611→   611→      weight: number;
+   612→   612→    }
+   613→   613→    const items: Item[] = [];
+   614→   614→    for (const assetId of beat.assetIds) {
+   615→   615→      const geo = geometry.get(assetId);
+   616→   616→      if (geo) {
+   617→   617→        const scale = scene.placements.find((pl) => pl.assetId === assetId)?.placement.scale ?? 1;
+   618→   618→        for (const [pathId, segs] of geo.paths) {
+   619→   619→          if (claimed.has(`${assetId}::${pathId}`)) continue;
+   620→   620→          items.push({ kind: "path", assetId, id: pathId, weight: Math.max(120, totalLength(segs) * scale) });
+   621→   621→        }
+   622→   622→      }
+   623→   623→      const texts = TEXT_IDS_BY_ASSET.get(assetId) ?? [];
+   624→   624→      for (const textId of texts) {
+   625→   625→        if (claimed.has(`${assetId}::text:${textId}`)) continue;
+   626→   626→        const chars = TEXT_CHARS_BY_ID.get(`${assetId}::${textId}`) ?? 12;
+   627→   627→        items.push({ kind: "text", assetId, id: textId, weight: 40 * chars });
+   628→   628→      }
+   629→   629→    }
+   630→   630→    if (items.length === 0) continue; // the every-beat-has-an-action law
+   631→   631→
+   632→   632→    // S147 — the emphasis mark fires LAST: the labeled item lands, THEN the
+   633→   633→    // mark punctuates it (the W4 law — emphasis fires after the spoken
+   634→   634→    // claim). Stable sort: only mark-asset items move; absent markAssetId
+   635→   635→    // leaves the order byte-identical to the pre-S147 compile.
+   636→   636→    if (beat.markAssetId) {
+   637→   637→      items.sort(
+   638→   638→        (a, b) =>
+   639→   639→          (a.assetId === beat.markAssetId ? 1 : 0) - (b.assetId === beat.markAssetId ? 1 : 0)
+   640→   640→      );
+   641→   641→    }
+   642→   642→
+   643→   643→    // The fill law's arithmetic, scoped to the beat window.
+   644→   644→    const gaps = PATH_GAP_MS * (items.length - 1);
+   645→   645→    const avail = Math.max(120, beat.endMs - beat.startMs - gaps);
+   646→   646→    const totalWeight = items.reduce((a, w) => a + w.weight, 0);
+   647→   647→    let rawSum = 0;
+   648→   648→    const raw = items.map((w) => {
+   649→   649→      const ideal = (w.weight / totalWeight) * avail;
+   650→   650→      const d =
+   651→   651→        w.kind === "path"
+   652→   652→          ? Math.max(MIN_PATH_MS, Math.min(MAX_PATH_MS, ideal))
+   653→   653→          : Math.max(500, (TEXT_CHARS_BY_ID.get(`${w.assetId}::${w.id}`) ?? 12) * MS_PER_CHAR);
+   654→   654→      rawSum += d;
+   655→   655→      return d;
+   656→   656→    });
+   657→   657→    const f = rawSum > 0 ? Math.min(2.8, Math.max(0.5, avail / rawSum)) : 1;
+   658→   658→    let t = beat.startMs;
+   659→   659→    for (let i = 0; i < items.length; i++) {
+   660→   660→      const w = items[i];
+   661→   661→      // Never outlast the scene clock (the hold is the window's own edge).
+   662→   662→      const dur = Math.max(120, Math.min(Math.round(raw[i] * f), Math.max(120, durationMs - t)));
+   663→   663→      if (w.kind === "path") {
+   664→   664→        events.push({ type: "draw_path", assetId: w.assetId, pathId: w.id, startMs: Math.round(t), durationMs: dur });
+   665→   665→        claimed.add(`${w.assetId}::${w.id}`);
+   666→   666→      } else {
+   667→   667→        events.push({ type: "write_text", assetId: w.assetId, textId: w.id, startMs: Math.round(t), durationMs: dur });
+   668→   668→        claimed.add(`${w.assetId}::text:${w.id}`);
+   669→   669→      }
+   670→   670→      t += dur + PATH_GAP_MS;
+   671→   671→    }
+   672→   672→  }
+   673→   673→  return events.sort((a, b) => a.startMs - b.startMs);
+   674→   674→}
+   675→   675→
+   676→   676→// ---------------------------------------------------------------------------
+   677→   677→// beatSceneEvents — the seam the render and the editor preview share
+   678→   678→// ---------------------------------------------------------------------------
+   679→   679→
+   680→   680→/**
+   681→   681→ * The W2 scheduling entry point, consumed by BOTH the renderer
+   682→   682→ * (render.ts) and the editor preview (wb-canvas.tsx) — the one-source
+   683→   683→ * law: same inputs, same beats, same frames on both surfaces.
+   684→   684→ *
+   685→   685→ * Plan → compile; a degenerate plan (no beats, no compiled work beyond
+   686→   686→ * the author's events) falls back to `scheduleScene` BYTE-FOR-BYTE — the
+   687→   687→ * fallback-renders law. When the plan is usable, explicit events stay
+   688→   688→ * senior inside compileBeats and the compiled fills ride the narration's
+   689→   689→ * windows.
+   690→   690→ */
+   691→   691→export function beatSceneEvents(
+   692→   692→  scene: WhiteboardScene,
+   693→   693→  durationMs: number,
+   694→   694→  geometry: Map<string, AssetGeometry>,
+   695→   695→  assetTags?: ReadonlyMap<string, readonly string[]>,
+   696→   696→  anchors?: WordAnchors,
+   697→   697→  assetMeta?: ReadonlyMap<string, AssetBeatMeta>
+   698→   698→): AnimationEvent[] {
+   699→   699→  const fallback = () => scheduleScene(scene, durationMs, geometry, anchors);
+   700→   700→  if (!(durationMs > 0)) return fallback();
+   701→   701→  const beats = planBeats(scene, { durationMs, geometry, assetTags, anchors, assetMeta });
+   702→   702→  if (beats.length === 0) return fallback();
+   703→   703→  const events = compileBeats(beats, scene, durationMs, geometry);
+   704→   704→  // A usable plan always adds the unclaimed work; an empty list here is
+   705→   705→  // the degenerate corner (nothing drawable at all) — the fill law's
+   706→   706→  // output would be identical, so either path agrees. Take the fallback
+   707→   707→  // for one-source consistency.
+   708→   708→  if (events.length === 0) return fallback();
+   709→   709→  return events;
+   710→   710→}
+   711→   711→
