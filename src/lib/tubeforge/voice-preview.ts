@@ -10,7 +10,14 @@ import { createHash } from "crypto";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { getCapability } from "./providers/settings";
-import { sanitizeVoice, ttsSynthesize, voiceCatalog, isClonedVoiceId } from "./providers/tts";
+import {
+  sanitizeVoice,
+  ttsSynthesize,
+  voiceCatalog,
+  isClonedVoiceId,
+  isCartesiaVoiceId,
+  listCartesiaVoices,
+} from "./providers/tts";
 import { aiCall } from "./budget";
 import { listVoiceProfiles, cloneSynthesisAvailable, voiceProfileProvider } from "./voice-clone";
 
@@ -63,6 +70,14 @@ export async function resolvePreviewVoice(voice: string) {
     known = (await listVoiceProfiles()).some((c) => c.id === voice)
       ? await cloneSynthesisAvailable(voice)
       : false;
+  }
+  // S149 — Cartesia's REAL catalog is the account's live list, not the
+  // static fallback: a UUID of any account voice (public library, custom
+  // clone) must audition, not 400 with "not in the catalog". The static
+  // check above already admitted the safety-net pair; this admits the rest
+  // of the truth. Unreachable list → stays unknown (the honest fallback).
+  if (!known && config.provider === "cartesia" && isCartesiaVoiceId(voice)) {
+    known = (await listCartesiaVoices(config)).some((v) => v.id === voice);
   }
   return {
     config,

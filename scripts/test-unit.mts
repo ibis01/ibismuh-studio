@@ -11740,6 +11740,199 @@ await test("S95 heygen: JSON without a url, empty audio, HTTP 401, and a missing
   );
 });
 
+// ---------- suite: S149 — the Cartesia live-voice law ----------
+//
+// The archived-library incident: production could pick eight voice-picker
+// entries whose UUIDs Cartesia had ARCHIVED (GET /voices stopped serving
+// them; POST /tts/bytes answered 404 "voice not found") — so every
+// voiceover job on those voices burned six retry rounds and died with
+// "Voice change failed". Only Clive and Parker (the two ids still valid)
+// generated. The law: the LIVE account list is the truth — the static
+// safety net carries only verified ids, an unknown UUID resolves to a real
+// account voice at synthesis time, and a 404 after a verbatim resolve
+// self-heals once on the refreshed list.
+
+suiteStart("S149 — the Cartesia live-voice law (the archived-library incident)");
+
+await test("S149 catalog: the static safety net carries ONLY verified ids — the eight archived-library ids are gone", async () => {
+  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  const catalog = tts.voiceCatalog("cartesia");
+  eq(catalog.length, 2, "exactly the verified pair (Clive, Parker)");
+  ok(catalog.some((v) => v.id === "b24f41fd-00a3-4cd8-992a-a0c9f13f3ef1"), "Clive rides");
+  ok(catalog.some((v) => v.id === "30894953-bcce-41fe-892c-15ce19c843ff"), "Parker rides");
+  // The archived ids that 404'd production must never come back:
+  const ARCHIVED = [
+    "694f9389-aac1-45b6-b726-9d9369183238", // Bright Female
+    "a0e99841-438c-4a64-b679-ae501e7d6091", // Barbershop Man
+    "a81b5a35-9d67-4dfc-b4d5-5e167c31a385", // Wise Woman
+    "c2eb8f44-49cd-4a6a-9a0e-c7d6cc13f9a0", // Friendly Man
+    "a01f57e5-4c4a-4a26-a26b-3d1e1b89a4c5", // Calm Female
+    "bf991597-6c13-47e4-8411-91c9b9d5c5a7", // Soft Female
+    "d46abd1d-2d02-43e8-819f-51fb652c1c61", // Narrator
+    "8a1b5a35-9d67-4dfc-b4d5-5e167c31a385", // Deep Male
+  ];
+  for (const dead of ARCHIVED) {
+    ok(!catalog.some((v) => v.id === dead), `the archived id ${dead} is NOT in the catalog`);
+  }
+});
+
+await test("S149 shapes: the UUID test and the cartesia sanitize law", async () => {
+  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  eq(tts.isCartesiaVoiceId("b24f41fd-00a3-4cd8-992a-a0c9f13f3ef1"), true, "a uuid is a cartesia voice id");
+  eq(tts.isCartesiaVoiceId("B24F41FD-00A3-4CD8-992A-A0C9F13F3EF1"), true, "case-insensitive");
+  eq(tts.isCartesiaVoiceId("jam"), false, "a studio voice name is not");
+  eq(tts.isCartesiaVoiceId("voice_clone_20240315_143052_001"), false, "a clone id is not");
+  eq(tts.isCartesiaVoiceId(""), false, "empty is not");
+  const clive = "b24f41fd-00a3-4cd8-992a-a0c9f13f3ef1";
+  eq(tts.sanitizeVoice("cartesia", clive), clive, "a uuid rides verbatim");
+  eq(tts.sanitizeVoice("cartesia", "jam"), clive, "a foreign name falls back to the static first (Clive)");
+});
+
+/** S149 — a resolve-config with a UNIQUE apiKey per case: the module-level
+ *  live-list cache keys on the key's last 6 chars, so distinct keys give
+ *  each case a cold cache without a test hook. */
+function s149Cfg(keySuffix: string, baseUrl = "https://api.cartesia.test") {
+  return {
+    provider: "cartesia",
+    apiKey: `ck-pin-${keySuffix}`,
+    baseUrl,
+    model: "sonic-3.6",
+  } as Parameters<typeof import("../src/lib/tubeforge/providers/tts.ts").resolveCartesiaVoiceId>[1];
+}
+
+const S149_LIVE = { voices: [{ id: "11111111-2222-4333-8444-555566667777", name: "Live First" }] };
+
+await test("S149 resolve: a UUID the live list KNOWS rides verbatim; resolve never synthesizes", async () => {
+  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  const known = "11111111-2222-4333-8444-555566667777";
+  let posts = 0;
+  await withFetchStub(async (url) => {
+    if (url.includes("/voices")) return S95_JSON(S149_LIVE);
+    posts++; // any tts/bytes hit from a resolve would be the old bug's shape
+    return S95_WAV();
+  }, async () => {
+    const id = await tts.resolveCartesiaVoiceId(known, s149Cfg("kn1"));
+    eq(id, known, "a live-list voice rides verbatim");
+  });
+  eq(posts, 0, "resolve lists voices — it never POSTs synthesis");
+});
+
+await test("S149 resolve: an UNKNOWN uuid (an archived id) lands on the live first voice — audio, not a 404", async () => {
+  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  const archived = "694f9389-aac1-45b6-b726-9d9369183238"; // Bright Female — the production killer
+  await withFetchStub(async (url) => {
+    if (url.includes("/voices")) return S95_JSON(S149_LIVE);
+    return S95_WAV();
+  }, async () => {
+    const id = await tts.resolveCartesiaVoiceId(archived, s149Cfg("unk1"));
+    eq(id, "11111111-2222-4333-8444-555566667777", "an archived uuid resolves to the account's real first voice");
+  });
+});
+
+await test("S149 resolve: an unreachable live list NEVER rewrites a uuid — Cartesia's readable 404 stays honest", async () => {
+  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  const requested = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeffff0000";
+  await withFetchStub(async () => new Response("boom", { status: 500 }), async () => {
+    const id = await tts.resolveCartesiaVoiceId(requested, s149Cfg("unr1"));
+    eq(id, requested, "cannot verify → verbatim (no silent substitution on a network failure)");
+  });
+});
+
+await test("S149 resolve: a foreign name goes to the live first voice; offline it falls to the static first (Clive)", async () => {
+  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  await withFetchStub(async (url) => {
+    if (url.includes("/voices")) return S95_JSON(S149_LIVE);
+    return S95_WAV();
+  }, async () => {
+    const id = await tts.resolveCartesiaVoiceId("jam", s149Cfg("nm1"));
+    eq(id, "11111111-2222-4333-8444-555566667777", "a zai voice name resolves to the live first voice");
+  });
+  await withFetchStub(async () => new Response("boom", { status: 500 }), async () => {
+    const id = await tts.resolveCartesiaVoiceId("jam", s149Cfg("nm2"));
+    eq(id, "b24f41fd-00a3-4cd8-992a-a0c9f13f3ef1", "offline, the safety net's first entry (verified Clive) rides");
+  });
+});
+
+await test("S149 self-heal: a 404 after a verbatim resolve refreshes the list and retries ONCE on the real first voice", async () => {
+  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  type Core = typeof tts.cartesiaTts;
+  const cfg = {
+    provider: "cartesia",
+    apiKey: "ck-pin-heal1",
+    baseUrl: "https://api.cartesia.test",
+    model: "sonic-3.6",
+  } as Parameters<Core>[1];
+  const posts: Record<string, unknown>[] = [];
+  const voicesGets: number[] = [];
+  await withFetchStub(async (url, init) => {
+    if (url.includes("/voices")) {
+      // COLD resolve probe fails (network blip) — the uuid rides verbatim.
+      // The refresh probe after the 404 succeeds.
+      if (voicesGets.length === 0) {
+        voicesGets.push(1);
+        return new Response("boom", { status: 500 });
+      }
+      voicesGets.push(2);
+      return S95_JSON(S149_LIVE);
+    }
+    posts.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+    if (posts.length === 1) {
+      return new Response(JSON.stringify({ message: "Voice not found" }), { status: 404 });
+    }
+    return S95_WAV();
+  }, async () => {
+    const buf = await tts.cartesiaTts(
+      { input: "hello", voice: "694f9389-aac1-45b6-b726-9d9369183238", speed: 1 },
+      cfg,
+    );
+    ok(buf.length >= 44, `audio returns after the self-heal (${buf.length} bytes)`);
+  });
+  eq(posts.length, 2, "exactly two synthesis POSTs (the dead one + the healed one)");
+  eq(voicesGets.length, 2, "the list was probed twice (cold resolve + the cache-bypassing refresh)");
+  eq(
+    String((posts[0]?.voice as Record<string, unknown> | undefined)?.id),
+    "694f9389-aac1-45b6-b726-9d9369183238",
+    "the first POST rides the requested uuid verbatim (the resolve could not verify)"
+  );
+  eq(
+    String((posts[1]?.voice as Record<string, unknown> | undefined)?.id),
+    "11111111-2222-4333-8444-555566667777",
+    "the healed POST rides the refreshed list's real first voice"
+  );
+});
+
+await test("S149 self-heal: a 404 whose refreshed list still lacks a substitute rethrows the readable Cartesia error", async () => {
+  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  type Core = typeof tts.cartesiaTts;
+  const cfg = {
+    provider: "cartesia",
+    apiKey: "ck-pin-heal2",
+    baseUrl: "https://api.cartesia.test",
+    model: "sonic-3.6",
+  } as Parameters<Core>[1];
+  let posts = 0;
+  let lastErr: unknown = null;
+  await withFetchStub(async (url) => {
+    if (url.includes("/voices")) return S95_JSON(S149_LIVE);
+    posts++;
+    return new Response(JSON.stringify({ message: "Voice not found" }), { status: 404 });
+  }, async () => {
+    try {
+      await tts.cartesiaTts(
+        { input: "hello", voice: "11111111-2222-4333-8444-555566667777", speed: 1 },
+        cfg,
+      );
+    } catch (e) {
+      lastErr = e;
+    }
+  });
+  eq(posts, 1, "no pointless retry — the refreshed list's first voice IS the requested voice, so the original error stands");
+  ok(
+    lastErr instanceof Error && /Voice not found/.test(String((lastErr as Error).message)),
+    "the readable Cartesia error surfaces (not a mystery)"
+  );
+});
+
 await test("S95 magichour: the four-step happy path — upload-url, timed PUT, submit, video-projects poll, download", async () => {
   const { magicHourVideo } = await import("../src/lib/tubeforge/providers/video.ts");
   type Core = typeof magicHourVideo;

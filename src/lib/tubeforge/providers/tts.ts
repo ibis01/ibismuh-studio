@@ -59,19 +59,23 @@ export function isCartesiaVoiceId(voice: string): boolean {
 }
 
 /** The static last-resort catalog — used only when the LIVE account list is
- *  unreachable AND the requested voice is not a UUID. Kept in sync with the
- *  registry note: the live list is the truth, this is the safety net. */
+ *  unreachable AND the requested voice is not a UUID. The live list is the
+ *  truth; this is the safety net.
+ *
+ *  S149 — the archived-library incident: this list used to carry TEN ids
+ *  (Clive, Parker, Bright Female, Barbershop Man, Wise Woman, Friendly Man,
+ *  Calm Female, Soft Female, Narrator, Deep Male) copied from an OLD public-
+ *  library snapshot. Cartesia has since ARCHIVED the sonic-era public voices
+ *  (voices.list grew an include_archived flag) and relaunched the library for
+ *  sonic-3 with "Name — descriptor" labels. Archived ids are absent from
+ *  GET /voices and answer POST /tts/bytes with 404 "voice not found" — so
+ *  production could pick eight pickers entries that were GUARANTEED to fail
+ *  ("only Parker and Clive work"). The catalog now carries ONLY ids verified
+ *  against a live account + the current library; never re-add an unverified
+ *  UUID — the safety net must not contain lies. */
 const CARTESIA_STATIC_VOICES = [
-  { id: "b24f41fd-00a3-4cd8-992a-a0c9f13f3ef1", label: "Clive" },
-  { id: "30894953-bcce-41fe-892c-15ce19c843ff", label: "Parker" },
-  { id: "694f9389-aac1-45b6-b726-9d9369183238", label: "Bright Female" },
-  { id: "a0e99841-438c-4a64-b679-ae501e7d6091", label: "Barbershop Man" },
-  { id: "a81b5a35-9d67-4dfc-b4d5-5e167c31a385", label: "Wise Woman" },
-  { id: "c2eb8f44-49cd-4a6a-9a0e-c7d6cc13f9a0", label: "Friendly Man" },
-  { id: "a01f57e5-4c4a-4a26-a26b-3d1e1b89a4c5", label: "Calm Female" },
-  { id: "bf991597-6c13-47e4-8411-91c9b9d5c5a7", label: "Soft Female" },
-  { id: "d46abd1d-2d02-43e8-819f-51fb652c1c61", label: "Narrator" },
-  { id: "8a1b5a35-9d67-4dfc-b4d5-5e167c31a385", label: "Deep Male" },
+  { id: "b24f41fd-00a3-4cd8-992a-a0c9f13f3ef1", label: "Clive — Measured Expert" },
+  { id: "30894953-bcce-41fe-892c-15ce19c843ff", label: "Parker — Supportive Pal" },
 ];
 
 /** In-memory cache for the live voice list — keyed by baseUrl + key
@@ -149,20 +153,31 @@ export async function listCartesiaVoices(
   }
 }
 
-/** Resolve the voice to send to Cartesia:
- *  1. A UUID (picked from the live list, or a valid account voice) → verbatim.
- *  2. Anything else (a Z.ai voice name, a clone id, an empty string — the
+/** Resolve the voice to send to Cartesia — THE LIVE-LIST LAW (S149):
+ *  1. A UUID the account's live list KNOWS (picked from any picker) →
+ *     verbatim — the happy path is untouched.
+ *  2. A UUID the live list does NOT know (an archived-library id saved on an
+ *     old video, a deleted custom voice) → the FIRST live voice. Shipping the
+ *     unknown id verbatim is a guaranteed 404 that fails the whole voiceover
+ *     job after six retry rounds; landing on a real account voice produces
+ *     audio instead. The substitution only fires when the list is REACHABLE
+ *     and the id is verifiably absent — never on a network hiccup.
+ *  3. Anything else (a Z.ai voice name, a clone id, an empty string — the
  *     Settings Test button) → the FIRST voice of the account's live list, so
  *     the synthesis lands on a REAL existing voice.
- *  3. Live list unreachable → the static catalog's first entry (readable
- *     Cartesia 404 if even that is stale for the account, instead of a
- *     mystery). */
-async function resolveCartesiaVoiceId(
+ *  4. Live list unreachable → the static catalog's first entry (for non-UUID
+ *     requests; a UUID rides verbatim — Cartesia's readable 404 stays the
+ *     honest outcome when we cannot verify anything). */
+export async function resolveCartesiaVoiceId(
   voice: string,
   config: CapabilityConfig,
 ): Promise<string> {
   const requested = voice?.trim() ?? "";
-  if (isCartesiaVoiceId(requested)) return requested;
+  if (isCartesiaVoiceId(requested)) {
+    const live = await listCartesiaVoices(config);
+    if (!live.length) return requested; // unreachable list — cannot verify, ride verbatim
+    return live.some((v) => v.id === requested) ? requested : live[0].id;
+  }
   const live = await listCartesiaVoices(config);
   if (live.length) return live[0].id;
   return CARTESIA_STATIC_VOICES[0].id;
@@ -524,7 +539,9 @@ async function geminiTts(
  *  both the voices listing and the synthesis call). */
 export const CARTESIA_VERSION = "2025-04-16";
 
-async function cartesiaTts(
+/** Exported for the S149 pin suite — called with a caller-built config so
+ *  the pins run with no DB and no tenant context, exactly like heygenTts. */
+export async function cartesiaTts(
   req: TtsRequest,
   config: CapabilityConfig,
 ): Promise<Buffer> {
@@ -546,6 +563,36 @@ async function cartesiaTts(
   // hard-coded UUID.
   const voiceId = await resolveCartesiaVoiceId(req.voice, config);
 
+  // S149 — the self-heal: a 404 "not found" after a verbatim resolve means
+  // the cached live list (5-min TTL) served an id the account no longer has
+  // (archived-library ids, a just-deleted custom voice). Refresh the list
+  // and retry ONCE on the refreshed first voice — audio instead of a dead
+  // end. Any other status, or an empty refreshed list, rethrows the original
+  // readable Cartesia error untouched.
+  try {
+    return await cartesiaTtsCall(baseUrl, key, model, voiceId, req.input);
+  } catch (err) {
+    const httpErr = err as ProviderHttpError;
+    if (
+      !(httpErr instanceof ProviderHttpError) ||
+      httpErr.status !== 404 ||
+      !/not found/i.test(httpErr.message)
+    ) {
+      throw err;
+    }
+    const refreshed = await listCartesiaVoices(config, { refresh: true });
+    if (!refreshed.length || refreshed[0].id === voiceId) throw err;
+    return cartesiaTtsCall(baseUrl, key, model, refreshed[0].id, req.input);
+  }
+}
+
+async function cartesiaTtsCall(
+  baseUrl: string,
+  key: string,
+  model: string,
+  voiceId: string,
+  transcript: string,
+): Promise<Buffer> {
   const response = await providerFetch(
     "Cartesia TTS",
     joinUrl(baseUrl, "tts/bytes"),
@@ -558,7 +605,7 @@ async function cartesiaTts(
       },
       body: JSON.stringify({
         model_id: model,
-        transcript: req.input,
+        transcript,
         voice: {
           mode: "id",
           id: voiceId,
