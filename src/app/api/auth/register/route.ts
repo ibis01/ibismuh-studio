@@ -94,7 +94,12 @@ export async function POST(req: NextRequest) {
     const verifyToken = randomToken();
     const orgName = `${name || email.split("@")[0]}'s Studio`;
 
-    const created = await rawDb.$transaction(async (tx) => {
+    // S135 law — an explicit budget so serverless latency (cold Postgres
+    // compute, pool acquisition) cannot expire the signup write mid-callback
+    // with "Transaction already closed" (the S148 incident class: the same
+    // wall storage-quota/import-store/scene-revisions already run).
+    const created = await rawDb.$transaction(
+      async (tx) => {
       const user = await tx.user.create({
         data: {
           email,
@@ -123,7 +128,7 @@ export async function POST(req: NextRequest) {
       });
 
       return { user, organization };
-    });
+    }, { timeout: 60_000, maxWait: 15_000 });
 
     const orgId = created.organization.id;
 

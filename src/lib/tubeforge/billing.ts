@@ -408,15 +408,16 @@ export interface SpendResult {
 }
 
 // Transient transaction failures worth retrying: Prisma's serializable
-// conflict / timeout codes (Postgres) plus the SQLite busy/locked family —
-// SQLite serializes writers at the file level, so a concurrent interactive
-// transaction can surface "database is locked"; a retry re-reads the
-// balance, which is exactly the correctness we need.
+// conflict / timeout codes (Postgres — P2034 conflicts, P2028 expired
+// transactions under serverless latency, the S148 class) plus the SQLite
+// busy/locked family — SQLite serializes writers at the file level, so a
+// concurrent interactive transaction can surface "database is locked"; a
+// retry re-reads the balance, which is exactly the correctness we need.
 function isTransientTxError(err: unknown): boolean {
   const code = (err as { code?: string } | null)?.code;
-  if (code === "P2034" || code === "P2024") return true;
+  if (code === "P2034" || code === "P2024" || code === "P2028") return true;
   const msg = err instanceof Error ? err.message : String(err);
-  return /database is locked|database table is locked|SQLITE_BUSY|Transaction not found/i.test(msg);
+  return /database is locked|database table is locked|SQLITE_BUSY|Transaction not found|Transaction already closed|expired transaction/i.test(msg);
 }
 
 // In-process serialization for spendCredits. The check+insert must be
@@ -444,7 +445,16 @@ async function runBilledTx<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>):
   const MAX_ATTEMPTS = 5;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      return await rawDb.$transaction(fn, isPostgres ? { isolationLevel: "Serializable" } : undefined);
+      // S135 law — the budget must outlive the tx's worst contended wait:
+      // Prisma's default 5s expired MID-CALLBACK under serverless latency
+      // (S148) — the same wall storage-quota/import-store/scene-revisions
+      // already run with 60s/15s.
+      return await rawDb.$transaction(
+        fn,
+        isPostgres
+          ? { isolationLevel: "Serializable", timeout: 60_000, maxWait: 15_000 }
+          : undefined,
+      );
     } catch (err) {
       if (attempt < MAX_ATTEMPTS && isTransientTxError(err)) {
         // Exponential backoff — concurrent metering bursts resolve in ms.

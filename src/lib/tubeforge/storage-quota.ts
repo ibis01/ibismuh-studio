@@ -75,24 +75,34 @@ export interface StoragePutReservation {
   commit(actualBytes: number): Promise<void>;
 }
 
-/** Serializable on Postgres with P2034 conflict retry; default on SQLite. */
+/** Serializable on Postgres with P2034/P2028 retry; default on SQLite. */
 async function storageAdmissionTx<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
   const serializable = !`${process.env.DATABASE_URL ?? ""}`.startsWith("file:");
   for (let attempt = 1; ; attempt += 1) {
     try {
-      // VERCEL FIX: Increased timeout to 30s and maxWait to 5s to prevent
-      // "Transaction already closed" errors during slow network/DB operations.
+      // S135 law (import-store.ts + scene-revisions.ts precedent): contended
+      // waits must resolve INSIDE the transaction's lifetime. On serverless
+      // (Vercel) the admission's Postgres round trips paid latency beyond
+      // Prisma's default 5s interactive budget — the tx was aborted
+      // MID-CALLBACK and the next query hit "Transaction already closed",
+      // failing the whole job (S148 live incident: the voiceover path's
+      // quota admission). 60s of budget with a 15s acquisition window stays
+      // bounded — the same wall the graphics import and scene-revision
+      // landing writes already run.
       const txOptions = {
-        timeout: 30000,
-        maxWait: 5000,
+        timeout: 60_000,
+        maxWait: 15_000,
         ...(serializable ? { isolationLevel: "Serializable" as const } : {}),
       };
       return await rawDb.$transaction(fn, txOptions);
     } catch (err) {
       // P2034 — the transaction conflict Serializable exists to produce.
-      // Retry against the winner's committed rows (spend.ts's
+      // P2028 — the interactive tx expired mid-callback (a latency spike
+      // burned the budget). Both abort the WHOLE callback, so a retry re-runs
+      // it cleanly against the winner's committed rows (spend.ts's
       // admitWithConflictRetry law).
-      if ((err as { code?: string })?.code === "P2034" && attempt < 4) {
+      const code = (err as { code?: string })?.code;
+      if ((code === "P2034" || code === "P2028") && attempt < 4) {
         await new Promise((r) => setTimeout(r, 25 * attempt));
         continue;
       }
@@ -139,13 +149,16 @@ export async function reserveStorageBytes(
       update: {},
       create: { organizationId, bytes: 0 },
     });
-    const [usage, holds] = await Promise.all([
-      tx.storageUsage.findUnique({ where: { organizationId } }),
-      tx.storageReservation.aggregate({
-        _sum: { bytes: true },
-        where: { organizationId, expiresAt: { gt: new Date() } }, // LIVE holds only
-      }),
-    ]);
+    // Sequential, not Promise.all: ONE connection serves the whole tx so the
+    // pair never actually parallelized — and after a tx expiry the batch's
+    // loser surfaced as "A batch query cannot be executed on an expired
+    // transaction" (S148). Sequential awaits fail with one honest error and
+    // let the retry ladder above own the recovery.
+    const usage = await tx.storageUsage.findUnique({ where: { organizationId } });
+    const holds = await tx.storageReservation.aggregate({
+      _sum: { bytes: true },
+      where: { organizationId, expiresAt: { gt: new Date() } }, // LIVE holds only
+    });
     const committed = usage ? Number(usage.bytes) : 0;
     const inFlight = holds._sum.bytes ? Number(holds._sum.bytes) : 0;
     if (committed + inFlight - replacesBytes + Math.max(0, incomingBytes) > quota) {

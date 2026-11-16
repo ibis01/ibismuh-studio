@@ -747,12 +747,16 @@ const spend: SpendState = (g.__tfSpend ??= {
 
 /** S47 — one retry on a Prisma serialization conflict (P2034): the loser
  *  of a concurrent-admission race re-runs the transaction against the
- *  winner's committed rows. Any other error propagates (fail-closed). */
+ *  winner's committed rows. P2028 (the interactive tx expired mid-callback
+ *  under serverless latency — the S148 incident) gets the same treatment:
+ *  the whole callback rolled back, so one re-run is clean. Any other error
+ *  propagates (fail-closed). */
 async function admitWithConflictRetry<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (err) {
-    if ((err as { code?: string })?.code !== "P2034") throw err;
+    const code = (err as { code?: string })?.code;
+    if (code !== "P2034" && code !== "P2028") throw err;
     return await fn();
   }
 }
@@ -883,7 +887,17 @@ export async function admitDispatch(opts: {
           }
           return { recorded, pendingRows };
         },
-        serializable ? { isolationLevel: "Serializable" } : undefined,
+        serializable
+          ? {
+              isolationLevel: "Serializable",
+              // S135 law — the budget must outlive the admission's worst
+              // contended wait: the default 5s expired MID-CALLBACK under
+              // serverless latency (S148), the same wall storage-quota,
+              // import-store and scene-revisions already run.
+              timeout: 60_000,
+              maxWait: 15_000,
+            }
+          : undefined,
       ),
     );
   } catch (err) {
