@@ -1738,9 +1738,14 @@ await test("cameraAt: exact interpolation, clamped ends", () => {
 
 await test("S134 objectAt: keyless objects mirror their static fields exactly (the render-path byte-identity)", async () => {
   const { objectAt, scaffoldScene3D } = await import("../src/lib/tubeforge/scene3d");
+  // S160: the scaffold's satellites/centerpiece now carry keyframes (the
+  // alive-world law), so the KEYLESS identity law rides explicit keyless
+  // clones — the law itself is unchanged (a keyless object mirrors its
+  // static fields at every t).
   const doc = scaffoldScene3D("s134 pin");
+  const keyless = doc.objects.map((o) => ({ ...o, keyframes: undefined }));
   for (const t of [0, 0.13, 0.5, 0.77, 1]) {
-    for (const o of doc.objects) {
+    for (const o of keyless) {
       const s = objectAt(o, t);
       eq(s.id, o.id, "the id rides");
       eq(s.position, o.position, `position passthrough at t=${t}`);
@@ -1807,8 +1812,8 @@ await test("S134 the tolerant keyframes read + the strict write round-trip", asy
   ok(keys?.[0] && !("junk" in keys[0]), "unknown key fields drop (strict write)");
   const s1 = serializeScene3D(parsed);
   eq(serializeScene3D(parseScene3D(s1)), s1, "serialize → parse → serialize is byte-identical with keyframes");
-  const plain = parseScene3D(serializeScene3D(doc));
-  ok(plain?.objects.every((o) => o.keyframes === undefined), "keyless objects never invent keyframes");
+  const plain = parseScene3D(serializeScene3D({ ...doc, objects: doc.objects.map((o) => ({ ...o, keyframes: undefined })) }));
+  ok(plain?.objects.every((o) => o.keyframes === undefined), "keyless objects never invent keyframes (the fixture is the keyless clone set — the S160 scaffold's animated objects legitimately carry keys)");
   const written = JSON.parse(serializeScene3D(plain)) as { objects: Array<Record<string, unknown>> };
   ok(written.objects.every((o) => !("keyframes" in o)), "a keyless scene writes no object-level keyframes (byte-identity; the camera's keyframes field is unrelated)");
 });
@@ -14736,7 +14741,7 @@ suiteStart("Stage S — anim/: easing, keyframes, the clock (S120 §8)");
 
 await test("S easing: the table is complete, pure, clamped — and the overshoot curves actually overshoot", async () => {
   const { EASE_CURVES, evalEase, isEaseName } = await import("../src/lib/tubeforge/anim/easing");
-  eq(Object.keys(EASE_CURVES).sort(), ["ease-back", "ease-in-out", "ease-out", "linear", "pop"], "five named curves, closed table");
+  eq(Object.keys(EASE_CURVES).sort(), ["ease-back", "ease-in-out", "ease-out", "glide", "linear", "pop"], "six named curves, closed table (S160 added the glide)");
   ok(isEaseName("pop") && !isEaseName("spring"), "the guard knows the table");
   for (const [name, fn] of Object.entries(EASE_CURVES)) {
     eq(fn(-0.5), 0, `${name} clamps below the domain`);
@@ -21860,6 +21865,142 @@ await test("S159 the voices route overlays the live lists for every account-list
     src.includes('config.provider === "elevenlabs"') && src.includes('config.provider === "playht"'),
     "elevenlabs and playht overlay their live account lists like cartesia"
   );
+});
+
+// ---------------------------------------------------------------------------
+// S160 — the reference motion-and-light pass (the animated-shorts style
+// study, SKILL.md + references/reports): the measured GLIDE ease joins the
+// shared substrate; the 3D lane carries the destination-key ease and the
+// additive look seam (sky / fog / shadows); the renderer page carries the
+// gated passes + the Neutral tone map; the graphics camera folds the
+// impact kick (the KICKS law) off the `hit` events.
+// ---------------------------------------------------------------------------
+
+suiteStart("S160 — the reference motion-and-light pass");
+
+await test("S160 the glide ease: the smootherstep joins the substrate, exact at the anchors", async () => {
+  const { EASE_CURVES, evalEase, isEaseName, zoomProgressExpr } = await import("../src/lib/tubeforge/anim/easing");
+  ok(isEaseName("glide"), "glide is a named curve");
+  const glide = EASE_CURVES.glide;
+  eq(glide(0), 0, "0 → 0");
+  eq(glide(1), 1, "1 → 1");
+  eq(glide(0.5), 0.5, "the midpoint is symmetric");
+  approx(glide(0.25), 0.103515625, 1e-12, "the closed form at the quarter (6t⁵−15t⁴+10t³)");
+  approx(glide(0.75), 0.896484375, 1e-12, "and mirrored at the three-quarter");
+  ok(glide(0.1) < glide(0.2) && glide(0.8) < glide(0.9), "monotone");
+  ok(glide(0.2) < 0.38, "slower off the mark than linear (the measured S shape)");
+  eq(glide(-1), 0, "clamped below");
+  eq(glide(2), 1, "clamped above");
+  eq(evalEase("glide", 0.5), 0.5, "evalEase routes glide");
+  ok(zoomProgressExpr("glide", 30).startsWith("(6*pow(on/30,5)"), "the zoompan compiler carries the closed form");
+  ok(!glide.toString().includes("Math.pow"), "the no-pow law (exact multiplication only)");
+});
+
+await test("S160 scene3d: the destination-key ease — absent ⇒ linear (the historical evaluation), glide when shipped", async () => {
+  const { cameraAt, objectAt } = await import("../src/lib/tubeforge/scene3d");
+  const linearKeys = [
+    { t: 0, position: [0, 0, 6] as [number, number, number], lookAt: [0, 0, 0] as [number, number, number] },
+    { t: 1, position: [4, 2, 6] as [number, number, number], lookAt: [0, 1, 0] as [number, number, number] },
+  ];
+  approx(cameraAt(linearKeys, 0.25).position[1], 0.5, 1e-9, "absent ease ⇒ linear (the v1 law holds)");
+  const glided = linearKeys.map((k, i) => (i === 1 ? { ...k, ease: "glide" as const } : k));
+  approx(cameraAt(glided, 0.25).position[1], 2 * 0.103515625, 1e-12, "the glide arrives at the destination key (the span's y range is 0→2)");
+  approx(cameraAt(glided, 0.5).position[1], 1, 1e-12, "symmetric at the midpoint");
+  const obj = {
+    id: "orb", kind: "sphere" as const, position: [0, 0, 0] as [number, number, number], material: { color: "#888888" },
+    keyframes: [
+      { t: 0, position: [0, 0, 0] as [number, number, number] },
+      { t: 1, position: [10, 0, 0] as [number, number, number], ease: "glide" as const },
+    ],
+  };
+  approx(objectAt(obj, 0.25).position[0], 1.03515625, 1e-9, "the object track rides its key's glide too");
+  const linearObj = { ...obj, keyframes: [{ t: 0, position: [0, 0, 0] as [number, number, number] }, { t: 1, position: [10, 0, 0] as [number, number, number] }] };
+  approx(objectAt(linearObj, 0.25).position[0], 2.5, 1e-9, "absent ⇒ linear for objects as well");
+});
+
+await test("S160 scene3d: the look seam parses tolerantly, serializes strictly, round-trips byte-stable", async () => {
+  const { parseScene3D, serializeScene3D, scaffoldScene3D } = await import("../src/lib/tubeforge/scene3d");
+  const doc = scaffoldScene3D("s160 look");
+  ok(doc.sky != null && doc.sky.top === "#3e7fd2" && doc.sky.horizon === "#b8d0ec", "the scaffold carries the day sky");
+  ok(doc.fog != null && doc.fog.color === "#b8d0ec", "fog rides the horizon colour (the reference law)");
+  ok(doc.shadows === true, "shadows on");
+  ok(doc.camera.keyframes.every((k) => k.ease === "glide"), "the camera keys ride the glide");
+  const satA = doc.objects.find((o) => o.id === "sat-a");
+  ok(satA?.keyframes != null && satA.keyframes.length === 3 && satA.keyframes.some((k) => k.ease === "glide"), "the animated objects carry eased keys");
+  ok(doc.objects.find((o) => o.id === "ground")?.keyframes === undefined, "the ground stays keyless (the S134 fixture depends on keyless clones existing)");
+  const s1 = serializeScene3D(doc);
+  const back = parseScene3D(s1);
+  ok(back != null && serializeScene3D(back) === s1, "byte-stable round-trip with the seam fields");
+  const bare = parseScene3D(JSON.stringify({
+    version: 1,
+    camera: { fov: 50, keyframes: [{ t: 0, position: [0, 0, 6], lookAt: [0, 0, 0] }] },
+    objects: [{ id: "a", kind: "box", position: [0, 0, 0], material: {} }],
+    lights: [],
+    sky: "junk", fog: { color: "nothex", near: "junk" }, shadows: "yes",
+  }));
+  ok(bare != null, "junk seam fields never kill the doc");
+  ok(bare && bare.sky === undefined, "a junk sky (non-object) reads as absent");
+  ok(bare && bare.fog != null && bare.fog.color === "#b8d0ec" && bare.fog.near === 14, "a shipped fog object falls back honestly");
+  ok(bare && bare.shadows === undefined, "a non-boolean shadows reads as absent");
+  ok(bare && bare.camera.keyframes[0].ease === undefined, "a junk key ease ⇒ absent ⇒ linear");
+  ok(bare && !serializeScene3D(bare).includes('"sky"'), "absent seam fields never serialize");
+});
+
+await test("S160 render3d: the page carries the gated look passes and the Neutral tone map", async () => {
+  const { pageHtml } = await import("../src/lib/tubeforge/render3d");
+  const src = pageHtml(1280, 720, "THREE_SRC", "CORE_SRC", "{}");
+  ok(src.includes("THREE.NeutralToneMapping"), "the Neutral tone map rides the page (the reference post chain's terminal stage)");
+  ok(src.includes("renderer.shadowMap.enabled = shadowsOn") && src.includes("doc.shadows === true"), "the shadow pass is gated on the doc flag");
+  ok(src.includes("if (doc.sky)") && src.includes("BackSide") && src.includes("smoothstep(0.0, 0.55, vDir.y)"), "the two-stop elevation gradient dome is gated");
+  ok(src.includes("if (doc.fog)") && src.includes("new THREE.Fog("), "the fog pass is gated");
+  ok(src.includes("mesh.castShadow = shadowsOn"), "the shadow flags are gated too");
+  ok(src.includes("#include <tonemapping_fragment>") && src.includes("#include <colorspace_fragment>"), "the dome lands in the displayed range (the tone/color chunks)");
+});
+
+await test("S160 graphics: the hit kick — the KICKS grammar (flip-sign each frame, decay over 7, latest wins)", async () => {
+  const { hitKickOffset, GRAPHICS_MOTION_SEMANTICS } = await import("../src/lib/tubeforge/graphics/frame");
+  const S = GRAPHICS_MOTION_SEMANTICS;
+  eq(S.hitKickFrames, 7, "the measured 6-7 frame window");
+  eq(S.hitKickBasePx, 3, "the measured ~3 px at the 720p reference");
+  eq(hitKickOffset(undefined, 500, 30, 1080), { dx: 0, dy: 0 }, "no events ⇒ zero (the seam law)");
+  eq(hitKickOffset([{ tMs: 100, kind: "sfx" }], 500, 30, 1080), { dx: 0, dy: 0 }, "an sfx cue is not a hit");
+  const ev = { tMs: 1000, kind: "hit" as const };
+  const k0 = hitKickOffset([ev], 1000, 30, 720);
+  approx(k0.dx, 3, 1e-9, "full amplitude at the hit frame");
+  approx(k0.dy, -1.8, 1e-9, "the y swing rides the factor, opposite phase (the judder)");
+  const k1 = hitKickOffset([ev], 1000 + 1000 / 30, 30, 720);
+  ok(k1.dx < 0 && k1.dy > 0, "the offset flips sign on the next frame");
+  approx(Math.abs(k1.dx) / 3, (1 - 1 / 7) * Math.sqrt(1 - 1 / 7), 1e-9, "the decay is (1−n/7)^1.5 (sqrt-exact)");
+  ok(hitKickOffset([ev], 1000 + 7 * (1000 / 30), 30, 720).dx === 0, "the window closes at 7 frames");
+  const scaled = hitKickOffset([ev], 1000, 30, 1080);
+  approx(scaled.dx, 4.5, 1e-9, "scaled to the doc height (3 px at 720 → 4.5 at 1080)");
+  const two = [ev, { tMs: 1000 + 2 * (1000 / 30), kind: "hit" as const }];
+  const k2 = hitKickOffset(two, 1000 + 2.5 * (1000 / 30), 30, 720);
+  approx(Math.abs(k2.dx) / 3, (1 - 0.5 / 7) * Math.sqrt(1 - 0.5 / 7), 1e-9, "the LATEST hit owns the shake");
+  eq(JSON.stringify(hitKickOffset([ev], 1337, 30, 1080)), JSON.stringify(hitKickOffset([ev], 1337, 30, 1080)), "pure: same inputs → same bytes");
+});
+
+await test("S160 graphics frameAt: the camera folds the kick; no camera / no live window stays byte-identical", async () => {
+  const { frameAt, hitKickOffset } = await import("../src/lib/tubeforge/graphics/frame");
+  const scene = {
+    id: "s1", narration: "one two three.", background: "#ffffff",
+    camera: [{ tMs: 0, zoom: 2, tx: 0, ty: 0 }, { tMs: 3000, zoom: 2, tx: 100, ty: 0 }],
+    events: [{ tMs: 1500, kind: "hit" as const }],
+    elements: [],
+  };
+  const doc = { version: 1, title: "kick pin", width: 1920, height: 1080, fps: 30 as const, scenes: [scene] };
+  const withKick = frameAt(doc, 1500);
+  const kickCam = withKick.camera;
+  ok(kickCam != null && kickCam.tx > 0, "the kick lands on the camera tx (positive at n=0)");
+  const expected = 50 + hitKickOffset(scene.events, 1500, 30, 1080).dx / 2;
+  approx(kickCam?.tx ?? -9999, expected, 1e-9, "the cameraAt base PLUS the kick, screen px → board units through the zoom");
+  const calm = frameAt(doc, 2900);
+  ok(calm.camera != null && Math.abs(calm.camera.tx - 2900 / 30) < 1e-9, "outside the window the camera is cameraAt alone (0→100 over 3000 ms → tx = 2900/30)");
+  const evFree = { ...scene, events: undefined };
+  const plain = frameAt({ ...doc, scenes: [evFree] }, 1500);
+  approx(plain.camera?.tx ?? -9999, 50, 1e-12, "no events ⇒ cameraAt untouched (the byte-identity seam)");
+  const camFree = { ...scene, camera: undefined };
+  ok(frameAt({ ...doc, scenes: [camFree] }, 1500).camera === undefined, "hits without a camera stay cameraless (no #gcam to shake)");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

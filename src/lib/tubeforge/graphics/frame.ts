@@ -77,7 +77,7 @@ import { evalEase } from "../anim/easing";
 import { evalAt } from "../anim/keyframe";
 import { estimateNarrationMs } from "../whiteboard/timing";
 import { cameraAt, type GraphicsCameraState } from "./camera";
-import type { ElementMotion, ElementTween, GraphicsDoc, GraphicsElement } from "./types";
+import type { ElementMotion, ElementTween, GraphicsDoc, GraphicsElement, GraphicsEvent } from "./types";
 
 /** The v1 motion semantics — ONE source, cited by the pins and the design
  *  record. Values are receipts to tune; the names are the contract. */
@@ -102,6 +102,16 @@ export const GRAPHICS_MOTION_SEMANTICS = {
   emphasisSlidePx: 48,
   /** emphasis re-trace dip (wipe / draw). */
   emphasisNudge: 0.25,
+  /** S160 — the impact kick (the animated-shorts KICKS grammar, ported
+   *  from references/reports/motion.md): a `hit` event shakes the scene
+   *  camera — the offset flips sign EVERY frame and decays over this many
+   *  frames, at this amplitude in px at the 720p REFERENCE height (scaled
+   *  to the doc's own height by the caller), with the y-axis swing at
+   *  this factor of the x swing (the judder reads as a shake, not a
+   *  diagonal slide). */
+  hitKickFrames: 7,
+  hitKickBasePx: 3,
+  hitKickYFactor: 0.6,
 } as const;
 
 /** The motion kinds that drive the opacity channel (enter: 0→1; exit:
@@ -185,6 +195,48 @@ function sceneClocks(doc: GraphicsDoc, voMsBySceneId?: Map<string, number>): Sce
 }
 
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+/**
+ * S160 — the hit kick: the camera shake a `hit` event fires (the
+ * animated-shorts camera grammar's KICKS law, measured in its motion
+ * report and ported here). The LATEST hit inside the window owns the
+ * shake (overlapping hits never stack); the offset flips sign every
+ * delivered frame and decays over `hitKickFrames` frames; the amplitude
+ * is `hitKickBasePx` at the 720p reference height, scaled to the doc's
+ * own height. PURE — the decay is sqrt(u)·u (IEEE sqrt is exactly
+ * specified — the no-pow law holds); same inputs → byte-identical
+ * offsets. No events / no live window → the zero offset (the seam law:
+ * every pre-S160 payload evaluates unchanged).
+ */
+export function hitKickOffset(
+  events: readonly GraphicsEvent[] | undefined,
+  sceneTMs: number,
+  fps: number,
+  docHeight: number,
+): { dx: number; dy: number } {
+  if (!events || events.length === 0) return { dx: 0, dy: 0 };
+  const S = GRAPHICS_MOTION_SEMANTICS;
+  const frameMs = 1000 / fps;
+  let latest: number | null = null; // the smallest n = the most recent live hit
+  for (const ev of events) {
+    if (ev.kind !== "hit") continue;
+    const n = (sceneTMs - ev.tMs) / frameMs;
+    // The window [0, frames) with the epsilon fold on the far edge (a
+    // floating-point n that lands a hair under the close must read as
+    // outside — same fold as the parity below).
+    if (n < 0 || n >= S.hitKickFrames - 1e-9) continue;
+    if (latest === null || n < latest) latest = n;
+  }
+  if (latest === null) return { dx: 0, dy: 0 };
+  const u = 1 - latest / S.hitKickFrames;
+  const decay = Math.sqrt(u) * u; // (1 − n/frames)^1.5, sqrt-exact
+  const px = S.hitKickBasePx * (docHeight / 720) * decay;
+  // The flip parity snaps to the OWNING frame (a floating-point n that
+  // lands a hair under a frame boundary must not read as the previous
+  // frame — the epsilon-fold law).
+  const sign = Math.floor(latest + 1e-9) % 2 === 0 ? 1 : -1;
+  return { dx: px * sign, dy: px * S.hitKickYFactor * -sign };
+}
 
 /** The emphasis envelope: triangle phase eased by the motion's own curve —
  *  0 at both window edges (continuity at emphasis boundaries), 1 at the
@@ -342,14 +394,25 @@ export function frameAt(
   }
   if (active === undefined) active = last;
   const sceneT = t - active.startMs;
+  // S160 — the camera fold: the pure cameraAt evaluation plus the hit
+  // kick (a `hit` event's decaying shake, converted from screen px to
+  // board units through the zoom the applier scales by). No camera → the
+  // field stays ABSENT (the additive-seam law holds both ways); a camera
+  // with no live hit window evaluates byte-identically to cameraAt alone.
+  let camera: GraphicsCameraState | undefined;
+  if (active.scene.camera !== undefined) {
+    const cam = cameraAt(active.scene.camera, sceneT);
+    const kick = hitKickOffset(active.scene.events, sceneT, doc.fps, doc.height);
+    camera = kick.dx !== 0 || kick.dy !== 0
+      ? { zoom: cam.zoom, tx: cam.tx + kick.dx / cam.zoom, ty: cam.ty + kick.dy / cam.zoom }
+      : cam;
+  }
   // S130 — the camera resolves on the SCENE-LOCAL clock (the R-6 law: one
   // scene resolution, one scene-local evaluation, one function call apart).
   return {
     sceneId: active.scene.id,
     sceneTMs: sceneT,
-    ...(active.scene.camera !== undefined
-      ? { camera: cameraAt(active.scene.camera, sceneT) }
-      : {}),
+    ...(camera !== undefined ? { camera } : {}),
     // R-6 (the S123 multi-scene pin): element motions are SCENE-LOCAL (the
     // validator's time-sanity law bounds every motion span by its own
     // scene's clock), so they evaluate against the scene-local clock —

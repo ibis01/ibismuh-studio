@@ -11,7 +11,16 @@
 // clock, no randomness (the S64 law generalizes). easeInOut is the SAME
 // cubic family the whiteboard's own scheduler uses — one formula family,
 // two consumers, documented.
-export type EaseName = "linear" | "ease-in-out" | "ease-out" | "pop" | "ease-back";
+//
+// S160 — "glide", the measured camera-move curve. The animated-shorts
+// style study (references/reports/motion.md, 32,337 frames) measured that
+// reference camera moves ride a SYMMETRIC SMOOTHERSTEP — ~10 frames of
+// acceleration, ~10 of settle, no linear midsection — and that this one
+// curve carries 65% of all screen motion. It is adopted here as the
+// camera-glide ease for every engine that keys a camera (the 3D lane's
+// cameraAt, the graphics scene camera, the zoompan compiler): one name,
+// one formula, the motion grammar the measurement proved.
+export type EaseName = "linear" | "ease-in-out" | "ease-out" | "pop" | "ease-back" | "glide";
 
 const clamp01 = (t: number): number => (Number.isFinite(t) ? Math.min(1, Math.max(0, t)) : 0);
 
@@ -48,6 +57,19 @@ function easeOut(t: number): number {
   return 1 - b * b * b;
 }
 
+/** The glide — Perlin's smootherstep, 6t⁵ − 15t⁴ + 10t³: zero first AND
+ *  second derivatives at both ends (the symmetric S the measured camera
+ *  grammar rides — slower off the mark and into the settle than the
+ *  cubic ease-in-out, which reads as a snappier move). The exact-
+ *  multiplication law as everywhere below — the powers are built by
+ *  repeated multiplication, never Math.pow. */
+function glide(t: number): number {
+  const u = clamp01(t);
+  const u2 = u * u;
+  const u3 = u2 * u;
+  return u3 * (u * (6 * u - 15) + 10);
+}
+
 /** Back-overshoot constants: s1 sets how far past the target the curve
  *  swings before settling; c3 is its cubic coefficient (the standard
  *  easeOutBack closed form). */
@@ -79,6 +101,7 @@ export const EASE_CURVES: Readonly<Record<EaseName, (t: number) => number>> = Ob
   "ease-out": easeOut,
   pop,
   "ease-back": easeBack,
+  glide,
 });
 
 export function isEaseName(name: string): name is EaseName {
@@ -113,6 +136,11 @@ export function zoomProgressExpr(name: EaseName | "smooth", last: number): strin
     case "ease-in-out":
       // motion.ts's smooth curve: the cosine ease byte-for-byte.
       return `(0.5-0.5*cos(PI*${n}))`;
+    case "glide":
+      // The smootherstep, compiled to the closed-form polynomial (the
+      // string carries pow() — this is an ffmpeg expression, not JS math;
+      // the no-pow law governs JS numeric code only).
+      return `(6*pow(${n},5)-15*pow(${n},4)+10*pow(${n},3))`;
     case "ease-out":
       return `(1-pow(1-${n},3))`;
     case "ease-back":

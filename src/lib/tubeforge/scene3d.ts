@@ -18,6 +18,25 @@
 // reads as absent and is never overwritten), tolerant parse (null on
 // unreadable — junk fields fall back honestly), strict write (exactly the
 // declared fields, version first), byte-stable round-trip.
+//
+// S160 — the reference motion-and-light pass (the animated-shorts style
+// study, SKILL.md + references/reports): the ADDITIVE SEAM LAW as the
+// graphics lane proved it (S129–S132, no version bump):
+//   • per-key `ease` on the camera and object keyframes — the house
+//     destination-key convention (the segment ARRIVING at a key is eased
+//     by THAT key's ease; absent ⇒ linear — one vocabulary with
+//     graphics/camera.ts). Old docs carry no ease ⇒ they still evaluate
+//     byte-identically (the seam's backward law).
+//   • the look seam: optional `sky` (a two-stop gradient dome — top /
+//     horizon, the measured day sky compressed), `fog` (colour + near/far
+//     — the reference's fog-equals-horizon law), `shadows` (real sun
+//     shadows). Absent fields keep the flat pre-S160 look; the renderer
+//     gates every pass on the field's presence.
+//   • the renderer's global look upgrade (tone mapping) is DELIBERATE and
+//     un-gated: this lane is demo-grade, manual, and not compositor-wired
+//     — the upgrade IS the point, and no golden hash rides its frames.
+
+import { evalEase, isEaseName, type EaseName } from "./anim/easing";
 
 export const SCENE3D_VERSION = 1;
 
@@ -55,12 +74,14 @@ export interface Scene3DObject {
 
 /** One object keyframe: normalized time + any subset of the channels it
  *  drives at that moment (absent channels hold — strict optionality, the
- *  byte-stable round-trip law). */
+ *  byte-stable round-trip law). S160: the destination-key ease (absent ⇒
+ *  linear — the shared convention). */
 export interface Scene3DObjectKeyframe {
   t: number;
   position?: [number, number, number];
   rotation?: [number, number, number];
   scale?: [number, number, number];
+  ease?: EaseName;
 }
 
 /** The keyframe cap per object — mirrors the graphics lane's
@@ -81,6 +102,9 @@ export interface Scene3DCameraKeyframe {
   t: number;
   position: [number, number, number];
   lookAt: [number, number, number];
+  /** S160 — the glide arriving at THIS key (the destination-key
+   *  convention; absent ⇒ linear, the historical evaluation). */
+  ease?: EaseName;
 }
 
 export interface Scene3D {
@@ -91,6 +115,15 @@ export interface Scene3D {
   fps: 24 | 30 | 60;
   durationSec: number;
   background: string; // #rrggbb
+  /** S160 — the additive look seam. The gradient sky dome (top / horizon
+   *  stops); absent ⇒ the flat background colour (the pre-S160 look). */
+  sky?: { top: string; horizon: string };
+  /** S160 — depth fog (the reference law: fog IS the horizon colour).
+   *  Absent ⇒ no fog pass. */
+  fog?: { color: string; near: number; far: number };
+  /** S160 — real sun shadows off the directional lights. Absent/false ⇒
+ *  the shadow pass stays off (the SwiftShader budget holds either way). */
+  shadows?: boolean;
   camera: {
     fov: number; // degrees, clamped 20..110
     keyframes: Scene3DCameraKeyframe[];
@@ -137,6 +170,8 @@ function parseObject(raw: unknown): Scene3DObject | null {
       if (Array.isArray(kk.position)) key.position = vec3(kk.position, [0, 0, 0]);
       if (Array.isArray(kk.rotation)) key.rotation = vec3(kk.rotation, [0, 0, 0]);
       if (Array.isArray(kk.scale)) key.scale = vec3(kk.scale, [1, 1, 1]);
+      // S160 — the destination-key ease (junk ⇒ absent ⇒ linear).
+      if (typeof kk.ease === "string" && isEaseName(kk.ease)) key.ease = kk.ease;
       if (key.position === undefined && key.rotation === undefined && key.scale === undefined) return null;
       return key;
     })
@@ -204,6 +239,8 @@ export function parseScene3D(json: string | null | undefined): Scene3D | null {
           t: clamp(t, 0, 1),
           position: vec3(kk.position, [0, 0, 6]),
           lookAt: vec3(kk.lookAt, [0, 0, 0]),
+          // S160 — the destination-key ease (junk ⇒ absent ⇒ linear).
+          ...(typeof kk.ease === "string" && isEaseName(kk.ease) ? { ease: kk.ease } : {}),
         } as Scene3DCameraKeyframe;
       })
       .filter((k): k is Scene3DCameraKeyframe => k != null);
@@ -214,6 +251,17 @@ export function parseScene3D(json: string | null | undefined): Scene3D | null {
     const lights = (Array.isArray(raw.lights) ? raw.lights : [])
       .map(parseLight)
       .filter((l): l is Scene3DLight => l != null);
+    // S160 — the look seam (decoration-class): a seam field reads ONLY
+    // when it ships as a plain object — junk reads as absent (the
+    // byte-stable round-trip law); honest fallbacks fill the values
+    // inside the object.
+    const isPlainObj = (v: unknown): v is Record<string, unknown> =>
+      v !== null && typeof v === "object" && !Array.isArray(v);
+    const skyRaw = isPlainObj(raw.sky) ? raw.sky : null;
+    const fogRaw = isPlainObj(raw.fog) ? raw.fog : null;
+    const fogNear = Number(fogRaw?.near);
+    const fogFarRaw = Number(fogRaw?.far);
+    const fogFar = Number.isFinite(fogFarRaw) ? clamp(fogFarRaw, 2, 1000) : 58;
     return {
       version: SCENE3D_VERSION,
       aspect,
@@ -222,6 +270,17 @@ export function parseScene3D(json: string | null | undefined): Scene3D | null {
       fps,
       durationSec: Number.isFinite(duration) ? clamp(duration, 1, 60) : 5,
       background: hex(raw.background, "#101418"),
+      ...(skyRaw ? { sky: { top: hex(skyRaw.top, "#3e7fd2"), horizon: hex(skyRaw.horizon, "#b8d0ec") } } : {}),
+      ...(fogRaw
+        ? {
+            fog: {
+              color: hex(fogRaw.color, "#b8d0ec"),
+              near: Number.isFinite(fogNear) ? clamp(fogNear, 1, 500) : 14,
+              far: Math.max(fogFar, Number.isFinite(fogNear) ? clamp(fogNear, 1, 500) + 1 : 15),
+            },
+          }
+        : {}),
+      ...(typeof raw.shadows === "boolean" ? { shadows: raw.shadows } : {}),
       camera: {
         fov: Number.isFinite(Number(camera.fov)) ? clamp(Number(camera.fov), 20, 110) : 50,
         keyframes: keyframes.sort((a, b) => a.t - b.t),
@@ -257,6 +316,7 @@ function serializeObject(o: Scene3DObject): Record<string, unknown> {
       ...(k.position ? { position: [...k.position] } : {}),
       ...(k.rotation ? { rotation: [...k.rotation] } : {}),
       ...(k.scale ? { scale: [...k.scale] } : {}),
+      ...(k.ease ? { ease: k.ease } : {}),
     }));
   }
   return out;
@@ -272,12 +332,16 @@ export function serializeScene3D(doc: Scene3D): string {
     fps: doc.fps,
     durationSec: doc.durationSec,
     background: doc.background,
+    ...(doc.sky ? { sky: { top: doc.sky.top, horizon: doc.sky.horizon } } : {}),
+    ...(doc.fog ? { fog: { color: doc.fog.color, near: doc.fog.near, far: doc.fog.far } } : {}),
+    ...(doc.shadows !== undefined ? { shadows: doc.shadows } : {}),
     camera: {
       fov: doc.camera.fov,
       keyframes: doc.camera.keyframes.map((k) => ({
         t: k.t,
         position: [...k.position],
         lookAt: [...k.lookAt],
+        ...(k.ease ? { ease: k.ease } : {}),
       })),
     },
     objects: doc.objects.map(serializeObject),
@@ -306,7 +370,15 @@ function hash32(s: string): number {
  * the recorded tail): a ground plane, a centerpiece box (the topic's hue,
  * seeded), two satellite spheres, three-point lighting, and a camera
  * ORBIT keyframed across the scene — the "establishing flyover" every
- * explainer opens with. Same input → byte-identical doc (pinned).
+ * explainer opens with.
+ *
+ * S160 — the scaffold rides the reference's day look and motion grammar
+ * (the animated-shorts style bible): a two-stop sky with fog riding the
+ * horizon colour, real sun shadows, a warm lit ground (the flat demo
+ * look was the lane's biggest tell), camera keys on the measured GLIDE
+ * (the symmetric smootherstep the motion report proved), and a gently
+ * ALIVE world — the satellites arc and bob, the centerpiece turns. Same
+ * input → byte-identical doc (pinned).
  */
 export function scaffoldScene3D(
   topic: string,
@@ -323,6 +395,7 @@ export function scaffoldScene3D(
   const height = aspect === "16:9" ? 720 : aspect === "9:16" ? 1280 : 960;
   const duration = clamp(opts.durationSec ?? 5, 1, 60);
   const fps = opts.fps ?? 30;
+  const rot0 = (h % 90) * (Math.PI / 180);
 
   const doc: Scene3D = {
     version: SCENE3D_VERSION,
@@ -331,24 +404,52 @@ export function scaffoldScene3D(
     height,
     fps,
     durationSec: duration,
-    background: "#101418",
+    // The reference's fog-equals-horizon law: the flat backdrop joins the
+    // sky at the horizon, so the dome's horizon stop IS the backdrop.
+    background: "#b8d0ec",
+    sky: { top: "#3e7fd2", horizon: "#b8d0ec" },
+    fog: { color: "#b8d0ec", near: 14, far: 58 },
+    shadows: true,
     camera: {
       fov: 50,
       keyframes: [
-        { t: 0, position: [-4.2, 3.2, 6.4], lookAt: [0, 0.6, 0] },
-        { t: 0.5, position: [0, 2.6, 7.2], lookAt: [0, 0.6, 0] },
-        { t: 1, position: [4.2, 3.4, 6.2], lookAt: [0, 0.7, 0] },
+        { t: 0, position: [-4.2, 3.2, 6.4], lookAt: [0, 0.6, 0], ease: "glide" },
+        { t: 0.5, position: [0, 2.6, 7.2], lookAt: [0, 0.6, 0], ease: "glide" },
+        { t: 1, position: [4.2, 3.4, 6.2], lookAt: [0, 0.7, 0], ease: "glide" },
       ],
     },
     objects: [
-      { id: "ground", kind: "plane", position: [0, 0, 0], rotation: [-Math.PI / 2, 0, 0], scale: [18, 18, 1], material: { color: "#1c222b", roughness: 0.9 } },
-      { id: "centerpiece", kind: "box", position: [0, 0.75, 0], rotation: [0, (h % 90) * (Math.PI / 180), 0], scale: [1.5, 1.5, 1.5], material: { color: centerpiece, metalness: 0.55, roughness: 0.35 } },
-      { id: "sat-a", kind: "sphere", position: [-2.6, 0.8, 0.9], scale: [0.8, 0.8, 0.8], material: { color: satelliteA, metalness: 0.2, roughness: 0.5 } },
-      { id: "sat-b", kind: "sphere", position: [2.4, 1.05, -0.8], scale: [1.05, 1.05, 1.05], material: { color: satelliteB, metalness: 0.2, roughness: 0.5 } },
+      { id: "ground", kind: "plane", position: [0, 0, 0], rotation: [-Math.PI / 2, 0, 0], scale: [18, 18, 1], material: { color: "#a3947d", roughness: 0.9 } },
+      {
+        id: "centerpiece", kind: "box", position: [0, 0.75, 0], rotation: [0, rot0, 0], scale: [1.5, 1.5, 1.5], material: { color: centerpiece, metalness: 0.55, roughness: 0.35 },
+        // The slow majestic quarter-turn — eased, seeded.
+        keyframes: [
+          { t: 0, rotation: [0, rot0, 0] },
+          { t: 1, rotation: [0, rot0 + 0.9, 0], ease: "glide" },
+        ],
+      },
+      {
+        id: "sat-a", kind: "sphere", position: [-2.6, 0.8, 0.9], scale: [0.8, 0.8, 0.8], material: { color: satelliteA, metalness: 0.2, roughness: 0.5 },
+        // The arc: drift toward the camera-side while climbing, then settle.
+        keyframes: [
+          { t: 0, position: [-2.6, 0.8, 0.9] },
+          { t: 0.5, position: [-2.9, 1.15, 1.5], ease: "glide" },
+          { t: 1, position: [-2.2, 1.0, 1.9], ease: "glide" },
+        ],
+      },
+      {
+        id: "sat-b", kind: "sphere", position: [2.4, 1.05, -0.8], scale: [1.05, 1.05, 1.05], material: { color: satelliteB, metalness: 0.2, roughness: 0.5 },
+        // The bob: up and back down on the same eased S.
+        keyframes: [
+          { t: 0, position: [2.4, 1.05, -0.8] },
+          { t: 0.5, position: [2.4, 1.45, -0.8], ease: "glide" },
+          { t: 1, position: [2.4, 1.05, -0.8], ease: "glide" },
+        ],
+      },
     ],
     lights: [
-      { kind: "ambient", intensity: 1.1, color: "#dfe6ee" },
-      { kind: "directional", intensity: 2.4, color: "#ffffff", direction: [-4, 6, 3] },
+      { kind: "ambient", intensity: 1.0, color: "#cfe0f0" },
+      { kind: "directional", intensity: 2.8, color: "#ffe9c4", direction: [-4, 6, 3] },
     ],
   };
   return doc;
@@ -363,8 +464,10 @@ const lerp3 = (a: [number, number, number], b: [number, number, number], f: numb
 ];
 
 /**
- * The camera at normalized time t (0..1): linear interpolation between
- * the bracketing keyframes. Deterministic, pure — the pins hold it and
+ * The camera at normalized time t (0..1): interpolation between the
+ * bracketing keyframes, the segment ARRIVING at a key eased by THAT key's
+ * ease (S160 — absent ⇒ linear, the historical evaluation and the shared
+ * destination-key convention). Deterministic, pure — the pins hold it and
  * the renderer evaluates exactly this.
  */
 export function cameraAt(
@@ -380,7 +483,7 @@ export function cameraAt(
     const a = keys[i];
     const b = keys[i + 1];
     if (clamped >= a.t && clamped <= b.t) {
-      const f = (clamped - a.t) / Math.max(b.t - a.t, 1e-9);
+      const f = evalEase(b.ease ?? "linear", (clamped - a.t) / Math.max(b.t - a.t, 1e-9));
       return { position: lerp3(a.position, b.position, f), lookAt: lerp3(a.lookAt, b.lookAt, f) };
     }
   }
@@ -404,10 +507,12 @@ export interface Scene3DObjectState {
  * per channel: the keys that CARRY a channel form that channel's track;
  * clamped holds outside (before the first key → the first key's value,
  * after the last → the last — the author controls both edges by writing
- * the edge keys); the static field is only the no-keys fallback. Pure,
- * deterministic — the pins hold it and the renderer evaluates exactly
- * this. Two adapters, one vocabulary: the same clamped-lerp law the S94
- * camera established, now for objects — the PAE adapter contract.
+ * the edge keys); the static field is only the no-keys fallback. The
+ * segment arriving at a key is eased by THAT key's ease (S160 — absent ⇒
+ * linear, the historical evaluation). Pure, deterministic — the pins hold
+ * it and the renderer evaluates exactly this. Two adapters, one
+ * vocabulary: the same clamped-lerp law the S94 camera established, now
+ * for objects — the PAE adapter contract.
  */
 export function objectAt(obj: Scene3DObject, t: number): Scene3DObjectState {
   const clamped = clamp(t, 0, 1);
@@ -425,7 +530,7 @@ export function objectAt(obj: Scene3DObject, t: number): Scene3DObjectState {
       const a = ks[i];
       const b = ks[i + 1];
       if (clamped >= a.t && clamped <= b.t) {
-        const f = (clamped - a.t) / Math.max(b.t - a.t, 1e-9);
+        const f = evalEase(b.ease ?? "linear", (clamped - a.t) / Math.max(b.t - a.t, 1e-9));
         return lerp3(a[channel], b[channel], f);
       }
     }

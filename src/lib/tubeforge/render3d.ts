@@ -16,6 +16,17 @@
 // as a video-kind clip exactly like stock footage — the shared timeline
 // consumption the §4.C-5 future-engine assertion pattern proves in the
 // smoke.
+//
+// S160 — the look pass (the animated-shorts reference look, compressed to
+// what SwiftShader carries at budget): Neutral TONE MAPPING (the
+// reference's post chain ends in NEUTRAL — flat demo colors were the
+// lane's biggest tell), real sun SHADOWS (gated on doc.shadows), a
+// two-stop gradient SKY DOME (gated on doc.sky — the measured day sky),
+// and depth FOG riding the horizon colour (gated on doc.fog — the
+// reference's fog-equals-horizon law). Every pass but tone mapping is
+// gated on its doc field: absent fields render the pre-S160 geometry
+// unchanged (the additive-seam law); tone mapping is the deliberate
+// global upgrade (no golden hash rides this lane's frames).
 
 import { execFile } from "child_process";
 import fs from "fs";
@@ -43,8 +54,10 @@ async function runFfmpeg(args: string[]): Promise<void> {
 /** The renderer page: a canvas + the three module source, no network.
  *  r187's three.module.js imports "./three.core.js" — BOTH sources are
  *  injected, the core as its own blob URL, the specifier rewritten to it
- *  (a blob URL has no base, so the relative specifier could never resolve). */
-function pageHtml(width: number, height: number, threeSource: string, threeCoreSource: string, sceneJson: string): string {
+ *  (a blob URL has no base, so the relative specifier could never resolve).
+ *  Exported for the S160 look pins (the page source is the renderer's
+ *  contract surface — the pins hold what the raster actually runs). */
+export function pageHtml(width: number, height: number, threeSource: string, threeCoreSource: string, sceneJson: string): string {
   // Harden the injected sources: a literal `</script>` (or any `<`) inside
   // the stringified source would terminate the inline script early — the
   // classic injection hazard, escaped the standard way.
@@ -68,8 +81,42 @@ function pageHtml(width: number, height: number, threeSource: string, threeCoreS
   const canvas = document.getElementById("stage");
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
   renderer.setSize(${width}, ${height}, false);
+  // S160 — the Neutral tone map (the reference post chain's terminal
+  // stage): lift the demo-flat standard material into the measured tonal
+  // range. Exposure stays the identity 1.0.
+  renderer.toneMapping = THREE.NeutralToneMapping;
+  renderer.toneMappingExposure = 1.0;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(doc.background);
+  // S160 — the shadow pass (gated): PCF-soft maps off the directional
+  // lights, fitted to the scaffold-scale scene.
+  const shadowsOn = doc.shadows === true;
+  renderer.shadowMap.enabled = shadowsOn;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // S160 — the sky dome (gated): a two-stop elevation gradient on a
+  // back-side sphere, depth-write off, fog off (the dome IS the horizon
+  // — fog blends geometry toward it, never the reverse). The tone-map and
+  // color-space chunks ride the fragment tail so the stops land in the
+  // same displayed range as the lit meshes.
+  if (doc.sky) {
+    const skyMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false,
+      uniforms: {
+        topColor: { value: new THREE.Color(doc.sky.top) },
+        horizonColor: { value: new THREE.Color(doc.sky.horizon) },
+      },
+      vertexShader: "varying vec3 vDir; void main() { vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+      fragmentShader: "varying vec3 vDir; uniform vec3 topColor; uniform vec3 horizonColor; void main() { float h = smoothstep(0.0, 0.55, vDir.y); gl_FragColor = vec4(mix(horizonColor, topColor, h), 1.0); #include <tonemapping_fragment> #include <colorspace_fragment> }",
+    });
+    scene.add(new THREE.Mesh(new THREE.SphereGeometry(48, 24, 12), skyMat));
+  }
+  // S160 — the fog pass (gated): depth fog toward the horizon colour —
+  // the reference's aerial-perspective law at the lane's scene scale.
+  if (doc.fog) {
+    scene.fog = new THREE.Fog(new THREE.Color(doc.fog.color), doc.fog.near, doc.fog.far);
+  }
   const camera = new THREE.PerspectiveCamera(doc.camera.fov, ${width} / ${height}, 0.1, 100);
   const meshesById = new Map();
   for (const o of doc.objects) {
@@ -89,6 +136,10 @@ function pageHtml(width: number, height: number, threeSource: string, threeCoreS
     mesh.position.set(...o.position);
     if (o.rotation) mesh.rotation.set(...o.rotation);
     if (o.scale) mesh.scale.set(...o.scale);
+    // S160 — the shadow flags (gated): opaque geometry casts, everything
+    // receives (a transparent caster paints a dark ghost — excluded).
+    mesh.castShadow = shadowsOn && (o.material.opacity ?? 1) >= 1;
+    mesh.receiveShadow = shadowsOn;
     mesh.name = o.id;
     scene.add(mesh);
     meshesById.set(o.id, mesh);
@@ -100,6 +151,20 @@ function pageHtml(width: number, height: number, threeSource: string, threeCoreS
       const d = new THREE.DirectionalLight(new THREE.Color(l.color), l.intensity);
       const dir = l.direction ?? [0, 1, 0];
       d.position.set(dir[0] * 10, dir[1] * 10, dir[2] * 10);
+      // S160 — the sun's shadow map (gated): a 1024² PCF-soft fit with the
+      // normal-bias that keeps the ground acne-free at this scale.
+      if (shadowsOn) {
+        d.castShadow = true;
+        d.shadow.mapSize.set(1024, 1024);
+        d.shadow.camera.near = 20;
+        d.shadow.camera.far = 140;
+        d.shadow.camera.left = -18;
+        d.shadow.camera.right = 18;
+        d.shadow.camera.top = 18;
+        d.shadow.camera.bottom = -18;
+        d.shadow.normalBias = 0.02;
+        d.shadow.bias = -0.0002;
+      }
       scene.add(d);
     }
   }
