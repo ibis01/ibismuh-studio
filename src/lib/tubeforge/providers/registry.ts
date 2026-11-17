@@ -223,6 +223,18 @@ export const TTS_PROVIDERS: ProviderMeta[] = [
     note: "Free forever: open-source Chatterbox (MIT) on a host you control — your PC (voice-server/README.md), an Oracle Cloud Always Free VM, 24/7 (voice-server/oracle/README.md), or a free Hugging Face Space (voice-server/hf-space/README.md). Paste the host's URL as Base URL and its secret (--key / VOICE_KEY) as the API key. CPU speed — slower than paid APIs, but $0, no rate limits.",
   },
   {
+    id: "kokoro",
+    kind: "openai",
+    label: "Kokoro (local, lightweight)",
+    defaultBaseUrl: "http://localhost:8880/v1",
+    keyUrl: "https://huggingface.co/hexgrad/Kokoro-82M",
+    models: [
+      { id: "kokoro", hint: "Apache-2.0 — commercial-OK; 82M params, CPU-friendly" },
+    ],
+    note: "S173's lightweight local candidate: Apache-2.0 weights, an OpenAI-compatible server (kokoro-fastapi), and a small footprint that runs where Chatterbox is too heavy — the same $0-per-generation contract as selfhost. Paste the server URL as Base URL; no key needed.",
+    requiresKey: false,
+  },
+  {
     id: "openai",
     kind: "openai",
     label: "OpenAI TTS",

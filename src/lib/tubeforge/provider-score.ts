@@ -82,6 +82,10 @@ const TTS_PRIORS: Record<string, ProviderPriors> = {
   zhipu: { quality: 0.88, latency: 0.75, fit: 0.95 }, // the cloning lane
   heygen: { quality: 0.76, latency: 0.88, fit: 0.72 }, // free turbo lane; public voice ids, no clone-from-sample
   selfhost: { quality: 0.7, latency: 0.3, fit: 0.85 }, // free forever, CPU speed, cloning
+  // S173 — the lightweight local candidate (Apache-2.0, 82M params,
+  // CPU-friendly). Starting beliefs per the file header; smaller model
+  // than Chatterbox, hence a notch lower on quality, faster on latency.
+  kokoro: { quality: 0.66, latency: 0.4, fit: 0.75 },
   openai: { quality: 0.82, latency: 0.85, fit: 0.78 },
   elevenlabs: { quality: 0.95, latency: 0.8, fit: 0.9 },
   // The 339e747 TTS lanes — starting beliefs from the registry notes (the

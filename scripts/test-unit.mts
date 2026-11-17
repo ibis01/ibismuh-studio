@@ -24552,6 +24552,108 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
   });
 }
 
+// ---------------------------------------------------------------------------
+// S173-S176 — Programme D (the voice engine): the Kokoro adoption rides
+// the registry; the router enforces the tiered hierarchy and principle 8
+// BY SIGNATURE; the manager plans chunks, profiles and selective
+// regeneration — all pure.
+// ---------------------------------------------------------------------------
+{
+  const vr = await import("../src/lib/tubeforge/voice-router");
+  const vm = await import("../src/lib/tubeforge/voice-manager");
+  const reg = await import("../src/lib/tubeforge/providers/registry");
+
+  await test("s173: Kokoro is adopted in the registry (the lightweight local candidate)", () => {
+    const kokoro = reg.TTS_PROVIDERS.find((p) => p.id === "kokoro");
+    ok(kokoro !== undefined, "the kokoro provider entry exists");
+    ok(kokoro?.requiresKey === false, "loopback local — no key needed");
+    ok(kokoro?.models.some((m) => m.hint?.includes("Apache-2.0")), "the licence hint rides (principle 9: reviewed, commercial-OK)");
+  });
+
+  await test("s173: the local tier contract holds (zero-cost, registry-present)", () => {
+    const contract = vr.localVoiceTierContract();
+    ok(contract.ok, JSON.stringify(contract.problems));
+    ok(vr.VOICE_TIERS.zero.includes("kokoro") && vr.VOICE_TIERS.zero.includes("selfhost"), "the tier-1 zero-cost set carries chatterbox + kokoro");
+  });
+
+  await test("s176: the router honors tier order and availability — never assumption", () => {
+    const ack = vr.routeVoiceGeneration({ mode: "standard", availableProviderIds: ["openai", "selfhost", "heygen"], paidFallbackAcknowledged: true });
+    ok(ack.ok, ack.ok ? "" : ack.reason);
+    if (ack.ok) {
+      const rankOf = { zero: 0, freetier: 1, paid: 2 } as const;
+      eq(ack.plan.primary.providerId, "selfhost", "the zero-cost tier wins structurally");
+      eq(ack.plan.primary.costClass, "zero", "the primary is zero-cost");
+      ok(ack.plan.fallbacks.every((s) => rankOf[ack.plan.primary.costClass] <= rankOf[s.costClass]), "fallbacks never climb tiers downward");
+    }
+    const noAck = vr.routeVoiceGeneration({ mode: "standard", availableProviderIds: ["openai", "selfhost", "heygen"] });
+    eq(noAck.ok, false, "the same chain WITHOUT the acknowledgement refuses — a paid fallback is a decision, never a default");
+  });
+
+  await test("s176: principle 8 BY SIGNATURE — a paid fallback needs the acknowledgement flag", () => {
+    const refusal = vr.routeVoiceGeneration({ mode: "standard", availableProviderIds: ["elevenlabs"] });
+    eq(refusal.ok, false, "a paid-only chain refuses without the flag");
+    ok(!refusal.ok && refusal.reason.includes("paidFallbackAcknowledged"), "the refusal names the required flag");
+    const okd = vr.routeVoiceGeneration({ mode: "standard", availableProviderIds: ["elevenlabs"], paidFallbackAcknowledged: true });
+    ok(okd.ok, "the acknowledged chain runs");
+  });
+
+  await test("s176: the FREE mode routes to zero-cost ONLY — paid is a refusal, not a warning", () => {
+    const refusal = vr.routeVoiceGeneration({ mode: "free", availableProviderIds: ["selfhost", "elevenlabs"] });
+    ok(refusal.ok, "the free mode runs when a zero-cost provider exists");
+    if (refusal.ok) {
+      ok(refusal.plan.fallbacks.every((s) => s.costClass === "zero"), "no paid step rides the free chain");
+    }
+    const dead = vr.routeVoiceGeneration({ mode: "free", availableProviderIds: ["elevenlabs", "openai"] });
+    eq(dead.ok, false, "a free mode with only paid providers refuses outright");
+    ok(!dead.ok && dead.reason.includes("self-hosted zero-cost providers ONLY"), "the refusal states the law");
+  });
+
+  await test("s174: the quality profiles compile with Nigerian English first-class", () => {
+    const v = vm.buildVoiceProfileDirective("nigerian-english");
+    ok(v.ok && v.directive.rate === 0.95 && v.directive.emotion === "warm", "the profile's measured defaults ride");
+    ok(!vm.buildVoiceProfileDirective("australian-english" as never).ok, "a sixth profile does not exist");
+    ok(!vm.buildVoiceProfileDirective("british-english", { rate: 3 }).ok, "a rate outside [0.5, 1.5] refuses");
+    const longForm = vm.buildVoiceProfileDirective("british-english", {}, { longForm: true });
+    eq(longForm.ok, false, "a long-form production without a pinned voice refuses (the consistency law)");
+    ok(vm.buildVoiceProfileDirective("british-english", { voiceId: "narrator_01" }, { longForm: true }).ok, "a pinned voice satisfies it");
+  });
+
+  await test("s175: the chunker is deterministic sentence-boundary splitting", () => {
+    const text = "First sentence is short. Second sentence is much longer and carries several clauses, commas, and a final period. Third! Fourth asks a question?";
+    const chunks = vm.chunkNarration(text);
+    ok(chunks.length >= 1, `the narration splits into ${chunks.length} chunk(s)`);
+    const rejoined = chunks.map((c) => c.text).join(" ");
+    ok(rejoined.includes("First sentence is short.") && rejoined.includes("question?"), "every sentence survives the split");
+    eq(vm.chunkNarration(""), [], "empty narration chunks to nothing");
+    const long = Array.from({ length: 40 }, (_, i) => `Sentence number ${i} here carries about fifteen words of narration for the voice engine.`).join(" ");
+    const longChunks = vm.chunkNarration(long);
+    ok(longChunks.length >= 3, `a long script splits (${longChunks.length} chunks)`);
+    ok(longChunks.every((c) => c.text.length <= vm.CHUNK_MAX_CHARS), "no chunk breaks the wall");
+    // Determinism: same text, same chunks.
+    eq(JSON.stringify(vm.chunkNarration(long)), JSON.stringify(vm.chunkNarration(long)), "the split is deterministic");
+  });
+
+  await test("s175: the planner maps chunks onto slots with corrections; regeneration is selective", () => {
+    const slots = [
+      { sceneId: "scene_001", text: "Lagos is home to the tech scene.", voiceId: "v1", providerHint: undefined, atMs: 0, durationMs: 3000 },
+      { sceneId: "scene_002", text: "The Lagoserian market grows.", voiceId: "v1", providerHint: undefined, atMs: 3000, durationMs: 3000 },
+    ] as never[];
+    const res = vm.planVoiceProduction(slots as never, { profile: "nigerian-english", rate: 0.95, pauseScale: 1.1, emotion: "warm", voiceId: "v1" }, [{ from: "Lagos", to: "Lay-gos" }] as never);
+    ok(res.ok, res.ok ? "" : res.errors.join("; "));
+    if (!res.ok) return;
+    eq(res.plan.chunks.length, 2, "two slots, two chunk plans");
+    ok(res.plan.chunks.every((c) => c.corrections.some((k) => k.from === "Lagos")), "the pronunciation correction rides every chunk that mentions the word");
+    const verdicts = [
+      { chunkId: res.plan.chunks[0].chunk.chunkId, ok: true, durationMs: 1400 },
+      { chunkId: res.plan.chunks[1].chunk.chunkId, ok: false, error: "provider 429" },
+      { chunkId: "chunk-stale-999", ok: false, error: "stale receipt" },
+    ];
+    const regen = vm.chunksNeedingRegeneration(res.plan, verdicts);
+    eq(regen.length, 2, "exactly the failed + stale chunks regenerate");
+    ok(!regen.includes(res.plan.chunks[0].chunk.chunkId), "the SUCCESSFUL chunk is untouched — regeneration is selective, never whole-script");
+  });
+}
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
