@@ -24741,6 +24741,93 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
   });
 }
 
+// ---------------------------------------------------------------------------
+// S181-S184 — Programmes G + H: the immutable edit ops, the creative
+// controls that compile into S168 vocabulary, the estimate-before-
+// generation with budget + dedupe, and the mode contracts with the
+// anti-cripple law.
+// ---------------------------------------------------------------------------
+{
+  const cx = await import("../src/lib/tubeforge/creator-experience");
+  const ci = await import("../src/lib/tubeforge/cost-intelligence");
+  const ac = await import("../src/lib/tubeforge/animation-compiler");
+  const us = await import("../src/lib/tubeforge/universal-scene");
+
+  const baseProject = () => ({
+    version: 1, title: "The edit target", mode: "free",
+    scenes: [
+      { version: 1, sceneId: "scene_001", kind: "graphics", durationMs: 8000, assets: [], directives: [], narration: { text: "First." } },
+      { version: 1, sceneId: "scene_002", kind: "whiteboard", durationMs: 6000, assets: [], directives: [] },
+    ],
+  }) as never;
+
+  await test("s181: edits are immutable ops that re-validate the whole project", () => {
+    const p0 = baseProject();
+    const r1 = cx.applyTimelineEdit(p0, { op: "resize-scene", sceneId: "scene_001", durationMs: 9000 });
+    ok(r1.ok && r1.project !== undefined, "a resize applies");
+    ok((r1.project as never as { scenes: { durationMs: number }[] }).scenes[0].durationMs === 9000, "the new clock rides");
+    ok(us.validateUniversalProject(r1.project).ok, "the edited project re-validates");
+    // Immutable: the original is untouched (undo is the previous project).
+    ok((p0 as never as { scenes: { durationMs: number }[] }).scenes[0].durationMs === 8000, "the source project was never mutated");
+    ok(!cx.applyTimelineEdit(p0, { op: "resize-scene", sceneId: "scene_001", durationMs: 99 }).ok, "a resize below the wall refuses");
+    const del = cx.applyTimelineEdit(p0, { op: "delete-scene", sceneId: "scene_001" });
+    ok(del.ok, "a deletion that leaves one scene applies");
+    const badTransition = cx.applyTimelineEdit(p0, { op: "set-transition", sceneIndex: 1, transition: "explode-into-confetti" });
+    eq(badTransition.ok, false, "an invented transition refuses through the S168 validator");
+    const goodTransition = cx.applyTimelineEdit(p0, { op: "set-transition", sceneIndex: 1, transition: "crossfade" });
+    ok(goodTransition.ok, "a catalog transition applies");
+  });
+
+  await test("s182: the beginner drives one preset; the advanced user drives knobs — all inside the walls", () => {
+    const pro = cx.resolveCreativeControls({ preset: "professional" });
+    ok(pro.ok && pro.controls?.animationIntensity === 0.5, "the professional preset resolves");
+    const energetic = cx.resolveCreativeControls({ preset: "energetic" });
+    ok(energetic.ok && energetic.controls?.pacing === 0.85, "the energetic preset carries its own pacing");
+    const advanced = cx.resolveCreativeControls({ preset: "calm", cameraStyle: "dynamic", pacing: 1.1 });
+    ok(advanced.ok && advanced.controls?.cameraStyle === "dynamic", "an advanced override rides on a preset");
+    ok(!cx.resolveCreativeControls({ preset: "avant-garde" as never }).ok, "a fourth preset does not exist");
+    ok(!cx.resolveCreativeControls({ preset: "calm", pacing: 2 }).ok, "pacing outside [0.75, 1.33] refuses");
+    ok((advanced.directives ?? []).every((d) => d.domain === "camera"), "the camera style compiles into camera-domain directives");
+    const paced = cx.applyPacing(baseProject(), 1.2);
+    ok(paced.scenes.every((s) => s.durationMs <= cx.SCENE_DURATION_WALLS.maxMs && s.durationMs >= cx.SCENE_DURATION_WALLS.minMs), "pacing stays inside the schema walls");
+    ok(us.validateUniversalProject(paced).ok, "the paced project re-validates");
+  });
+
+  await test("s183: the estimate rides the plan BEFORE generation; budgets gate; dedupe reuses", () => {
+    const verdict = ac.compileUniversalProject(baseProject());
+    ok(verdict.ok);
+    if (!verdict.ok) return;
+    const est = ci.estimateProductionCost(verdict.plan, "zero");
+    ok(est.lines.some((l) => l.line === "voice" && l.microUsd === 0), "the zero-cost voice tier carries no per-char spend");
+    ok(est.totalMicroUsd > 0 && est.lines.some((l) => l.line === "rendering" && l.microUsd > 0), "compute and storage still book — the estimate is honest about lines, not a flat zero");
+    const estPaid = ci.estimateProductionCost(verdict.plan, "paid");
+    ok(estPaid.totalMicroUsd > est.totalMicroUsd, "the paid tier's estimate is higher — the estimate shows the tier's price");
+    ok(ci.gateBudget(est, 300).ok, "a plan inside the budget passes the gate");
+    ok(!ci.gateBudget(estPaid, 300).ok, "an over-budget estimate refuses BEFORE generation");
+    const h1 = ci.planHashOf(verdict.plan);
+    const h2 = ci.planHashOf(JSON.parse(JSON.stringify(verdict.plan)) as never);
+    eq(h1, h2, "the plan hash is key-order-independent");
+    const first = ci.dedupeCheck(h1, []);
+    eq(first.duplicate, false, "the first sighting generates");
+    const second = ci.dedupeCheck(h1, [h1]);
+    ok(second.duplicate && second.spendMicroUsd === 0, "the second sighting REUSES — duplicate generation prevented, spend zero");
+  });
+
+  await test("s184: the mode contracts hold — the free tier produces COMPLETE videos, never a cripple", () => {
+    eq([...ci.PRODUCTION_MODES], ["free", "standard", "premium"], "the three operating modes");
+    eq(ci.MODE_CONTRACTS.free.voiceClasses, ["zero"], "the free mode's voice is zero-cost only");
+    ok(ci.MODE_CONTRACTS.free.maxAssetCostRank < ci.MODE_CONTRACTS.standard.maxAssetCostRank && ci.MODE_CONTRACTS.standard.maxAssetCostRank < ci.MODE_CONTRACTS.premium.maxAssetCostRank, "the asset ceilings climb with the tiers");
+    const freeOk = ci.enforceModeCapabilities({ mode: "free", voiceClass: "zero", maxAssetRankUsed: 1 });
+    ok(freeOk.ok && freeOk.completeVideoPossible, "a native free-mode project admits COMPLETE — the anti-cripple law");
+    const freePaid = ci.enforceModeCapabilities({ mode: "free", voiceClass: "paid", maxAssetRankUsed: 1 });
+    eq(freePaid.ok, false, "a paid voice in the free mode refuses");
+    const freeGen = ci.enforceModeCapabilities({ mode: "free", voiceClass: "zero", maxAssetRankUsed: 3 });
+    ok(!freeGen.ok && freeGen.refusals.some((r) => r.includes("ceiling")), "a generated asset in the free mode refuses (the S177 ceiling)");
+    const premium = ci.enforceModeCapabilities({ mode: "premium", voiceClass: "paid", maxAssetRankUsed: 3 });
+    ok(premium.ok, "the premium tier admits the paid class and the full ladder");
+  });
+}
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
