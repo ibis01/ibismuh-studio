@@ -4619,6 +4619,84 @@ suiteStart("S2 honest mix: per-boundary transitions");
     eq(sanitizeTransitionDuration(0.7), 0.7, "legal value passes");
     eq(sanitizeTransitionDuration(9), 1.5, "ceiling clamps");
   });
+
+  await test("S163 Phase A: the preset table — opus-measured beats at their literals, fps-free", async () => {
+    const { TRANSITION_PRESET_DEFAULTS, presetDurationSec, TRANSITION_IDS, TRANSITION_DEFAULT } =
+      await import("../src/lib/tubeforge/transitions");
+    // The opus DEFAULTS table numbers (S161 audit Part 2.2, MIT, read at
+    // source): frames at opus's 30 fps reference derived ONCE into seconds —
+    // the preset stores SECONDS, never frames (the S123 D3 fps-free law).
+    eq(TRANSITION_PRESET_DEFAULTS.iris, 0.267, "iris 8f @ 30 → 0.267s");
+    eq(TRANSITION_PRESET_DEFAULTS.whiteout, 1.4, "whiteout 42f @ 30 → 1.4s");
+    eq(TRANSITION_PRESET_DEFAULTS.zoomthrough, 0.467, "zoom 14f @ 30 → 0.467s");
+    eq(presetDurationSec("iris"), 0.267);
+    eq(presetDurationSec("whiteout"), 1.4);
+    eq(presetDurationSec("zoomthrough"), 0.467);
+    // Styles without a measured number keep the blanket 0.5s default.
+    for (const legacy of ["cut", "fade", "fadeblack", "fadewhite", "dissolve", "hblur", "wipeleft", "circleopen", "pixelize"] as const)
+      eq(presetDurationSec(legacy), TRANSITION_DEFAULT.durationSec, `${legacy} → 0.5 (no measured number, byte-identical)`);
+    // The presets join the closed catalog (doc overlays + the Director's
+    // vocabulary + the studio picker all flow through TRANSITION_IDS).
+    ok(TRANSITION_IDS.has("iris") && TRANSITION_IDS.has("whiteout") && TRANSITION_IDS.has("zoomthrough"), "the three presets are legal ids");
+  });
+
+  await test("S163 Phase A: sanitizeTransition/resolveTransition — the absent duration is style-aware", async () => {
+    const { sanitizeTransition, resolveTransition } = await import("../src/lib/tubeforge/transitions");
+    // A preset style carries its measured beat when the duration is absent.
+    eq(sanitizeTransition({ style: "iris" }).durationSec, 0.267, "iris → 0.267");
+    eq(sanitizeTransition({ style: "whiteout" }).durationSec, 1.4, "whiteout → 1.4");
+    eq(sanitizeTransition({ style: "zoomthrough" }).durationSec, 0.467, "zoomthrough → 0.467");
+    // Legacy styles byte-identical: absent → the blanket 0.5s.
+    for (const legacy of ["cut", "fade", "fadeblack", "fadewhite"]) {
+      const s = sanitizeTransition({ style: legacy });
+      eq(s.durationSec, 0.5, `${legacy} absent → 0.5 (byte-identical)`);
+      eq(s.style, legacy, `${legacy} style preserved`);
+    }
+    // sanitizeTransition(null) — the pre-S163 shape — unchanged.
+    eq(sanitizeTransition(null).style, "fade");
+    eq(sanitizeTransition(null).durationSec, 0.5, "null row → fade/0.5 exactly as before");
+    // An EXPLICIT pick always wins over the preset number (and still clamps).
+    eq(sanitizeTransition({ style: "iris", durationSec: 0.8 }).durationSec, 0.8, "explicit 0.8 wins over the preset beat");
+    eq(sanitizeTransition({ style: "iris", durationSec: 0.1 }).durationSec, 0.2, "the 0.2 floor still clamps a preset");
+    eq(sanitizeTransition({ style: "whiteout", durationSec: 9 }).durationSec, 1.5, "the 1.5 ceiling still clamps a preset");
+    // resolveTransition — the row law, style-aware.
+    eq(resolveTransition({ transitionStyle: "iris", transitionDuration: null }).durationSec, 0.267, "row with preset style + no duration → the measured beat");
+    eq(resolveTransition({ transitionStyle: "iris", transitionDuration: 0.9 }).durationSec, 0.9, "row with an explicit duration → the explicit number");
+    eq(resolveTransition(null).durationSec, 0.5, "null row → 0.5 (byte-identical)");
+    eq(resolveTransition({ transitionStyle: null }, "slides").style, "cut", "slides hard-cut law unchanged");
+    eq(resolveTransition({ transitionStyle: null }, "slides").durationSec, 0.5, "slides cut → 0.5 (cut carries no debt anyway)");
+  });
+
+  await test("S163 Phase A: the graph builder emits the presets — measured durations ride the xfade args", async () => {
+    const { buildTransitionGraphMulti, transitionOffsetsMulti, transitionTotalDurationMulti, xfadeTransitionOf } =
+      await import("../src/lib/tubeforge/transitions");
+    // THE COMPILE WALL: presets are named after the designed beat, not the
+    // ffmpeg verb — and the raw id must NEVER reach the filtergraph (ffmpeg
+    // 7.1 happens to carry its own "iris"; 5.1 — the Docker image — has
+    // zoomin but no iris/whiteout at all).
+    eq(xfadeTransitionOf("iris"), "circleopen", "iris compiles to circleopen");
+    eq(xfadeTransitionOf("whiteout"), "fadewhite", "whiteout compiles to fadewhite");
+    eq(xfadeTransitionOf("zoomthrough"), "zoomin", "zoomthrough compiles to zoomin");
+    for (const legacy of ["cut", "fade", "fadeblack", "fadewhite", "dissolve", "hblur", "wipeleft", "circleopen", "radial", "pixelize"] as const)
+      eq(xfadeTransitionOf(legacy), legacy, `${legacy} is identity-mapped (byte-identical emission)`);
+    // iris compiles to circleopen at the measured 0.267s.
+    const iris = buildTransitionGraphMulti([4, 4], [{ style: "iris", durationSec: 0.267 }]);
+    ok(iris !== null, "iris builds a graph");
+    ok(iris.video.includes("xfade=transition=circleopen:duration=0.267:offset=3.733"), `iris → circleopen @ 0.267 (got: ${iris.video})`);
+    ok(iris.audio.includes("acrossfade=d=0.267"), "the audio chain overlaps the same beat");
+    // zoomthrough compiles to zoomin (ffmpeg ≥ 5.1 — bookworm ships 5.1.x, the sandbox 7.1.x).
+    const zoom = buildTransitionGraphMulti([4, 4], [{ style: "zoomthrough", durationSec: 0.467 }]);
+    ok(zoom !== null && zoom.video.includes("xfade=transition=zoomin:duration=0.467"), "zoomthrough → zoomin @ 0.467");
+    // whiteout compiles to fadewhite at the measured 1.4s.
+    const white = buildTransitionGraphMulti([4, 4], [{ style: "whiteout", durationSec: 1.4 }]);
+    ok(white !== null && white.video.includes("xfade=transition=fadewhite:duration=1.400"), "whiteout → fadewhite @ 1.400");
+    // The debt math honors the measured numbers exactly.
+    eq(transitionOffsetsMulti([4, 4], [{ style: "iris", durationSec: 0.267 }]), [3.733], "the iris boundary removes 0.267s from the timeline");
+    approx(transitionTotalDurationMulti([4, 4], [{ style: "whiteout", durationSec: 1.4 }]) ?? 0, 6.6, 1e-9, "the whiteout master is 8 − 1.4 = 6.6s");
+    // BYTE-IDENTITY of the legacy path — the pre-S163 graph string unchanged.
+    const legacy = buildTransitionGraphMulti([4, 4], [{ style: "fade", durationSec: 0.5 }]);
+    ok(legacy !== null && legacy.video.includes("xfade=transition=fade:duration=0.500:offset=3.500"), "the legacy fade graph is byte-identical");
+  });
 }
 
 // ---------- S34: spend-gate estimator — script-aware floors + per-hold usage slices ----------

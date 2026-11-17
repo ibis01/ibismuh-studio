@@ -557,6 +557,7 @@ state. Updated as milestones land — never rewritten retroactively.
 | S162b master roadmap preserved | `586b1bf` | the commissioning report in-repo as PROPOSED; §9 reconciliation; ledger live | CLOSED (document) |
 | Nov 8 eight-profile blind baseline | — | the S55 kit's human round returned: mean 3.25/5, temporal coherence 4.5/5; weaknesses per profile ON RECORD | CLOSED (baseline of record — `docs/audits/s55-blind-scoring-record.md`) |
 | Scene-QC S136 audio contract (scene scope) | this commit | `sceneAudioVerdict` pins ×5 (battery 907); the silent-scene false-fail and the vacuous dead-air pass killed | CLOSED |
+| S163 Phase A — the transition preset layer | this commit | opus-measured beats (iris 0.267 / whiteout 1.4 / zoomthrough 0.467) as named catalog styles; the style→xfade compile wall (`xfadeTransitionOf`); boundary + seam-QC duration laws mirrored; pins ×3 (battery 910) | CLOSED (Phase A); Phase B native transitions NOT STARTED |
 | VQ1 added as the overlay programme | this commit | the acceptance rule + P1–P5 + re-benchmark protocol in this document | CLOSED (spec); P1–P5 implementation NOT STARTED |
 | S163–S167 | — | staged in the six-engine audit Part 4 | NOT STARTED |
 | S168–S184 | — | this document (PROPOSED) | NOT STARTED / needs per-milestone specs |

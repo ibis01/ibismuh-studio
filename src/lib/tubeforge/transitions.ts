@@ -26,7 +26,10 @@ export type TransitionStyle =
   | "smoothdown"
   | "circleopen"
   | "radial"
-  | "pixelize"; // stylized mosaic — playful niches
+  | "pixelize" // stylized mosaic — playful niches
+  | "iris" // S163 preset — the opus iris beat: circleopen at its MEASURED 8f
+  | "whiteout" // S163 preset — the opus whiteout beat: fadewhite at its MEASURED 42f
+  | "zoomthrough"; // S163 preset — the opus zoom-through beat: zoomin at its MEASURED 14f
 
 export interface TransitionDef {
   id: TransitionStyle;
@@ -50,12 +53,78 @@ export const TRANSITIONS: TransitionDef[] = [
   { id: "circleopen", label: "Circle Open", desc: "Next scene opens in a growing circle" },
   { id: "radial", label: "Radial Sweep", desc: "Clockwise radial reveal" },
   { id: "pixelize", label: "Pixel Melt", desc: "Mosaic dissolve — stylized niches" },
+  { id: "iris", label: "Iris", desc: "Snappy iris open — the measured 8-frame beat" },
+  { id: "whiteout", label: "Whiteout", desc: "Long dip through white — the measured 42-frame breath" },
+  { id: "zoomthrough", label: "Zoom Through", desc: "Push through the cut into the next scene — the measured 14-frame beat" },
 ];
 
 const TRANSITION_IDS = new Set(TRANSITIONS.map((t) => t.id));
 
 /** The catalog ids (route validation + doc-overlay sanitizing). */
 export { TRANSITION_IDS };
+
+// ---------- the S163 preset layer (opus-measured beats) ----------
+//
+// The six-engine audit (S161 Part 4, S163 Phase A) adopts the opus motion
+// library's MEASURED transition numbers as named presets: a preset id is
+// the full designed beat — the xfade style AND its duration — so a
+// director picking "iris" gets the 8-frame snap, not the blanket 0.5s.
+//
+// THE FPS-FREE LAW (the S123 D3 pin's lesson): the opus table cites FRAMES
+// at its 30 fps reference; presets store SECONDS, derived once and pinned
+// here — never re-derived from a frame count at render time.
+//
+// Provenance: opus `src/transitions.tsx` DEFAULTS table (MIT), read at
+// source by the S161 audit. These numbers are priors the audit verified;
+// every entry names the file it was read from.
+export const TRANSITION_PRESET_DEFAULTS: Partial<Record<TransitionStyle, number>> = {
+  // opus "iris 8f" @ 30 fps → 8/30 = 0.2667 s (xfade circleopen).
+  iris: 0.267,
+  // opus "whiteout 42f" @ 30 fps → 42/30 = 1.4 s (xfade fadewhite).
+  whiteout: 1.4,
+  // opus "zoom 14f" @ 30 fps → 14/30 = 0.4667 s (xfade zoomin, ffmpeg ≥ 5.1).
+  zoomthrough: 0.467,
+};
+
+/** The preset's measured duration, or the blanket 0.5s default for styles
+ *  without a measured number. The ONLY place the preset table is read. */
+export function presetDurationSec(style: TransitionStyle): number {
+  return TRANSITION_PRESET_DEFAULTS[style] ?? TRANSITION_DEFAULT.durationSec;
+}
+
+/** S163 — the style → ffmpeg xfade transition name. Legacy ids ARE xfade
+ *  names (identity-mapped, byte-identical emission); the presets are named
+ *  after the DESIGNED beat, not the ffmpeg verb — "iris" compiles to
+ *  circleopen, "whiteout" to fadewhite, "zoomthrough" to zoomin. The
+ *  mapping is also the ffmpeg-version wall of record: ffmpeg 5.1 (the
+ *  Docker image) has zoomin but has NO "iris" transition of its own — the
+ *  raw id must never reach the filtergraph. */
+const XFADE_TRANSITION: Record<TransitionStyle, string> = {
+  cut: "cut",
+  fade: "fade",
+  fadeblack: "fadeblack",
+  fadewhite: "fadewhite",
+  dissolve: "dissolve",
+  hblur: "hblur",
+  wipeleft: "wipeleft",
+  wiperight: "wiperight",
+  slideleft: "slideleft",
+  slideright: "slideright",
+  smoothup: "smoothup",
+  smoothdown: "smoothdown",
+  circleopen: "circleopen",
+  radial: "radial",
+  pixelize: "pixelize",
+  iris: "circleopen",
+  whiteout: "fadewhite",
+  zoomthrough: "zoomin",
+};
+
+/** The ffmpeg xfade transition name a style compiles to (exported for the
+ *  pins; the graph builder is the only runtime consumer). */
+export function xfadeTransitionOf(style: TransitionStyle): string {
+  return XFADE_TRANSITION[style];
+}
 
 // ---------- defaults & sanitizing ----------
 
@@ -92,13 +161,21 @@ export interface TransitionSettings {
   durationSec: number;
 }
 
-/** Sanitize both fields in one call (route + render entry point). */
+/** Sanitize both fields in one call (route + render entry point). The
+ *  absent-duration fallback is STYLE-AWARE (S163): a preset style carries
+ *  its measured beat (iris 0.267 / whiteout 1.4 / zoomthrough 0.467);
+ *  every legacy style keeps the blanket 0.5s — byte-identical for all
+ *  absent fields that existed before the preset layer. */
 export function sanitizeTransition(
   v: { style?: unknown; durationSec?: unknown } | null | undefined
 ): TransitionSettings {
+  const style = sanitizeTransitionStyle(v?.style);
   return {
-    style: sanitizeTransitionStyle(v?.style),
-    durationSec: sanitizeTransitionDuration(v?.durationSec),
+    style,
+    durationSec:
+      v?.durationSec != null
+        ? sanitizeTransitionDuration(v.durationSec)
+        : presetDurationSec(style),
   };
 }
 
@@ -107,7 +184,9 @@ export function sanitizeTransition(
  *  through the same function instead of drifting copies). A null style on a
  *  slides row is a HARD CUT (the deck's designed beats land clean — the
  *  PNG frames don't melt); anything else is the row's pick over the
- *  crossfade default. An explicit pick on a slides row is honored. */
+ *  crossfade default. An explicit pick on a slides row is honored.
+ *  S163: an ABSENT duration now resolves to the style's own preset number
+ *  (the measured beat) — an explicit pick always wins over it. */
 export function resolveTransition(
   row: {
     transitionStyle?: string | null;
@@ -381,7 +460,7 @@ export function buildTransitionGraphMulti(
     const vOut = b === offsets.length - 1 ? "v" : `bx${b}`;
     const aOut = b === offsets.length - 1 ? "a" : `ba${b}`;
     video.push(
-      `[${vLabel}][${b + 1}:v]xfade=transition=${style}:duration=${d.toFixed(3)}:offset=${offsets[b].toFixed(3)},format=yuv420p[${vOut}]`
+      `[${vLabel}][${b + 1}:v]xfade=transition=${xfadeTransitionOf(style)}:duration=${d.toFixed(3)}:offset=${offsets[b].toFixed(3)},format=yuv420p[${vOut}]`
     );
     audio.push(`[${aLabel}][${b + 1}:a]acrossfade=d=${d.toFixed(3)}[${aOut}]`);
     vLabel = vOut;

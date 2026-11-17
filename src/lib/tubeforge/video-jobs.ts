@@ -690,6 +690,7 @@ async function runScenePreviewJob(
     motionContext: { tone: video.tone, niche: video.niche },
     topic: video.topic,
     transition: resolveTransition(video, mode),
+    transitionDurationExplicit: video.transitionDuration != null,
     brand: null,
     onProgress: (current, total, label) => {
       if (isJobCancelled(videoId, "render")) throw new JobCancelledError();
@@ -805,6 +806,7 @@ async function runBoundaryPreviewJob(
     motionContext: { tone: video.tone, niche: video.niche },
     topic: video.topic,
     transition: resolveTransition(video, mode),
+    transitionDurationExplicit: video.transitionDuration != null,
     brand: null,
     onProgress: (current, total, label) => {
       if (isJobCancelled(videoId, "render")) throw new JobCancelledError();

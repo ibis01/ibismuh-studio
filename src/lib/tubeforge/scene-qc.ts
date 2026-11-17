@@ -78,6 +78,7 @@ import {
   transitionOffsetsMulti,
   sanitizeTransitionStyle,
   resolveTransition,
+  presetDurationSec,
   TRANSITION_IDS,
   type TransitionSettings,
   type TransitionStyle,
@@ -445,16 +446,23 @@ export function seamsOfScene(sceneIndex: number, sceneCount: number): number[] {
 
 /** The seam's effective setting — EXACTLY the read renderVideo's stitcher
  * does: the incoming scene's doc transitionIn over the video-level default
- * (resolveTransition is the one shared law). */
+ * (resolveTransition is the one shared law). S163: the DURATION mirrors the
+ * stitcher's boundary math too — an explicit user pick governs; otherwise a
+ * preset boundary rides its measured beat, so the QC expectation and the
+ * rendered blend debt can never drift apart. */
 function seamSetting(video: Video, timelineDocScenes: { transitionIn: string | null }[] | null, incomingPos: number): TransitionSettings {
   const def = resolveTransition(video, video.renderMode);
   const docStyle = timelineDocScenes?.[incomingPos]?.transitionIn ?? null;
+  const style =
+    docStyle != null && TRANSITION_IDS.has(docStyle as never)
+      ? sanitizeTransitionStyle(docStyle)
+      : def.style;
   return {
-    style:
-      docStyle != null && TRANSITION_IDS.has(docStyle as never)
-        ? sanitizeTransitionStyle(docStyle)
-        : def.style,
-    durationSec: def.durationSec,
+    style,
+    durationSec:
+      video.transitionDuration != null && style === def.style
+        ? def.durationSec
+        : presetDurationSec(style),
   };
 }
 

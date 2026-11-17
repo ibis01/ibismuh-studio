@@ -121,6 +121,7 @@ import {
   fadeblackWindowsMulti,
   partitionByCuts,
   planBlendGroupsMulti,
+  presetDurationSec,
   shiftSegmentsForBlendMulti,
   TRANSITION_IDS,
   type TransitionSettings,
@@ -199,6 +200,13 @@ export interface RenderOptions {
   motion?: MotionSettings | null;
   /** Scene transitions (undefined = built-in default — crossfade 0.5s). */
   transition?: TransitionSettings | null;
+  /** S163 — the caller's OWN duration truth: true = the user explicitly
+   *  picked a duration (it governs every boundary verbatim); false/absent =
+   *  the duration field is the DEFAULT for the style, so a doc-picked
+   *  PRESET boundary rides its measured beat instead of the blanket number.
+   *  Absent-field byte-identity holds either way for legacy styles (their
+   *  preset number IS the blanket 0.5s). */
+  transitionDurationExplicit?: boolean;
   /** Video-level context so scene classification can read tone/niche. */
   motionContext?: SceneContext;
   /** S93 — the video's cast character (portrait-backed) — the rig's
@@ -2330,6 +2338,7 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
     // blends all along — the render now matches it).
     report(scenes.length, "Stitching scenes");
     const trans = sanitizeTransition(opts.transition);
+    const durationExplicit = opts.transitionDurationExplicit === true;
     const boundary: TransitionSettings[] = [];
     for (let b = 0; b + 1 < scenes.length; b++) {
       // S87 slice 2 — the plan's boundary transition (the tracks read)
@@ -2337,12 +2346,20 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
       // either source identically.
       const docStyle =
         planScenes?.[b + 1]?.transitionIn ?? docScenes?.[b + 1]?.transitionIn ?? null;
+      const style =
+        docStyle != null && TRANSITION_IDS.has(docStyle as never)
+          ? sanitizeTransitionStyle(docStyle)
+          : trans.style;
+      // S163 Phase A — the boundary's duration: an explicit user pick
+      // governs every boundary verbatim; otherwise a PRESET boundary rides
+      // its measured beat (iris 0.267 / whiteout 1.4 / zoomthrough 0.467)
+      // and everything else keeps the video-level number (0.5 for legacy
+      // styles — byte-identical to the pre-S163 behavior).
       boundary.push({
-        style:
-          docStyle != null && TRANSITION_IDS.has(docStyle as never)
-            ? sanitizeTransitionStyle(docStyle)
-            : trans.style,
-        durationSec: trans.durationSec,
+        style,
+        durationSec: !durationExplicit && style !== trans.style
+          ? presetDurationSec(style)
+          : trans.durationSec,
       });
     }
     const basePath = path.join(tmpDir, "base.mp4");
