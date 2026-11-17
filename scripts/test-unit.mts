@@ -24654,6 +24654,93 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
   });
 }
 
+// ---------------------------------------------------------------------------
+// S177-S180 — Programmes E + F: the asset cost ladder, the sound plan
+// over the existing catalogs, the plan-side quality inspector, and the
+// repair proposals that must survive the S168 validator.
+// ---------------------------------------------------------------------------
+{
+  const ai = await import("../src/lib/tubeforge/asset-intelligence");
+  const sp = await import("../src/lib/tubeforge/sound-plan");
+  const pi = await import("../src/lib/tubeforge/production-intelligence");
+  const dv = await import("../src/lib/tubeforge/director-vocabulary");
+  const ac = await import("../src/lib/tubeforge/animation-compiler");
+
+  const sceneOf = (over: Record<string, unknown>): never =>
+    ({ version: 1, sceneId: "scene_001", kind: "graphics", durationMs: 8000, assets: [], directives: [], ...over }) as never;
+
+  await test("s177: the asset cost ladder is native < reuse < stock < generate", () => {
+    ok(ai.ASSET_COST_RANK.native < ai.ASSET_COST_RANK.reuse && ai.ASSET_COST_RANK.reuse < ai.ASSET_COST_RANK.stock && ai.ASSET_COST_RANK.stock < ai.ASSET_COST_RANK.generate, "the ladder ranks cheapest-first");
+    const native = ai.decideAssetStrategy(sceneOf({ directives: [{ domain: "animation", target: "counter", action: "enter:count" }] }));
+    eq(native.strategy, "native", "a chart-tell scene renders natively — never generated");
+    const reuse = ai.decideAssetStrategy(sceneOf({ background: { type: "image", assetId: "asset_001" }, assets: [{ id: "asset_001", kind: "image", origin: "upload" }] }));
+    eq(reuse.strategy, "reuse", "a declared background reuses");
+    const stock = ai.decideAssetStrategy(sceneOf({ kind: "classic", background: { type: "image", assetId: "asset_001" }, assets: [{ id: "asset_001", kind: "image", origin: "generated" }] }));
+    eq(stock.strategy, "stock", "stock precedes generation");
+    const ledger = ai.planAssetIntelligence([sceneOf({ sceneId: "scene_001" }), sceneOf({ sceneId: "scene_002", directives: [{ domain: "animation", target: "headline", action: "enter:draw" }] })]);
+    eq(ledger.generateCount, 0, "a native-first ledger generates nothing it should not");
+  });
+
+  await test("s178: the sound plan rides the EXISTING catalogs (moods, duck lanes, the -16 contract)", () => {
+    const good = sp.planSoundDesign({
+      musicMood: "uplifting",
+      duckIntensity: "standard",
+      boundaryTransitions: [{ boundaryIndex: 1, transitionType: "crossfade", atMs: 8000 }],
+      totalMs: 19000,
+    });
+    ok(good.ok, good.ok ? "" : JSON.stringify(good.errors));
+    if (good.ok) {
+      eq(good.plan.targetLufs, -16, "the loudness contract is the house constant");
+      eq(good.plan.cues[0].kind, "boundary-swish", "the crossfade pairing rides the designed receipt");
+    }
+    const junk = sp.planSoundDesign({ musicMood: "lofi-beats-to-render-to", duckIntensity: "standard", boundaryTransitions: [], totalMs: 1000 });
+    eq(junk.ok, false, "a mood outside the music catalog refuses");
+    const badDuck = sp.planSoundDesign({ duckIntensity: "supersquash", boundaryTransitions: [], totalMs: 1000 });
+    eq(badDuck.ok, false, "a duck intensity outside the audiomix catalog refuses");
+    const oob = sp.planSoundDesign({ boundaryTransitions: [{ boundaryIndex: 1, transitionType: "iris", atMs: 99000 }], totalMs: 19000 });
+    eq(oob.ok, false, "a cue outside the composition clock refuses");
+  });
+
+  await test("s179: the inspector finds the roadmap's named problems in the PLAN", () => {
+    const verdict = ac.compileUniversalProject({
+      version: 1, title: "T", mode: "free",
+      scenes: [
+        { version: 1, sceneId: "scene_001", kind: "graphics", durationMs: 8000, assets: [], directives: [{ domain: "animation", target: "boundary:1", action: "transition:crossfade" }] },
+        { version: 1, sceneId: "scene_002", kind: "graphics", durationMs: 6000, assets: [], directives: [], narration: { text: "Dead air follows." } },
+        { version: 1, sceneId: "scene_003", kind: "graphics", durationMs: 4000, assets: [], directives: [{ domain: "animation", target: "counter", action: "enter:count", params: { durationMs: 99999 } }] },
+      ],
+    });
+    ok(verdict.ok);
+    if (!verdict.ok) return;
+    const findings = pi.inspectProductionQuality(verdict.plan);
+    ok(findings.some((f) => f.code === "repetitive-imagery"), "repetitive imagery is caught (same kind, no movement, no boundary between 2 and 3)");
+    ok(findings.some((f) => f.code === "unnatural-movement"), "a 99.9 s count outside the measured wall is caught");
+    ok(findings.every((f) => typeof f.sceneId === "string" && f.severity !== undefined), "findings are typed and ranked");
+  });
+
+  await test("s180: repairs are valid S168 directives, one scene each, approval-required", () => {
+    const verdict = ac.compileUniversalProject({
+      version: 1, title: "T", mode: "free",
+      scenes: [
+        { version: 1, sceneId: "scene_001", kind: "graphics", durationMs: 8000, assets: [], directives: [] },
+        { version: 1, sceneId: "scene_002", kind: "graphics", durationMs: 6000, assets: [], directives: [] },
+      ],
+    });
+    ok(verdict.ok);
+    if (!verdict.ok) return;
+    const findings = pi.inspectProductionQuality(verdict.plan);
+    const { proposals, invalidRefused } = pi.proposeRepairs(findings, (d) => dv.validateDirectorDirective(d as never).ok);
+    ok(proposals.length > 0, `the inspector's findings yield ${proposals.length} proposals`);
+    eq(invalidRefused, 0, "no proposal needed refusing (the canned corrections are valid vocabulary)");
+    ok(proposals.every((p) => p.requiresApproval === true), "every proposal requires approval");
+    ok(proposals.every((p) => p.directives.every((d) => dv.validateDirectorDirective(d as never).ok)), "every proposed directive survives the S168 validator");
+    const guard = pi.repairScopeGuard(proposals[0], ["scene_001", "scene_002"]);
+    ok(guard.ok, "the scope guard admits a declared scene");
+    ok(!pi.repairScopeGuard({ ...proposals[0], affectedSceneId: "scene_999" }, ["scene_001", "scene_002"]).ok, "the scope guard refuses an invented scene");
+    ok(!pi.repairScopeGuard({ ...proposals[0], requiresApproval: false }, ["scene_001", "scene_002"]).ok, "the scope guard refuses an unapproved repair");
+  });
+}
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
