@@ -456,6 +456,26 @@ walls, no new dependencies. Order = visual impact per LOC × risk.
   guard for large fills; blind kit W-series.
 - **Complexity**: medium; ~600–900 new LOC, all pure geometry.
 
+> **LANDED** — `da654d3` (battery 928/928 — the 920 stay green + 8; CI
+> 8/8; live smoke byte-identical). The port is in-house — no Rough.js
+> dependency: `whiteboard/roughen.ts` (310 LOC, the MINSTD PRNG + the
+> per-shape seed law fnv1a(assetId::pathId), no shared mutable stream;
+> bowing double-stroke, rough Catmull-Rom, ellipse overshoot) and
+> `whiteboard/fills.ts` (314 LOC, scan-line hachure inside by
+> construction, the four wrappers, dots ONLY with the seeded jitter)
+> wired BEHIND the S139 sketch pass with its roughness/bowing knobs
+> (absent ⇒ byte-identical legacy, pinned). `svg.ts` gains fixed-decimal
+> parity through the ONE serializer, the authored-curve flatten + RDP,
+> and the countPathCommands cap guard. Pins ×8: byte-identity RUN TWICE,
+> the extended banned-token source-pin, the cap guard, per-shape seed
+> independence, absent-knob byte-identity, fixed-decimal parity, the
+> primitives and fill styles at their laws. The live smoke
+> (`scripts/s164-proof.mts`) rendered a knob-active asset through the
+> real chromium → sketch → applier → ffmpeg path twice — sha256
+> 873109629c1732f0… both runs, byte-identical. THE BLIND KIT W-SERIES IS
+> NOT YET RUN — the audit's acceptance names it; the kit remains the
+> human gate for this slice, unbuilt.
+
 ### S165 — the render-farm determinism + throughput slice (HyperFrames patterns)
 
 - **Objective**: enforce and prove determinism at the pipeline level; buy
