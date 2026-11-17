@@ -418,6 +418,27 @@ walls, no new dependencies. Order = visual impact per LOC × risk.
 - **Complexity**: Phase A low; Phase B medium-high (assembly contract
   touch).
 
+> **LANDED** — Phase A at `409fc59` (battery 910); Phase B at `9a9fb9e`
+> (battery 920/920 — the 910 pre-existing pins stay green + 10; CI 8/8).
+> Phase B shipped the staging as specified: `graphics/transitions.ts`
+> (743 LOC, pure — no fs/ffmpeg/Date.now/Math.random) with the closed
+> native set (crossfade, iris, whiteout, zoomthrough, wipeleft,
+> wiperight) at the measured opus frame counts, the in-house seeded
+> geometry (hash01 FNV-1a / axisFor / cornerR — no shared mutable
+> stream), the JSON-stable 3-dp-quantized per-frame compositor, and the
+> overlap-accounting law in its NET-ZERO form (window frames are CARVED
+> from the outgoing scene's tail and given back as the window clip —
+> Σ clips + Σ windows ≡ Σ legacy frames as an integer identity, so the
+> delivered program stays exactly the doc clock and the two-clock assert
+> guards unchanged). The additive opt-in rides `types.ts`
+> (`nativeTransitions` indexed by boundary; absent ⇒ byte-identical
+> legacy path at parse, write AND render). The QC seam expectation books
+> native boundaries as blend windows with the same running-sum
+> arithmetic as the builder (the two derivations cannot disagree). The
+> live smoke caught a real P5-proof bug (the window applier received an
+> OBJECT where it JSON.parses a STRING) — fixed by double-encoding the
+> description into a quoted literal, pinned.
+
 ### S164 — the whiteboard hand-drawn geometry slice (Rough.js native port)
 
 - **Objective**: real hand-drawn strokes and fills; keep byte-determinism.

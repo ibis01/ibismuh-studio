@@ -483,7 +483,7 @@ Purpose: no programme duplicates shipped work.
 |---|---|---|
 | S162 measured easing + choreography | **Code landed** — nine exact-op curves (seven opus MIT anchor sets via cubic-bezier evaluator; OT parabolic-in-out; OT exponential), counter tabular-nums + landing pulse + kinetic stagger, planner/llm-planner adoption | `e07fbb0`; `src/lib/tubeforge/anim/easing.ts`, `graphics/frame.ts`, `graphics/planner.ts`, `graphics/llm-planner.ts`; battery 902/902; blind kit 12/12 |
 | S162 acceptance | Blind kit committed; **human scoring gate PENDING** | `scripts/s162-blind-kit.mts`; `docs/audits/s162-visual-acceptance-record.md` |
-| S163 native transition engine | Staged (Phase A assembly-xfade vocabulary; Phase B native `graphics/transitions.ts`) | Six-engine audit Part 4 S163 |
+| S163 native transition engine | **Landed both phases** — Phase A assembly-xfade vocabulary (`409fc59`); Phase B native `graphics/transitions.ts` (`9a9fb9e`) | Six-engine audit Part 4 S163; battery 920/920; CI 8/8 |
 | S164 whiteboard geometry (Rough.js native port) | Staged with determinism landmine checklist | Six-engine audit Part 4 S164 |
 | S165 determinism + throughput | Staged (HyperFrames patterns: ready-gate diagnostics, static-frame dedup, golden-video harness) | Six-engine audit Part 4 S165 |
 | S166 character expressiveness | Staged (mbp/rest mouth classes, OT parabolic pose math, K2-gated IK) | Six-engine audit Part 4 S166; `docs/audits/s125-character-rig.md` |
@@ -556,10 +556,11 @@ state. Updated as milestones land — never rewritten retroactively.
 | S162 measured easing + choreography | `e07fbb0` | battery 902/902; kit 12/12; **human blind scoring PENDING** | **OPEN — awaiting 3 scorers, composite ≥ 4/5** (`docs/audits/s162-visual-acceptance-record.md`) |
 | S162b master roadmap preserved | `586b1bf` | the commissioning report in-repo as PROPOSED; §9 reconciliation; ledger live | CLOSED (document) |
 | Nov 8 eight-profile blind baseline | — | the S55 kit's human round returned: mean 3.25/5, temporal coherence 4.5/5; weaknesses per profile ON RECORD | CLOSED (baseline of record — `docs/audits/s55-blind-scoring-record.md`) |
-| Scene-QC S136 audio contract (scene scope) | this commit | `sceneAudioVerdict` pins ×5 (battery 907); the silent-scene false-fail and the vacuous dead-air pass killed | CLOSED |
-| S163 Phase A — the transition preset layer | this commit | opus-measured beats (iris 0.267 / whiteout 1.4 / zoomthrough 0.467) as named catalog styles; the style→xfade compile wall (`xfadeTransitionOf`); boundary + seam-QC duration laws mirrored; pins ×3 (battery 910) | CLOSED (Phase A); Phase B native transitions NOT STARTED |
-| VQ1 added as the overlay programme | this commit | the acceptance rule + P1–P5 + re-benchmark protocol in this document | CLOSED (spec); P1–P5 implementation NOT STARTED |
-| S163–S167 | — | staged in the six-engine audit Part 4 | NOT STARTED |
+| Scene-QC S136 audio contract (scene scope) | `f7d5dce` | `sceneAudioVerdict` pins ×5 (battery 907); the silent-scene false-fail and the vacuous dead-air pass killed | CLOSED |
+| S163 Phase A — the transition preset layer | `409fc59` | opus-measured beats (iris 0.267 / whiteout 1.4 / zoomthrough 0.467) as named catalog styles; the style→xfade compile wall (`xfadeTransitionOf`); boundary + seam-QC duration laws mirrored; pins ×3 (battery 910) | CLOSED (Phase A) |
+| S163 Phase B — the native graphics transition engine | `9a9fb9e` | `graphics/transitions.ts` (743 LOC, pure) — TransitionSpec closed set (crossfade/iris/whiteout/zoomthrough/wipeleft/wiperight) at the measured opus frame counts; in-house seeded geometry (hash01 FNV-1a / axisFor / cornerR); JSON-stable 3-dp compositor; the overlap-accounting law NET-ZERO (window frames carved from the outgoing tail — Σ clips + Σ windows ≡ Σ legacy frames, the two-clock assert guards unchanged); additive `nativeTransitions` opt-in, absent ⇒ byte-identical legacy path; QC books native boundaries as blend windows with the builder's arithmetic; the live smoke caught a P5-proof applier bug (fixed + pinned); pins ×10 (battery 920/920); CI 8/8 | CLOSED |
+| VQ1 added as the overlay programme | `f7d5dce` | the acceptance rule + P1–P5 + re-benchmark protocol in this document | CLOSED (spec); P1–P5 implementation NOT STARTED |
+| S164–S167 | — | staged in the six-engine audit Part 4 | NOT STARTED |
 | S168–S184 | — | this document (PROPOSED) | NOT STARTED / needs per-milestone specs |
 
 ---
@@ -571,7 +572,7 @@ The report's ordering, annotated with the repo state:
 | Step | Action | Outcome | State |
 |---|---|---|---|
 | 1 | Close S162 visual acceptance | Trustworthy animation baseline | Kit sessions ready; **3 human scorers required** |
-| 2 | Complete S163–S167 | Improve native rendering | S163 next (transition engine, audit Part 4); **every slice answers a VQ1 baseline weakness** |
+| 2 | Complete S164–S167 | Improve native rendering | S164 next (whiteboard geometry, audit Part 4); **every slice answers a VQ1 baseline weakness** |
 | 3 | Audit existing AI Director capabilities | Avoid duplicating work | M0 audit exists; capability mapping in §9.2 |
 | 4 | Audit existing TTS integration | Establish what is reusable | Inventory in §9.3 |
 | 5 | Benchmark Chatterbox, Kokoro, VoiceStudio | Select the best affordable default | Chatterbox + VoiceStudio wired; Kokoro adoption candidate |
