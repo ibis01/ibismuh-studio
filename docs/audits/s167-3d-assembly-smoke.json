@@ -15,12 +15,12 @@
     }
   },
   "stages": {
-    "engineRender": "/tmp/s167-smoke-mvUWw5/3d/scene-3d.mp4",
+    "engineRender": "/tmp/s167-smoke-rECpb6/3d/scene-3d.mp4",
     "engineRenderBytes": 26496,
     "stagingArgs": [
       "-y",
       "-i",
-      "/tmp/s167-smoke-mvUWw5/3d/scene-3d.mp4",
+      "/tmp/s167-smoke-rECpb6/3d/scene-3d.mp4",
       "-r",
       "24",
       "-vf",
@@ -39,7 +39,7 @@
       "48000",
       "-ac",
       "2",
-      "/tmp/s167-smoke-mvUWw5/seg-01.mp4"
+      "/tmp/s167-smoke-rECpb6/seg-01.mp4"
     ],
     "assemblyList": "seg-01.mp4 (the 3d engine segment) + seg-02.mp4 (the card, same staging)",
     "stitch": "concat demuxer, -c copy"

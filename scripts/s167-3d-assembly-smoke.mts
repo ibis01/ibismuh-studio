@@ -136,14 +136,18 @@ async function main() {
       ],
     });
     const doc = parseScene3D(docJson);
-    ok(doc != null && doc.camera.shake != null && doc.camera.pushIn === 0.18, "the finisher doc parses with its shake + pushIn");
-    ok(doc != null && serializeScene3D(doc) === serializeScene3D(doc), "the doc round-trips byte-stable");
-    const res = await renderScene3D(doc!, {
+    if (doc == null) {
+      console.error("  ✗ the finisher doc failed to parse — nothing downstream can run");
+      process.exit(1);
+    }
+    ok(doc.camera.shake != null && doc.camera.pushIn === 0.18, "the finisher doc parses with its shake + pushIn");
+    ok(serializeScene3D(doc) === serializeScene3D(doc), "the doc round-trips byte-stable");
+    const res = await renderScene3D(doc, {
       outDir: path.join(work, "3d"),
       onProgress: () => {},
       budgetMs: 300_000,
     });
-    ok(fs.existsSync(res.file), `the 3D engine rendered ${res.frames} frames @ ${doc!.fps}fps (${doc!.durationSec}s) — scene-3d.mp4 exists`);
+    ok(fs.existsSync(res.file), `the 3D engine rendered ${res.frames} frames @ ${doc.fps}fps (${doc.durationSec}s) — scene-3d.mp4 exists`);
     // THE FINISHER IS LIVE IN THE RASTER: the camera keys HOLD at [0,2.2,7]
     // across the whole scene — the only motion is the push-in + the shake,
     // so consecutive hold frames MUST differ (an inert camera would dither
@@ -169,9 +173,13 @@ async function main() {
       ],
     };
     const plan = planFromTracks(tracksDoc as never, 2);
-    ok(plan != null && plan.scenes.map((s) => s.kind).join(",") === "3d,video", "the schema-2 tracks doc reads the 3d kind (planFromTracks)");
-    ok(validatePlanKinds(plan!.scenes.map((s) => s.kind)).ok === false, "the routing wall holds for the 3d kind (no compositor segment builder)");
-    const verdictMissing = engineSegmentVerdict(plan!.scenes.map((s) => s.kind), [null, null]);
+    if (plan == null) {
+      console.error("  ✗ the schema-2 tracks doc failed to read — nothing downstream can run");
+      process.exit(1);
+    }
+    ok(plan.scenes.map((s) => s.kind).join(",") === "3d,video", "the schema-2 tracks doc reads the 3d kind (planFromTracks)");
+    ok(validatePlanKinds(plan.scenes.map((s) => s.kind)).ok === false, "the routing wall holds for the 3d kind (no compositor segment builder)");
+    const verdictMissing = engineSegmentVerdict(plan.scenes.map((s) => s.kind), [null, null]);
     ok(!verdictMissing.ok && verdictMissing.missing.length === 1 && verdictMissing.missing[0].kind === "3d", "fail-closed: the verdict refuses the 3d scene with no engine segment");
 
     // ---------- 3. the compositor's STAGING pass (the real S143 args) ----------
@@ -198,7 +206,7 @@ async function main() {
     ]);
     await ffmpeg(stage(card, seg2));
     ok(fs.existsSync(seg2), "the card segment staged through the SAME transcode (identical codec parameters)");
-    const verdictOk = engineSegmentVerdict(plan!.scenes.map((s) => s.kind), [seg1, seg2]);
+    const verdictOk = engineSegmentVerdict(plan.scenes.map((s) => s.kind), [seg1, seg2]);
     ok(verdictOk.ok, "admitted: both plan scenes carry their segments — the compositor's only admission check passes");
 
     // ---------- 4. the assembly (the concat demuxer, the render's stitch) ----------
@@ -224,7 +232,7 @@ async function main() {
     const receipt = {
       slice: "S167",
       what: "the 3D clip appears in a rendered assembly — the Part 0.3 gap closed on real bytes",
-      doc: { aspect: "16:9", fps: doc!.fps, durationSec: doc!.durationSec, frames: res.frames, finisher: { pushIn: doc!.camera.pushIn, shake: doc!.camera.shake } },
+      doc: { aspect: "16:9", fps: doc.fps, durationSec: doc.durationSec, frames: res.frames, finisher: { pushIn: doc.camera.pushIn, shake: doc.camera.shake } },
       stages: {
         engineRender: res.file,
         engineRenderBytes: fs.statSync(res.file).size,
@@ -240,7 +248,7 @@ async function main() {
         windowMeanAbsDelta: Number(cross.toFixed(3)),
         finalBytes: fs.existsSync(finalPath) ? fs.statSync(finalPath).size : null,
       },
-      admission: { planKinds: plan!.scenes.map((s) => s.kind), failClosed: verdictMissing, admitted: verdictOk.ok },
+      admission: { planKinds: plan.scenes.map((s) => s.kind), failClosed: verdictMissing, admitted: verdictOk.ok },
       at: new Date(0).toISOString(),
       note: "rendered in the dev sandbox, foreground; the timestamp is pinned to epoch (the receipt is content-addressed, not clock-addressed)",
     };
