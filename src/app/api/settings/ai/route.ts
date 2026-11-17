@@ -12,7 +12,7 @@ import {
   syncZaiConfigFile,
   ZAI_SETTING_KEYS,
 } from "@/lib/tubeforge/providers/config";
-import { setUserSettings } from "@/lib/tubeforge/settings";
+import { setUserSettings, listProviderCredentials } from "@/lib/tubeforge/settings";
 import { requireUser } from "@/lib/tubeforge/tenant";
 import {
   getCapability,
@@ -54,9 +54,28 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   auth.enter(); // tenant scope: handler + spawned job closures
 
-  const caps: Record<string, ReturnType<typeof publicCapability>> = {};
+  const caps: Record<string, ReturnType<typeof publicCapability> & {
+    keys: Record<string, { hasKey: boolean; maskedKey: string; baseUrl: string }>;
+  }> = {};
   for (const cap of CAPABILITIES) {
-    caps[cap] = publicCapability(await getCapability(cap));
+    const config = await getCapability(cap);
+    // S159 — EVERY provider's saved-key state for this capability, not just
+    // the active one. The UI reads this map on provider switches so going
+    // A → B → A restores A's saved key badge (the row still exists; the
+    // switch must never read as "the key disappeared").
+    const saved = await listProviderCredentials(cap);
+    const keys: Record<string, { hasKey: boolean; maskedKey: string; baseUrl: string }> = {};
+    for (const p of PROVIDERS_BY_CAPABILITY[cap] ?? []) {
+      const cred = saved.get(p.id);
+      if (cred?.apiKey) {
+        keys[p.id] = {
+          hasKey: true,
+          maskedKey: maskKey(cred.apiKey),
+          baseUrl: cred.baseUrl ?? "",
+        };
+      }
+    }
+    caps[cap] = { ...publicCapability(config), keys };
   }
 
   const legacy = await readLegacyZai();

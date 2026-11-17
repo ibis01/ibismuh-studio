@@ -121,3 +121,24 @@ export async function deleteProviderCredential(
     where: { userId, capability, provider },
   });
 }
+
+/** S159 — EVERY saved credential for one capability, keyed by provider id.
+ *  The settings GET serves this map so the UI can show each provider's own
+ *  saved key state (masked) — switching providers never reads as "the key
+ *  disappeared" when the row for the other provider still exists. */
+export async function listProviderCredentials(
+  capability: string
+): Promise<Map<string, { baseUrl: string; apiKey: string }>> {
+  const ctx = assertCtx("settings.listProviderCredentials");
+  const rows = await rawDb.providerCredential.findMany({
+    where: { userId: ctx.userId, capability, isActive: true },
+  });
+  const map = new Map<string, { baseUrl: string; apiKey: string }>();
+  for (const row of rows) {
+    map.set(row.provider, {
+      baseUrl: row.baseUrl ?? "",
+      apiKey: decryptSecret(row.apiKey),
+    });
+  }
+  return map;
+}

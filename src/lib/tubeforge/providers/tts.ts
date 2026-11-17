@@ -10,6 +10,9 @@
 //   cartesia → POST {baseUrl}/tts/bytes (X-API-Key + Cartesia-Version headers)
 //   deepgram → POST {baseUrl}/speak?model={model} (Authorization: Token)
 //   playht   → POST {baseUrl}/tts/stream (X-USER-ID + Authorization)
+//   elevenlabs → S159 — POST {baseUrl}/text-to-speech/{voiceId} (xi-api-key;
+//             pcm_44100 wrapped into WAV via pcmToWav). Voice ids resolve
+//             against the ACCOUNT's live list — the Cartesia law, mirrored.
 //   voicestudio → S121 — the USER-MANAGED VoiceStudio server's OpenAI-
 //             compatible API: POST {baseUrl}/v1/audio/speech.
 
@@ -22,6 +25,7 @@ import {
 import { providerMeta, OPENAI_VOICES, type ProviderId } from "./registry";
 import { VOICES } from "../types";
 import { joinUrl, providerFetch, ProviderHttpError } from "./http";
+import { pcmToWav } from "../wav";
 import {
   getSampleWavByVoiceId,
   voiceProfileProvider,
@@ -183,6 +187,301 @@ export async function resolveCartesiaVoiceId(
   return CARTESIA_STATIC_VOICES[0].id;
 }
 
+// ---------- S159 — the wired voice catalogs (the Cartesia law, mirrored) ----------
+//
+// A provider with many voice ids ships THREE layers, exactly like Cartesia:
+//   1. a STATIC catalog in code — known-good ids, the offline shape fallback;
+//   2. a LIVE account list overlaid in the voices route (when the provider
+//      has a listing endpoint AND a saved key) — the pickers' one truth;
+//   3. synthesis-time resolution — a foreign/stale voice lands on a REAL
+//      voice of the account instead of a guaranteed error.
+
+/** Gemini TTS prebuilt voices — Google's documented 30-name set. These ids
+ *  are STABLE names (not account UUIDs), so the static catalog is the one
+ *  truth; there is no listing endpoint to overlay. Puck rides first: it is
+ *  the adapter's historical default, so the fallback voice is unchanged. */
+export const GEMINI_VOICES = [
+  { id: "Puck", label: "Puck — upbeat" },
+  { id: "Zephyr", label: "Zephyr — bright" },
+  { id: "Charon", label: "Charon — informative" },
+  { id: "Kore", label: "Kore — firm" },
+  { id: "Fenrir", label: "Fenrir — excitable" },
+  { id: "Leda", label: "Leda — youthful" },
+  { id: "Orus", label: "Orus — firm" },
+  { id: "Aoede", label: "Aoede — breezy" },
+  { id: "Callirrhoe", label: "Callirrhoe — easy-going" },
+  { id: "Autonoe", label: "Autonoe — bright" },
+  { id: "Enceladus", label: "Enceladus — breathy" },
+  { id: "Iapetus", label: "Iapetus — clear" },
+  { id: "Umbriel", label: "Umbriel — easy-going" },
+  { id: "Algieba", label: "Algieba — smooth" },
+  { id: "Despina", label: "Despina — smooth" },
+  { id: "Erinome", label: "Erinome — clear" },
+  { id: "Algenib", label: "Algenib — gravelly" },
+  { id: "Rasalgethi", label: "Rasalgethi — informative" },
+  { id: "Laomedeia", label: "Laomedeia — upbeat" },
+  { id: "Achernar", label: "Achernar — soft" },
+  { id: "Alnilam", label: "Alnilam — firm" },
+  { id: "Schedar", label: "Schedar — even" },
+  { id: "Gacrux", label: "Gacrux — mature" },
+  { id: "Pulcherrima", label: "Pulcherrima — forward" },
+  { id: "Achird", label: "Achird — friendly" },
+  { id: "Zubenelgenubi", label: "Zubenelgenubi — casual" },
+  { id: "Vindemiatrix", label: "Vindemiatrix — gentle" },
+  { id: "Sadachbia", label: "Sadachbia — lively" },
+  { id: "Sadaltager", label: "Sadaltager — knowledgeable" },
+  { id: "Sulafat", label: "Sulafat — warm" },
+] as const;
+
+/** Deepgram Aura-2 voices. Deepgram's speak API takes the VOICE as the
+ *  `model` parameter (aura-2-{name}-en) — voice and model are ONE value,
+ *  so the catalog ids are the model ids and the adapter maps a picked
+ *  voice onto the speak model directly. */
+export const DEEPGRAM_VOICES = [
+  { id: "aura-2-thalia-en", label: "Thalia — warm female (recommended)" },
+  { id: "aura-2-asteria-en", label: "Asteria — expressive female" },
+  { id: "aura-2-orpheus-en", label: "Orpheus — deep male" },
+  { id: "aura-2-arcas-en", label: "Arcas — casual male" },
+  { id: "aura-2-perseus-en", label: "Perseus — earnest male" },
+  { id: "aura-2-angus-en", label: "Angus — firm male" },
+  { id: "aura-2-orion-en", label: "Orion — authoritative male" },
+  { id: "aura-2-helios-en", label: "Helios — bright male" },
+  { id: "aura-2-hera-en", label: "Hera — assured female" },
+  { id: "aura-2-zeus-en", label: "Zeus — commanding male" },
+  { id: "aura-2-persephone-en", label: "Persephone — emotional female" },
+] as const;
+
+/** PlayHT's documented default pre-made voice. PlayHT's full library is
+ *  account-shaped and served LIVE (GET /voices); the static catalog keeps
+ *  the offline fallback honest — a real, documented voice id. */
+export const PLAYHT_STATIC_VOICES = [
+  { id: "larry", label: "Larry — documented default (recommended)" },
+] as const;
+
+/** ElevenLabs' classic pre-made library — the stable public ids the docs
+ *  and every integration tutorial reference. Custom/clone voices ride the
+ *  LIVE list (GET /v1/voices) overlaid in the voices route; a stale id is
+ *  self-healed at synthesis (the 404 ladder below). Rachel rides first:
+ *  the docs' primary example voice, so the fallback is a real voice. */
+export const ELEVEN_STATIC_VOICES = [
+  { id: "21m00Tcm4TlvDq8ikWAM", label: "Rachel — calm narration (recommended)" },
+  { id: "29vD33N1CtxCmqQRPOHJ", label: "Drew — grounded male" },
+  { id: "2EiwWnXFnvU5JabPnv8n", label: "Clyde — war veteran male" },
+  { id: "5Q0t7uMcjvnagumLfvZi", label: "Paul — authoritative male" },
+  { id: "AZnzlk1XvdvUeBnXmlld", label: "Domi — strong female" },
+  { id: "CYw3k2KsWGVVaze69DH", label: "Dave — conversational male" },
+  { id: "EXAVITQu4vr4xnSDxMaL", label: "Sarah — soft female" },
+  { id: "ErXwobaYiX0SgX7sRDaX", label: "Antoni — well-rounded male" },
+  { id: "GBv7mTt0atIp3Cy8C4jk", label: "Thomas — calm male" },
+  { id: "IKne3meq5aSn9JBey2G4", label: "Charlie — hypersonic male" },
+  { id: "JBFqcADxSsP6w2AMdoHi", label: "George — warm narration male" },
+  { id: "MF3mGyEYCl7XYWbV9V6O", label: "Elli — emotional female" },
+  { id: "N2lVS1w4EtoT3dr4eOWO", label: "Callum — intense male" },
+  { id: "ODq5zmih8GrVes37Dizd", label: "Patrick — gravelly male" },
+  { id: "SOYHLrjzK2X1ezoL6HAb", label: "Harry — anxious male" },
+  { id: "pqHfZKP75CvOlQylNhV4", label: "Bill — documentary male" },
+  { id: "cgSgspJ2msm6clMCkdW9", label: "Jessica — expressive female" },
+  { id: "bVMeCyTHy58xNoL34h8p", label: "Chris — casual male" },
+  { id: "nPczCjzI2devNBz1zQrb", label: "Brian — deep narration male" },
+  { id: "pFZP5JQG7iQjIQuC4Bku", label: "Lily — British female" },
+] as const;
+
+/** ElevenLabs voice ids are 20-char base62 strings (their premade library
+ *  and every cloned voice). Anything else ("jam", a Z.ai name, a clone id)
+ *  is NOT speakable by ElevenLabs and resolves at synthesis time. */
+export function isElevenlabsVoiceId(voice: string): boolean {
+  return /^[A-Za-z0-9]{20}$/.test(voice ?? "");
+}
+
+/** PlayHT clone voices ride s3:// URIs — account-owned, pass verbatim. */
+export function isPlayhtCloneVoiceId(voice: string): boolean {
+  return (voice ?? "").startsWith("s3://");
+}
+
+/** In-memory caches for the live voice lists — keyed by credential
+ *  fingerprint so switching accounts never serves the wrong account's
+ *  voices. 5-minute TTL (the Cartesia cache's law). */
+const LIVE_VOICE_TTL_MS = 5 * 60 * 1000;
+let elevenVoiceCache: {
+  key: string;
+  at: number;
+  voices: { id: string; label: string }[];
+} | null = null;
+let playhtVoiceCache: {
+  key: string;
+  at: number;
+  voices: { id: string; label: string }[];
+} | null = null;
+
+function liveCacheKey(config: { baseUrl?: string; apiKey?: string }): string {
+  const fp = config.apiKey ? config.apiKey.slice(-6) : "";
+  return `${config.baseUrl?.trim() ?? ""}|${fp}`;
+}
+
+function dedupeLive(voices: { id: string; label: string }[]): {
+  id: string;
+  label: string;
+}[] {
+  const seen = new Set<string>();
+  const out: { id: string; label: string }[] = [];
+  for (const v of voices) {
+    if (v.id && !seen.has(v.id)) {
+      seen.add(v.id);
+      out.push({ id: v.id, label: v.label || v.id });
+    }
+  }
+  return out;
+}
+
+/** GET {baseUrl}/v1/voices — the ElevenLabs ACCOUNT's real voices (the
+ *  premade library plus every cloned/custom voice). Fails open as []
+ *  exactly like the Cartesia probe: an unreachable list degrades to the
+ *  static catalog, never to an error. */
+export async function listElevenlabsVoices(
+  config: CapabilityConfig,
+  opts?: { refresh?: boolean }
+): Promise<{ id: string; label: string }[]> {
+  const key = config.apiKey?.trim();
+  if (!key) return [];
+  const cacheKey = liveCacheKey(config);
+  if (
+    !opts?.refresh &&
+    elevenVoiceCache &&
+    elevenVoiceCache.key === cacheKey &&
+    Date.now() - elevenVoiceCache.at < LIVE_VOICE_TTL_MS
+  ) {
+    return elevenVoiceCache.voices;
+  }
+  const meta = providerMeta("tts", "elevenlabs");
+  const baseUrl =
+    config.baseUrl?.trim() || meta?.defaultBaseUrl || "https://api.elevenlabs.io/v1";
+  try {
+    const res = await providerFetch(
+      "ElevenLabs voices",
+      joinUrl(baseUrl, "voices"),
+      { method: "GET", headers: { "xi-api-key": key } },
+      { capability: "tts" },
+    );
+    const data = (await res.json()) as { voices?: unknown[] } | unknown[];
+    const rows: unknown[] = Array.isArray(data)
+      ? data
+      : ((data as { voices?: unknown[] }).voices ?? []);
+    const voices = dedupeLive(
+      rows
+        .map((r) => r as { voice_id?: string; name?: string })
+        .filter((r) => typeof r.voice_id === "string" && r.voice_id)
+        .map((r) => ({
+          id: r.voice_id as string,
+          label: (r.name as string) || (r.voice_id as string),
+        }))
+    );
+    elevenVoiceCache = { key: cacheKey, at: Date.now(), voices };
+    return voices;
+  } catch {
+    return [];
+  }
+}
+
+/** GET {baseUrl}/voices — the PlayHT ACCOUNT's real voices (pre-made
+ *  library plus clones). Same fail-open contract as the Cartesia probe. */
+export async function listPlayhtVoices(
+  config: CapabilityConfig,
+  opts?: { refresh?: boolean }
+): Promise<{ id: string; label: string }[]> {
+  const rawKey = config.apiKey?.trim();
+  if (!rawKey || !rawKey.includes(":")) return [];
+  const cacheKey = liveCacheKey(config);
+  if (
+    !opts?.refresh &&
+    playhtVoiceCache &&
+    playhtVoiceCache.key === cacheKey &&
+    Date.now() - playhtVoiceCache.at < LIVE_VOICE_TTL_MS
+  ) {
+    return playhtVoiceCache.voices;
+  }
+  const meta = providerMeta("tts", "playht");
+  const baseUrl =
+    config.baseUrl?.trim() || meta?.defaultBaseUrl || "https://api.play.ht/api/v2";
+  const idx = rawKey.indexOf(":");
+  const userId = rawKey.slice(0, idx).trim();
+  const apiKey = rawKey.slice(idx + 1).trim();
+  try {
+    const res = await providerFetch(
+      "PlayHT voices",
+      joinUrl(baseUrl, "voices"),
+      {
+        method: "GET",
+        headers: { "X-USER-ID": userId, Authorization: `Bearer ${apiKey}` },
+      },
+      { capability: "tts" },
+    );
+    const data = (await res.json()) as unknown;
+    // The list endpoint returns an array of voice objects (id + name).
+    const rows: unknown[] = Array.isArray(data)
+      ? data
+      : ((data as { voices?: unknown[] }).voices ?? []);
+    const voices = dedupeLive(
+      rows
+        .map((r) => r as { id?: string; name?: string })
+        .filter((r) => typeof r.id === "string" && r.id)
+        .map((r) => ({ id: r.id as string, label: (r.name as string) || (r.id as string) }))
+    );
+    playhtVoiceCache = { key: cacheKey, at: Date.now(), voices };
+    return voices;
+  } catch {
+    return [];
+  }
+}
+
+/** Resolve the voice to send to ElevenLabs — THE LIVE-LIST LAW (S159, the
+ *  S149 Cartesia shape mirrored):
+ *  1. A 20-char id the account's live list KNOWS → verbatim.
+ *  2. A 20-char id the live list does NOT know (a deleted custom voice on
+ *     an old video) → the FIRST live voice — audio instead of a guaranteed
+ *     404 (the adapter's self-heal ladder catches list-staleness too).
+ *  3. Anything else (a Z.ai voice name, a clone id, an empty string) → the
+ *     first live voice, else the static catalog's first entry.
+ *  4. Live list unreachable → static-catalog ids ride verbatim (they are
+ *     the premade library; Cartesia's readable-404 honesty for the rest). */
+export async function resolveElevenlabsVoiceId(
+  voice: string,
+  config: CapabilityConfig
+): Promise<string> {
+  const requested = voice?.trim() ?? "";
+  const catalogIds: string[] = ELEVEN_STATIC_VOICES.map((v) => v.id);
+  const live = await listElevenlabsVoices(config);
+  if (isElevenlabsVoiceId(requested)) {
+    if (!live.length) return requested; // cannot verify — ride verbatim
+    return live.some((v) => v.id === requested)
+      ? requested
+      : live[0].id;
+  }
+  if (!requested || !catalogIds.includes(requested)) {
+    if (live.length) return live[0].id;
+    return ELEVEN_STATIC_VOICES[0].id;
+  }
+  return requested; // a known premade id — verbatim (offline-safe)
+}
+
+/** Resolve the voice to send to PlayHT — the same law:
+ *  s3:// clone URIs and live-list ids ride verbatim; static-catalog ids
+ *  ride verbatim offline; a foreign/stale voice lands on the first live
+ *  voice, else the documented default. */
+export async function resolvePlayhtVoiceId(
+  voice: string,
+  config: CapabilityConfig
+): Promise<string> {
+  const requested = voice?.trim() ?? "";
+  if (isPlayhtCloneVoiceId(requested)) return requested;
+  const catalogIds: string[] = PLAYHT_STATIC_VOICES.map((v) => v.id);
+  const live = await listPlayhtVoices(config);
+  if (requested && (live.some((v) => v.id === requested) || catalogIds.includes(requested))) {
+    return requested;
+  }
+  if (live.length) return live[0].id;
+  return PLAYHT_STATIC_VOICES[0].id;
+}
+
 /** The voice catalog for a provider (drives UI pickers + sanitization). */
 export function voiceCatalog(provider: ProviderId, model = "") {
   if (provider === "openai") {
@@ -211,6 +510,29 @@ export function voiceCatalog(provider: ProviderId, model = "") {
     // to Cartesia untouched.
     return CARTESIA_STATIC_VOICES.map((v) => ({ ...v }));
   }
+  if (provider === "gemini") {
+    // S159 — the prebuilt-voice catalog: Google's documented 30-name set.
+    // The old fallthrough served the Z.ai studio voices — ids Gemini has
+    // never heard of — so every saved voice silently collapsed to the
+    // adapter's hardcoded Puck.
+    return GEMINI_VOICES.map((v) => ({ ...v }));
+  }
+  if (provider === "deepgram") {
+    // S159 — Aura-2 voices. Voice and model are ONE value in Deepgram's
+    // speak API; the adapter maps a catalog voice onto the speak model.
+    return DEEPGRAM_VOICES.map((v) => ({ ...v }));
+  }
+  if (provider === "playht") {
+    // S159 — static fallback + the LIVE account list overlays it in the
+    // voices route (PlayHT's library is account-shaped).
+    return PLAYHT_STATIC_VOICES.map((v) => ({ ...v }));
+  }
+  if (provider === "elevenlabs") {
+    // S159 — the premade library + the LIVE account list (clones/custom
+    // voices) overlaid in the voices route; synthesis resolves through
+    // resolveElevenlabsVoiceId (the Cartesia law).
+    return ELEVEN_STATIC_VOICES.map((v) => ({ ...v }));
+  }
   // zai + zhipu share the same 7 studio voices; zhipu additionally accepts
   // cloned ids (appended to the catalog by the API layer, which can hit the DB).
   return VOICES.map((v) => ({ id: v.id, label: v.label }));
@@ -236,6 +558,19 @@ export function sanitizeVoice(
     return voice;
   if (provider === "voicestudio") return voice; // verbatim — the server owns the catalog
   if (provider === "cartesia" && isCartesiaVoiceId(voice)) return voice;
+  // S159 — Gemini voice names canonicalize case-insensitively (a hand-typed
+  // "aoede" still lands on the catalog's exact "Aoede" the API expects).
+  if (provider === "gemini" && voice) {
+    const canonical = GEMINI_VOICES.find(
+      (v) => v.id.toLowerCase() === voice.trim().toLowerCase(),
+    );
+    if (canonical) return canonical.id;
+  }
+  // S159 — account-owned ids pass through verbatim; the live-list check
+  // happens at synthesis (resolveElevenlabsVoiceId / resolvePlayhtVoiceId),
+  // never here — this function is sync and must not guess.
+  if (provider === "elevenlabs" && isElevenlabsVoiceId(voice)) return voice;
+  if (provider === "playht" && isPlayhtCloneVoiceId(voice)) return voice;
   const catalog = voiceCatalog(provider, model);
   return catalog.some((v) => v.id === voice) ? voice : catalog[0].id;
 }
@@ -318,6 +653,9 @@ export async function ttsSynthesize(
   }
   if (config.provider === "playht") {
     return playhtTts(request, config);
+  }
+  if (config.provider === "elevenlabs") {
+    return elevenlabsTts(request, config);
   }
   return zaiTts(request, config);
 }
@@ -491,10 +829,11 @@ async function geminiTts(
   // Gemini requires the key as a query parameter, not a Bearer header.
   const url = `${baseUrl}/models/${model}:generateContent?key=${key}`;
 
-  // Gemini TTS uses a hardcoded default voice (Puck) because the underlying
-  // generateContent API takes prebuilt voice names (Puck, Charon, Kore, etc.)
-  // rather than the Z.ai studio voice ids.
-  const voiceName = "Puck";
+  // S159 — the voice is HONORED: the catalog's prebuilt names are the legal
+  // values (a Z.ai name like "jam" canonicalizes to the default Puck, not a
+  // silent hardcoded voice). The old code hardcoded Puck and ignored the
+  // picker entirely.
+  const voiceName = sanitizeVoice("gemini", req.voice);
 
   const response = await providerFetch("Gemini TTS", url, {
     method: "POST",
@@ -635,13 +974,23 @@ async function deepgramTts(
     config.baseUrl?.trim() ||
     meta?.defaultBaseUrl ||
     "https://api.deepgram.com/v1";
-  const model = config.model?.trim() || "aura-2-thalia-en";
   const key = config.apiKey?.trim();
   if (!key) {
     throw new Error(
       "Deepgram needs an API key from console.deepgram.com (Settings → AI Providers)",
     );
   }
+
+  // S159 — voice and model are ONE value in Deepgram's speak API: a voice
+  // picked from the catalog (any aura id) IS the speak model. A voice saved
+  // under another provider ("jam", a clone id) is not an aura id and falls
+  // back to the saved/default model — never a foreign id on the wire.
+  const catalog: string[] = DEEPGRAM_VOICES.map((v) => v.id);
+  const requestedVoice = req.voice?.trim() ?? "";
+  const model =
+    catalog.includes(requestedVoice)
+      ? requestedVoice
+      : config.model?.trim() || "aura-2-thalia-en";
 
   const url = `${joinUrl(baseUrl, "speak")}?model=${encodeURIComponent(model)}`;
 
@@ -689,9 +1038,12 @@ async function playhtTts(
   const userId = rawKey.slice(0, idx).trim();
   const apiKey = rawKey.slice(idx + 1).trim();
 
-  // PlayHT requires a valid voice ID. We default to a known public voice
-  // if the caller hasn't provided one, but the user can override it.
-  const voiceId = req.voice?.trim() || "larry";
+  // S159 — THE LIVE-LIST LAW (resolvePlayhtVoiceId): s3:// clone URIs and
+  // live-list ids ride verbatim; a foreign voice ("jam" — a Z.ai name saved
+  // under another provider) lands on the account's first live voice, else
+  // the documented default. The old code sent req.voice verbatim — a stale
+  // or foreign id was a guaranteed error.
+  const voiceId = await resolvePlayhtVoiceId(req.voice, config);
 
   const response = await providerFetch(
     "PlayHT TTS",
@@ -715,6 +1067,87 @@ async function playhtTts(
   const buffer = Buffer.from(new Uint8Array(await response.arrayBuffer()));
   if (buffer.length < 44) throw new Error("PlayHT TTS returned empty audio");
   return buffer;
+}
+
+// ---------- ElevenLabs (S159 — the Cartesia law, mirrored) ----------
+
+/** Exported for the S159 pin suite — called with a caller-built config so
+ *  the pins run with no DB and no tenant context, exactly like heygenTts
+ *  and cartesiaTts. */
+export async function elevenlabsTts(
+  req: TtsRequest,
+  config: CapabilityConfig,
+): Promise<Buffer> {
+  const meta = providerMeta("tts", "elevenlabs");
+  const baseUrl =
+    config.baseUrl?.trim() ||
+    meta?.defaultBaseUrl ||
+    "https://api.elevenlabs.io/v1";
+  const model = config.model?.trim() || "eleven_multilingual_v2";
+  const key = config.apiKey?.trim();
+  if (!key) {
+    throw new Error(
+      "ElevenLabs needs an API key from elevenlabs.io/app/settings/api-keys (Settings → AI Providers)",
+    );
+  }
+
+  // THE LIVE-LIST LAW (S159 — resolveElevenlabsVoiceId): a 20-char id the
+  // account knows rides verbatim; a foreign voice ("jam", a Z.ai name, a
+  // clone id) lands on a REAL account voice — never a guaranteed 404.
+  const voiceId = await resolveElevenlabsVoiceId(req.voice, config);
+
+  // S159 — the self-heal (the Cartesia ladder, mirrored): a 404 after a
+  // verbatim resolve means the cached live list (5-min TTL) served an id
+  // the account no longer has (a just-deleted clone, a retired premade).
+  // Refresh the list and retry ONCE on the refreshed first voice. Any other
+  // status, or an empty refreshed list, rethrows the original error.
+  try {
+    return await elevenlabsTtsCall(baseUrl, key, model, voiceId, req.input);
+  } catch (err) {
+    const httpErr = err as ProviderHttpError;
+    if (
+      !(httpErr instanceof ProviderHttpError) ||
+      httpErr.status !== 404
+    ) {
+      throw err;
+    }
+    const refreshed = await listElevenlabsVoices(config, { refresh: true });
+    if (!refreshed.length || refreshed[0].id === voiceId) throw err;
+    return elevenlabsTtsCall(baseUrl, key, model, refreshed[0].id, req.input);
+  }
+}
+
+async function elevenlabsTtsCall(
+  baseUrl: string,
+  key: string,
+  model: string,
+  voiceId: string,
+  transcript: string,
+): Promise<Buffer> {
+  // pcm_44100 (s16le mono) wrapped into a canonical WAV container — the
+  // downstream pipeline measures narration with WAV header math
+  // (wavDurationSec), so the adapter contract stays "always WAV bytes".
+  const response = await providerFetch(
+    "ElevenLabs TTS",
+    `${joinUrl(baseUrl, `text-to-speech/${voiceId}`)}?output_format=pcm_44100`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "audio/wav",
+        "xi-api-key": key,
+      },
+      body: JSON.stringify({
+        text: transcript,
+        model_id: model,
+      }),
+    },
+    { capability: "tts" },
+  );
+  const pcm = Buffer.from(new Uint8Array(await response.arrayBuffer()));
+  if (pcm.length < 1000)
+    throw new Error("ElevenLabs TTS returned empty audio");
+  return pcmToWav(pcm, 44100, 1, 16);
 }
 
 // ---------- VoiceStudio (the user's own server — S121) ----------

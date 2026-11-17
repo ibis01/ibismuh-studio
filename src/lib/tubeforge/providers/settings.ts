@@ -169,7 +169,22 @@ export async function saveCapability(
     next.visionModel = (next.visionModel ?? "")?.trim() ?? "";
   }
 
-  if (patch.apiKey === "") {
+  // S159 — THE NO-INHERIT LAW. Switching providers never carries the old
+  // provider's secret into the new provider's row. The old logic
+  // (`patch.apiKey === "" → next.apiKey = current.apiKey`) read the ACTIVE
+  // provider's key — so a provider switch saved with a blank key field
+  // silently WROTE provider A's key into provider B's credential row
+  // (cross-contamination), and a later synthesis on B authenticated as A.
+  // Now: unchanged provider + blank field keeps today's "keep the saved
+  // key" behavior; a provider switch resolves the NEW provider's OWN saved
+  // credential (or none — a readable needs-a-key error at synthesis beats a
+  // foreign key silently riding the wire).
+  const providerChanged = next.provider !== current.provider;
+  if (providerChanged && !(patch.apiKey ?? "").trim()) {
+    const cred = await getProviderCredential(capability, next.provider);
+    next.apiKey = cred?.apiKey ?? "";
+    next.baseUrl = next.baseUrl?.trim() || cred?.baseUrl || "";
+  } else if (patch.apiKey === "") {
     next.apiKey = current.apiKey;
   }
 

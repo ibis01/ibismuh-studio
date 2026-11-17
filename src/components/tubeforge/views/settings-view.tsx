@@ -222,6 +222,14 @@ export function SettingsView() {
         visionModel: string;
         hasKey: boolean;
         maskedKey: string;
+        // S159 — EVERY provider's saved-key state for this capability
+        // (masked, from GET /api/settings/ai). A provider switch restores
+        // the newly selected provider's own state instead of wiping it —
+        // switching away and back never reads as "the key disappeared".
+        keys: Record<
+          string,
+          { hasKey: boolean; maskedKey: string; baseUrl: string }
+        >;
       }
     >
   >({
@@ -233,6 +241,7 @@ export function SettingsView() {
       visionModel: "",
       hasKey: false,
       maskedKey: "",
+      keys: {},
     },
     tts: {
       provider: "zai",
@@ -242,6 +251,7 @@ export function SettingsView() {
       visionModel: "",
       hasKey: false,
       maskedKey: "",
+      keys: {},
     },
     asr: {
       provider: "voicestudio",
@@ -251,6 +261,7 @@ export function SettingsView() {
       visionModel: "",
       hasKey: false,
       maskedKey: "",
+      keys: {},
     },
     image: {
       provider: "zai",
@@ -260,6 +271,7 @@ export function SettingsView() {
       visionModel: "",
       hasKey: false,
       maskedKey: "",
+      keys: {},
     },
     video: {
       provider: "zai",
@@ -269,6 +281,7 @@ export function SettingsView() {
       visionModel: "",
       hasKey: false,
       maskedKey: "",
+      keys: {},
     },
   });
   const [provSaving, setProvSaving] = useState(false);
@@ -323,11 +336,36 @@ export function SettingsView() {
         maskedKey: d.zai?.maskedKey ?? "",
       });
       setProv((f) => ({
-        chat: { ...f.chat, ...(d.capabilities?.chat ?? {}), apiKey: "" },
-        tts: { ...f.tts, ...(d.capabilities?.tts ?? {}), apiKey: "" },
-        asr: { ...f.asr, ...(d.capabilities?.asr ?? {}), apiKey: "" },
-        image: { ...f.image, ...(d.capabilities?.image ?? {}), apiKey: "" },
-        video: { ...f.video, ...(d.capabilities?.video ?? {}), apiKey: "" },
+        chat: {
+          ...f.chat,
+          ...(d.capabilities?.chat ?? {}),
+          apiKey: "",
+          keys: d.capabilities?.chat?.keys ?? f.chat.keys,
+        },
+        tts: {
+          ...f.tts,
+          ...(d.capabilities?.tts ?? {}),
+          apiKey: "",
+          keys: d.capabilities?.tts?.keys ?? f.tts.keys,
+        },
+        asr: {
+          ...f.asr,
+          ...(d.capabilities?.asr ?? {}),
+          apiKey: "",
+          keys: d.capabilities?.asr?.keys ?? f.asr.keys,
+        },
+        image: {
+          ...f.image,
+          ...(d.capabilities?.image ?? {}),
+          apiKey: "",
+          keys: d.capabilities?.image?.keys ?? f.image.keys,
+        },
+        video: {
+          ...f.video,
+          ...(d.capabilities?.video ?? {}),
+          apiKey: "",
+          keys: d.capabilities?.video?.keys ?? f.video.keys,
+        },
       }));
     } catch {
       /* non-critical */
@@ -1028,6 +1066,15 @@ export function SettingsView() {
                                   ? "cogvideox-3"
                                   : ""
                               : (p?.models[0]?.id ?? "");
+                          // S159 — switching providers RESTORES the newly
+                          // selected provider's own saved state (key badge
+                          // + base URL from the credentials map) instead of
+                          // wiping it. The key INPUT stays blank — secrets
+                          // never echo — but the placeholder and the badge
+                          // tell the truth: a saved key exists for THIS
+                          // provider, and saving with a blank field keeps
+                          // it. Going A → B → A brings A's key back.
+                          const saved = f[cap].keys?.[v];
                           return {
                             ...f,
                             [cap]: {
@@ -1037,10 +1084,10 @@ export function SettingsView() {
                                 f[cap].provider === v
                                   ? f[cap].model
                                   : fallbackModel,
-                              baseUrl: "",
+                              baseUrl: saved?.baseUrl ?? "",
                               apiKey: "",
-                              hasKey: false,
-                              maskedKey: "",
+                              hasKey: saved?.hasKey ?? false,
+                              maskedKey: saved?.maskedKey ?? "",
                             },
                           };
                         })

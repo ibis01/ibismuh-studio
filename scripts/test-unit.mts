@@ -54,6 +54,8 @@ import {
 import {
   describeVoiceHealth,
   isClonedVoiceId,
+  resolveElevenlabsVoiceId,
+  resolvePlayhtVoiceId,
   sanitizeVoice,
   voiceCatalog,
 } from "../src/lib/tubeforge/providers/tts";
@@ -21714,6 +21716,150 @@ await test("S157 studio-doc rides the browser chunk — no node builtins may ent
   const font = await fsp.readFile("src/lib/tubeforge/title-font.ts", "utf8");
   ok(font.includes("import fs from \"node:fs\""), "the disk-touching seam imports fs (server-only)");
   ok(font.includes("if (!fontFile) return null;"), "a missing font degrades the overlay, never the render");
+});
+
+// ---------- suite: S159 — the persisted keys and the wired voice catalogs ----------
+
+suiteStart("S159 — the persisted keys and the wired voice catalogs");
+
+await test("S159 switching providers never inherits the old provider's secret", async () => {
+  // The receipt: a blank key field on a provider switch resolved to the
+  // ACTIVE provider's key (getCapability reads the saved row) and the upsert
+  // wrote it into the NEW provider's credential row — provider B
+  // authenticated as A. The guard resolves the NEW provider's OWN row (or
+  // none) before the keep-current branch ever runs.
+  const src = await fsp.readFile("src/lib/tubeforge/providers/settings.ts", "utf8");
+  ok(src.includes("THE NO-INHERIT LAW"), "the law is stated where the save happens");
+  ok(
+    src.includes('providerChanged && !(patch.apiKey ?? "").trim()'),
+    "a provider switch with a blank/missing key resolves the NEW provider's own credential"
+  );
+  ok(
+    src.includes("getProviderCredential(capability, next.provider)"),
+    "the switch path reads the new provider's row"
+  );
+  ok(
+    src.indexOf("providerChanged") < src.indexOf('else if (patch.apiKey === "")'),
+    "the switch guard runs BEFORE the keep-current branch"
+  );
+});
+
+await test("S159 the settings GET serves every provider's saved-key state", async () => {
+  const src = await fsp.readFile("src/app/api/settings/ai/route.ts", "utf8");
+  ok(src.includes("listProviderCredentials"), "the GET reads ALL credential rows for the capability");
+  ok(src.includes("maskedKey: maskKey(cred.apiKey)"), "the keys map carries masked keys only — secrets never leave the server");
+});
+
+await test("S159 the settings UI restores saved state on provider switch", async () => {
+  const src = await fsp.readFile("src/components/tubeforge/views/settings-view.tsx", "utf8");
+  ok(
+    !src.includes("hasKey: false,\n                              maskedKey: \"\""),
+    "the switch handler's hard-clear wipe is gone"
+  );
+  ok(src.includes("f[cap].keys?.[v]"), "the switch handler restores from the per-provider credentials map");
+  ok(src.includes("saved?.hasKey ?? false"), "the restored badge state comes from the saved map");
+  ok(src.includes("keys: d.capabilities?.chat?.keys ?? f.chat.keys"), "loadAi merges the keys map per capability");
+});
+
+await test("S159 gemini/deepgram/playht/elevenlabs voice catalogs are wired in code", () => {
+  const gemini = voiceCatalog("gemini");
+  ok(gemini.length === 30 && gemini.some((v) => v.id === "Aoede"), "gemini carries the 30 prebuilt names");
+  ok(gemini[0].id === "Puck", "Puck rides first — the historical default IS the fallback");
+  ok(!gemini.some((v) => v.id === "tongtong"), "gemini no longer serves the zai studio voices");
+  const deepgram = voiceCatalog("deepgram");
+  ok(deepgram.length >= 11 && deepgram.every((v) => v.id.startsWith("aura-2-")), "deepgram carries the full aura-2 set (voice == model)");
+  ok(voiceCatalog("playht").some((v) => v.id === "larry"), "playht's documented default rides the static catalog");
+  const eleven = voiceCatalog("elevenlabs");
+  ok(
+    eleven.length >= 20 && eleven.some((v) => v.id === "21m00Tcm4TlvDq8ikWAM") && eleven[0].id === "21m00Tcm4TlvDq8ikWAM",
+    "elevenlabs carries the premade library with Rachel as the fallback"
+  );
+});
+
+await test("S159 sanitizeVoice resolves per provider — foreign voices land on real ones", () => {
+  eq(sanitizeVoice("gemini", "Aoede"), "Aoede", "a catalog voice rides verbatim");
+  eq(sanitizeVoice("gemini", "aoede"), "Aoede", "gemini names canonicalize case-insensitively");
+  eq(sanitizeVoice("gemini", "tongtong"), "Puck", "a zai voice maps to gemini's default, never a foreign id on the wire");
+  eq(sanitizeVoice("deepgram", "aura-2-orpheus-en"), "aura-2-orpheus-en", "aura ids ride verbatim");
+  eq(sanitizeVoice("deepgram", "tongtong"), "aura-2-thalia-en", "a zai voice maps to deepgram's default");
+  eq(sanitizeVoice("elevenlabs", "29vD33N1CtxCmqQRPOHJ"), "29vD33N1CtxCmqQRPOHJ", "premade ids ride verbatim");
+  eq(
+    sanitizeVoice("elevenlabs", "abcdefghijklmnopqrst"),
+    "abcdefghijklmnopqrst",
+    "20-char account ids (custom clones) ride verbatim — the live check happens at synthesis"
+  );
+  eq(sanitizeVoice("playht", "larry"), "larry", "the documented default rides verbatim");
+  eq(sanitizeVoice("playht", "s3://voice-cloning-zero-shot/abc"), "s3://voice-cloning-zero-shot/abc", "playht clone URIs ride verbatim");
+  eq(sanitizeVoice("playht", "tongtong"), "larry", "a zai voice maps to playht's documented default");
+});
+
+await test("S159 the live-list resolution lands foreign voices on REAL voices (offline ladder)", async () => {
+  // The resolve functions call the live list, which fails open as [] with no
+  // key — so these run with NO network and pin the offline half of the law.
+  eq(
+    await resolveElevenlabsVoiceId("tongtong", { provider: "elevenlabs", model: "" }),
+    "21m00Tcm4TlvDq8ikWAM",
+    "unreachable list + foreign voice → the static catalog's REAL voice"
+  );
+  eq(
+    await resolveElevenlabsVoiceId("", { provider: "elevenlabs", model: "" }),
+    "21m00Tcm4TlvDq8ikWAM",
+    "the empty test-button voice lands on a real voice too"
+  );
+  eq(
+    await resolveElevenlabsVoiceId("29vD33N1CtxCmqQRPOHJ", { provider: "elevenlabs", model: "" }),
+    "29vD33N1CtxCmqQRPOHJ",
+    "premade ids ride verbatim offline"
+  );
+  eq(
+    await resolvePlayhtVoiceId("tongtong", { provider: "playht", model: "" }),
+    "larry",
+    "unreachable list + foreign voice → the documented default"
+  );
+  eq(
+    await resolvePlayhtVoiceId("s3://voice-cloning-zero-shot/abc", { provider: "playht", model: "" }),
+    "s3://voice-cloning-zero-shot/abc",
+    "clone URIs ride verbatim"
+  );
+});
+
+await test("S159 the elevenlabs lane is a REAL adapter — no more zai fallthrough", async () => {
+  // The receipt: TTS_PROVIDERS listed elevenlabs, but ttsSynthesize had no
+  // branch for it — selecting ElevenLabs silently synthesized through the
+  // Z.ai SDK and the ElevenLabs key never touched the wire.
+  const src = await fsp.readFile("src/lib/tubeforge/providers/tts.ts", "utf8");
+  ok(src.includes("export async function elevenlabsTts"), "the adapter exists");
+  ok(
+    src.indexOf('config.provider === "elevenlabs"') < src.indexOf("return zaiTts(request, config)"),
+    "the dispatch branches on elevenlabs BEFORE the zai fallthrough"
+  );
+  ok(src.includes("resolveElevenlabsVoiceId(req.voice, config)"), "synthesis resolves through the live-list law");
+  ok(src.includes("output_format=pcm_44100") && src.includes("pcmToWav"), "pcm wraps into the always-WAV contract");
+  ok(src.includes("httpErr.status !== 404"), "the 404 self-heal ladder rides the adapter");
+});
+
+await test("S159 gemini honors the picked voice, deepgram maps voice to the speak model", async () => {
+  const src = await fsp.readFile("src/lib/tubeforge/providers/tts.ts", "utf8");
+  ok(
+    src.includes('const voiceName = sanitizeVoice("gemini", req.voice)'),
+    "geminiTts honors the request voice through the catalog"
+  );
+  ok(
+    src.includes("catalog.includes(requestedVoice)"),
+    "deepgramTts maps a catalog voice onto the speak model (voice == model)"
+  );
+  ok(
+    src.includes("resolvePlayhtVoiceId(req.voice, config)"),
+    "playhtTts resolves through the live-list law"
+  );
+});
+
+await test("S159 the voices route overlays the live lists for every account-list provider", async () => {
+  const src = await fsp.readFile("src/app/api/settings/voices/route.ts", "utf8");
+  ok(
+    src.includes('config.provider === "elevenlabs"') && src.includes('config.provider === "playht"'),
+    "elevenlabs and playht overlay their live account lists like cartesia"
+  );
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
