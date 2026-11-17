@@ -529,6 +529,23 @@ walls, no new dependencies. Order = visual impact per LOC × risk.
   successor.
 - **Complexity**: mouth classes low; pose schema medium; IK gated.
 
+> **LANDED** — `53a5cec` (battery 947/947 — the 933 stay green + 14).
+> The mouth classes: SPEECH_CYCLE gains the mbp closure windows + the
+> rest class (rest on pauses), the syllable→class mapping extended; the
+> two new art variants join parts generation (existing variants
+> byte-identical). The pose tween schema v-next rides ADDITIVELY: polar
+> deltas (OT ANGLE Δ / DISTANCE Δ — senior over x/y; two polar keys
+> tween ON THE ARC, the constant-radius off-the-chord blend) + per-part
+> rigidity (own scale inert, inherited pose scale stripped, the subtree
+> rigid; rotation and translation still apply); the new fields' tweens
+> ride the ONE curve table `evalEase` so S162's parabolic-in-out and
+> exponential drive pose segments directly (their laws re-pinned at the
+> pose level). FK byte-identity for untouched docs pinned. THE K2 GATE
+> IS RECORDED, NOT IMPLEMENTED — the deferred decision + the contract
+> sketch (chain reduction, DLS, the authored-contact contract, bake-only
+> results) live in `docs/audits/s166-k2-gate-record.md`, exactly as this
+> section's staging required.
+
 ### S167 — the cinematic finisher slice (Blender math + 3D wiring)
 
 - **Objective**: depth + grade in the finishing pipeline; wire 3D into
