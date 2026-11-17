@@ -157,6 +157,52 @@ sacrifice visual quality for milestone speed. Track:
 
 ---
 
+### PROGRAMME VQ1 — Visual Quality (the overlay programme)
+
+VQ1 is not a new engine layer — it is the quality contract that reads the
+November 8 eight-profile blind baseline and turns its findings into
+measurable engineering requirements for S162–S180. Source of record:
+`docs/baselines/s55-blind-scoring-baseline-2026-11-08.json` + the returned
+round's narrative `docs/audits/s55-blind-scoring-record.md`.
+
+**The acceptance rule (VQ1's law, verbatim):**
+
+> A scene must demonstrate meaningful subject or environmental movement
+> where the story requires it. Camera movement alone must not qualify as
+> successful animation.
+
+**The special requirement (Islamic history):** preserve historical scene
+continuity and avoid generating visible depictions of prominent religious
+figures where the production brief prohibits them (rides the existing S49
+restricted-visual chain; the continuity bar is visual quality, the
+depiction bar stays policy).
+
+**The five engineering priorities the findings translate into:**
+
+| Priority | Requirements |
+|---|---|
+| P1 — Subject animation (top) | Facial expression systems; eye and mouth movement; object transformation; mechanical movement; character gestures |
+| P2 — Temporal continuity | Scene-entry and exit states; persistent object identity; no unexplained character appearances; stable geometry across frames |
+| P3 — Environmental animation | Water movement; smoke and particles; lighting changes; atmospheric depth; background movement |
+| P4 — Camera choreography | Dolly and tracking; parallax; controlled zoom; focus changes; camera movement coordinated with subject movement |
+| P5 — Profile-specific quality control | Different video types carry different motion expectations — a podcast is not a mechanical explainer |
+
+**The baseline it answers:** mean overall 3.25/5 (temporal coherence 4.5/5
+— the engines hold time; motion MEANING is the gap). Social (2/5,
+unconvincing facial movement) and Islamic history (2/5, continuity +
+character artifacts) are the critical findings; Explainer and Animation
+(3/5) need stronger subject-level motion; Narrative, Advertisement,
+Podcast and Documentary (4/5) hold.
+
+**The re-benchmark protocol (fixed now, so the comparison is evidence):**
+the same eight profiles, the same five scoring dimensions, three or more
+independent blind reviewers, the same scene durations and sampling points,
+side-by-side against the November 8 baseline, the artifact-load direction
+(5 = few artifacts) preserved. It runs after the VQ1 implementation rounds
+land.
+
+---
+
 ### PROGRAMME B — AI Director (S168–S170)
 
 This is where TubeForge becomes fundamentally different from conventional
@@ -508,6 +554,10 @@ state. Updated as milestones land — never rewritten retroactively.
 | S160 motion-and-light pass | `4e676db` | glide ease; 3D look seam; impact kick; battery 898; CI 44032289104 8/8 | CLOSED |
 | S161 six-engine audit | `e72d0ad` | the shortlist deep-dive + staged roadmap | CLOSED (document) |
 | S162 measured easing + choreography | `e07fbb0` | battery 902/902; kit 12/12; **human blind scoring PENDING** | **OPEN — awaiting 3 scorers, composite ≥ 4/5** (`docs/audits/s162-visual-acceptance-record.md`) |
+| S162b master roadmap preserved | `586b1bf` | the commissioning report in-repo as PROPOSED; §9 reconciliation; ledger live | CLOSED (document) |
+| Nov 8 eight-profile blind baseline | — | the S55 kit's human round returned: mean 3.25/5, temporal coherence 4.5/5; weaknesses per profile ON RECORD | CLOSED (baseline of record — `docs/audits/s55-blind-scoring-record.md`) |
+| Scene-QC S136 audio contract (scene scope) | this commit | `sceneAudioVerdict` pins ×5 (battery 907); the silent-scene false-fail and the vacuous dead-air pass killed | CLOSED |
+| VQ1 added as the overlay programme | this commit | the acceptance rule + P1–P5 + re-benchmark protocol in this document | CLOSED (spec); P1–P5 implementation NOT STARTED |
 | S163–S167 | — | staged in the six-engine audit Part 4 | NOT STARTED |
 | S168–S184 | — | this document (PROPOSED) | NOT STARTED / needs per-milestone specs |
 
@@ -520,7 +570,7 @@ The report's ordering, annotated with the repo state:
 | Step | Action | Outcome | State |
 |---|---|---|---|
 | 1 | Close S162 visual acceptance | Trustworthy animation baseline | Kit sessions ready; **3 human scorers required** |
-| 2 | Complete S163–S167 | Improve native rendering | S163 next (transition engine, audit Part 4) |
+| 2 | Complete S163–S167 | Improve native rendering | S163 next (transition engine, audit Part 4); **every slice answers a VQ1 baseline weakness** |
 | 3 | Audit existing AI Director capabilities | Avoid duplicating work | M0 audit exists; capability mapping in §9.2 |
 | 4 | Audit existing TTS integration | Establish what is reusable | Inventory in §9.3 |
 | 5 | Benchmark Chatterbox, Kokoro, VoiceStudio | Select the best affordable default | Chatterbox + VoiceStudio wired; Kokoro adoption candidate |

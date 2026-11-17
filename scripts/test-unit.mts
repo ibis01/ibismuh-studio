@@ -13223,6 +13223,71 @@ await test("scene-qc: checkSceneCues — the scene-sliced caption laws", async (
   );
 });
 
+// ---------- S136 at scene scope — the scene preview's audio contract ----------
+
+await test("scene-qc sceneAudioVerdict: silent scene + video-only preview → playable PASSES, sound lenses not asked", async () => {
+  const { sceneAudioVerdict } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const v = sceneAudioVerdict(
+    { probeClean: true, hasVideo: true, hasAudio: false, hasAudioStream: false },
+    false,
+    "5.1s"
+  );
+  ok(v.playable, "a silent scene's decodable video-only preview is playable, not a finding");
+  eq(v.value, "5.1s readable (video-only silent scene)", "the value discloses the silent-scene lane");
+  ok(v.label.includes("silent scene"), "the label discloses the contract");
+  eq(v.audioLensesApplicable, false, "no stream + no contract → the sound lenses are NOT asked (never unmeasured noise, never the spurious dead-air pass)");
+});
+
+await test("scene-qc sceneAudioVerdict: narrated scene + no audio → playable FAILS (words cut), lenses stay fail-closed", async () => {
+  const { sceneAudioVerdict } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const v = sceneAudioVerdict(
+    { probeClean: true, hasVideo: true, hasAudio: false, hasAudioStream: false },
+    true,
+    "5.1s"
+  );
+  ok(!v.playable, "a narrated scene without its speech is a blocking finding");
+  eq(v.value, "stream missing");
+  eq(v.label, "Preview plays as a valid MP4 (H.264 video + AAC audio)", "the narrated label is byte-identical to the pre-S136 demand");
+  eq(v.audioLensesApplicable, true, "the contract demanded audio — missing evidence stays unmeasured, never clean");
+});
+
+await test("scene-qc sceneAudioVerdict: narrated + AAC → the legacy verdict byte-identical, lenses asked", async () => {
+  const { sceneAudioVerdict } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const v = sceneAudioVerdict(
+    { probeClean: true, hasVideo: true, hasAudio: true, hasAudioStream: true },
+    true,
+    "15.5s"
+  );
+  ok(v.playable);
+  eq(v.value, "15.5s readable", "the AAC path's value is byte-identical to the pre-S136 verdict");
+  eq(v.audioLensesApplicable, true, "a stream to measure — the sound lenses run as ever");
+});
+
+await test("scene-qc sceneAudioVerdict: an unreadable probe stays fail-closed (applicability true)", async () => {
+  const { sceneAudioVerdict } = await import("../src/lib/tubeforge/scene-qc.ts");
+  // probeClean=false → applicability TRUE regardless of the stream flags
+  // (the garbage-bytes law: a probe that failed knows nothing).
+  for (const hasAudioStream of [false, true]) {
+    const v = sceneAudioVerdict(
+      { probeClean: false, hasVideo: true, hasAudio: false, hasAudioStream },
+      false,
+      "0.0s"
+    );
+    eq(v.audioLensesApplicable, true, `probe failed (stream=${String(hasAudioStream)}) → lenses stay asked`);
+  }
+});
+
+await test("scene-qc sceneAudioVerdict: no H.264 video stream → honest value, never a playable pass", async () => {
+  const { sceneAudioVerdict } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const v = sceneAudioVerdict(
+    { probeClean: true, hasVideo: false, hasAudio: true, hasAudioStream: true },
+    false,
+    "3.0s"
+  );
+  ok(!v.playable, "no video stream is never playable");
+  eq(v.value, "no H.264 video stream");
+});
+
 await test("scene-qc: the verdict law + the approval gate", async () => {
   const { recheckVerdictPassed, approvalBlocker, parseRecheckReport } = await import("../src/lib/tubeforge/scene-qc.ts");
   const pass = { id: "x", label: "x", status: "pass", pass: true, value: "" };

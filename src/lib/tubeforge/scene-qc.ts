@@ -255,6 +255,64 @@ export function recheckVerdictPassed(checks: QcCheck[], seams: SeamVerdict[]): b
   );
 }
 
+// ---------- pure: S136 at scene scope — the preview's audio contract ----------
+
+/**
+ * THE SCENE AUDIO CONTRACT (the whole-file battery's S136 law, qc.ts, one
+ * lane lower) — pure and unit-pinnable. The audio half is judged against
+ * the scene's OWN contract, never a blanket demand:
+ *
+ * - A scene WITH narration text promises speech: its preview must carry an
+ *   AAC stream — missing audio = words cut, a blocking finding.
+ * - A scene WITHOUT narration is silent by design (the scene WAV lane is
+ *   the preview's only sound source; music joins at assembly): a decodable
+ *   video-only preview is PLAYABLE, not a finding — the pre-S136 blanket
+ *   AAC demand shipped a blocking playable=fail on every silent scene and
+ *   a spurious dead-air "pass" over files with no audio at all.
+ *
+ * The probe-failure case stays fail-closed: an ffprobe that failed knows
+ * nothing — the sound lenses stay APPLICABLE (missing evidence reads
+ * unmeasured, never clean; the garbage-bytes law).
+ */
+export function sceneAudioVerdict(
+  probe: {
+    probeClean: boolean;
+    hasVideo: boolean;
+    hasAudio: boolean;
+    hasAudioStream: boolean;
+  },
+  narrated: boolean,
+  durationLabel: string
+): {
+  playable: boolean;
+  label: string;
+  value: string;
+  /** The sound-measuring lenses (loudness family + dead-air) are asked
+   * only when the artifact carries a stream to measure, or the contract
+   * demands one (narrated), or the probe itself failed (fail-closed).
+   * Never unmeasured noise on a silent scene; never a spurious pass. */
+  audioLensesApplicable: boolean;
+} {
+  const { probeClean, hasVideo, hasAudio, hasAudioStream } = probe;
+  const playable = hasVideo && (hasAudio || !narrated);
+  const label = narrated
+    ? "Preview plays as a valid MP4 (H.264 video + AAC audio)"
+    : "Preview plays as a valid MP4 (H.264 video; a silent scene may ship video-only)";
+  const value = playable
+    ? hasAudio
+      ? `${durationLabel} readable`
+      : `${durationLabel} readable (video-only silent scene)`
+    : hasVideo
+      ? "stream missing"
+      : "no H.264 video stream";
+  return {
+    playable,
+    label,
+    value,
+    audioLensesApplicable: !probeClean || hasAudioStream || narrated,
+  };
+}
+
 export type SceneApprovalBlock =
   | {
       ok: false;
@@ -498,30 +556,38 @@ export async function runSceneRecheck(
   if (previewStat) {
     const mp4Path = await storage.materialize(previewKey);
 
+    // The scene's OWN audio contract (S136 at scene scope — sceneAudioVerdict
+    // holds the law): narration text is the preview's promised speech; a
+    // scene without narration is silent by design and may ship video-only.
+    // The measured stream layout below drives both the playable verdict and
+    // the sound lenses' applicability. A FAILED probe knows nothing —
+    // applicability stays true there (fail-closed, the garbage-bytes law).
+    const narrated = Boolean(scene.narration?.trim());
+    let probeClean = false;
+    let hasAudioStream = false;
+
     // 1) Playability + geometry + duration.
     let duration = 0;
     let dimensions: { width?: number; height?: number } | null = null;
     try {
       const info = await ffprobeJson(mp4Path);
+      probeClean = true;
       const hasVideo = Boolean(
         info.streams?.some((s) => s.codec_type === "video" && s.codec_name === "h264")
       );
       const hasAudio = Boolean(
         info.streams?.some((s) => s.codec_type === "audio" && s.codec_name === "aac")
       );
+      hasAudioStream = Boolean(info.streams?.some((s) => s.codec_type === "audio"));
       const probed = Number(info.format?.duration ?? 0);
       if (Number.isFinite(probed) && probed > 0) duration = probed;
       dimensions = info.streams?.find((s) => s.codec_type === "video") ?? null;
-      checks.push(
-        qcCheck(
-          "playable",
-          "Preview plays as a valid MP4 (H.264 video + AAC audio)",
-          hasVideo && hasAudio ? "pass" : "fail",
-          hasVideo && hasAudio
-            ? `${duration.toFixed(1)}s readable`
-            : "stream missing"
-        )
+      const audio = sceneAudioVerdict(
+        { probeClean, hasVideo, hasAudio, hasAudioStream },
+        narrated,
+        `${duration.toFixed(1)}s`
       );
+      checks.push(qcCheck("playable", audio.label, audio.playable ? "pass" : "fail", audio.value));
     } catch (err) {
       checks.push(
         qcCheck("playable", "Preview plays as a valid MP4", "fail", "ffprobe failed", String(err).slice(0, 200))
@@ -610,57 +676,88 @@ export async function runSceneRecheck(
       )
     );
 
-    // 3) The loudness family — same windows, same tolerance story.
-    const lm = await measureLoudness(mp4Path);
-    checks.push(
-      qcCheck(
-        "loudness",
-        `Broadcast loudness (${MIX_TARGETS.integratedLUFS} LUFS target)`,
-        lm === null
-          ? "unmeasured"
-          : lm.integratedLUFS >= LUFS_PASS_WINDOW[0] && lm.integratedLUFS <= LUFS_PASS_WINDOW[1]
-            ? "pass"
-            : "fail",
-        lm === null ? "not measured" : `${lm.integratedLUFS.toFixed(1)} LUFS`,
-        lm === null ? "loudness analysis failed" : `window ${LUFS_PASS_WINDOW[0]}…${LUFS_PASS_WINDOW[1]} LUFS`
-      )
-    );
-    checks.push(
-      qcCheck(
-        "true-peak",
-        "True peak ≤ -1 dBTP (no clipping after encode)",
-        lm === null ? "unmeasured" : lm.truePeakDBTP <= MIX_TARGETS.truePeakDBTP + 0.2 ? "pass" : "fail",
-        lm === null ? "not measured" : `${lm.truePeakDBTP.toFixed(1)} dBTP`
-      )
-    );
-    checks.push(
-      qcCheck(
-        "loudness-range",
-        "Consistent volume (loudness range)",
-        lm === null ? "unmeasured" : lm.lra <= LRA_WARN ? "pass" : "fail",
-        lm === null ? "not measured" : `LRA ${lm.lra.toFixed(1)} LU`
-      )
-    );
+    // 3) The loudness family — same windows, same tolerance story. S136 at
+    //    scene scope: the sound lenses are ASKED only when the artifact
+    //    carries a stream to measure, or the contract demands one (a
+    //    narrated scene — fail-closed: missing evidence stays unmeasured,
+    //    never clean), or the probe itself failed. On a silent scene they
+    //    are NOT EMITTED — the same contract-scoped emission the captions
+    //    check already follows — never unmeasured noise, and never the
+    //    spurious dead-air "pass" over a file with no audio at all.
+    const audioLensesApplicable = !probeClean || hasAudioStream || narrated;
+    if (audioLensesApplicable) {
+      // A readable probe with NO audio stream: the reason a sound lens
+      // cannot run is the artifact's shape, not a crashed analysis — say so.
+      const noAudioStream = probeClean && !hasAudioStream;
+      const lm = await measureLoudness(mp4Path);
+      checks.push(
+        qcCheck(
+          "loudness",
+          `Broadcast loudness (${MIX_TARGETS.integratedLUFS} LUFS target)`,
+          lm === null
+            ? "unmeasured"
+            : lm.integratedLUFS >= LUFS_PASS_WINDOW[0] && lm.integratedLUFS <= LUFS_PASS_WINDOW[1]
+              ? "pass"
+              : "fail",
+          lm === null ? "not measured" : `${lm.integratedLUFS.toFixed(1)} LUFS`,
+          lm === null
+            ? noAudioStream
+              ? "no audio stream to measure (the render shipped none)"
+              : "loudness analysis failed"
+            : `window ${LUFS_PASS_WINDOW[0]}…${LUFS_PASS_WINDOW[1]} LUFS`
+        )
+      );
+      checks.push(
+        qcCheck(
+          "true-peak",
+          "True peak ≤ -1 dBTP (no clipping after encode)",
+          lm === null ? "unmeasured" : lm.truePeakDBTP <= MIX_TARGETS.truePeakDBTP + 0.2 ? "pass" : "fail",
+          lm === null ? "not measured" : `${lm.truePeakDBTP.toFixed(1)} dBTP`
+        )
+      );
+      checks.push(
+        qcCheck(
+          "loudness-range",
+          "Consistent volume (loudness range)",
+          lm === null ? "unmeasured" : lm.lra <= LRA_WARN ? "pass" : "fail",
+          lm === null ? "not measured" : `LRA ${lm.lra.toFixed(1)} LU`
+        )
+      );
 
-    const silences = [
-      ...stderr.matchAll(/\[silencedetect[^\]]*\]\s*(?:lavfi\.silencedetect\.)?silence_start:\s*(\d+(?:\.\d+)?)/g),
-    ].map((m) => Number(m[1]))
-      .filter((s) => s > 1 && s < duration - 2);
-    checks.push(
-      qcCheck(
-        "dead-air",
-        "No dead air (voice or music always present)",
-        !analysisRan
-          ? "unmeasured"
-          : silences.length === 0
-            ? "pass"
-            : "fail",
-        !analysisRan ? "analysis failed" : silences.length === 0 ? "none" : `${silences.length} silent run${silences.length > 1 ? "s" : ""}`,
-        !analysisRan
-          ? "ffmpeg could not complete the scan — this check did not run"
-          : silences.slice(0, 4).map((s) => `at ${s.toFixed(1)}s`).join(", ")
-      )
-    );
+      // Dead air needs an audio stream to scan: with none standing, the
+      // check reads UNMEASURED — a stream-less file cannot "pass" a silence
+      // scan, and under a narrated contract the unmeasured keeps the
+      // report red for a human (fail-closed).
+      const silences = noAudioStream
+        ? []
+        : [
+            ...stderr.matchAll(/\[silencedetect[^\]]*\]\s*(?:lavfi\.silencedetect\.)?silence_start:\s*(\d+(?:\.\d+)?)/g),
+          ].map((m) => Number(m[1]))
+            .filter((s) => s > 1 && s < duration - 2);
+      checks.push(
+        qcCheck(
+          "dead-air",
+          "No dead air (voice or music always present)",
+          !analysisRan || noAudioStream
+            ? "unmeasured"
+            : silences.length === 0
+              ? "pass"
+              : "fail",
+          !analysisRan
+            ? "analysis failed"
+            : noAudioStream
+              ? "no audio stream to scan"
+              : silences.length === 0
+                ? "none"
+                : `${silences.length} silent run${silences.length > 1 ? "s" : ""}`,
+          !analysisRan
+            ? "ffmpeg could not complete the scan — this check did not run"
+            : noAudioStream
+              ? "the artifact carries no audio stream — silence cannot be scanned"
+              : silences.slice(0, 4).map((s) => `at ${s.toFixed(1)}s`).join(", ")
+        )
+      );
+    }
 
     // 4) The pacing + timing lenses (sampled scan, flicker, stutter) — the
     // plan-rhythm lens stays project-scope (it judges runs ACROSS scenes).

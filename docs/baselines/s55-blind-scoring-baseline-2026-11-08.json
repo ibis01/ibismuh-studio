@@ -1,0 +1,68 @@
+{
+  "baseline": "s55-blind-scoring-november-8",
+  "status": "HISTORICAL BASELINE OF RECORD — preserved, never overwritten. The next eight-profile round scores AGAINST this, side-by-side (the commissioning decision).",
+  "anchors": {
+    "kit": "scripts/s55-eval-kit.mts",
+    "manifest": "docs/baselines/s55-eval-kit-manifest.json",
+    "runbook": "docs/runbooks/s55-human-evaluation-kit.md",
+    "recordedAt": "2026-11-07T22:39:59.828Z",
+    "note": "the November 8 eight-profile anchor renders (tier 1: engine axes on local stand-in imagery; tier 2 imagery axes excluded per the runbook's protocol)"
+  },
+  "scoring": {
+    "blind": true,
+    "scorers": "independent blind review (>= 1 round returned; per-scorer sheets live with the scorer's records)",
+    "dimensions": "five scoring dimensions as scored in the returning round; per-dimension detail below where the round published it (temporal coherence)",
+    "artifactLoadDirection": "5 = few artifacts — PRESERVE THIS DIRECTION in all future scoring (the commissioning decision)"
+  },
+  "overall": {
+    "mean": 3.25,
+    "scale": 5,
+    "profilesAtOrAbove4": 4,
+    "profilesAt2": 2,
+    "meanTemporalCoherence": 4.5,
+    "byProfile": {
+      "narrative": 4,
+      "documentary": 4,
+      "podcast": 4,
+      "advertisement": 4,
+      "explainer": 3,
+      "animation": 3,
+      "social": 2,
+      "islamic-history": 2
+    }
+  },
+  "findings": [
+    { "profile": "social", "mainWeakness": "unconvincing facial movement", "priority": "critical" },
+    { "profile": "explainer", "mainWeakness": "static mechanical objects", "priority": "high" },
+    { "profile": "narrative", "mainWeakness": "minor geometry instability", "priority": "medium" },
+    { "profile": "animation", "mainWeakness": "insufficient object movement", "priority": "high" },
+    { "profile": "islamic-history", "mainWeakness": "scene continuity and character artifacts", "priority": "critical" },
+    { "profile": "advertisement", "mainWeakness": "too much camera-only movement", "priority": "medium" },
+    { "profile": "podcast", "mainWeakness": "minor appearance instability", "priority": "medium" },
+    { "profile": "documentary", "mainWeakness": "weak environmental dynamics", "priority": "medium" }
+  ],
+  "centralFinding": "TubeForge can produce visually attractive scenes, but it does not consistently produce meaningful motion. Camera movement alone must not qualify as successful animation (the VQ1 acceptance rule).",
+  "engineeringPriorities": {
+    "P1": "subject animation — facial expression systems, eye and mouth movement, object transformation, mechanical movement, character gestures",
+    "P2": "temporal continuity — scene-entry and exit states, persistent object identity, no unexplained character appearances, stable geometry across frames",
+    "P3": "environmental animation — water movement, smoke and particles, lighting changes, atmospheric depth, background movement",
+    "P4": "camera choreography — dolly and tracking, parallax, controlled zoom, focus changes, camera movement coordinated with subject movement",
+    "P5": "profile-specific quality control — different video types need different motion expectations (a podcast is not a mechanical explainer)"
+  },
+  "profileReading": {
+    "strongest": ["narrative", "advertisement", "podcast", "documentary"],
+    "needsMostAttention": ["social", "islamic-history"],
+    "needsStrongerSubjectMotion": ["explainer", "animation"]
+  },
+  "specialRequirements": {
+    "islamicHistory": "preserve historical scene continuity and avoid generating visible depictions of prominent religious figures where the production brief prohibits them"
+  },
+  "rebenchmarkProtocol": {
+    "profiles": "the same eight profiles",
+    "dimensions": "the same five scoring dimensions",
+    "reviewers": "three or more independent blind reviewers",
+    "fixedConditions": "the same scene durations and sampling points",
+    "comparison": "side-by-side against this baseline",
+    "trigger": "repeat after the VQ1 implementation rounds land"
+  }
+}
