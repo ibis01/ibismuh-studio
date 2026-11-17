@@ -145,6 +145,54 @@ S163 door.
 
 **Status: the S162 gate remains OPEN with round 1 on record.**
 
+## 4b. Round 2 — the strengthened delta (2026-11-17, scores PENDING)
+
+The operator chose closure path 2: **strengthen the delta, re-kit,
+re-score.** The strengthening is not a fixture tweak — it is everything
+that landed in the pipeline after round 1 was scored:
+
+| Landed since round 1 | Commit | What it adds to arm B's world |
+|---|---|---|
+| S163 native transitions (graphics) | `9a9fb9e` | crossfade/iris/whiteout/zoomthrough/wipeleft/wiperight at opus-measured frame counts, in-house seeded geometry |
+| S164 whiteboard hand-drawn | `da654d3` | Rough.js native port (whiteboard lane) |
+| S165 determinism + throughput | `a2759db` | ready-gate diagnostics, golden-video baselines, 4.32× dedup |
+| S166 character expressiveness | `53a5cec` | mouth classes, pose schema v-next (character lane) |
+| S167 cinematic finisher | `57a6ab2` | fBM shake, SOP/CDL grade, duck lanes, 3D admission |
+
+**This fixture is the motion-graphics lane**, so round 2's arm-B
+strengthening is exactly the deltas that touch its render path: the S162
+measured vocabulary (unchanged from round 1) + the S163 native transition
+engine on both boundaries — crossfade (15 frames, the house 0.5 s beat)
+then the iris reveal (8 frames), the opus-measured defaults, pinned
+verbatim in the kit script. S164/S166/S167 live in the whiteboard,
+character and 3D/studio lanes and honestly do not touch this fixture.
+Arm A stays the round-1 baseline receipt verbatim (pre-S162 enter table,
+hard cuts, no optional fields — the additive-absent law).
+
+**The kit session of record:**
+`validation/s162-blind-kit-2026-11-17T20-46-45-735Z` — 14/14 assertions.
+Codenames as shuffled: `TFR-aaef4199`, `TFR-52e3fb3a`. (Unblinding note,
+for the operator only, sealed until scoring closes: one round-2 artifact
+is **byte-identical to its round-1 counterpart** — same SHA — because the
+legacy path it rides is additive-absent-frozen across all five landed
+commits; the other moved, which is the strengthening reaching the pixels.
+The mapping lives in the session's gitignored `key.json`; round-2 scorers
+receive the zips only, never this document.)
+
+**Sheet change, taught by the round-1 deviation:** every clip now asks
+for ONE overall number first (the composite of record, phone-friendly),
+with the four anchored rows optional beneath it — granularity if the
+scorers will give it, the holistic if they will not. The verdict rule is
+unchanged: ≥ 3 scorers, arm B ≥ 4/5, **and arm B > arm A** — a second
+tie is a second FAIL-AND-ROUTE-BACK.
+
+**Distribution:** `s162-round2-kit.zip` (operator: sheets + manifest +
+clips, no key) and per-scorer packs `s162-round2-scorer-{1,2,3}-pack.zip`
+(README-FIRST + sheet + the two codename clips). No key rides any pack.
+
+- [ ] Round 2 composites: arm A ______ / 5, arm B ______ / 5, delta ______.
+      Fill in §5's template when the sheets come back.
+
 ## 5. Regenerating the session
 
 ```bash

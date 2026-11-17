@@ -15,13 +15,31 @@
 //     expo-out landings, the 150 ms kinetic stagger, the counter's
 //     landing pulse).
 //
-// The ONLY delta between the arms is the S162 vocabulary — same scenes,
-// same layout, same clocks, same renderer. The kit codenames every
-// artifact (TFR-<8hex>.mp4), shuffles it, writes three per-scorer sheets
-// (the Part 6 anchored rows), and drops the code→artifact key + manifest
-// into the session dir — /validation/ is gitignored, the key never rides
-// git. The scoring itself remains the human gate — the kit does not
-// score, does not fabricate composites, and says so in the README.
+// The arms differ ONLY in the rendered capability — same scenes, same
+// layout, same clocks, same renderer.
+//
+// ROUND 2 (the strengthened delta — the operator chose closure path 2 of
+// the round-1 record, docs/audits/s162-visual-acceptance-record.md §4a):
+// round 1 ended 4.00/4.00 — a tie in every scorer's own hand. Everything
+// visible that landed since (S163 native transitions `9a9fb9e`, S164 the
+// hand-drawn whiteboard `da654d3`, S165 determinism+throughput
+// `a2759db`, S166 expressiveness `53a5cec`, S167 the cinematic finisher
+// `57a6ab2`) is now IN the pipeline; arm B rides it. THIS fixture is the
+// motion-graphics lane, so its arm-B strengthening = the S162 measured
+// vocabulary + the S163 native transition engine on both boundaries (the
+// opus-measured defaults); S164/S166/S167 live in the whiteboard,
+// character and 3D/studio lanes and honestly do not touch this render
+// path. Arm A stays the round-1 baseline receipt verbatim: the pre-S162
+// enter table, hard cuts, no optional fields anywhere (the
+// additive-absent law keeps every legacy path byte-identical).
+//
+// The kit codenames every artifact (TFR-<8hex>.mp4), shuffles it, writes
+// three per-scorer sheets (the Part 6 anchored rows + the phone-friendly
+// one-number holistic the round-1 deviation taught us to ask for
+// explicitly), and drops the code→artifact key + manifest into the
+// session dir — /validation/ is gitignored, the key never rides git. The
+// scoring itself remains the human gate — the kit does not score, does
+// not fabricate composites, and says so in the README.
 //
 // Run: node --import tsx scripts/s162-blind-kit.mts
 
@@ -118,7 +136,18 @@ async function main(): Promise<void> {
   });
   const armA = rewindEntersToPreS162(armB);
 
-  // The arms must differ EXACTLY in the motion vocabulary — same ids,
+  // ROUND 2 — arm B's strengthened delta: the S163 native transitions on
+  // BOTH boundaries (boundary b joins scene b and b+1). The opus-measured
+  // defaults, pinned verbatim for provenance: the crossfade's 15 frames
+  // (the house 0.5 s beat) then the iris reveal's 8 frames into the data
+  // scene. Arm A carries NONE — absent ⇒ the legacy hard-cut stream, byte
+  // for byte (the additive-absent law).
+  armB.nativeTransitions = [
+    { type: "crossfade", frames: 15 },
+    { type: "iris", frames: 8 },
+  ];
+
+  // The arms must differ EXACTLY in the rendered capability — same ids,
   // same layout, same clocks.
   ok(JSON.stringify(armA).length > 0 && armA.scenes.length === armB.scenes.length, "both arms scaffolded");
   const layoutA = JSON.stringify(armA.scenes.map((s) => s.elements.map((e) => [e.id, e.kind, e.at])));
@@ -129,6 +158,14 @@ async function main(): Promise<void> {
   ok(motionA !== motionB, "the arms' motion vocabularies differ (the S162 delta is real)");
   ok(motionB.includes('"measured-out"') && motionB.includes('"expo-out"'), "arm B rides the measured vocabulary");
   ok(motionA.includes('"ease-back"') && motionA.includes('"linear"'), "arm A rides the pre-S162 receipt");
+  ok(armA.nativeTransitions === undefined, "arm A carries no native transitions (the round-1 baseline: hard cuts)");
+  ok(
+    Array.isArray(armB.nativeTransitions) &&
+      armB.nativeTransitions.length === 2 &&
+      armB.nativeTransitions[0]?.type === "crossfade" &&
+      armB.nativeTransitions[1]?.type === "iris",
+    "arm B carries the S163 boundary specs (crossfade 15f → iris 8f, the measured defaults)",
+  );
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const sessionDir = path.join(REPO_ROOT, "validation", `s162-blind-kit-${stamp}`);
@@ -198,13 +235,21 @@ async function main(): Promise<void> {
 
   for (let s = 1; s <= 3; s++) {
     const rows = shuffled
-      .map((a) => `- ${codename(a.sha)} (${a.durSec.toFixed(1)}s)\n${rubricRows.map((r) => `  ${r}: ___`).join("\n")}`)
+      .map(
+        (a) =>
+          `- ${codename(a.sha)} (${a.durSec.toFixed(1)}s)\n` +
+          `  OVERALL (one number 1-5 — the composite of record): ___\n` +
+          rubricRows.map((r) => `  ${r}: ___`).join("\n"),
+      )
       .join("\n\n");
     fs.writeFileSync(
       path.join(sessionDir, `scorer-${s}.md`),
-      `# S162 blind score — scorer ${s}\n\n` +
-        `Two motion-graphics clips, shuffled. Score every row 1-5 (5 = best).\n` +
-        `Do NOT discuss with other scorers before submitting.\n\n${rows}\n\n` +
+      `# S162 blind score — ROUND 2 — scorer ${s}\n\n` +
+        `Two motion-graphics clips, shuffled. Whole numbers 1-5 (5 = best).\n` +
+        `Do NOT discuss with other scorers before submitting.\n\n` +
+        `For EACH clip: the OVERALL number is the composite of record (the ` +
+        `phone-friendly holistic); the four rows are optional but they ` +
+        `sharpen the routing if the round-1 tie repeats.\n\n${rows}\n\n` +
         `One line on WHY (the feel, not the features): ___________\n`,
     );
   }
@@ -221,11 +266,16 @@ async function main(): Promise<void> {
     JSON.stringify(
       {
         session: "s162-blind-kit",
+        round: 2,
         stamp,
+        strengthening: [
+          "S162 measured easing + choreography vocabulary (the round-1 delta, unchanged)",
+          "S163 native transition engine on both boundaries — crossfade (15f) then the iris reveal (8f), the opus-measured defaults",
+        ],
         artifacts: artifacts.map((a) => ({ arm: a.arm, code: codename(a.sha), sha256: a.sha, durationSec: a.durSec })),
         arms: {
-          A: "pre-S162 enter table (ease-back/ease-out/linear, 350 ms sequential stagger, linear count, no landing pulse)",
-          B: "the S162 scaffold verbatim (measured-out entrances, expo-out landings, 150 ms kinetic stagger, landing pulse)",
+          A: "the round-1 baseline — pre-S162 enter table (ease-back/ease-out/linear, 350 ms sequential stagger, linear count, no landing pulse), hard cuts, no optional fields",
+          B: "the strengthened scaffold — the S162 measured vocabulary + the S163 native transitions on both boundaries",
         },
         fixture: "scaffoldGraphicsDoc: opener + stat + list/chart archetypes, 640x360 @ 24 fps, silent",
       },
@@ -235,16 +285,20 @@ async function main(): Promise<void> {
   );
   fs.writeFileSync(
     path.join(sessionDir, "README.md"),
-    `# S162 blind kit session\n\n` +
-      `Two arms of the SAME graphics fixture, differing ONLY in the S162 motion vocabulary, ` +
-      `rendered through the real engine and shuffled.\n\n` +
-      `Protocol (S120 §4 / the six-engine audit Part 6): ≥ 3 human scorers, the anchored rows on ` +
-      `each scorer sheet, composite ≥ 4/5 per arm. THE KIT DOES NOT SCORE — hand the sheets out, ` +
-      `collect composites, record them in the successor audit doc. The code→artifact key is ` +
-      `key.json IN THIS DIRECTORY ONLY (never commit it, never paste it into a shared doc before scoring closes).\n`,
+    `# S162 blind kit session — ROUND 2 (the strengthened delta)\n\n` +
+      `Two arms of the SAME graphics fixture, rendered through the real engine and shuffled.\n\n` +
+      `Arm A is the round-1 baseline (pre-S162 enter table, hard cuts). Arm B is the strengthened ` +
+      `scaffold: the S162 measured vocabulary + the S163 native transitions on both boundaries ` +
+      `(crossfade, then the iris reveal — the opus-measured defaults). Round 1 ended 4.00/4.00 — ` +
+      `a tie; the operator chose closure path 2 (strengthen the delta, re-kit, re-score).\n\n` +
+      `Protocol (S120 §4 / the six-engine audit Part 6): ≥ 3 human scorers, the OVERALL number ` +
+      `per clip is the composite of record (rows optional), arm B ≥ 4/5 AND arm B > arm A. ` +
+      `THE KIT DOES NOT SCORE — hand the sheets out, collect composites, record them in the ` +
+      `S162 record doc. The code→artifact key is key.json IN THIS DIRECTORY ONLY (never commit ` +
+      `it, never paste it into a shared doc before scoring closes).\n`,
   );
 
-  console.log(`\n  session: ${sessionDir}`);
+  console.log(`\n  session: ${sessionDir}  (ROUND 2 — the strengthened delta)`);
   console.log(`  artifacts: ${shuffled.map((a) => codename(a.sha)).join(", ")} (shuffled)`);
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

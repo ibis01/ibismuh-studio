@@ -553,7 +553,7 @@ state. Updated as milestones land — never rewritten retroactively.
 | S158/S159 provider keys per provider | `6552073` | keys map GET; restore-not-inherit; live-list law to ElevenLabs/PlayHT | CLOSED |
 | S160 motion-and-light pass | `4e676db` | glide ease; 3D look seam; impact kick; battery 898; CI 44032289104 8/8 | CLOSED |
 | S161 six-engine audit | `e72d0ad` | the shortlist deep-dive + staged roadmap | CLOSED (document) |
-| S162 measured easing + choreography | `e07fbb0` | battery 902/902; kit 12/12; **round 1 human scoring returned a TIE** — B 4.00 / A 4.00 (phone-relayed single numbers, rubric rows not filled; deviation on record) | **OPEN — round 1 = FAIL-AND-ROUTE-BACK per the verdict rule (B must exceed A); three closure paths recorded** (`docs/audits/s162-visual-acceptance-record.md` §4a) |
+| S162 measured easing + choreography | `e07fbb0` | battery 902/902; kit 12/12; **round 1 human scoring returned a TIE** — B 4.00 / A 4.00 (phone-relayed single numbers, rubric rows not filled; deviation on record); **operator chose closure path 2 — ROUND 2 KIT BUILT** (session `2026-11-17T20-46-45-735Z`, 14/14; arm B = the S162 vocabulary + the S163 crossfade→iris boundaries; arm A byte-identical to round 1, the additive-absent law proven at pixel level; zips distributed, scores PENDING) | **OPEN — round 2 in flight; verdict rule unchanged (B ≥ 4 AND B > A)** (`docs/audits/s162-visual-acceptance-record.md` §4b) |
 | S162b master roadmap preserved | `586b1bf` | the commissioning report in-repo as PROPOSED; §9 reconciliation; ledger live | CLOSED (document) |
 | Nov 8 eight-profile blind baseline | — | the S55 kit's human round returned: mean 3.25/5, temporal coherence 4.5/5; weaknesses per profile ON RECORD | CLOSED (baseline of record — `docs/audits/s55-blind-scoring-record.md`) |
 | Scene-QC S136 audio contract (scene scope) | `f7d5dce` | `sceneAudioVerdict` pins ×5 (battery 907); the silent-scene false-fail and the vacuous dead-air pass killed | CLOSED |
@@ -574,7 +574,7 @@ The report's ordering, annotated with the repo state:
 
 | Step | Action | Outcome | State |
 |---|---|---|---|
-| 1 | Close S162 visual acceptance | Trustworthy animation baseline | Round 1 TIE (4.00/4.00) on record; **gate stays OPEN — operator picks a closure path: rubric re-run, delta strengthening, or explicit floor acceptance** (record §4a) |
+| 1 | Close S162 visual acceptance | Trustworthy animation baseline | Round 1 TIE on record; **operator chose path 2 — the delta is strengthened (S163–S167 landed) and the ROUND-2 KIT IS BUILT + distributed; scores PENDING; verdict rule unchanged: B ≥ 4 AND B > A** (record §4b) |
 | 2 | Complete S163–S167 | Improve native rendering | **CODE COMPLETE — S163–S167 all landed** (battery 952/952); the S162 human gate + the S164 W-series blind kit remain the OPEN human gates; VQ1 P1–P5 implementation follows the gates |
 | 3 | Audit existing AI Director capabilities | Avoid duplicating work | M0 audit exists; capability mapping in §9.2 |
 | 4 | Audit existing TTS integration | Establish what is reusable | Inventory in §9.3 |
