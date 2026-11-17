@@ -23924,6 +23924,226 @@ await test("S165 (e) THE FRAME-TRUTH SCAN — the real tree is green, the plante
   ok(!fs.existsSync(tmp), "the planted fixture is deleted — it never ships (test scaffolding only)");
 });
 
+// ---------- S167: the cinematic finisher slice (Blender math + 3D wiring) ----------
+
+suiteStart("S167 — the cinematic finisher (the fBM shake, the CDL grade, the duck lanes, the 3D admission)");
+
+await test("S167 fBM shake: zero at strength 0, bounded by ±strength/2, seeded (same seed → same shake), channels distinct", async () => {
+  const { cameraShakeAt, fbmShake01, perlinShake2, CAMERA_SHAKE_DEFAULTS } = await import("../src/lib/tubeforge/anim/camera");
+  // The measured constants ride (the audit's Part 2.6 octave pair).
+  eq(CAMERA_SHAKE_DEFAULTS.octaves, 4, "the default octave count");
+  approx(CAMERA_SHAKE_DEFAULTS.frequency, 2.1, 1e-15, "the default base frequency (the handheld band)");
+  // ZERO AT STRENGTH 0 — the calm camera (and junk strength is the honest zero).
+  eq(cameraShakeAt({ strength: 0, seed: 42 }, 5), { x: 0, y: 0, roll: 0 }, "strength 0 → the zero shake");
+  eq(cameraShakeAt({ strength: Number.NaN, seed: 42 }, 5), { x: 0, y: 0, roll: 0 }, "junk strength → the zero shake");
+  eq(cameraShakeAt({ strength: 1, seed: 42 }, Number.NaN), { x: 0, y: 0, roll: 0 }, "a non-finite sample time → the zero shake (never a NaN pose)");
+  // BOUNDED — the (noise − 0.5)·strength fold caps every channel at strength/2.
+  const strength = 0.35;
+  let maxAbs = 0;
+  for (let i = 0; i < 6000; i++) {
+    const o = cameraShakeAt({ strength, seed: 42 }, i * 0.005);
+    maxAbs = Math.max(maxAbs, Math.abs(o.x), Math.abs(o.y), Math.abs(o.roll));
+  }
+  ok(maxAbs <= strength / 2, `every channel stays inside ±strength/2 over a 30s sweep (max ${maxAbs.toFixed(4)} ≤ ${strength / 2})`);
+  ok(maxAbs > strength * 0.4, `the sweep actually EXERCISES the range (max ${maxAbs.toFixed(4)} — not a vacuous flat line)`);
+  // SEEDED — the same seed and the same sample time are byte-identical;
+  // a different seed moves the shake.
+  const a = cameraShakeAt({ strength, seed: 42 }, 1.234);
+  eq(cameraShakeAt({ strength, seed: 42 }, 1.234), a, "same seed + same t → byte-identical (the determinism law)");
+  eq(cameraShakeAt({ strength, seed: 42, octaves: 8 }, 1.234).x !== a.x || cameraShakeAt({ strength, seed: 42, octaves: 8 }, 1.234).y !== a.y, true, "a different octave count shakes differently");
+  let differs = false;
+  for (let i = 0; i < 40 && !differs; i++) {
+    differs = JSON.stringify(cameraShakeAt({ strength, seed: 42 }, i * 0.1)) !== JSON.stringify(cameraShakeAt({ strength, seed: 43 }, i * 0.1));
+  }
+  ok(differs, "a different seed produces a different shake (the seeds actually salt the lattice)");
+  // THE PINNED LITERALS — the seeded construction's frozen output (the same
+  // FNV-1a lattice + the glide fade rebuild them bit-for-bit).
+  approx(a.x, -0.08476911811064397, 1e-15, "seed 42 @ 1.234s — x channel");
+  approx(a.y, -0.036901793383701274, 1e-15, "seed 42 @ 1.234s — y channel");
+  approx(a.roll, 0.018870806248045185, 1e-15, "seed 42 @ 1.234s — roll channel (degrees)");
+  // The channels ride separate salts — they never lock step.
+  const sep = cameraShakeAt({ strength: 1, seed: 7 }, 2.5);
+  ok(sep.x !== sep.y && sep.y !== sep.roll && sep.x !== sep.roll, "x/y/roll are three independent channels at this sample");
+  // The fBM value domain: [0, 1] (the Blender noise-modifier's fold), and
+  // the raw Perlin stays inside its ±√2 gradient bound.
+  let lo = 1;
+  let hi = 0;
+  let perlinBound = 0;
+  for (let i = 0; i < 8000; i++) {
+    const v = fbmShake01(i * 0.003, 7, 4, 2.1, 1);
+    lo = Math.min(lo, v);
+    hi = Math.max(hi, v);
+    perlinBound = Math.max(perlinBound, Math.abs(perlinShake2(i * 0.037, 1.73, 2)));
+  }
+  ok(lo >= 0 && hi <= 1, `fbmShake01 stays inside [0,1] (swept [${lo.toFixed(3)}, ${hi.toFixed(3)}])`);
+  ok(perlinBound <= Math.SQRT2, `perlinShake2 stays inside its ±√2 bound (max ${perlinBound.toFixed(4)})`);
+});
+
+await test("S167 cameraPoseAt: the exponential push-in rides S162's curve; the shake composes; absent fields are byte-identical", async () => {
+  const { cameraPoseAt, cameraAt, parseScene3D, serializeScene3D } = await import("../src/lib/tubeforge/scene3d");
+  const { cameraShakeAt } = await import("../src/lib/tubeforge/anim/camera");
+  const keys = [{ t: 0, position: [0, 0, 6] as [number, number, number], lookAt: [0, 0, 0] as [number, number, number] }];
+  const objects = [{ id: "a", kind: "box" as const, position: [0, 0, 0] as [number, number, number], material: { color: "#888888", metalness: 0, roughness: 0.6, opacity: 1 } }];
+  const baseDoc = {
+    version: 1 as const, aspect: "16:9" as const, width: 1280, height: 720, fps: 30 as const,
+    durationSec: 4, background: "#101418", camera: { fov: 50, keyframes: keys }, objects, lights: [{ kind: "ambient" as const, intensity: 1 }],
+  };
+  // THE ABSENT SEAM: no shake, no pushIn → cameraAt's exact pose (the
+  // pre-S167 frames byte-identical — the additive-seam law).
+  eq(cameraPoseAt(baseDoc, 0.25), cameraAt(keys, 0.25), "absent finisher fields → cameraAt's exact pose");
+  eq(cameraPoseAt(baseDoc, 0).roll, undefined, "absent shake → no roll channel");
+  // THE EXPONENTIAL HOLD PUSH-IN: S162's exponential rides the normalized
+  // clock — at t=0.25 the ease is 0.015625, so pushIn 0.5 dollies 0.0078125
+  // of the camera→lookAt distance: z = 6·(1 − 0.0078125) = 5.953125 exactly.
+  const pushDoc = { ...baseDoc, camera: { ...baseDoc.camera, pushIn: 0.5 } };
+  const p25 = cameraPoseAt(pushDoc, 0.25);
+  approx(p25.position[2], 5.953125, 1e-12, "pushIn dolly rides the exponential ease (f(0.25)·0.5·6 from z=6)");
+  eq(cameraPoseAt(pushDoc, 0).position[2], 6, "the push starts at the keyed pose (ease 0)");
+  approx(cameraPoseAt(pushDoc, 1).position[2], 3, 1e-12, "at t=1 the dolly has eaten pushIn·distance (0.5·6)");
+  // THE SHAKE COMPOSES ON TOP: the offsets are the shake channels at the
+  // scene's REAL seconds (t·durationSec — the fps-free sampling), x/y on
+  // the position, roll carried as its own channel (degrees).
+  const shakeDoc = { ...baseDoc, camera: { ...baseDoc.camera, shake: { strength: 0.35, seed: 42 } } };
+  const s1 = cameraShakeAt({ strength: 0.35, seed: 42 }, 1);
+  const shake25 = cameraPoseAt(shakeDoc, 0.25);
+  approx(shake25.position[0], s1.x, 1e-15, "the shake's x rides the camera position (t = 0.25·4s = 1s)");
+  approx(shake25.position[1], s1.y, 1e-15, "the shake's y rides the camera position");
+  approx(shake25.roll ?? -1, s1.roll, 1e-15, "the roll channel is the shake's roll (degrees)");
+  const both = cameraPoseAt({ ...shakeDoc, camera: { ...shakeDoc.camera, pushIn: 0.5 } }, 1);
+  const s4 = cameraShakeAt({ strength: 0.35, seed: 42 }, 4);
+  approx(both.position[2], 3, 1e-12, "push-in holds while the shake rides on top");
+  approx(both.position[0], s4.x, 1e-15, "the shake composes AFTER the push (t = 1·4s = 4s)");
+  // THE DOC SEAM: tolerant parse, strict serialize, byte-stable round-trip.
+  const s = serializeScene3D(shakeDoc as never);
+  ok(s.includes('"shake":{"strength":0.35,"seed":42}') && !s.includes('"octaves"'), "a minimal shake ships strength+seed only (parse must not invent, serialize must not fill)");
+  ok(serializeScene3D(parseScene3D(s) as never) === s, "serialize → parse → serialize is byte-identical with the finisher seam");
+  ok(!serializeScene3D(baseDoc as never).includes("shake") && !serializeScene3D(baseDoc as never).includes("pushIn"), "absent finisher fields never serialize (the legacy doc bytes)");
+  const junk = parseScene3D(JSON.stringify({ version: 1, camera: { fov: 50, keyframes: keys, shake: "junk", pushIn: "x" }, objects, lights: [{ kind: "ambient", intensity: 1 }] }));
+  ok(junk != null && junk.camera.shake === undefined && junk.camera.pushIn === undefined, "junk shake/pushIn read as absent (the calm pre-S167 camera)");
+  const clamped = parseScene3D(JSON.stringify({ version: 1, camera: { fov: 50, keyframes: keys, shake: { strength: 99 }, pushIn: 7 }, objects, lights: [{ kind: "ambient", intensity: 1 }] }));
+  eq(clamped?.camera.shake?.strength, 5, "a shipped shake clamps into its honest range (0..5)");
+  eq(clamped?.camera.pushIn, 1, "pushIn clamps to 1 (a full dolly is the maximum)");
+});
+
+await test("S167 grade: the SOP/CDL scalars compile to curves args; absent ⇒ the exact legacy arg stream", async () => {
+  const { gradeFilter, cdlCurvesFilter, sanitizeGrade } = await import("../src/lib/tubeforge/studio-doc");
+  // THE COMPILE IS PINNED (the args are the law's text): out =
+  // (in·slope + offset)^power sampled at the fixed anchors, the power on
+  // the exact-sqrt ladder (1/1024 grid — byte-stable across every engine).
+  eq(cdlCurvesFilter({ slope: 1.12, offset: -0.02, power: 1.2 }), "curves=all='0/0.000 0.25/0.199 0.5/0.477 0.75/0.788 1/1.000'", "the CDL compile at slope 1.12 / offset −0.02 / power 1.2");
+  eq(cdlCurvesFilter({ slope: 1.3 }), "curves=all='0/0.000 0.25/0.325 0.5/0.650 0.75/0.975 1/1.000'", "slope-only (offset/power ride their neutrals)");
+  eq(cdlCurvesFilter({ power: 0.7 }), "curves=all='0/0.000 0.25/0.379 0.5/0.615 0.75/0.818 1/1.000'", "power-only — the lift-toe curve");
+  eq(cdlCurvesFilter({ slope: 1, offset: 0, power: 1 }), null, "a NEUTRAL CDL compiles to nothing (the identity curve is the legacy look)");
+  eq(cdlCurvesFilter({}), null, "an empty CDL block compiles to nothing");
+  eq(cdlCurvesFilter(null), null, "null compiles to nothing");
+  // THE ADDITIVE-ABSENT BYTE-IDENTITY: the legacy arg streams are untouched.
+  const legacy = { brightness: 1, contrast: 1.05, saturation: 1.08, temperature: 0, vignette: 0.5 };
+  eq(gradeFilter(legacy), "eq=contrast=1.050:saturation=1.080,vignette=a=0.750", "a doc without CDL scalars → the exact legacy arg stream");
+  eq(gradeFilter(null), "eq=contrast=1.05:saturation=1.08,vignette=PI/5", "null → the classic default, unchanged");
+  eq(
+    gradeFilter({ ...legacy, slope: 1.12, offset: -0.02, power: 1.2 }),
+    "curves=all='0/0.000 0.25/0.199 0.5/0.477 0.75/0.788 1/1.000',eq=contrast=1.050:saturation=1.080,vignette=a=0.750",
+    "a non-neutral CDL PREPENDS the curves filter; the legacy tail is byte-identical",
+  );
+  // THE SANITIZER: strictly optional keys (junk ⇒ absent), clamped domains.
+  eq(Object.keys(sanitizeGrade({ brightness: 1.1, contrast: 1.2, saturation: 1, temperature: 0.3, vignette: 0.4 }) ?? {}), ["brightness", "contrast", "saturation", "temperature", "vignette"], "absent CDL keys stay absent (the five legacy keys, byte-stable)");
+  const partial = sanitizeGrade({ brightness: 1.1, contrast: 1.2, saturation: 1, temperature: 0.3, vignette: 0.4, slope: 1.12, offset: "junk", power: 1.2 });
+  ok(partial != null && partial.slope === 1.12 && partial.offset === undefined && partial.power === 1.2, "a junk CDL scalar drops individually (strict optionality)");
+  eq(sanitizeGrade({ brightness: 1, contrast: 1, saturation: 1, temperature: 0, vignette: 0, slope: 9, offset: -1, power: 0.1 }), { brightness: 1, contrast: 1, saturation: 1, temperature: 0, vignette: 0, slope: 1.5, offset: -0.25, power: 0.5 }, "shipped CDL scalars clamp into their domains (slope 0.5..1.5, offset ±0.25, power 0.5..2)");
+});
+
+await test("S167 duck lanes: attack 0.15 / release 0.4 / depth 0.25 — the keyframed envelope is pinned at its shape", async () => {
+  const { duckGainAt, duckEnvelopeKeyframes, duckAutomationChain, DUCK_AUTOMATION } = await import("../src/lib/tubeforge/audiomix");
+  // THE NUMBERS' PROVENANCE (the audit's Part 2.4 — the HyperFrames
+  // transcript-driven automation constants, adopted as written numbers).
+  eq(DUCK_AUTOMATION.attackSec, 0.15, "the attack ramp (seconds)");
+  eq(DUCK_AUTOMATION.releaseSec, 0.4, "the release ramp (seconds)");
+  eq(DUCK_AUTOMATION.depth, 0.25, "the held gain (≈ −12 dB)");
+  const win = [{ startSec: 2, endSec: 4 }];
+  // THE KEYFRAMED SHAPE at the exact edges: unity before, a straight attack
+  // ramp, the hold at depth, the straight release, unity after.
+  approx(duckGainAt(win, 1), 1, 1e-12, "before the window → unity");
+  approx(duckGainAt(win, 2), 1, 1e-12, "the ramp STARTS at the window (still unity at its edge)");
+  approx(duckGainAt(win, 2.075), 0.625, 1e-12, "half-attack (0.075 of 0.15) → half the dip");
+  approx(duckGainAt(win, 2.15), 0.25, 1e-12, "full depth at window + attack");
+  approx(duckGainAt(win, 3), 0.25, 1e-12, "the hold rides at the depth");
+  approx(duckGainAt(win, 4), 0.25, 1e-12, "the release STARTS at the window end");
+  approx(duckGainAt(win, 4.2), 0.625, 1e-12, "half-release → half the dip");
+  approx(duckGainAt(win, 4.4), 1, 1e-12, "unity again at end + release");
+  // Overlapping windows take the deepest dip; a too-short window never
+  // reaches full depth; malformed windows are skipped.
+  approx(duckGainAt([{ startSec: 1, endSec: 3 }, { startSec: 2, endSec: 5 }], 4), 0.25, 1e-12, "overlaps take the DEEPEST dip (a duck never duckles)");
+  ok(duckGainAt([{ startSec: 2, endSec: 2.1 }], 2.05) > 0.25, "a window shorter than the attack never reaches full depth (the ramps cross)");
+  approx(duckGainAt([{ startSec: 5, endSec: 2 }], 3), 1, 1e-12, "a reversed window is skipped (unity)");
+  approx(duckGainAt([], 3), 1, 1e-12, "no windows → unity everywhere");
+  // THE KEYFRAMED LANE: the envelope sampled at the mix fps — ascending
+  // times, gains inside [depth, 1], the edge keyframes pinned.
+  const kf = duckEnvelopeKeyframes(win, 10, { totalSec: 5 });
+  eq(kf.length, 51, "one keyframe per sample (0..5s at 10 fps, inclusive)");
+  ok(kf.every((k, i) => i === 0 || k.tSec > kf[i - 1].tSec), "the keyframe times ascend");
+  ok(kf.every((k) => k.gain >= 0.25 && k.gain <= 1), "every gain sits inside [depth, unity]");
+  approx(kf[20].gain, 1, 1e-12, "the keyframe at t=2.0 is still unity (the ramp starts at the window)");
+  approx(kf[21].gain, 0.5, 1e-12, "the keyframe at t=2.1 is half-way down the attack");
+  approx(kf[44].gain, 1, 1e-12, "the keyframe at t=4.4 is back to unity");
+  // THE CHAIN: the envelope compiles to ONE volume expression riding
+  // eval=frame (the musicLevelAutomation seam); malformed windows → null.
+  eq(
+    duckAutomationChain(win),
+    "[music]volume='1-0.750*min(clip((t-2.000)/0.150,0,1),clip((4.400-t)/0.400,0,1))':eval=frame[mduck]",
+    "the single-window chain, byte-exact",
+  );
+  eq(
+    duckAutomationChain([{ startSec: 1, endSec: 2 }, { startSec: 3, endSec: 4 }]),
+    "[music]volume='1-0.750*max(min(clip((t-1.000)/0.150,0,1),clip((2.400-t)/0.400,0,1)),min(clip((t-3.000)/0.150,0,1),clip((4.400-t)/0.400,0,1)))':eval=frame[mduck]",
+    "two windows nest under max() (the deepest dip, in-expression)",
+  );
+  eq(duckAutomationChain([], "bed", "dipped"), null, "no windows → no lane (the legacy mix byte-for-byte)");
+  eq(duckAutomationChain([{ startSec: 2, endSec: 4 }], "bed", "dipped"), "[bed]volume='1-0.750*min(clip((t-2.000)/0.150,0,1),clip((4.400-t)/0.400,0,1))':eval=frame[dipped]", "the labels are parameters (the chain drops into any graph position)");
+  // The envelope and the chain agree — one shape, two projections.
+  const chainGain = duckGainAt(win, 3.1);
+  approx(chainGain, 0.25, 1e-12, "the shape the chain compiles is the shape the envelope evaluates");
+});
+
+await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuses without its segment, rides as an engine segment with one", async () => {
+  const { planFromTracks, validatePlanKinds, engineSegmentVerdict, COMPOSITOR_SEGMENT_KINDS } = await import("../src/lib/tubeforge/composition-plan");
+  const tracks = {
+    tracks: [
+      {
+        name: "visual",
+        kind: "visual",
+        clips: [
+          { id: "c1", sceneIndex: 1, kind: "video", startSec: 0, endSec: 3, transitionIn: null },
+          { id: "c2", sceneIndex: 2, kind: "3d", startSec: 3, endSec: 7, transitionIn: "fade" },
+        ],
+      },
+    ],
+  } as never;
+  const plan = planFromTracks(tracks, 2);
+  ok(plan != null, "a mixed video+3d plan reads");
+  eq(plan?.scenes.map((s) => s.kind), ["video", "3d"], "the 3d clip keeps its kind (the Part 0.3 gap closes)");
+  eq(plan?.totalSec, 7, "the window math is untouched");
+  eq(plan?.scenes[1].transitionIn, "fade", "the boundary transition rides");
+  // THE WALL HOLDS: "3d" has NO compositor segment builder — the registry
+  // does not grow; the kind is admitted only WITH its engine segment.
+  eq([...COMPOSITOR_SEGMENT_KINDS], ["video", "image"], "the builder registry is unchanged (engine kinds admit via segments, the S143 law)");
+  eq(validatePlanKinds(["video", "3d"]), { ok: false, unsupported: ["3d"] }, "the routing wall refuses a 3d plan without segments");
+  eq(engineSegmentVerdict(["video", "3d"], [null, null]), { ok: false, missing: [{ position: 1, kind: "3d" }] }, "the verdict names the missing 3d segment (fail-closed)");
+  eq(engineSegmentVerdict(["video", "3d"], [null, "/tmp/engine-segs/3d-scene-2/scene-3d.mp4"]), { ok: true, missing: [] }, "a 3d scene WITH its pre-rendered segment is admitted");
+  eq(engineSegmentVerdict(["3d"], ["/x"]), { ok: true, missing: [] }, "a single 3d scene rides the same law");
+  // The dispatcher wiring (the S157 usage-scan pattern — the compile reads
+  // the source so the wiring cannot silently rot).
+  const vj = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
+  ok(vj.includes('s.kind === "3d"'), "the mixed-engine dispatcher gate admits the 3d kind");
+  ok(vj.includes('kindAt(i) === "3d"'), "the dispatcher builds 3d scenes through the 3D lane");
+  ok(vj.includes("renderScene3D(doc,"), "the 3D engine render rides the dispatcher");
+  ok(vj.includes("scene3d: video.scene3d"), "the video's scene3d doc rides into the dispatcher");
+  ok(vj.includes("the video has no 3D scene doc"), "a 3d plan without the doc refuses loudly (fail-closed)");
+  // The renderer consumes the finisher path (the pose channels are live).
+  const r3 = fs.readFileSync("src/lib/tubeforge/render3d.ts", "utf8");
+  ok(r3.includes("cameraPoseAt(doc, t)"), "the render loop evaluates the S167 camera pose path");
+  ok(r3.includes("rollDeg"), "the page carries the roll channel (the shake's view-axis rotation)");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

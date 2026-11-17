@@ -30,7 +30,14 @@
 // ---------- grade ----------
 
 /** Per-scene color grade. All fields are absolute (1 = neutral) so the UI's
- *  sliders and the render's filter share one vocabulary. */
+ *  sliders and the render's filter share one vocabulary.
+ *
+ *  S167 — the SOP/ASC-CDL scalars ride ADDITIVELY (Blender's color-balance
+ *  CDL method, the audit's Part 2.6 — formulas only): out =
+ *  (in·slope + offset)^power per channel. Strictly optional — a doc that
+ *  ships none of the three keeps the byte-identical legacy grade (the
+ *  additive-seam law); a partial ship reads the missing scalars at their
+ *  neutrals (slope 1, offset 0, power 1). */
 export interface SceneGrade {
   /** 0.5..1.5 — 1 neutral. Rendered as eq=brightness=(v−1)*0.3. */
   brightness: number;
@@ -42,6 +49,12 @@ export interface SceneGrade {
   temperature: number;
   /** 0..1 — 0 off; 0.5 ≈ the classic cinematic vignette. */
   vignette: number;
+  /** S167 — CDL slope 0.5..1.5 (1 neutral). Absent = neutral. */
+  slope?: number;
+  /** S167 — CDL offset −0.25..0.25 (0 neutral). Absent = neutral. */
+  offset?: number;
+  /** S167 — CDL power 0.5..2 (1 neutral). Absent = neutral. */
+  power?: number;
 }
 
 export const GRADE_PRESETS: Record<string, SceneGrade> = {
@@ -64,19 +77,33 @@ export function sanitizeGrade(v: unknown): SceneGrade | null {
   const g = v as Record<string, unknown>;
   // A doc that carries the grade block but NO fields (all defaults) is a
   // real "reset to neutral" pick — keep it as an explicit neutral grade.
+  // S167 — the CDL scalars stay STRICTLY OPTIONAL: a key ships only when it
+  // carried a finite number (junk ⇒ absent ⇒ the legacy grade byte-for-byte;
+  // the byte-stable round-trip law — parse must not invent).
+  const slope = Number(g.slope);
+  const offset = Number(g.offset);
+  const power = Number(g.power);
   return {
     brightness: clampNum(g.brightness, 0.5, 1.5, 1),
     contrast: clampNum(g.contrast, 0.5, 1.5, 1),
     saturation: clampNum(g.saturation, 0, 2, 1),
     temperature: clampNum(g.temperature, -1, 1, 0),
     vignette: clampNum(g.vignette, 0, 1, 0),
+    ...(Number.isFinite(slope) ? { slope: clampNum(slope, 0.5, 1.5, 1) } : {}),
+    ...(Number.isFinite(offset) ? { offset: clampNum(offset, -0.25, 0.25, 0) } : {}),
+    ...(Number.isFinite(power) ? { power: clampNum(power, 0.5, 2, 1) } : {}),
   };
 }
 
-/** The ffmpeg filter for one scene's grade. `null` → the classic default. */
+/** The ffmpeg filter for one scene's grade. `null` → the classic default.
+ *  S167 — a non-neutral CDL ship prepends the curves filter (the primary
+ *  transform precedes the exposure/balance look); absent or neutral CDL
+ *  scalars keep the exact legacy string (the additive-seam law). */
 export function gradeFilter(g: SceneGrade | null | undefined): string {
   if (!g) return "eq=contrast=1.05:saturation=1.08,vignette=PI/5"; // the classic GRADE
   const parts: string[] = [];
+  const cdl = cdlCurvesFilter(g);
+  if (cdl) parts.push(cdl);
   const eq: string[] = [];
   // eq brightness is ADDITIVE in [-1,1]: map the 0.5..1.5 slider to a gentle
   // ±0.15 exposure shift — full-range would blow out at 1.5.
@@ -91,6 +118,77 @@ export function gradeFilter(g: SceneGrade | null | undefined): string {
   }
   if (g.vignette > 0.01) parts.push(`vignette=a=${(0.3 + 0.9 * g.vignette).toFixed(3)}`);
   return parts.length > 0 ? parts.join(",") : "null";
+}
+
+// ---------- S167: the SOP/ASC-CDL grade → ffmpeg curves args ----------
+//
+// The audit's Part 2.6 grade formula (Blender's color-balance CDL method,
+// read as written math only — the GPL boundary): out = (in·slope + offset)
+// ^power. ffmpeg's curves filter is the vehicle (a control-point
+// interpolator, per the audit's "expressible as curves/colorbalance
+// args"): the compiled filter samples the EXACT CDL function at fixed
+// anchors and lets the natural cubic spline render the curve between them.
+//
+// Determinism: the power exponent rides the SAME exact-sqrt ladder the
+// easing substrate proved (Math.pow/exp/log are implementation-approximated
+// and split bytes across V8 builds — the 2026-11-15 dispatch receipt; IEEE
+// sqrt is correctly rounded, byte-stable everywhere). The scalar is
+// quantized onto the ladder's 1/1024 grid (max step error 0.00049 —
+// invisible in a creative grade), x^n is built by exact square-and-multiply
+// multiplications, then ten IEEE sqrts finish x^(n/1024). The y anchors
+// quantize at 3 dp — the 8-bit quantum is 0.0039, so the rounding sits well
+// under one delivered shade.
+
+const CDL_LADDER_STEPS = 1024;
+
+/** x^(n/1024) for integer n — the exact-sqrt ladder (S162's construction,
+ *  shared math, no transcription). The SQRTS COME FIRST: ten correctly-
+ *  rounded sqrts give y = x^(1/1024) (sqrt moves x toward 1 — no underflow
+ *  where x^n-then-sqrt would die), then y^n is built by binary square-
+ *  and-multiply — every op an exact IEEE multiplication or a correctly-
+ *  rounded sqrt, byte-stable across every engine (relative error ≤ ~4e-15,
+ *  far under the 3-dp anchor quantum). PRECONDITION: x ∈ [0, 1], n ≥ 1. */
+function cdlPowLadder(x: number, n: number): number {
+  let y = x;
+  for (let i = 0; i < 10; i++) y = Math.sqrt(y);
+  let acc = 1;
+  let base = y;
+  let k = n;
+  while (k > 0) {
+    if (k & 1) acc *= base;
+    k >>= 1;
+    if (k > 0) base *= base;
+  }
+  return acc;
+}
+
+/** The exact CDL function at one anchor: (x·slope + offset)^power with the
+ *  affine result clamped into the curves filter's [0,1] domain. */
+function cdlAt(slope: number, offset: number, powerN: number, x: number): number {
+  const lin = x * slope + offset;
+  const clamped = Math.min(1, Math.max(0, lin));
+  return cdlPowLadder(clamped, powerN);
+}
+
+/** The compiled `curves` filter for one scene's CDL scalars, or null when
+ *  the scalars are absent or NEUTRAL (the identity curve is the legacy
+ *  look — compiling it would cost a filter for nothing). Exported for the
+ *  pins (the args are the law's text). */
+export function cdlCurvesFilter(g: Pick<SceneGrade, "slope" | "offset" | "power"> | null | undefined): string | null {
+  if (!g) return null;
+  const has = g.slope !== undefined || g.offset !== undefined || g.power !== undefined;
+  if (!has) return null;
+  const slope = Number.isFinite(g.slope) ? (g.slope as number) : 1;
+  const offset = Number.isFinite(g.offset) ? (g.offset as number) : 0;
+  const power = Number.isFinite(g.power) ? (g.power as number) : 1;
+  if (Math.abs(slope - 1) < 0.005 && Math.abs(offset) < 0.005 && Math.abs(power - 1) < 0.005) return null;
+  // The ladder-grid exponent (1/1024 steps across the sanitized domain).
+  const powerN = Math.round(power * CDL_LADDER_STEPS);
+  const anchors = [0, 0.25, 0.5, 0.75, 1];
+  const pts = anchors
+    .map((x) => `${x}/${cdlAt(slope, offset, powerN, x).toFixed(3)}`)
+    .join(" ");
+  return `curves=all='${pts}'`;
 }
 
 // ---------- title ----------

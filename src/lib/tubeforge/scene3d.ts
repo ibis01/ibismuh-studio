@@ -37,6 +37,7 @@
 //     — the upgrade IS the point, and no golden hash rides its frames.
 
 import { evalEase, isEaseName, type EaseName } from "./anim/easing";
+import { cameraShakeAt } from "./anim/camera";
 
 export const SCENE3D_VERSION = 1;
 
@@ -107,6 +108,19 @@ export interface Scene3DCameraKeyframe {
   ease?: EaseName;
 }
 
+/** S167 — the fBM handheld shake (the Blender formula via anim/camera.ts).
+ *  Absent ⇒ the calm camera (the pre-S167 frames, byte-identical). */
+export interface Scene3DShake {
+  /** The per-channel peak amplitude: x/y world units, roll degrees. */
+  strength: number;
+  /** Same seed ⇒ the same shake; absent ⇒ 0 (the determinism law). */
+  seed?: number;
+  /** Octaves 1..8 (absent ⇒ 4). */
+  octaves?: number;
+  /** Base frequency, cycles per second (absent ⇒ 2.1). */
+  frequency?: number;
+}
+
 export interface Scene3D {
   version: number;
   aspect: Scene3DAspect;
@@ -127,6 +141,13 @@ export interface Scene3D {
   camera: {
     fov: number; // degrees, clamped 20..110
     keyframes: Scene3DCameraKeyframe[];
+    /** S167 — the fBM handheld shake channel. Absent ⇒ no shake. */
+    shake?: Scene3DShake;
+    /** S167 — the exponential hold push-in: the fraction of the
+     *  camera→lookAt distance dollied in across the scene, riding S162's
+     *  "exponential" ease (the constant-PERCEIVED-RATE zoom curve). The
+     *  motion a hold plays when the keys sit still. Absent ⇒ none. */
+    pushIn?: number;
   };
   objects: Scene3DObject[];
   lights: Scene3DLight[];
@@ -262,6 +283,28 @@ export function parseScene3D(json: string | null | undefined): Scene3D | null {
     const fogNear = Number(fogRaw?.near);
     const fogFarRaw = Number(fogRaw?.far);
     const fogFar = Number.isFinite(fogFarRaw) ? clamp(fogFarRaw, 2, 1000) : 58;
+    // S167 — the camera finisher seam (decoration-class, the S160 shape):
+    // a junk shake object / pushIn reads as ABSENT (the calm pre-S167
+    // camera), a shipped one clamps into its honest range.
+    const shakeRaw = isPlainObj(camera.shake) ? camera.shake : null;
+    const shakeStrength = Number(shakeRaw?.strength);
+    const shakeSeed = Number(shakeRaw?.seed);
+    const shakeOctaves = Number(shakeRaw?.octaves);
+    const shakeFrequency = Number(shakeRaw?.frequency);
+    const pushInRaw = Number(camera.pushIn);
+    const shake: Scene3DShake | undefined =
+      shakeRaw && Number.isFinite(shakeStrength) && shakeStrength > 0
+        ? {
+            strength: clamp(shakeStrength, 0, 5),
+            ...(Number.isFinite(shakeSeed) ? { seed: Math.round(shakeSeed) } : {}),
+            ...(Number.isFinite(shakeOctaves)
+              ? { octaves: Math.round(clamp(shakeOctaves, 1, 8)) }
+              : {}),
+            ...(Number.isFinite(shakeFrequency) && shakeFrequency > 0
+              ? { frequency: clamp(shakeFrequency, 0.1, 10) }
+              : {}),
+          }
+        : undefined;
     return {
       version: SCENE3D_VERSION,
       aspect,
@@ -284,6 +327,8 @@ export function parseScene3D(json: string | null | undefined): Scene3D | null {
       camera: {
         fov: Number.isFinite(Number(camera.fov)) ? clamp(Number(camera.fov), 20, 110) : 50,
         keyframes: keyframes.sort((a, b) => a.t - b.t),
+        ...(shake ? { shake } : {}),
+        ...(Number.isFinite(pushInRaw) && pushInRaw > 0 ? { pushIn: clamp(pushInRaw, 0, 1) } : {}),
       },
       objects,
       lights: lights.length > 0 ? lights : [{ kind: "ambient", intensity: 1.2, color: "#ffffff" }],
@@ -343,6 +388,20 @@ export function serializeScene3D(doc: Scene3D): string {
         lookAt: [...k.lookAt],
         ...(k.ease ? { ease: k.ease } : {}),
       })),
+      // S167 — strict finisher-seam write: only the fields that SHIPPED
+      // (the byte-stable round-trip law — parse must not invent, serialize
+      // must not fill).
+      ...(doc.camera.shake
+        ? {
+            shake: {
+              strength: doc.camera.shake.strength,
+              ...(doc.camera.shake.seed !== undefined ? { seed: doc.camera.shake.seed } : {}),
+              ...(doc.camera.shake.octaves !== undefined ? { octaves: doc.camera.shake.octaves } : {}),
+              ...(doc.camera.shake.frequency !== undefined ? { frequency: doc.camera.shake.frequency } : {}),
+            },
+          }
+        : {}),
+      ...(doc.camera.pushIn !== undefined ? { pushIn: doc.camera.pushIn } : {}),
     },
     objects: doc.objects.map(serializeObject),
     lights: doc.lights.map((l) => ({
@@ -488,6 +547,56 @@ export function cameraAt(
     }
   }
   return { position: [...last.position], lookAt: [...last.lookAt] };
+}
+
+/**
+ * S167 — the camera POSE at normalized time t (0..1): cameraAt's keyed
+ * path, then the two cinematic finisher channels in their order of
+ * application —
+ *   1. the exponential hold push-in (camera.pushIn): a dolly along the
+ *      view axis toward lookAt riding S162's "exponential" ease (the
+ *      constant-PERCEIVED-RATE zoom curve — the motion a hold plays when
+ *      the keys sit still);
+ *   2. the fBM handheld shake (camera.shake): the Blender formula's three
+ *      channels (x/y world units on the position, roll in DEGREES),
+ *      sampled on the scene's REAL seconds (t·durationSec — the shake is
+ *      fps-free, the same doc at 24 or 60 fps shakes identically per
+ *      second, the D3 law's shape).
+ * Both channels are gated on their field's presence: a doc without them
+ * returns cameraAt's exact pose (the additive-seam law — the pre-S167
+ * frames are byte-identical). Pure, deterministic — the pins hold it and
+ * the renderer evaluates exactly this.
+ */
+export function cameraPoseAt(
+  doc: Scene3D,
+  t: number
+): { position: [number, number, number]; lookAt: [number, number, number]; roll?: number } {
+  const clamped = clamp(t, 0, 1);
+  const base = cameraAt(doc.camera.keyframes, clamped);
+  let position = base.position;
+  const lookAt = base.lookAt;
+  const pushIn = doc.camera.pushIn;
+  if (Number.isFinite(pushIn) && (pushIn as number) > 0) {
+    const k = evalEase("exponential", clamped) * Math.min(1, Math.max(0, pushIn as number));
+    position = lerp3(position, lookAt, k);
+  }
+  const shakeCfg = doc.camera.shake;
+  if (shakeCfg) {
+    const s = cameraShakeAt(
+      {
+        strength: shakeCfg.strength,
+        seed: shakeCfg.seed ?? 0,
+        octaves: shakeCfg.octaves,
+        frequency: shakeCfg.frequency,
+      },
+      clamped * Math.max(doc.durationSec, 1e-9)
+    );
+    if (s.x !== 0 || s.y !== 0 || s.roll !== 0) {
+      position = [position[0] + s.x, position[1] + s.y, position[2]];
+      return { position, lookAt, roll: s.roll };
+    }
+  }
+  return { position, lookAt };
 }
 
 // ---------- the object path (S134 — pure, camera-consistent) ----------

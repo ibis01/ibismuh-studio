@@ -17,6 +17,17 @@
 // a division that poisons the output with NaN. Interpolation rides the
 // shared easing substrate (evalEase, "ease-in-out" — the ONE motion
 // feel); no second cubic is hand-rolled here.
+//
+// S167 — the fBM shake channel (the cinematic finisher slice): the audit's
+// Part 2.6 Blender camera-shake formula, re-derived in-house as written
+// math only (the GPL boundary — zero code transcription): the octave loop
+// `sum += perlin(f·p)·amp; amp *= roughness(0.5); f *= lacunarity(2.0)`,
+// normalized by the max amp, applied as `value += (noise − 0.5)·strength`
+// per channel. The lattice gradients ride a seeded FNV-1a hash cascade
+// (no shared mutable stream, no Math.random — the frame-truth law holds;
+// this module walks in src/lib/tubeforge/anim, so the scan enforces it),
+// the fade is the SAME smootherstep the glide ease rides, and every op is
+// + − × ÷ on IEEE floats (the exact-multiplication law — no Math.pow).
 import { evalEase } from "./easing";
 
 /** One key of a camera move: the camera's world pose at time `t`
@@ -187,4 +198,112 @@ export function projectPoint(
   if (depth <= 0) return null;
   const scale = cam.fov / depth;
   return { x: x2 * scale, y: y2 * scale, scale };
+}
+
+// ---------------------------------------------------------------------------
+// S167 — the fBM shake channel (the Blender formula, clean-room; ~60 LOC
+// as staged). The scene3d lane's camera consumes this through scene3d.ts's
+// cameraPoseAt — the Stage-S substrate's first real consumer (Part 0.3's
+// adoption path). Everything below is PURE: no clock, no ambient
+// randomness, no fs — the same seed and the same sample time always yield
+// the same offsets, byte-identically (the frame-truth law).
+// ---------------------------------------------------------------------------
+
+/** The fBM octave constants (the audit's Part 2.6 measured pair). */
+const SHAKE_ROUGHNESS = 0.5;
+const SHAKE_LACUNARITY = 2.0;
+
+/** The 2D lattice gradient set: eight directions (diagonals length √2), so
+ *  every lattice dot product stays inside ±√2 and the [0,1] fold below is
+ *  honest over its whole domain. */
+const SHAKE_GRAD_X = [1, -1, 1, -1, 1, -1, 0, 0] as const;
+const SHAKE_GRAD_Y = [1, 1, -1, -1, 0, 0, 1, -1] as const;
+
+/** Seeded lattice hash: an FNV-1a cascade over the integer cell coords and
+ *  the channel salt — one pure integer mix (Math.imul is exact 32-bit
+ *  integer multiplication, byte-stable across every engine), never a
+ *  shared mutable stream. Returns 0..7 — the gradient row index. */
+function shakeCellHash(ix: number, iy: number, salt: number): number {
+  let h = Math.imul(ix | 0, 16777619) ^ Math.imul(iy | 0, 16777619) ^ Math.imul(salt | 0, 16777619);
+  h ^= h >>> 13;
+  h = Math.imul(h, 16777619);
+  h ^= h >>> 16;
+  return (h >>> 0) % 8;
+}
+
+/** One lattice corner's gradient dot product. */
+function shakeDot(ix: number, iy: number, dx: number, dy: number, salt: number): number {
+  const g = shakeCellHash(ix, iy, salt);
+  return SHAKE_GRAD_X[g] * dx + SHAKE_GRAD_Y[g] * dy;
+}
+
+/** Seeded 2D Perlin gradient noise at one channel salt — pure, inside
+ *  ±√2 (the fade-weighted bilinear fold of the four lattice dot products;
+ *  the practical range is far narrower). The fade is Perlin's smootherstep
+ *  — the same 6t⁵−15t⁴+10t³ the glide ease rides. */
+export function perlinShake2(x: number, y: number, salt: number): number {
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const fx = x - x0;
+  const fy = y - y0;
+  const u = fx * fx * fx * (fx * (fx * 6 - 15) + 10);
+  const v = fy * fy * fy * (fy * (fy * 6 - 15) + 10);
+  const d00 = shakeDot(x0, y0, fx, fy, salt);
+  const d10 = shakeDot(x0 + 1, y0, fx - 1, fy, salt);
+  const d01 = shakeDot(x0, y0 + 1, fx, fy - 1, salt);
+  const d11 = shakeDot(x0 + 1, y0 + 1, fx - 1, fy - 1, salt);
+  const a = d00 + (d10 - d00) * u;
+  const b = d01 + (d11 - d01) * u;
+  return a + (b - a) * v;
+}
+
+/** The fBM octave stack (the audit's Part 2.6 loop), normalized by the max
+ *  amp and folded to [0, 1] — the noise-modifier's value domain. Each
+ *  octave samples its own lattice slice (the per-octave y offset and seed
+ *  salt decorrelate the stack); the channels sit on separate salts so
+ *  x/y/roll never lock step. */
+export function fbmShake01(t: number, seed: number, octaves: number, frequency: number, salt: number): number {
+  let sum = 0;
+  let amp = 1;
+  let f = frequency;
+  let norm = 0;
+  for (let o = 0; o < octaves; o++) {
+    sum += perlinShake2(f * t, salt * 13.73 + o * 3.17, (seed + o * 101) | 0);
+    norm += amp;
+    amp *= SHAKE_ROUGHNESS;
+    f *= SHAKE_LACUNARITY;
+  }
+  const n = sum / norm; // the max-amp normalization
+  return Math.min(1, Math.max(0, n * 0.5 + 0.5));
+}
+
+/** The shake channel's config. strength is the per-channel PEAK amplitude —
+ *  x/y in world units, roll in degrees (the consumers own the units); 0
+ *  (or junk) is the honest zero, a calm camera. */
+export interface CameraShakeConfig {
+  strength: number;
+  /** Same seed ⇒ the same shake (the determinism law). Junk ⇒ 0. */
+  seed: number;
+  /** Octaves 1..8 (default 4). */
+  octaves?: number;
+  /** Base frequency — the handheld band's cycles per second (default 2.1). */
+  frequency?: number;
+}
+
+export const CAMERA_SHAKE_DEFAULTS = { octaves: 4, frequency: 2.1 } as const;
+
+/** The shake at time `t` (SECONDS — the caller owns the clock mapping):
+ *  three independent fBM channels, each applied as (noise − 0.5)·strength
+ *  — bounded by ±strength/2 by construction, zero at strength 0. */
+export function cameraShakeAt(cfg: CameraShakeConfig, t: number): { x: number; y: number; roll: number } {
+  const strength = Number.isFinite(cfg.strength) && cfg.strength > 0 ? cfg.strength : 0;
+  if (strength === 0 || !Number.isFinite(t)) return { x: 0, y: 0, roll: 0 };
+  const octRaw = Number.isFinite(cfg.octaves) ? (cfg.octaves as number) : CAMERA_SHAKE_DEFAULTS.octaves;
+  const octaves = Math.min(8, Math.max(1, Math.round(octRaw)));
+  const freq = Number.isFinite(cfg.frequency) && (cfg.frequency as number) > 0
+    ? (cfg.frequency as number)
+    : CAMERA_SHAKE_DEFAULTS.frequency;
+  const seed = Math.round(Number.isFinite(cfg.seed) ? cfg.seed : 0);
+  const chan = (salt: number) => (fbmShake01(t, seed, octaves, freq, salt) - 0.5) * strength;
+  return { x: chan(1), y: chan(2), roll: chan(3) };
 }

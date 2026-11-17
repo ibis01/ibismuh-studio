@@ -37,7 +37,7 @@ import { WB_CHROMIUM_LAUNCH_ARGS } from "./whiteboard/render";
 // S165 — the ready-gate named diagnostics: a wedged 3D render names WHICH
 // gate is stuck (launch / page-load / compose / apply / screenshot / encode).
 import { withRenderGate, type RenderGateName } from "./render-gates";
-import { cameraAt, objectAt, type Scene3D } from "./scene3d";
+import { cameraPoseAt, objectAt, type Scene3D } from "./scene3d";
 
 const renderLog = log.child({ mod: "render3d" });
 const execFileAsync = promisify(execFile);
@@ -180,9 +180,12 @@ export function pageHtml(width: number, height: number, threeSource: string, thr
       if (s.scale) mesh.scale.set(s.scale[0], s.scale[1], s.scale[2]);
     }
   };
-  window.__CAMERA__ = (position, lookAt) => {
+  window.__CAMERA__ = (position, lookAt, rollDeg) => {
     camera.position.set(...position);
     camera.lookAt(...lookAt);
+    // S167 — the fBM shake's roll channel: a rotation around the view axis
+    // (the local z AFTER lookAt), degrees → radians. 0/absent = no-op.
+    if (rollDeg) camera.rotateZ((rollDeg * Math.PI) / 180);
     renderer.render(scene, camera);
   };
   window.__READY__ = true;
@@ -268,7 +271,11 @@ export async function renderScene3D(
 
     for (let f = 0; f < frames; f++) {
       const t = frames > 1 ? f / (frames - 1) : 0;
-      const cam = cameraAt(doc.camera.keyframes, t);
+      // S167 — the camera POSE path: cameraAt's keyed evaluation, then the
+      // exponential push-in and the fBM shake channels (both gated on their
+      // doc fields — a doc without them keeps the keyed pose verbatim, the
+      // additive-seam law). The roll channel rotates the view axis in-page.
+      const cam = cameraPoseAt(doc, t);
       // S134 — the objects ride the SAME normalized clock through the
       // pure objectAt path (one evaluate per frame drives objects then
       // camera; the camera call renders). Keyless objects come back as
@@ -277,15 +284,15 @@ export async function renderScene3D(
       const states = doc.objects.map((o) => objectAt(o, t));
       currentGate = "apply";
       await page.evaluate(
-        ({ states, position, lookAt }) => {
+        ({ states, position, lookAt, rollDeg }) => {
           const w = window as unknown as {
             __OBJECTS__: (s: Array<{ id: string; position: number[]; rotation?: number[]; scale?: number[] }>) => void;
-            __CAMERA__: (p: number[], l: number[]) => void;
+            __CAMERA__: (p: number[], l: number[], rollDeg: number) => void;
           };
           w.__OBJECTS__(states);
-          w.__CAMERA__(position, lookAt);
+          w.__CAMERA__(position, lookAt, rollDeg);
         },
-        { states, position: cam.position, lookAt: cam.lookAt }
+        { states, position: cam.position, lookAt: cam.lookAt, rollDeg: cam.roll ?? 0 }
       );
       currentGate = "screenshot";
       const shot = await page.screenshot({

@@ -86,6 +86,11 @@ import {
   renderWhiteboard,
   probeDurationSec,
 } from "./whiteboard/render";
+// S167 — the scene-story 3D engine lane: the video's scene3d doc renders
+// through the shared chromium rasterizer (render3d) and joins the assembly
+// the S143 way, as a pre-rendered engine segment.
+import { parseScene3D } from "./scene3d";
+import { renderScene3D } from "./render3d";
 // S123 (G1) P3 — the graphics engine lane: the renderer + the lane-aware
 // QC helpers (the doc's hold windows + the hard-cut expectation),
 // imported at the SAME seam the whiteboard engine rides.
@@ -856,13 +861,16 @@ async function runBoundaryPreviewJob(
  * contract) — the plan's scene at position i carries sceneIndex, and the
  * engine scene with that id renders. An engine-kind plan scene whose
  * engine doc/project doesn't carry the scene refuses loudly (a data bug,
- * not a render input problem).
+ * not a render input problem). S167 — the 3D doc is per-video SINGULAR
+ * (Video.scene3d): every 3d-kind plan scene renders through THE doc, each
+ * into its own outDir (its own artifact, the compositor patches its own
+ * clock into the composition windows).
  *
  * Cancellation rides the render job's own guard kind; progress reports
  * through the caller's onProgress (the job's setJobProgress seam).
  */
 async function buildEngineSegments(
-  video: { id: string; whiteboardProject: string | null; graphicsDoc: string | null },
+  video: { id: string; whiteboardProject: string | null; graphicsDoc: string | null; scene3d: string | null },
   renderScenes: { index: number }[],
   plan: CompositionPlan,
   onProgress: (current: number, total: number, label: string) => void
@@ -960,6 +968,36 @@ async function buildEngineSegments(
         throw new Error(`the graphics engine returned no artifact for scene ${sceneIndex}`);
       }
       out[i] = file;
+    }
+  }
+
+  // ---- the 3D scenes (S167): the scene-story engine's rasterized clip
+  // joins assembly — the recorded Part 0.3 gap ("scene-3d.mp4 is never
+  // assembled") closes here, the S143 way. The video's scene3d doc IS the
+  // engine scene (per-video singular); a missing doc refuses loudly.
+  const d3Idx = renderScenes.map((_, i) => i).filter((i) => kindAt(i) === "3d");
+  if (d3Idx.length > 0) {
+    const doc = parseScene3D(video.scene3d);
+    if (!doc) {
+      throw new Error(
+        `the plan carries ${d3Idx.length} 3d-kind scene(s) but the video has no 3D scene doc — scaffold one in the 3D panel (S167: the compositor consumes engine segments, it cannot rasterize 3D ink itself)`
+      );
+    }
+    for (const i of d3Idx) {
+      const sceneIndex = plan.scenes[i]?.sceneIndex ?? renderScenes[i]?.index ?? i + 1;
+      if (isJobCancelled(video.id, "render")) throw new JobCancelledError();
+      onProgress(Math.min(i + 1, total), total, `Rasterizing scene ${sceneIndex} through the 3D engine`);
+      const res = await renderScene3D(doc, {
+        outDir: path.join(segDir, `3d-scene-${sceneIndex}`),
+        onProgress: (label, fraction) => {
+          if (isJobCancelled(video.id, "render")) throw new JobCancelledError();
+          setJobProgress(video.id, "render", Math.max(1, Math.round(fraction * total)), total, `${label} (scene ${sceneIndex})`);
+        },
+      });
+      if (!fs.existsSync(res.file)) {
+        throw new Error(`the 3D engine returned no artifact for scene ${sceneIndex}`);
+      }
+      out[i] = res.file;
     }
   }
 
@@ -1189,9 +1227,9 @@ export async function runRenderJob(
     const engineSegments =
       timelinePlan &&
       timelinePlan.scenes.length === renderScenes.length &&
-      timelinePlan.scenes.some((s) => s.kind === "whiteboard" || s.kind === "graphics")
+      timelinePlan.scenes.some((s) => s.kind === "whiteboard" || s.kind === "graphics" || s.kind === "3d")
         ? await buildEngineSegments(
-            { id: videoId, whiteboardProject: video.whiteboardProject, graphicsDoc: video.graphicsDoc },
+            { id: videoId, whiteboardProject: video.whiteboardProject, graphicsDoc: video.graphicsDoc, scene3d: video.scene3d },
             renderScenes,
             timelinePlan,
             (current, total, label) => {

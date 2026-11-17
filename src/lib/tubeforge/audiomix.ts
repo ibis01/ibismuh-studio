@@ -190,6 +190,132 @@ export function musicLevelAutomation(
   return `[music]volume='${terms.join("+")}':eval=frame[mvol]`;
 }
 
+// ---------- S167 — the transcript-driven duck automation lanes ----------
+//
+// The audit's borrow (Part 3.6 + the HyperFrames receipt, Part 2.4): the
+// live sidechaincompress duck above reacts to the MIX; a transcript-driven
+// render instead lays the duck down as a KEYFRAMED gain envelope — word /
+// segment timestamps → automation (attack 0.15s / release 0.4s / duck 0.25,
+// the measured HyperFrames numbers), rendered into the mix deterministically.
+// These lanes are the deterministic form: PURE math (no ffmpeg, no clock),
+// the envelope is a straight-line ramp per edge (attack down, hold at the
+// depth, release up), and the chain compiles to ONE volume expression with
+// eval=frame (the same per-frame-eval seam musicLevelAutomation proved).
+// The legacy sidechain path is untouched — absent windows ⇒ no lane, the
+// existing mix byte-for-byte.
+
+/** The measured automation constants (the audit's Part 2.4 numbers). */
+export const DUCK_AUTOMATION = {
+  /** Seconds from window start to full depth — the attack ramp. */
+  attackSec: 0.15,
+  /** Seconds from window end back to unity — the release ramp. */
+  releaseSec: 0.4,
+  /** The held gain inside a window (0.25 ≈ −12 dB — the measured duck). */
+  depth: 0.25,
+} as const;
+
+/** One transcript window the bed ducks under. startSec/endSec are seconds
+ *  on the mix clock (the blended timeline's t). */
+export interface DuckWindow {
+  startSec: number;
+  endSec: number;
+}
+
+/** The envelope gain at time t: unity outside every window, a straight
+ *  attack ramp (1 → depth over attackSec) into a hold, then a straight
+ *  release ramp (depth → 1 over releaseSec). Overlapping windows take the
+ *  DEEPEST dip (a duck never duckles). A window shorter than the attack
+ *  never reaches full depth — the two ramps cross where they cross. Pure,
+ *  deterministic — the keyframe pins hold it. */
+export function duckGainAt(
+  windows: readonly DuckWindow[],
+  t: number,
+  opts: { attackSec?: number; releaseSec?: number; depth?: number } = {}
+): number {
+  const attack = Number.isFinite(opts.attackSec) && (opts.attackSec as number) > 0
+    ? (opts.attackSec as number)
+    : DUCK_AUTOMATION.attackSec;
+  const release = Number.isFinite(opts.releaseSec) && (opts.releaseSec as number) > 0
+    ? (opts.releaseSec as number)
+    : DUCK_AUTOMATION.releaseSec;
+  const depth = Number.isFinite(opts.depth) && (opts.depth as number) > 0
+    ? (opts.depth as number)
+    : DUCK_AUTOMATION.depth;
+  let deepest = 0;
+  for (const w of windows) {
+    const start = Number(w?.startSec);
+    const end = Number(w?.endSec);
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    // The dip shape: rise over the attack, fall over the release — the
+    // ramps cross for a too-short window (min of the two shapes).
+    const rise = (t - start) / attack;
+    const fall = (end + release - t) / release;
+    const dip = Math.min(1, Math.max(0, rise), Math.max(0, Math.min(1, fall)));
+    deepest = Math.max(deepest, dip);
+  }
+  return 1 - (1 - depth) * deepest;
+}
+
+/** The KEYFRAMED envelope: the envelope sampled at the mix fps — the
+ *  automation lane's deliverable, the thing the pins read and a consumer
+ *  can lay down as literal keyframes. Times ascend, gains in [depth, 1]. */
+export function duckEnvelopeKeyframes(
+  windows: readonly DuckWindow[],
+  fps: number,
+  opts: { attackSec?: number; releaseSec?: number; depth?: number; totalSec?: number } = {}
+): { tSec: number; gain: number }[] {
+  const rate = Number.isFinite(fps) && fps > 0 ? fps : 30;
+  const total = Number.isFinite(opts.totalSec) && (opts.totalSec as number) > 0
+    ? (opts.totalSec as number)
+    : windows.reduce((m, w) => Math.max(m, (w?.endSec ?? 0) + DUCK_AUTOMATION.releaseSec), 0);
+  const frames = Math.max(0, Math.ceil(total * rate));
+  const out: { tSec: number; gain: number }[] = [];
+  for (let i = 0; i <= frames; i++) {
+    const tSec = i / rate;
+    out.push({ tSec, gain: duckGainAt(windows, tSec, opts) });
+  }
+  return out;
+}
+
+/**
+ * The automation chain for one ducked bed: the KEYFRAMED envelope compiled
+ * into a `volume` expression riding eval=frame — the same per-frame seam
+ * musicLevelAutomation uses. The expression is 1 − (1−depth)·max(dips):
+ * each window contributes min(clip((t−s)/attack,0,1), clip((e+release−t)/
+ * release,0,1)) — the exact shape duckGainAt evaluates. Returns null when
+ * the windows are malformed/absent (callers keep the plain [music] label —
+ * the legacy duck path or no duck at all, byte-for-byte).
+ */
+export function duckAutomationChain(
+  windows: readonly DuckWindow[],
+  musicLabel = "music",
+  outLabel = "mduck",
+  opts: { attackSec?: number; releaseSec?: number; depth?: number } = {}
+): string | null {
+  const attack = Number.isFinite(opts.attackSec) && (opts.attackSec as number) > 0
+    ? (opts.attackSec as number)
+    : DUCK_AUTOMATION.attackSec;
+  const release = Number.isFinite(opts.releaseSec) && (opts.releaseSec as number) > 0
+    ? (opts.releaseSec as number)
+    : DUCK_AUTOMATION.releaseSec;
+  const depth = Number.isFinite(opts.depth) && (opts.depth as number) > 0
+    ? (opts.depth as number)
+    : DUCK_AUTOMATION.depth;
+  const clean = (windows ?? [])
+    .map((w) => ({ start: Number(w?.startSec), end: Number(w?.endSec) }))
+    .filter((w) => Number.isFinite(w.start) && Number.isFinite(w.end) && w.end > w.start && w.start >= 0);
+  if (clean.length === 0) return null;
+  const dip = (w: { start: number; end: number }): string =>
+    `min(clip((t-${w.start.toFixed(3)})/${attack.toFixed(3)},0,1),clip((${(w.end + release).toFixed(3)}-t)/${release.toFixed(3)},0,1))`;
+  // max() in ffmpeg expressions is two-arg — nest for multiple windows.
+  const deepest = clean
+    .map(dip)
+    .reduce((acc, d) => (acc ? `max(${acc},${d})` : d), "");
+  return (
+    `[${musicLabel}]volume='1-${(1 - depth).toFixed(3)}*${deepest}':eval=frame[${outLabel}]`
+  );
+}
+
 // ---------- loudness measurement (pass 1) ----------
 
 export interface LoudnessMeasurement {

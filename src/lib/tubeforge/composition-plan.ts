@@ -36,9 +36,12 @@ import type { AssembledTimeline, TimelineTrack } from "./timeline";
  *  frames (the Whiteboard lane owns execution — the compositor's segment
  *  builders refuse the kind as a routing wall). "graphics" = S123 (G1):
  *  the motion-graphics lane draws the frames the same way (the compositor
- *  refuses it on the SAME routing wall). 3d/character land with the
- *  engines that own them. */
-export type PlanVisualKind = "video" | "image" | "whiteboard" | "graphics";
+ *  refuses it on the SAME routing wall). "3d" = S167: the scene-story 3D
+ *  engine's rasterized clip — the compositor contract's recorded gap
+ *  (Part 0.3: "scene-3d.mp4 is never assembled") closes here; the kind is
+ *  admitted the S143 way, as a PRE-RENDERED engine segment. character
+ *  lands with the engine that owns it. */
+export type PlanVisualKind = "video" | "image" | "whiteboard" | "graphics" | "3d";
 
 /**
  * Stage X — the compositor's SEGMENT-BUILDER registry: the visual kinds the
@@ -173,7 +176,9 @@ export function planFromTracks(
             ? "whiteboard"
             : c.kind === "graphics"
               ? "graphics"
-              : "video",
+              : c.kind === "3d"
+                ? "3d"
+                : "video",
       assetSource:
         c.asset?.source === "stock"
           ? "stock"
