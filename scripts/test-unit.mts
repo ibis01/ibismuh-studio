@@ -24471,6 +24471,87 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
   });
 }
 
+// ---------------------------------------------------------------------------
+// S171 — the shared animation vocabulary (mode-agnostic primitives over
+// the ONE curve table) and S172 — the cross-mode capability matrix
+// (borrow through the ONE implementor, honest wiring statuses).
+// ---------------------------------------------------------------------------
+{
+  const prim = await import("../src/lib/tubeforge/anim/primitives");
+  const cm = await import("../src/lib/tubeforge/cross-mode");
+
+  await test("s171: the primitive set is the closed fourteen from the roadmap ask", () => {
+    eq([...prim.PRIMITIVE_NAMES], [
+      "fade", "scale", "rotate", "translate", "draw", "reveal", "morph",
+      "camera-pan", "camera-zoom", "particle", "character-move", "stagger",
+      "spring", "parallax",
+    ], "the named fourteen, closed");
+    for (const name of prim.PRIMITIVE_NAMES) {
+      const wall = prim.PRIMITIVE_TIMING[name];
+      ok(wall.minMs > 0 && wall.defaultMs >= wall.minMs && wall.maxMs >= wall.defaultMs, `${name} carries honest timing walls`);
+    }
+  });
+
+  await test("s171: every primitive rides the ONE curve table (easing overrides must be table names)", () => {
+    ok(prim.samplePrimitive("fade", 0.5).ok, "the default ease rides the table");
+    ok(prim.samplePrimitive("fade", 0.5, { ease: "expo-out" as never }).ok, "a table-named override passes");
+    const v = prim.samplePrimitive("fade", 0.5, { ease: "ease-springy-9000" as never });
+    eq(v.ok, false, "an ease outside the table refuses");
+    ok(!v.ok && v.errors.some((e) => e.code === "unknown-ease"), "the refusal names the code");
+  });
+
+  await test("s171: samples are normalized, clamped and pure", () => {
+    const fade = prim.samplePrimitive("fade", 0.42);
+    ok(fade.ok && (fade.state.opacity ?? -1) >= 0 && (fade.state.opacity ?? -1) <= 1, "fade opacity clamped");
+    const zoom = prim.samplePrimitive("camera-zoom", 0.9, { to: 99 });
+    ok(zoom.ok && (zoom.state.camera?.zoom ?? 0) <= 3, "camera zoom clamped to the physical ceiling");
+    const clamped = prim.samplePrimitive("fade", 7); // t beyond 1
+    ok(clamped.ok && (clamped.state.opacity ?? 0) <= 1, "t01 clamps before sampling");
+    const junk = prim.samplePrimitive("fade", 0.5, { explode: true } as never);
+    eq(junk.ok, false, "unknown params refuse (never coerce)");
+    ok(!prim.samplePrimitive("explode-into-confetti" as never, 0.5).ok, "a sixteenth primitive does not exist");
+    // Determinism: same inputs, same state.
+    eq(prim.samplePrimitive("spring", 0.3, { damping: 0.4, frequency: 2 }).ok, prim.samplePrimitive("spring", 0.3, { damping: 0.4, frequency: 2 }).ok, "spring samples evaluate");
+    const a = prim.samplePrimitive("spring", 0.3, { damping: 0.4, frequency: 2 });
+    const b = prim.samplePrimitive("spring", 0.3, { damping: 0.4, frequency: 2 });
+    eq(a.ok && b.ok ? a.state.scale : 0, b.ok && b.state.scale !== undefined ? b.state.scale : 0, "the spring is deterministic");
+  });
+
+  await test("s171: the timing walls refuse loose clocks", () => {
+    eq(prim.checkPrimitiveTiming("fade", 50)?.code, "timing-wall", "below the wall refuses");
+    eq(prim.checkPrimitiveTiming("fade", 5000)?.code, "timing-wall", "above the wall refuses");
+    eq(prim.checkPrimitiveTiming("fade", 400), null, "the default rides inside the wall");
+  });
+
+  await test("s171: the stagger schedule is arithmetic, honest, bounded", () => {
+    const schedule = prim.staggerSchedule(5, 1000);
+    eq(schedule.length, 5, "one window per item");
+    eq(schedule[0].itemMs, 0, "the first item starts at zero");
+    ok(schedule[1].itemMs > schedule[0].itemMs, "delays increase");
+    eq(prim.staggerSchedule(1, 400)[0].windowMs, 400, "a solo item takes the whole window");
+    let threw = false;
+    try { prim.staggerSchedule(0, 100); } catch { threw = true; }
+    ok(threw, "an empty schedule throws");
+  });
+
+  await test("s172: the capability matrix is closed, honest and house-implemented", () => {
+    const audit = cm.crossModeMatrixAudit();
+    ok(audit.ok, JSON.stringify(audit.problems));
+    ok(cm.CROSS_MODE_CAPABILITIES.length >= 9, "the matrix carries the roadmap's named capabilities plus the house's own");
+    const wirings = cm.CROSS_MODE_CAPABILITIES.map((c) => c.wiring);
+    ok(wirings.includes("native") && wirings.includes("borrowed") && wirings.includes("codified"), "all three honesty levels are in use — the matrix is not a wish list");
+  });
+
+  await test("s172: the resolver admits hosts and named borrowers, refuses the rest", () => {
+    eq(cm.resolveCrossModeCapability("animated charts", "graphics").ok, true, "the host resolves");
+    eq(cm.resolveCrossModeCapability("animated charts", "whiteboard").ok, true, "a named borrower resolves");
+    eq(cm.resolveCrossModeCapability("animated charts", "character").ok, false, "an unnamed borrower refuses");
+    ok(!cm.resolveCrossModeCapability("holodeck", "graphics").ok, "a capability outside the matrix refuses");
+    const kinetic = cm.resolveCrossModeCapability("kinetic typography", "slides");
+    ok(kinetic.ok && kinetic.implements !== undefined, "a resolution names the ONE implementor");
+  });
+}
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
