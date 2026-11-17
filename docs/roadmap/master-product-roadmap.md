@@ -553,7 +553,7 @@ state. Updated as milestones land — never rewritten retroactively.
 | S158/S159 provider keys per provider | `6552073` | keys map GET; restore-not-inherit; live-list law to ElevenLabs/PlayHT | CLOSED |
 | S160 motion-and-light pass | `4e676db` | glide ease; 3D look seam; impact kick; battery 898; CI 44032289104 8/8 | CLOSED |
 | S161 six-engine audit | `e72d0ad` | the shortlist deep-dive + staged roadmap | CLOSED (document) |
-| S162 measured easing + choreography | `e07fbb0` | battery 902/902; kit 12/12; **human blind scoring PENDING** | **OPEN — awaiting 3 scorers, composite ≥ 4/5** (`docs/audits/s162-visual-acceptance-record.md`) |
+| S162 measured easing + choreography | `e07fbb0` | battery 902/902; kit 12/12; **round 1 human scoring returned a TIE** — B 4.00 / A 4.00 (phone-relayed single numbers, rubric rows not filled; deviation on record) | **OPEN — round 1 = FAIL-AND-ROUTE-BACK per the verdict rule (B must exceed A); three closure paths recorded** (`docs/audits/s162-visual-acceptance-record.md` §4a) |
 | S162b master roadmap preserved | `586b1bf` | the commissioning report in-repo as PROPOSED; §9 reconciliation; ledger live | CLOSED (document) |
 | Nov 8 eight-profile blind baseline | — | the S55 kit's human round returned: mean 3.25/5, temporal coherence 4.5/5; weaknesses per profile ON RECORD | CLOSED (baseline of record — `docs/audits/s55-blind-scoring-record.md`) |
 | Scene-QC S136 audio contract (scene scope) | `f7d5dce` | `sceneAudioVerdict` pins ×5 (battery 907); the silent-scene false-fail and the vacuous dead-air pass killed | CLOSED |
@@ -571,7 +571,7 @@ The report's ordering, annotated with the repo state:
 
 | Step | Action | Outcome | State |
 |---|---|---|---|
-| 1 | Close S162 visual acceptance | Trustworthy animation baseline | Kit sessions ready; **3 human scorers required** |
+| 1 | Close S162 visual acceptance | Trustworthy animation baseline | Round 1 TIE (4.00/4.00) on record; **gate stays OPEN — operator picks a closure path: rubric re-run, delta strengthening, or explicit floor acceptance** (record §4a) |
 | 2 | Complete S164–S167 | Improve native rendering | S164 next (whiteboard geometry, audit Part 4); **every slice answers a VQ1 baseline weakness** |
 | 3 | Audit existing AI Director capabilities | Avoid duplicating work | M0 audit exists; capability mapping in §9.2 |
 | 4 | Audit existing TTS integration | Establish what is reusable | Inventory in §9.3 |

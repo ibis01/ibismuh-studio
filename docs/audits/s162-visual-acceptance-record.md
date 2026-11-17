@@ -79,6 +79,72 @@ On PASS: this record flips to CLOSED, the ledger row in
 On FAIL: the specific low-scoring rows route back into the graphics lane
 before any S163 work.
 
+## 4a. Round 1 — the human round as it ran (2026-11-17)
+
+Recorded verbatim by the operator; this section is evidence, not
+narrative.
+
+**The round as executed:**
+
+- 3 scorers submitted independently (no conferring reported; `key.json`
+  never left the operator's machine).
+- **DEVIATION**: the scorers worked from phones only and returned ONE
+  number per artifact instead of the four rubric rows + why-lines. The
+  operator relayed the pairs verbatim: scorer 1 — 4 and 4; scorer 2 —
+  3 and 3; scorer 3 — 5 and 5 ("their [scores] are the same [for both
+  clips]"). Sheet order: first number = `TFR-2c582bc9` (arm B), second =
+  `TFR-52e3fb3a` (arm A).
+- No why-lines were collected; no per-row granularity exists. The
+  composites below therefore ride single-number holistics, not the
+  four-row rubric the template asks for — recorded as a protocol
+  deviation, never back-filled.
+
+**Closure numbers (as relayed):**
+
+```
+Scorers: 3 (phone-relayed via the operator) · Date: 2026-11-17
+Per-scorer rows: NOT COLLECTED (single number per artifact — deviation)
+Composite arm A (TFR-52e3fb3a): 4.00 / 5   (4, 3, 5)
+Composite arm B (TFR-2c582bc9): 4.00 / 5   (4, 3, 5)
+Delta (B − A): +0.00 — a TIE in every scorer's own hand
+```
+
+**Verdict — per the adopted rule, FAIL-AND-ROUTE-BACK:**
+
+1. ≥ 3 scorers submitted independently — met.
+2. arm B composite ≥ 4/5 — met (4.00).
+3. arm B must EXCEED arm A — **not met** (+0.00; every scorer scored
+   both artifacts identically). A B ≥ 4 that fails to beat A is a
+   FAIL-AND-ROUTE-BACK, not a pass. **The gate does NOT close.**
+
+**What the tie honestly says:** at 640×360 phone viewing with
+single-number granularity, the S162 delta (ease-back → measured-out
+entrances, 350 ms → 150 ms stagger, the landing pulse) either does not
+read, or the round's coarseness cannot detect it. Both readings are
+recorded; neither is resolved by this round.
+
+**Ordering note, kept honest:** the adopted rule wrote "before any S163
+work" — S163 in fact proceeded (Phases A+B, `409fc59` / `9a9fb9e`, CI
+8/8) while this gate stayed open, per the master roadmap's staged
+ordering. Recorded here so the ledger never implies the gate opened the
+S163 door.
+
+**The three closure paths (operator's decision, none taken silently):**
+
+1. **Re-run the rubric round** — same two artifacts (they are
+   deterministic; the SHAs still match), scorers fill the four rows +
+   why-line per artifact. A phone-fillable one-number-per-row form is
+   the minimum viable instrument.
+2. **Strengthen the delta, re-kit, re-score** — if the tie reads as
+   "the delta does not read", the S162 vocabulary needs a perceptible
+   change before the gate can mean anything.
+3. **Operator acceptance of the recorded floor** — the human evidence
+   EXISTS and says 4.00/4.00: the floor is met, the improvement is not
+   demonstrated. Only the commissioning operator may close the gate on
+   that basis, explicitly, in the ledger — never as a silent pass.
+
+**Status: the S162 gate remains OPEN with round 1 on record.**
+
 ## 5. Regenerating the session
 
 ```bash
