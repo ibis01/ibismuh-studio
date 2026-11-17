@@ -485,7 +485,7 @@ Purpose: no programme duplicates shipped work.
 | S162 acceptance | Blind kit committed; **human scoring gate PENDING** | `scripts/s162-blind-kit.mts`; `docs/audits/s162-visual-acceptance-record.md` |
 | S163 native transition engine | **Landed both phases** — Phase A assembly-xfade vocabulary (`409fc59`); Phase B native `graphics/transitions.ts` (`9a9fb9e`) | Six-engine audit Part 4 S163; battery 920/920; CI 8/8 |
 | S164 whiteboard geometry (Rough.js native port) | **Code landed** — `da654d3`: roughen.ts + fills.ts in-house (no Rough.js dep), per-shape fnv1a seed law, S139 knobs honored; battery 928/928; live smoke byte-identical; blind kit W-series NOT YET RUN | Six-engine audit Part 4 S164; `scripts/s164-proof.mts` |
-| S165 determinism + throughput | Staged (HyperFrames patterns: ready-gate diagnostics, static-frame dedup, golden-video harness) | Six-engine audit Part 4 S165 |
+| S165 determinism + throughput | **Landed** — `0be0b5a` + `a2759db`: per-engine srgb/font-hinting launch sets; ready-gate named diagnostics (`render-gates.ts`); static-frame dedup (PSNR fail-closed); golden-video harness green on three engines (committed baselines + tolerance metadata); frame-truth scan (32 modules green, planted fixture CAUGHT); dedup throughput measured **4.32×** (30,365 ms → 7,035 ms on a 30s hold scene, delivered clock identical); pins ×5 (battery 933/933); s87 battery FULL 42/42 | Six-engine audit Part 4 S165; `scripts/golden/s165/` |
 | S166 character expressiveness | Staged (mbp/rest mouth classes, OT parabolic pose math, K2-gated IK) | Six-engine audit Part 4 S166; `docs/audits/s125-character-rig.md` |
 | S167 cinematic finishing + 3D wiring | Staged (fBM shake, exponential push-ins, SOP/CDL grade, duck envelopes, PlanVisualKind "3d") | Six-engine audit Part 4 S167; the recorded 3D-not-compositor-wired gap (audit Part 0.3) |
 
@@ -561,7 +561,8 @@ state. Updated as milestones land — never rewritten retroactively.
 | S163 Phase B — the native graphics transition engine | `9a9fb9e` | `graphics/transitions.ts` (743 LOC, pure) — TransitionSpec closed set (crossfade/iris/whiteout/zoomthrough/wipeleft/wiperight) at the measured opus frame counts; in-house seeded geometry (hash01 FNV-1a / axisFor / cornerR); JSON-stable 3-dp compositor; the overlap-accounting law NET-ZERO (window frames carved from the outgoing tail — Σ clips + Σ windows ≡ Σ legacy frames, the two-clock assert guards unchanged); additive `nativeTransitions` opt-in, absent ⇒ byte-identical legacy path; QC books native boundaries as blend windows with the builder's arithmetic; the live smoke caught a P5-proof applier bug (fixed + pinned); pins ×10 (battery 920/920); CI 8/8 | CLOSED |
 | S164 whiteboard hand-drawn geometry | `da654d3` | the Rough.js native port in-house — `whiteboard/roughen.ts` (310 LOC: MINSTD, per-shape seed = fnv1a(assetId::pathId), no shared mutable stream; bowing double-stroke, rough Catmull-Rom, ellipse overshoot) + `whiteboard/fills.ts` (314 LOC: scan-line hachure + 4 wrappers, dots only with seeded jitter) wired BEHIND the S139 sketch pass (absent knobs ⇒ byte-identical legacy); svg.ts ONE-serializer parity + authored-curve flatten/RDP + the command-cap guard; pins ×8 (battery 928/928); live smoke sha256-identical across two real renders; blind kit W-series NOT YET RUN | CLOSED (code); W-series blind kit OPEN |
 | VQ1 added as the overlay programme | `f7d5dce` | the acceptance rule + P1–P5 + re-benchmark protocol in this document | CLOSED (spec); P1–P5 implementation NOT STARTED |
-| S165–S167 | — | staged in the six-engine audit Part 4 | NOT STARTED |
+| S165 determinism + throughput | `0be0b5a` + `a2759db` | per-engine srgb/font-hinting launch sets; ready-gate named diagnostics (`render-gates.ts`, which-gate-is-stuck across graphics/whiteboard/3D/slides); static-frame dedup with PSNR fail-closed below the floor; the golden-video harness in the s87 battery — committed baselines + {minPsnr, maxFrameFailures, minAudioCorrelation}, green on THREE engines; the generalized frame-truth scan (251 LOC) — real tree green at 32 modules, the planted nondeterminism fixture CAUGHT; dedup throughput MEASURED 4.32× (30,365 ms → 7,035 ms wall, 720 screenshots → 2, delivered clock identical); pins ×5 (battery 933/933); s87 FULL 42/42; CI 8/8 both commits | CLOSED |
+| S166–S167 | — | staged in the six-engine audit Part 4 | NOT STARTED |
 | S168–S184 | — | this document (PROPOSED) | NOT STARTED / needs per-milestone specs |
 
 ---
@@ -573,7 +574,7 @@ The report's ordering, annotated with the repo state:
 | Step | Action | Outcome | State |
 |---|---|---|---|
 | 1 | Close S162 visual acceptance | Trustworthy animation baseline | Round 1 TIE (4.00/4.00) on record; **gate stays OPEN — operator picks a closure path: rubric re-run, delta strengthening, or explicit floor acceptance** (record §4a) |
-| 2 | Complete S164–S167 | Improve native rendering | S165 next (determinism + throughput, audit Part 4); **every slice answers a VQ1 baseline weakness** |
+| 2 | Complete S165–S167 | Improve native rendering | S166 next (character expressiveness, audit Part 4); **every slice answers a VQ1 baseline weakness** |
 | 3 | Audit existing AI Director capabilities | Avoid duplicating work | M0 audit exists; capability mapping in §9.2 |
 | 4 | Audit existing TTS integration | Establish what is reusable | Inventory in §9.3 |
 | 5 | Benchmark Chatterbox, Kokoro, VoiceStudio | Select the best affordable default | Chatterbox + VoiceStudio wired; Kokoro adoption candidate |

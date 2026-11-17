@@ -495,6 +495,25 @@ walls, no new dependencies. Order = visual impact per LOC × risk.
   fixture is CAUGHT by the new scan.
 - **Complexity**: medium; mostly infrastructure.
 
+> **LANDED** — `0be0b5a` (part 1) + `a2759db` (part 2); battery
+> 933/933 — the 928 stay green + 5; CI 8/8; the s87 battery FULL (A–E)
+> 42/42 foreground. Part 1: the per-engine srgb/font-hinting chromium
+> launch sets; the ready-gate named diagnostics (`render-gates.ts` —
+> which-gate-is-stuck expressions across graphics/whiteboard/3D/slides);
+> `graphics/static-dedup.ts` (the pure scan + PSNR reading law,
+> fail-closed below the floor). Part 2: THE DEDUP THROUGHPUT, MEASURED —
+> one 30s hold scene (720 delivered frames) through the same pipeline:
+> dedup OFF 30,365 ms wall / 720 chromium screenshots; dedup ON 7,035 ms
+> wall / 2 screenshots / 693 frames reused — **4.32× wall-clock**, the
+> delivered clock identical (the two-clock law holds). The golden-video
+> harness rides the s87 battery with committed baselines +
+> `{minPsnr, maxFrameFailures, minAudioCorrelation}` per engine — green
+> on THREE engines (graphics / scene3d / whiteboard fixtures committed
+> under `scripts/golden/s165/`). The generalized frame-truth scan
+> (`src/lib/tubeforge/frame-truth-scan.ts`, 251 LOC): the real engine
+> tree green at 32 modules, and the DELIBERATE NONDETERMINISM FIXTURE is
+> CAUGHT — the acceptance is evidence, not intent.
+
 ### S166 — the character expressiveness slice (OpenToonz adoptions)
 
 - **Objective**: better mouths, better pose math; decide the IK gate.
