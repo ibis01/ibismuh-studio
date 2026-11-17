@@ -80,6 +80,7 @@ import {
 } from "../whiteboard/svg";
 import type { GraphicsDoc, GraphicsElement, GraphicsScene } from "./types";
 import type { GraphicsFrameState } from "./frame";
+import { GRAPHICS_MOTION_SEMANTICS } from "./frame";
 
 // ---------------------------------------------------------------------------
 // The compose-time defaults — ONE table, cited by the skeleton and the pins
@@ -231,13 +232,23 @@ function counterInner(el: GraphicsElement): string {
   const p = el.counter;
   if (p === undefined) return "";
   const d = p.decimals ?? 0;
+  // S162 — the opus counter craft: the poster IS the final string (sized
+  // from the final value — no reflow on landing) and the text carries
+  // tabular numerals so same-length counting never re-measures glyphs
+  // (the glyph-jitter kill; GRAPHICS_MOTION_SEMANTICS.counterTabularNums
+  // is the named flag — the pins cite it). Style attr, not the SVG2
+  // presentation attribute — the style form is honored by every chromium
+  // the renderer runs.
+  const tabular = GRAPHICS_MOTION_SEMANTICS.counterTabularNums
+    ? ` style="font-variant-numeric:tabular-nums"`
+    : "";
   return textBlock({
     lines: [""],
     sizePx: GRAPHICS_COMPOSE_DEFAULTS.sizePx,
     weight: GRAPHICS_COMPOSE_DEFAULTS.weight,
     color: GRAPHICS_COMPOSE_DEFAULTS.ink,
     align: "center",
-    extraAttrs: ` data-counter="1" data-decimals="${d}" data-unit="${esc(p.unit ?? "")}"`,
+    extraAttrs: ` data-counter="1" data-decimals="${d}" data-unit="${esc(p.unit ?? "")}"${tabular}`,
     content: formatCounter(p.to, p.decimals, p.unit), // poster = the final value
   });
 }

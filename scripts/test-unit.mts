@@ -14741,7 +14741,7 @@ suiteStart("Stage S — anim/: easing, keyframes, the clock (S120 §8)");
 
 await test("S easing: the table is complete, pure, clamped — and the overshoot curves actually overshoot", async () => {
   const { EASE_CURVES, evalEase, isEaseName } = await import("../src/lib/tubeforge/anim/easing");
-  eq(Object.keys(EASE_CURVES).sort(), ["ease-back", "ease-in-out", "ease-out", "glide", "linear", "pop"], "six named curves, closed table (S160 added the glide)");
+  eq(Object.keys(EASE_CURVES).sort(), ["drift", "ease-back", "ease-in-out", "ease-out", "expo-in-out", "expo-out", "exponential", "glide", "linear", "measured-back", "measured-in", "measured-in-out", "measured-out", "parabolic-in-out", "pop"], "fifteen named curves, closed table (S162 added the measured nine)");
   ok(isEaseName("pop") && !isEaseName("spring"), "the guard knows the table");
   for (const [name, fn] of Object.entries(EASE_CURVES)) {
     eq(fn(-0.5), 0, `${name} clamps below the domain`);
@@ -18287,7 +18287,7 @@ await test("G1.4 normalize polices the grammar — every drop reported, survivor
   eq(s1First.id, "headline-1", "the first headline synthesized its id");
   eq(s1Second.id, "headline-2", "the dupe id was re-keyed, not dropped");
   eq(s1First.at, { x: 0, y: 1080, scale: 4, rotateDeg: 180 }, "the placement clamped onto the board");
-  eq(s1First.enter, { kind: "rise", durationMs: 600, delayMs: 0, ease: "ease-out" }, "a bare-kind enter rides the native defaults");
+  eq(s1First.enter, { kind: "rise", durationMs: 600, delayMs: 0, ease: "measured-out" }, "a bare-kind enter rides the native defaults (S162: the measured entrance is the degradation floor)");
   const s2 = out.served.get(2);
   ok(s2 !== undefined, "scene 2 served");
   eq(s2.elements.length, 2, "the chart (one clean row) and the raw-path icon survived");
@@ -18700,7 +18700,7 @@ await test("S123 pin 4 — golden frames: ms-sampled states are fps-free; the pe
   const ms24 = S123_SHA(JSON.stringify(S123_MS_GRID.map((t) => frameAt(d24, t))));
   const ms30 = S123_SHA(JSON.stringify(S123_MS_GRID.map((t) => frameAt(d30, t))));
   eq(ms24, ms30, "the same doc, sampled at ms-grid times, hashes identically at 24 and 30 fps");
-  eq(ms24, "a26ebc7ba208c3bf3aed4c7c27bdc5627eac704b7223ed518d35fe86a203cbf0", "the ms-grid golden hash is stable (drift detector)");
+  eq(ms24, "72532abb5bf1b93a0fee24402a877c81ff0399d17339ffaeb54c29c67354fff6", "the ms-grid golden hash is stable (drift detector; re-pinned by S162 — the counter's landing pulse rides the grid)");
   // (b) Per-fps frame series — t = frame · 1000 / fps: the DELIVERED series
   // differs per rate, and each is pinned byte-for-byte.
   const seriesHash = (fps: 24 | 30): string => {
@@ -18710,8 +18710,8 @@ await test("S123 pin 4 — golden frames: ms-sampled states are fps-free; the pe
     for (let n = 0; n < count; n++) states.push(frameAt(doc, (n * 1000) / fps));
     return S123_SHA(JSON.stringify(states));
   };
-  eq(seriesHash(24), "5b9006ac4d45945de02ccf72f1a237d95ba505d90ffd00f9c19e03eea8f61878", "the 24 fps frame-series golden hash is stable");
-  eq(seriesHash(30), "84394bd9d737be4abb20d5d0fb6cc253b345b2b162cb859c4e7047d68c1f686c", "the 30 fps frame-series golden hash is stable");
+  eq(seriesHash(24), "73e1ba0c1c3cbe148f5bfe0938ba3606af02af9544edb9f70711ca6354cc7aff", "the 24 fps frame-series golden hash is stable (re-pinned by S162 — the landing pulse)");
+  eq(seriesHash(30), "20ca665560c5ce0e0775c40a21ed1441f3c6c4e5beae80682fdf94ac815c8f03", "the 30 fps frame-series golden hash is stable (re-pinned by S162 — the landing pulse)");
   // (c) Determinism — no clock, no randomness: an immediate re-run of the
   // whole series is byte-identical (the S64 law, pinned over the full
   // delivered series).
@@ -22001,6 +22001,146 @@ await test("S160 graphics frameAt: the camera folds the kick; no camera / no liv
   approx(plain.camera?.tx ?? -9999, 50, 1e-12, "no events ⇒ cameraAt untouched (the byte-identity seam)");
   const camFree = { ...scene, camera: undefined };
   ok(frameAt({ ...doc, scenes: [camFree] }, 1500).camera === undefined, "hits without a camera stay cameraless (no #gcam to shake)");
+});
+
+// ---------- suite: S162 — the measured easing vocabulary + the counter craft ----------
+
+suiteStart("S162 — the measured vocabulary rides the substrate; the counter lands with craft");
+
+await test("S162 easing: the opus anchor sets pinned at their literals; the OT pair pinned at its exact laws", async () => {
+  const { EASE_CURVES } = await import("../src/lib/tubeforge/anim/easing");
+  // The bezier solve is 40 fixed bisection iterations — the literals below
+  // are its frozen output, independently cross-checked against a
+  // 200-iteration solve (agreement ~1e-12; the symmetric sets' midpoint
+  // carries only the bisection's 2⁻⁴⁰ residue, pinned at 1e-9).
+  approx(EASE_CURVES["measured-out"](0.25), 0.8256223011582051, 1e-12, "measured-out (0.16,1,0.3,1) f(0.25)");
+  approx(EASE_CURVES["measured-out"](0.5), 0.97177910526354, 1e-12, "measured-out f(0.5) — the long-tail settle");
+  approx(EASE_CURVES["measured-out"](0.75), 0.9976770670744277, 1e-12, "measured-out f(0.75)");
+  approx(EASE_CURVES["measured-in-out"](0.5), 0.5, 1e-9, "measured-in-out (0.65,0,0.35,1) midpoint (bisection residue)");
+  approx(EASE_CURVES["measured-in"](0.25), 0.031843473070597705, 1e-12, "measured-in (0.55,0,1,0.45) f(0.25) — exits accelerate");
+  approx(EASE_CURVES["drift"](0.25), 0.14467317835364701, 1e-12, "drift (0.37,0,0.63,1) f(0.25)");
+  approx(EASE_CURVES["expo-out"](0.25), 0.8435143230127665, 1e-12, "expo-out (0.19,1,0.22,1) f(0.25) — violent start");
+  approx(EASE_CURVES["expo-out"](0.5), 0.9778245915304966, 1e-12, "expo-out f(0.5) — the decelerating tail");
+  approx(EASE_CURVES["expo-in-out"](0.25), 0.0400588865203743, 1e-12, "expo-in-out (0.87,0,0.13,1) f(0.25)");
+  // measured-back — the opus overshoot entrance: swings past 1, settles EXACTLY.
+  approx(EASE_CURVES["measured-back"](0.25), 0.8162891986924028, 1e-12, "measured-back (0.34,1.56,0.64,1) f(0.25)");
+  ok(EASE_CURVES["measured-back"](0.5) > 1.08, `measured-back swings past 1 (got ${EASE_CURVES["measured-back"](0.5).toFixed(3)})`);
+  eq(EASE_CURVES["measured-back"](1), 1, "measured-back settles exactly");
+  // parabolic-in-out — the OT piecewise: exact midpoint, exact line slope 4/3.
+  eq(EASE_CURVES["parabolic-in-out"](0.5), 0.5, "parabolic midpoint EXACT (the 0.5-anchored middle branch)");
+  approx(EASE_CURVES["parabolic-in-out"](0.25), 0.16666666666666669, 1e-15, "parabolic accel span ends at A = 1/6");
+  approx(EASE_CURVES["parabolic-in-out"](0.75), 0.8333333333333333, 1e-15, "parabolic decel span starts at 1 − A");
+  approx(EASE_CURVES["parabolic-in-out"](0.3), 0.5 + (4 / 3) * (0.3 - 0.5), 1e-15, "parabolic middle is LINEAR at slope 4/3 (f(0.3))");
+  approx(EASE_CURVES["parabolic-in-out"](0.7), 0.5 + (4 / 3) * (0.7 - 0.5), 1e-15, "parabolic middle is LINEAR (f(0.7))");
+  let parSym = 0;
+  for (let i = 1; i < 50; i++) {
+    const t = i / 50;
+    parSym = Math.max(parSym, Math.abs(EASE_CURVES["parabolic-in-out"](t) + EASE_CURVES["parabolic-in-out"](1 - t) - 1));
+  }
+  ok(parSym <= 1e-12, `parabolic symmetry f(t) + f(1−t) = 1 (max residue ${parSym.toExponential(2)})`);
+  // exponential — the OT 2^x family: exact midpoint, math ground truth at
+  // the anchors (0.5·2⁻⁵ = 0.015625 — the sqrt-ladder table lands within
+  // ~5e-15 of it), symmetry over the grid.
+  eq(EASE_CURVES.exponential(0.5), 0.5, "exponential midpoint EXACT (0.5·1^10)");
+  approx(EASE_CURVES.exponential(0.25), 0.015625, 1e-12, "exponential f(0.25) = 2⁻⁶ (the math truth)");
+  approx(EASE_CURVES.exponential(0.75), 0.984375, 1e-12, "exponential f(0.75) = 1 − 2⁻⁶ (the math truth)");
+  let expSym = 0;
+  for (let i = 1; i < 50; i++) {
+    const t = i / 50;
+    expSym = Math.max(expSym, Math.abs(EASE_CURVES.exponential(t) + EASE_CURVES.exponential(1 - t) - 1));
+  }
+  ok(expSym <= 1e-12, `exponential symmetry f(t) + f(1−t) = 1 (max residue ${expSym.toExponential(2)})`);
+  ok(EASE_CURVES.exponential(0.1) < EASE_CURVES.exponential(0.2) && EASE_CURVES.exponential(0.6) < EASE_CURVES.exponential(0.7), "exponential accelerates then decelerates (the push-in shape)");
+});
+
+await test("S162 easing: the zoompan compiler refuses the measured vocabulary loudly (S167 owns the compile)", async () => {
+  const { zoomProgressExpr } = await import("../src/lib/tubeforge/anim/easing");
+  for (const name of ["measured-out", "exponential", "parabolic-in-out"] as const) {
+    let threw: unknown = null;
+    try {
+      zoomProgressExpr(name, 90);
+    } catch (e) {
+      threw = e;
+    }
+    ok(threw instanceof Error && threw.message.includes("S167"), `zoomProgressExpr("${name}") refuses with the S167 pointer`);
+  }
+});
+
+await test("S162 graphics frame: the counter craft — tabular numerals baked, the landing pulse breathes once", async () => {
+  const { GRAPHICS_MOTION_SEMANTICS } = await import("../src/lib/tubeforge/graphics/frame");
+  eq(GRAPHICS_MOTION_SEMANTICS.counterTabularNums, true, "the tabular-nums flag is on (the glyph-jitter kill)");
+  eq(GRAPHICS_MOTION_SEMANTICS.landingPulseMs, 267, "the pulse spans 267 ms (the opus 8 frames at the 30 fps reference — clock-invariant by the D3 law)");
+  eq(GRAPHICS_MOTION_SEMANTICS.landingPulseDepth, 0.025, "the pulse breathes +2.5% at its midpoint");
+  eq(GRAPHICS_MOTION_SEMANTICS.kineticStaggerMs, 150, "the kinetic stagger is the opus overlap offset");
+
+  const { composeGraphicsScene } = await import("../src/lib/tubeforge/graphics/compose");
+  const counterEl = {
+    id: "c", kind: "counter" as const, at: { x: 960, y: 470, scale: 2, rotateDeg: 0 },
+    counter: { from: 0, to: 87, unit: "%" as const },
+    enter: { kind: "count" as const, durationMs: 1200, delayMs: 300, ease: "expo-out" as const },
+  };
+  const scene = { id: "s1", narration: "it lands", background: "#ffffff", elements: [counterEl] };
+  const doc = { version: 1 as const, title: "counter craft", width: 1920, height: 1080, fps: 30 as const, scenes: [scene] };
+  const composed = composeGraphicsScene(scene, doc);
+  ok(composed.html.includes('data-counter="1"'), "the counter baked its payload marker");
+  ok(composed.html.includes('style="font-variant-numeric:tabular-nums"'), "the counter text carries tabular numerals (the S162 attr)");
+  ok(composed.html.includes("87%"), "the poster string is the FINAL value (sized from the final string)");
+
+  const { frameAt } = await import("../src/lib/tubeforge/graphics/frame");
+  const enterEnd = 300 + 1200;
+  const at = (tMs: number): number => frameAt(doc, tMs).elements[0]?.scale ?? -1;
+  eq(at(enterEnd), 2, "at the enter close the pulse has not begun (q = 0 → factor exactly 1)");
+  approx(at(enterEnd + 133.5), 2 * 1.025, 1e-9, "the pulse peaks at +2.5% mid-window (q = 0.5 at 133.5 ms)");
+  eq(at(enterEnd + 300), 2, "past the pulse window the scale returns EXACTLY to base");
+  approx(at(enterEnd - 0.01), at(enterEnd), 1e-9, "continuity into the pulse window");
+  // The D3 law holds THROUGH the pulse: the same doc at a different fps
+  // samples identical states at the same ms times.
+  const doc24 = { ...doc, fps: 24 as const };
+  eq(frameAt(doc24, enterEnd + 133.5).elements[0]?.scale, frameAt(doc, enterEnd + 133.5).elements[0]?.scale, "the pulse is fps-free (the D3 ms-sampled law)");
+
+  // The seam law both ways: a fade-entered counter never lands a number →
+  // no pulse; a count enter on a counter-less element → no pulse.
+  const fadeCounter = { ...counterEl, enter: { kind: "fade" as const, durationMs: 1200, delayMs: 300, ease: "measured-out" as const } };
+  const fadeDoc = { ...doc, scenes: [{ ...scene, elements: [fadeCounter] }] };
+  eq(frameAt(fadeDoc, enterEnd + 100).elements[0]?.scale, 2, "a fade-entered counter never pulses");
+  const bareCount = { id: "h", kind: "headline" as const, at: { x: 960, y: 480, scale: 1, rotateDeg: 0 }, text: { text: "no breath", sizePx: 64 }, enter: { kind: "count" as const, durationMs: 1200, delayMs: 300, ease: "linear" as const } };
+  const bareDoc = { ...doc, scenes: [{ ...scene, elements: [bareCount] }] };
+  eq(frameAt(bareDoc, enterEnd + 100).elements[0]?.scale, 1, "a count enter without a counter payload never pulses");
+});
+
+await test("S162 planner: the native enter table rides the measured vocabulary; the stagger overlaps", async () => {
+  const { nativeEnterFor, scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
+  eq(nativeEnterFor("headline", 0).ease, "measured-out", "headlines settle on the measured entrance");
+  eq(nativeEnterFor("counter", 0).ease, "expo-out", "counters land on the expo tail");
+  eq(nativeEnterFor("barChart", 0).ease, "expo-out", "bar growth lands on the expo tail");
+  eq(nativeEnterFor("icon", 0).ease, "linear", "the stroke draw stays constant-speed ink");
+  eq(nativeEnterFor("sprite", 3).ease, "measured-out", "even the closed-table sprite rides the vocabulary");
+  eq(nativeEnterFor("bullet", 0).delayMs, 400, "the first bullet holds the anchor");
+  eq(nativeEnterFor("bullet", 1).delayMs, 550, "the second bullet overlaps at the kinetic stagger (150ms, the opus offset)");
+  eq(nativeEnterFor("bullet", 2).delayMs, 700, "the third cascades");
+  // The real scaffold: the list archetype's bullets stagger by the constant
+  // (three scenes so the middle one rides the archetype chain — the first
+  // scene is always the opener card).
+  const doc = scaffoldGraphicsDoc({
+    scenes: [
+      { index: 1, title: "The opener", narration: "the setup takes minutes" },
+      { index: 2, title: "Why teams switch", narration: "First, the setup takes minutes. Next, the workflow runs itself. Finally, the results compound." },
+      { index: 3, title: "Start today", narration: "see the difference yourself" },
+    ],
+    topic: "stagger",
+  });
+  const s1 = doc.scenes[1];
+  ok(s1 !== undefined, "the scaffold served its scene");
+  const bullets = s1.elements.filter((e) => e.kind === "bullet");
+  ok(bullets.length >= 2, "the list archetype produced bullets");
+  ok(bullets.every((b) => b.enter.ease === "measured-out"), "every scaffolded bullet settles on the measured entrance");
+  const delays = bullets.map((b) => b.enter.delayMs);
+  ok(delays.every((d, i) => i === 0 || d - (delays[i - 1] ?? 0) === 150), `the cascade rides the kinetic stagger (${delays.join(", ")})`);
+  // The LLM prompt teaches the vocabulary (source pin — the S157 pattern).
+  const llmSrc = fs.readFileSync("src/lib/tubeforge/graphics/llm-planner.ts", "utf8");
+  ok(llmSrc.includes("measured-out, measured-in-out, measured-in, drift, measured-back, expo-out, expo-in-out, parabolic-in-out, exponential"), "the planner prompt lists the full measured menu");
+  ok(llmSrc.includes("PREFER the measured vocabulary"), "the prompt prefers the measured set over the legacy names");
+  ok(llmSrc.includes('let ease: EaseName = "measured-out"'), "the degradation floor is the measured entrance");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

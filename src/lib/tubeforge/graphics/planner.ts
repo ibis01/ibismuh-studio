@@ -20,6 +20,7 @@
 // the planner). $0 work — no AI call anywhere (design law 5).
 import { splitSentences } from "../whiteboard/beat-plan";
 import type { Placement } from "../whiteboard/svg";
+import { GRAPHICS_MOTION_SEMANTICS } from "./frame";
 import {
   GRAPHICS_BUDGETS,
   GRAPHICS_SURFACES,
@@ -165,34 +166,47 @@ function remapPlacement(pl: Placement, width: number, height: number): Placement
 /** The default enter motion per kind — every kind drawn from the
  *  compatibility table (a planner never proposes an illegal motion).
  *  `order` staggers repeated kinds (bullets) so the scaffold reads in
- *  sequence. Every span stays far inside the minimum scene clock
+ *  sequence — S162: the stagger rides GRAPHICS_MOTION_SEMANTICS
+ *  .kineticStaggerMs (the opus overlap schedule — the next row starts
+ *  WITHOUT waiting for the previous to finish; the cascade is one
+ *  motion). Every span stays far inside the minimum scene clock
  *  (estimateNarrationMs clamps at 4000ms; the widest default span is
- *  1500ms). */
+ *  1500ms).
+ *
+ *  S162 — the table rides the MEASURED vocabulary (the six-engine audit
+ *  Part 3.1, the opus ease.ts constants): entrances settle on
+ *  "measured-out" (0.16,1,0.3,1 — the measured default entrance, the
+ *  long-tail settle), counters and bar growth land on "expo-out"
+ *  (0.19,1,0.22,1 — violent start, decelerating tail: the number/bars
+ *  READ as landing, and the counter's landing pulse completes the
+ *  breath), the icon's stroke draw stays "linear" (constant-speed ink is
+ *  the honest hand). The pre-S162 names remain in the table — authored
+ *  docs evaluate byte-identically (the additive-seam law). */
 export function nativeEnterFor(kind: GraphicsElementKind, order: number): ElementMotion {
   switch (kind) {
     case "headline":
-      return { kind: "rise", durationMs: 600, delayMs: 0, ease: "ease-back" };
+      return { kind: "rise", durationMs: 600, delayMs: 0, ease: "measured-out" };
     case "subhead":
-      return { kind: "fade", durationMs: 500, delayMs: 250, ease: "ease-out" };
+      return { kind: "fade", durationMs: 500, delayMs: 250, ease: "measured-out" };
     case "bullet":
-      return { kind: "slide", durationMs: 400, delayMs: 400 + 350 * Math.max(0, order), ease: "ease-out" };
+      return { kind: "slide", durationMs: 400, delayMs: 400 + GRAPHICS_MOTION_SEMANTICS.kineticStaggerMs * Math.max(0, order), ease: "measured-out" };
     case "counter":
-      return { kind: "count", durationMs: 1200, delayMs: 300, ease: "linear" };
+      return { kind: "count", durationMs: 1200, delayMs: 300, ease: "expo-out" };
     case "bar":
     case "barChart":
-      return { kind: "grow", durationMs: 900, delayMs: 300, ease: "ease-out" };
+      return { kind: "grow", durationMs: 900, delayMs: 300, ease: "expo-out" };
     case "icon":
       return { kind: "draw", durationMs: 700, delayMs: 350, ease: "linear" };
     case "callout":
-      return { kind: "rise", durationMs: 400, delayMs: 500, ease: "ease-out" };
+      return { kind: "rise", durationMs: 400, delayMs: 500, ease: "measured-out" };
     case "shape":
-      return { kind: "grow", durationMs: 500, delayMs: 350, ease: "ease-out" };
+      return { kind: "grow", durationMs: 500, delayMs: 350, ease: "measured-out" };
     case "group":
-      return { kind: "fade", durationMs: 400, delayMs: 0, ease: "ease-out" };
+      return { kind: "fade", durationMs: 400, delayMs: 0, ease: "measured-out" };
     // S126 — the scaffold never proposes a sprite (imports arrive through
     // the lane); the default only satisfies the closed table.
     case "sprite":
-      return { kind: "fade", durationMs: 400, delayMs: 0, ease: "ease-out" };
+      return { kind: "fade", durationMs: 400, delayMs: 0, ease: "measured-out" };
   }
 }
 

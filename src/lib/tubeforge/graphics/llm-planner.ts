@@ -216,7 +216,7 @@ function policeMotion(
   let motionKind: string;
   let durationMs = base.durationMs;
   let delayMs = slot === "enter" ? base.delayMs : slot === "exit" ? Math.max(0, clockMs - 450) : base.delayMs;
-  let ease: EaseName = "ease-out";
+  let ease: EaseName = "measured-out";
 
   if (typeof raw === "string") {
     motionKind = raw.trim();
@@ -674,7 +674,7 @@ const PLANNER_SYSTEM_PROMPT = `You are a motion-graphics storyboard planner. You
 {
   "scenes": [
     { "scene": 1, "elements": [
-      { "kind": "headline", "text": "Big idea", "x": 960, "y": 400, "sizePx": 64, "enter": { "kind": "rise", "durationMs": 600, "delayMs": 0, "ease": "ease-back" } },
+      { "kind": "headline", "text": "Big idea", "x": 960, "y": 400, "sizePx": 64, "enter": { "kind": "rise", "durationMs": 600, "delayMs": 0, "ease": "measured-out" } },
       { "kind": "counter", "from": 0, "to": 87, "unit": "%", "x": 960, "y": 470 },
       { "kind": "barChart", "data": [ { "label": "2023", "value": 42 }, { "label": "2024", "value": 87 } ], "x": 960, "y": 620 },
       { "kind": "icon", "iconId": "arrow-up", "x": 960, "y": 300 }
@@ -692,7 +692,7 @@ Element kinds (closed set): headline, subhead, bullet, counter, barChart, icon, 
 - group: "children" = ids of elements in the SAME scene (groups do not nest).
 Every element REQUIRES an "enter" motion: { "kind", "durationMs", "delayMs", "ease" }. Motion legality per kind:
 ${MOTION_MENU_LINES}
-"ease" is one of: linear, ease-in-out, ease-out, pop, ease-back. durationMs 200-2000, delayMs ≥ 0 — keep every motion INSIDE the scene's runtime (you were told each scene's estimated seconds).
+"ease" is one of: linear, ease-in-out, ease-out, pop, ease-back, glide, measured-out, measured-in-out, measured-in, drift, measured-back, expo-out, expo-in-out, parabolic-in-out, exponential. PREFER the measured vocabulary: "measured-out" for entrances (fast away, long settle), "measured-in" for exits (accelerating away), "expo-out" for counters and bar growth (they read as landing), "measured-in-out" for camera/morph moves, "drift" for ambient motion. durationMs 200-2000, delayMs ≥ 0 — keep every motion INSIDE the scene's runtime (you were told each scene's estimated seconds).
 x/y are scene-space centers on the board you were told about; scale 0.2-4, rotateDeg -180..180. Optional "opacity" 0-1, optional "exit" and "emphasis" motions (same rules).
 Rules: "scene" is the story scene number you were given. At most 6 elements per scene — prefer fewer, larger, readable pieces. Never repeat an id within a scene. Serve EVERY scene. Keep all text verbatim-faithful to the story — never invent facts or numbers. Never wrap in markdown fences. Never add commentary.`;
 

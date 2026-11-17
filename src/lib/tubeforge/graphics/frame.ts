@@ -112,6 +112,29 @@ export const GRAPHICS_MOTION_SEMANTICS = {
   hitKickFrames: 7,
   hitKickBasePx: 3,
   hitKickYFactor: 0.6,
+  /** S162 — the counter craft (opus big-stat-slide, MIT numbers): the
+   *  counter's <text> carries `font-variant-numeric: tabular-nums` so
+   *  same-length counting never re-measures glyphs (the composer bakes
+   *  the attribute when this flag is on; the poster string is ALREADY the
+   *  final value — sized from the final string, the opus law). */
+  counterTabularNums: true,
+  /** S162 — the landing pulse (opus big-stat-slide): when a count motion
+   *  completes, the counter breathes ONCE — scale rises to
+   *  1 + landingPulseDepth at the pulse midpoint and returns exactly to
+   *  1 at both edges (the exact parabolic hump 4q(1−q) — the measured
+   *  sin(landed·π) hump ported through the exact-op law), over this many
+   *  MILLISECONDS. The window is clock-invariant BY LAW — the D3 pin
+   *  proves ms-sampled frame states are fps-free, so a frame-count
+   *  window would split the 24/30 fps worlds; 267 ms IS the opus 8
+   *  frames at the 30 fps reference, carried as the ms truth. */
+  landingPulseMs: 267,
+  landingPulseDepth: 0.025,
+  /** S162 — the kinetic stagger (opus big-stat/kinetic-type overlap
+   *  schedule, Motion Canvas' sequence law): a repeated kind's next
+   *  instance starts this many ms after the previous — WITHOUT waiting
+   *  for it to finish (windows overlap; the cascade reads as one motion).
+   *  The planner's bullet/bar rows stagger by this constant. */
+  kineticStaggerMs: 150,
 } as const;
 
 /** The motion kinds that drive the opacity channel (enter: 0→1; exit:
@@ -334,6 +357,21 @@ function emphasisChannels(emphasis: ElementMotion, tMs: number, out: Channels): 
   if (emphasis.kind === "wipe" || emphasis.kind === "draw") out.progress *= 1 - S.emphasisNudge * env;
 }
 
+/** S162 — the counter landing pulse: the ONE breath a count motion takes
+ *  when it completes. Window = (enterEnd, enterEnd + landingPulseMs]; the
+ *  hump 4q(1−q) is 0 at BOTH edges (continuity with the settled scale —
+ *  the emphasisEnv edge law, mirrored) and 1 at the midpoint, so the
+ *  counter rises to +landingPulseDepth and returns without a seam. PURE
+ *  (exact ops — the exact-multiplication law); identity outside the
+ *  window; FPS-FREE (the D3 law: ms-sampled states never read the
+ *  doc's clock rate). */
+function landingPulseFactor(tMs: number, enterEndMs: number): number {
+  const S = GRAPHICS_MOTION_SEMANTICS;
+  const q = (tMs - enterEndMs) / S.landingPulseMs;
+  if (q <= 0 || q >= 1) return 1;
+  return 1 + S.landingPulseDepth * 4 * q * (1 - q);
+}
+
 function elementFrame(el: GraphicsElement, tMs: number): GraphicsElementFrame {
   const out: Channels = {
     opacityFactor: 1,
@@ -348,6 +386,15 @@ function elementFrame(el: GraphicsElement, tMs: number): GraphicsElementFrame {
   if (el.tweens !== undefined) tweenChannels(el.tweens, tMs, out);
   if (el.exit !== undefined) exitChannels(el, el.exit, tMs, out);
   if (el.emphasis !== undefined) emphasisChannels(el.emphasis, tMs, out);
+  // S162 — the landing pulse rides LAST among the element layers: a count
+  // motion that has completed breathes once (the opus big-stat law). Only
+  // a real count enter pulses (a fade-entered counter never lands a
+  // number — its value sits at `to` from the start); the factor is 1
+  // outside the pulse window, so untouched docs evaluate byte-identically
+  // (the additive-seam law).
+  if (el.counter !== undefined && el.enter.kind === "count") {
+    out.scaleFactor *= landingPulseFactor(tMs, el.enter.delayMs + el.enter.durationMs);
+  }
   const frame: GraphicsElementFrame = {
     id: el.id,
     opacity: clamp01((el.opacity ?? 1) * out.opacityFactor),
