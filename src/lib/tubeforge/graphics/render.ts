@@ -53,6 +53,16 @@ import { APPLY_GRAPHICS_FRAME_FN, composeGraphicsScene, graphicsFramePayload } f
 import { graphicsEventList, type GraphicsEventSlot } from "./events";
 import { frameAt, graphicsSceneDurationsMs } from "./frame";
 import { assertGraphicsBudget } from "./preflight";
+// S163 Phase B — the native transition engine: the plan, the compositor
+// and the page seam ride the PURE module; this file only orchestrates.
+import {
+  APPLY_TRANSITION_FRAME_FN,
+  compositeTransitionFrame,
+  planNativeTransitions,
+  transitionCompositorPage,
+  type NativeTransitionPlan,
+  type NativeTransitionType,
+} from "./transitions";
 import { graphicsTracks } from "./tracks";
 import { writeGraphicsDoc, type GraphicsDoc } from "./types";
 import { wavDurationSec } from "../wav";
@@ -108,6 +118,17 @@ export interface GraphicsSceneRenderResult {
   file: string;
 }
 
+/** S163 Phase B — one rendered transition window (an additive result
+ *  field: absent on a legacy doc's render, present only when the doc
+ *  opted in). `frames` is the window's delivered frame count; `type` the
+ *  designed beat. The window file joins the concat list at its boundary. */
+export interface GraphicsWindowRenderResult {
+  boundary: number;
+  type: NativeTransitionType;
+  frames: number;
+  file: string;
+}
+
 /** The contract artifacts a graphics render returns alongside the files —
  *  the whiteboard shape mirrored (minus boardModes: the graphics doc has
  *  no board policy; the doc clock IS the timeline): the engine-authored
@@ -124,6 +145,9 @@ export interface GraphicsRenderResult {
    *  event channel's one seam — the audio/QC consumers' fact source;
    *  cues are not clips, so they never ride the tracks). */
   events: GraphicsEventSlot[];
+  /** S163 Phase B — the rendered transition windows in boundary order
+   *  (absent ⇒ the legacy path ran untouched — the additive-seam law). */
+  windows?: GraphicsWindowRenderResult[];
 }
 
 // ---------------------------------------------------------------------------
@@ -307,6 +331,78 @@ export function graphicsAssemblyArgs(input: {
   ];
 }
 
+/** S163 Phase B — the transition-window encode args. The SCENE law
+ *  mirrored (graphicsEncodeArgs), with ONE addition: the OUTGOING scene's
+ *  VO slot rides as input 1 OFFSET by the outgoing clip's delivered
+ *  seconds (-ss) — the carved tail CONTINUES through the window (the
+ *  audio law in transitions.ts: narration spanning the seam is never
+ *  clipped mid-word), apad fills whatever the slot lacks, and -t bounds
+ *  the output to the window's delivered seconds. Silent fill and the
+ *  audio-less shape match the scene encoder exactly (the S87 slice-5
+ *  stream-homogeneity law: the window file is concat-homogeneous with its
+ *  neighbor scenes). Exported for the unit pins (the arg list IS the
+ *  contract). */
+export function graphicsWindowEncodeArgs(input: {
+  framesDir: string;
+  /** The window's OWN encode rate — the scene law (doc.fps, or the look's
+   *  doc.fps / frameStep). Never assumed. */
+  fps: number;
+  /** The window's delivered seconds — the PLAN's number (frames ÷ doc.fps,
+   *  derived once), never re-derived here. */
+  durSec: number;
+  /** The OUTGOING scene's VO slot (null when that scene is silent). */
+  voPath: string | null;
+  /** The outgoing clip's delivered seconds — the VO's -ss offset. */
+  voOffsetSec: number;
+  silentFill: boolean;
+  windowFile: string;
+}): string[] {
+  const args: string[] = [
+    "-y",
+    "-framerate", String(input.fps),
+    "-i", path.join(input.framesDir, "f%05d.jpg"),
+  ];
+  if (input.voPath) args.push("-ss", input.voOffsetSec.toFixed(3), "-i", input.voPath);
+  else if (input.silentFill) args.push("-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo");
+  args.push(
+    "-filter_complex", "[0:v]format=yuv420p[v]",
+    "-map", "[v]",
+    ...((input.voPath || input.silentFill)
+      ? ["-map", "1:a", "-c:a", "aac", "-b:a", "160k", "-af", "apad"]
+      : []),
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "19",
+    "-t", input.durSec.toFixed(3),
+    input.windowFile,
+  );
+  return args;
+}
+
+/** S163 Phase B — the concat order: each window file inserts exactly
+ *  after its OUTGOING scene's file (entry b joins scene b and b+1).
+ *  PURE; an empty/absent window map returns the scene files verbatim —
+ *  the legacy concat list byte-identical (the additive-seam law).
+ *  Exported for the unit pins. */
+export function graphicsConcatEntries(
+  sceneFiles: string[],
+  windowFiles: ReadonlyMap<number, string>,
+): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < sceneFiles.length; i++) {
+    const scene = sceneFiles[i];
+    if (scene === undefined) continue;
+    out.push(scene);
+    const windowFile = windowFiles.get(i);
+    if (windowFile !== undefined) out.push(windowFile);
+  }
+  return out;
+}
+
+/** The transition-window clip's file for a boundary — window-<b+1>.mp4,
+ *  the scene-<n>.mp4 numbering mirrored. Exported for the unit pins. */
+export function graphicsWindowFile(outDir: string, boundary: number): string {
+  return path.join(outDir, `window-${boundary + 1}.mp4`);
+}
+
 /** Render one validated graphics doc to <outDir>/final.mp4. The caller
  *  passes the output of parseGraphicsDoc/validateGraphicsDoc — the doc IS
  *  the render input of record (the grammar gate ran at admission). */
@@ -371,6 +467,18 @@ export async function renderGraphics(
   const { chromium } = await import("playwright");
   fs.mkdirSync(opts.outDir, { recursive: true });
 
+  // S163 Phase B — the native transition plan: the doc's opt-in specs
+  // become the window plan through the ONE pure derivation (BEFORE
+  // chromium — a structural refusal never spends the launch). The plan's
+  // identity — Σ clips + Σ windows ≡ Σ legacy scene frames — is what the
+  // two-clock assert below enforces on the DELIVERED files; absent specs
+  // ⇒ null ⇒ the byte-identical legacy path.
+  const nativePlan: NativeTransitionPlan | null = planNativeTransitions({
+    scenes: plan.scenes,
+    fps: doc.fps,
+    specs: doc.nativeTransitions ?? [],
+  });
+
   // S132 — the resume setup. The fingerprint pins every input that shapes
   // the scene files; a mismatch refuses (fail-closed) instead of mixing
   // two renders' scenes. Encoded scenes rejoin only when their FILE still
@@ -417,8 +525,12 @@ export async function renderGraphics(
   try {
     for (let si = 0; si < doc.scenes.length; si++) {
       const scene = doc.scenes[si];
-      const frames = Math.ceil(plan.scenes[si].frames / step);
-      const durSec = plan.scenes[si].deliveredSec;
+      // S163 Phase B — the DELIVERED clip: the outgoing scene's own window
+      // carved from its tail (planNativeTransitions), or the legacy frames
+      // untouched when the doc carries no specs (byte-identity).
+      const clipFrames = nativePlan !== null ? nativePlan.sceneClipFrames[si] : plan.scenes[si].frames;
+      const frames = Math.ceil(clipFrames / step);
+      const durSec = nativePlan !== null ? nativePlan.sceneClipSec[si] : plan.scenes[si].deliveredSec;
       const durationMs = sceneMs[si];
       const cursorMs = sceneCursorMs(sceneMs, si);
 
@@ -521,18 +633,139 @@ export async function renderGraphics(
       }
     }
 
+    // S163 Phase B — the transition-window clips: one per boundary, each
+    // rendered AFTER the scene loop (self-contained — it screenshots the
+    // two scenes' seam snapshots from the compose, never from the encoded
+    // files, so a resumed scene's window renders identically). The window
+    // joins the concat list exactly after its outgoing scene's file.
+    const windowFiles = new Map<number, string>();
+    const windowResults: GraphicsWindowRenderResult[] = [];
+    if (nativePlan !== null) {
+      for (const win of nativePlan.windows) {
+        const boundary = win.boundary;
+        const outScene = doc.scenes[boundary];
+        const inScene = doc.scenes[boundary + 1];
+        if (outScene === undefined || inScene === undefined) {
+          throw new Error(
+            `the native transition window at boundary ${boundary} has no scene pair — an engine bug, not a doc problem`,
+          );
+        }
+        const windowFile = graphicsWindowFile(opts.outDir, boundary);
+        const framesDir = path.join(opts.outDir, `window-${boundary + 1}-frames`);
+        opts.onProgress?.(
+          `window ${boundary + 1}/${nativePlan.windows.length} ("${outScene.id}" → "${inScene.id}", ${win.spec.type}): composing`,
+          boundary / Math.max(doc.scenes.length, 1),
+        );
+        // Per-window context recycling (the S75 E10 receipt, mirrored) +
+        // security line 2: the page renders only what these strings carry.
+        const context = await browser.newContext({
+          viewport: { width: doc.width, height: doc.height },
+          deviceScaleFactor: 1,
+        });
+        await context.route("**/*", (route) => route.abort());
+        const page = await context.newPage();
+        try {
+          const surface = { width: doc.width, height: doc.height };
+          const shot = async (target: typeof outScene, tMs: number): Promise<Buffer> => {
+            const composed = composeGraphicsScene(target, doc, { spriteAssets: opts.spriteAssets });
+            if (composed.missingAssets.length > 0) {
+              throw new Error(
+                `unresolved sprite imports (${composed.missingAssets.join(", ")}) — resolve them through the import store before rendering`,
+              );
+            }
+            await page.setContent(composed.html, { waitUntil: "load" });
+            const payload = graphicsFramePayload(frameAt(doc, tMs, voMsBySceneId));
+            await page.evaluate(`(${APPLY_GRAPHICS_FRAME_FN})(${JSON.stringify(payload)})`);
+            return page.screenshot({ type: "jpeg", quality: 92, clip: { x: 0, y: 0, width: doc.width, height: doc.height } });
+          };
+          // The two SNAPSHOTS: the outgoing scene's final DELIVERED frame
+          // (the frame its clip ends on — the window's p→0 limit continues
+          // it exactly) and the incoming scene's first frame (the window's
+          // p→1 limit hands off to it exactly). Exact doc-clock times.
+          const outCursorMs = sceneCursorMs(sceneMs, boundary);
+          const snapA = await shot(outScene, outCursorMs + ((nativePlan.sceneClipFrames[boundary] - 1) / doc.fps) * 1000);
+          const snapB = await shot(inScene, sceneCursorMs(sceneMs, boundary + 1));
+          await page.setContent(
+            transitionCompositorPage(doc.width, doc.height, `data:image/jpeg;base64,${snapA.toString("base64")}`, `data:image/jpeg;base64,${snapB.toString("base64")}`),
+            { waitUntil: "load" },
+          );
+          await page.evaluate("Promise.all([window.__timgA.decode(), window.__timgB.decode()]).then(() => true)");
+
+          fs.mkdirSync(framesDir, { recursive: true });
+          const windowFrames = Math.ceil(win.frames / step);
+          for (let f = 0; f < windowFrames; f++) {
+            // The OPEN-interval ramp: delivered frame k shows progress
+            // (k+1)/(N+1) — the pure endpoints live in the neighbor clips,
+            // so both seams are quantization-tight (the module's law). A
+            // look-rate samples every OTHER delivered frame at its exact
+            // progress (the scene loop's step law, mirrored).
+            const k = f * step;
+            const desc = compositeTransitionFrame(surface, surface, (k + 1) / (win.frames + 1), win.spec, surface);
+            // The whiteboard's evaluate law verbatim (the P5 proof): the
+            // applier takes the payload STRING and JSON.parses it inside the
+            // page — the description is double-encoded into a quoted literal
+            // here. Interpolating the raw JSON would pass an OBJECT where
+            // the applier expects a string (the exact SyntaxError the P5
+            // proof caught on its first run — and the live smoke caught
+            // here).
+            await page.evaluate(`(${APPLY_TRANSITION_FRAME_FN})(${JSON.stringify(JSON.stringify(desc))})`);
+            await page.screenshot({
+              path: path.join(framesDir, `f${String(f).padStart(5, "0")}.jpg`),
+              type: "jpeg",
+              quality: 92,
+              clip: { x: 0, y: 0, width: doc.width, height: doc.height },
+            });
+            if (f % 24 === 0) {
+              opts.onProgress?.(
+                `window ${boundary + 1}/${nativePlan.windows.length} ("${outScene.id}" → "${inScene.id}", ${win.spec.type}): frame ${f + 1}/${windowFrames}`,
+                (boundary + (f + 1) / windowFrames) / doc.scenes.length,
+              );
+            }
+          }
+
+          // Encode the window: frames + the OUTGOING scene's carved VO
+          // tail (offset by the outgoing clip's seconds — narration spans
+          // the seam), the silent fill when any scene carries audio, or no
+          // audio stream at all (the concat homogeneity law, mirrored).
+          const voPath = voResolved.get(outScene.id) ?? null;
+          await runFfmpeg(graphicsWindowEncodeArgs({
+            framesDir,
+            fps: effFps,
+            durSec: win.sec,
+            voPath,
+            voOffsetSec: nativePlan.sceneClipSec[boundary],
+            silentFill: !voPath && anyVoAudio,
+            windowFile,
+          }));
+          fs.rmSync(framesDir, { recursive: true, force: true });
+          windowFiles.set(boundary, windowFile);
+          windowResults.push({ boundary, type: win.spec.type, frames: windowFrames, file: windowFile });
+        } finally {
+          await context.close().catch(() => {});
+        }
+      }
+    }
+
     // Final assembly: the two-clock assert first (the whiteboard law — the
     // delivered Σ must equal the contract's total, or the render refuses
-    // instead of shipping a desynced projection), then concat + bed.
+    // instead of shipping a desynced projection), then concat + bed. With
+    // native transitions the delivered Σ reads the plan's identity (Σ clips
+    // + Σ windows ≡ the doc clock); without them the legacy sum verbatim.
     const finalFile = path.join(opts.outDir, "final.mp4");
-    const totalSec = plan.scenes.reduce((a, s) => a + s.deliveredSec, 0);
+    const totalSec = nativePlan !== null
+      ? nativePlan.totalSec
+      : plan.scenes.reduce((a, s) => a + s.deliveredSec, 0);
     if (Math.abs(contractPlan.totalSec - Math.round(totalSec * 100) / 100) > 0.001) {
       throw new Error(
         "the graphics assembly clock diverged from the timeline contract — an engine bug, not a doc problem"
       );
     }
     const listFile = path.join(opts.outDir, "concat.txt");
-    fs.writeFileSync(listFile, sceneFiles.map((s) => `file '${path.resolve(s.file)}'`).join("\n") + "\n");
+    // The concat order: each window file inserts exactly after its
+    // outgoing scene's file (graphicsConcatEntries; a legacy doc's list is
+    // the scene files verbatim — byte-identity).
+    const concatFiles = graphicsConcatEntries(sceneFiles.map((s) => s.file), windowFiles);
+    fs.writeFileSync(listFile, concatFiles.map((f) => `file '${path.resolve(f)}'`).join("\n") + "\n");
     await runFfmpeg(graphicsAssemblyArgs({
       listFile,
       finalFile,
@@ -544,7 +777,16 @@ export async function renderGraphics(
     // interrupted run) is spent. Delete it so the next run starts fresh;
     // the scene mp4s stay (today's behavior).
     if (manifest !== null) fs.rmSync(renderManifestPath(opts.outDir), { force: true });
-    return { scenes: sceneFiles, file: finalFile, tracks, plan: contractPlan, events: graphicsEventList(doc, doc.fps, voMsBySceneId) };
+    return {
+      scenes: sceneFiles,
+      file: finalFile,
+      tracks,
+      plan: contractPlan,
+      events: graphicsEventList(doc, doc.fps, voMsBySceneId),
+      // S163 Phase B — additive only: a legacy doc's result carries no
+      // windows key at all (the additive-seam law, the result shape too).
+      ...(nativePlan !== null ? { windows: windowResults } : {}),
+    };
   } finally {
     await browser.close();
   }

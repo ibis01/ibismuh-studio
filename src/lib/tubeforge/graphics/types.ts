@@ -37,6 +37,11 @@ import { countPathCommands, type Placement } from "../whiteboard/svg";
 import { ANIM_FRAME_BUDGET } from "../anim/clock";
 import { isEaseName, type EaseName } from "../anim/easing";
 import { estimateNarrationMs } from "../whiteboard/timing";
+// S163 Phase B — the native transition grammar rides the pure vocabulary
+// module (a leaf BELOW the grammar: it imports only the anim substrate,
+// never the reverse — no cycle).
+import { sanitizeNativeTransitionSpec } from "./transitions";
+import type { TransitionSpec } from "./transitions";
 
 // ---------------------------------------------------------------------------
 // Version + id law
@@ -450,6 +455,14 @@ export interface GraphicsDoc {
   height: number;
   fps: 24 | 30;
   scenes: GraphicsScene[];
+  /** S163 Phase B — the native transition engine's opt-in: one spec per
+   *  boundary, INDEXED BY BOUNDARY (entry b joins scene b and b+1; a
+   *  shorter array leaves the later boundaries hard cuts). Absent ⇒ the
+   *  byte-identical legacy path (concat hard cuts, unchanged clock) — the
+   *  additive-seam law. Entry walls: ≤ scenes−1 (extras warn-drop), each
+   *  spec through sanitizeNativeTransitionSpec (closed type set, the
+   *  frames wall, junk decorations drop honestly). */
+  nativeTransitions?: TransitionSpec[];
 }
 
 // ---------------------------------------------------------------------------
@@ -564,7 +577,7 @@ const ELEMENT_KEYS = new Set([
   "opacity",
 ]);
 
-const DOC_KEYS = new Set(["version", "title", "width", "height", "fps", "scenes"]);
+const DOC_KEYS = new Set(["version", "title", "width", "height", "fps", "scenes", "nativeTransitions"]);
 const SCENE_KEYS = new Set(["id", "narration", "durationMs", "background", "routing", "camera", "events", "elements"]);
 
 const ROUTING_KEYS = new Set(["suggestedEngine", "confidence", "reason"]);
@@ -1740,6 +1753,30 @@ function parseDoc(raw: unknown, warnings: string[], errors: string[]): GraphicsD
     );
     return null;
   }
+  // S163 Phase B — the native transition opt-in (a DOC-level decoration,
+  // tolerant like every optional field): each entry through the sanitizer,
+  // extras beyond the boundary count warn-drop, an array with no
+  // surviving spec stays absent (absent stays absent).
+  let nativeTransitions: TransitionSpec[] | undefined;
+  if (raw.nativeTransitions !== undefined) {
+    if (!Array.isArray(raw.nativeTransitions)) {
+      warnings.push("doc nativeTransitions dropped — not an array");
+    } else {
+      const maxSpecs = Math.max(0, scenes.length - 1);
+      const specs: TransitionSpec[] = [];
+      for (let i = 0; i < raw.nativeTransitions.length; i++) {
+        const where = `doc nativeTransitions[${i}]`;
+        if (specs.length >= maxSpecs) {
+          warnings.push(`${where} dropped — only ${maxSpecs} boundaries exist for ${scenes.length} scenes`);
+          continue;
+        }
+        const spec = sanitizeNativeTransitionSpec(raw.nativeTransitions[i], where, warnings);
+        if (spec !== null) specs.push(spec);
+      }
+      if (specs.length > 0) nativeTransitions = specs;
+      else warnings.push("doc nativeTransitions carried no surviving specs — dropped (absent stays absent)");
+    }
+  }
   return {
     version: GRAPHICS_VERSION,
     title,
@@ -1747,6 +1784,7 @@ function parseDoc(raw: unknown, warnings: string[], errors: string[]): GraphicsD
     height,
     fps: fps as 24 | 30,
     scenes,
+    ...(nativeTransitions !== undefined ? { nativeTransitions } : {}),
   };
 }
 
@@ -1935,6 +1973,19 @@ function serializeElement(el: GraphicsElement): Rec {
   return out;
 }
 
+/** S163 Phase B — strict native-transition write: exactly the declared
+ *  fields, declared order (type, frames, angle, color, bands, seed) — the
+ *  spec block round-trips byte-stable like everything else on the doc.
+ *  ABSENT on a legacy doc → the key never appears (byte-identity). */
+function serializeNativeTransitionSpec(s: TransitionSpec): Rec {
+  const out: Rec = { type: s.type, frames: s.frames };
+  if (s.angle !== undefined) out.angle = s.angle;
+  if (s.color !== undefined) out.color = s.color;
+  if (s.bands !== undefined) out.bands = s.bands;
+  if (s.seed !== undefined) out.seed = s.seed;
+  return out;
+}
+
 /** Strict write: exactly the declared fields, version first, key order
  *  stable — byte-stable round-trip is the pin. */
 export function writeGraphicsDoc(doc: GraphicsDoc): string {
@@ -1960,5 +2011,10 @@ export function writeGraphicsDoc(doc: GraphicsDoc): string {
       out.elements = s.elements.map(serializeElement);
       return out;
     }),
+    // S163 Phase B — the native transition block rides AFTER the scenes
+    // (declared order, byte-stable; absent on a legacy doc → byte-identity).
+    ...(doc.nativeTransitions !== undefined
+      ? { nativeTransitions: doc.nativeTransitions.map(serializeNativeTransitionSpec) }
+      : {}),
   });
 }

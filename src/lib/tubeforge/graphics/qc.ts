@@ -72,6 +72,31 @@ const HARD_CUT_SETTINGS: TransitionSettings[] = [];
  *     kinetic-typography hold is the format's grammar). Empty window = the
  *     scene's motions run to its end (no legal hold). */
 export function graphicsExpectedCuts(doc: GraphicsDoc, voMsBySceneId?: Map<string, number>): ExpectedCuts {
+  // S163 Phase B — a doc WITH native transitions books its native
+  // boundaries as BLEND WINDOWS, not cuts: the window occupies the
+  // outgoing scene's tail on the doc clock (the net-zero carve — the
+  // boundary's delivered position is the doc-clock boundary itself, no
+  // debt shift), so the expectation covers [boundary − windowSec − 0.3,
+  // boundary + 0.3] and the hard cuts stay only at the plain boundaries.
+  // The same running-sum arithmetic as the builder below, so the two
+  // derivations can never disagree on where a boundary sits.
+  const specs = doc.nativeTransitions;
+  if (specs !== undefined && specs.length > 0 && doc.scenes.length >= 2) {
+    const sceneMs = graphicsSceneDurationsMs(doc, voMsBySceneId);
+    const cuts: number[] = [];
+    const windows: [number, number][] = [];
+    let acc = 0;
+    for (let b = 0; b + 1 < doc.scenes.length; b++) {
+      acc += Math.max(sceneMs[b] ?? 0, 0) / 1000;
+      const spec = specs[b];
+      if (spec !== undefined) {
+        windows.push([Math.max(acc - spec.frames / doc.fps - 0.3, 0), acc + 0.3]);
+      } else {
+        cuts.push(acc);
+      }
+    }
+    return { cuts, windows };
+  }
   const durSec = graphicsSceneDurationsMs(doc, voMsBySceneId).map((ms) => ms / 1000);
   // The settings array is INDEXED BY BOUNDARY (n−1 entries); an empty
   // array means "every boundary defaults to the cut style" — but the

@@ -19101,6 +19101,498 @@ await test("S123 tracks — hand-authored scene ids carry no row linkage (null i
 // judgments — to byte-shapes the house can audit.
 // ---------------------------------------------------------------------------
 
+// ---------- S163 Phase B: the native graphics transition engine ----------
+
+suiteStart("S163 Phase B — the native graphics transition engine");
+
+await test("S163 Phase B: the fps-free law — frames are the unit of account, seconds derive once", async () => {
+  const t = await import("../src/lib/tubeforge/graphics/transitions");
+  // The opus DEFAULTS table numbers as FRAMES (the audit's provenance, read
+  // at source — Phase A carries the same table): iris 8 / whiteout 42 /
+  // zoom 14; the wipes and the crossfade ride the house 0.5s beat at the
+  // 30 fps reference (15f).
+  eq(t.NATIVE_TRANSITION_DEFAULT_FRAMES.iris, 8, "iris 8f");
+  eq(t.NATIVE_TRANSITION_DEFAULT_FRAMES.whiteout, 42, "whiteout 42f");
+  eq(t.NATIVE_TRANSITION_DEFAULT_FRAMES.zoomthrough, 14, "zoom 14f");
+  eq(t.NATIVE_TRANSITION_DEFAULT_FRAMES.crossfade, 15, "crossfade 15f");
+  eq(t.NATIVE_TRANSITION_DEFAULT_FRAMES.wipeleft, 15, "wipeleft 15f");
+  eq(t.NATIVE_TRANSITION_DEFAULT_FRAMES.wiperight, 15, "wiperight 15f");
+  // Seconds derived ONCE at module load at the pinned reference rate —
+  // parity with Phase A's TRANSITION_PRESET_DEFAULTS (the two tables can
+  // never disagree on a beat's length).
+  const { TRANSITION_PRESET_DEFAULTS } = await import("../src/lib/tubeforge/transitions");
+  eq(t.NATIVE_TRANSITION_REFERENCE_SECONDS.iris, TRANSITION_PRESET_DEFAULTS.iris, "iris seconds parity with Phase A (0.267)");
+  eq(t.NATIVE_TRANSITION_REFERENCE_SECONDS.whiteout, TRANSITION_PRESET_DEFAULTS.whiteout, "whiteout seconds parity with Phase A (1.4)");
+  eq(t.NATIVE_TRANSITION_REFERENCE_SECONDS.zoomthrough, TRANSITION_PRESET_DEFAULTS.zoomthrough, "zoomthrough seconds parity with Phase A (0.467)");
+  eq(t.NATIVE_TRANSITION_REFERENCE_SECONDS.crossfade, 0.5, "crossfade 15f @ 30 → 0.5");
+  eq(t.GRAPHICS_TRANSITION_REFERENCE_FPS, 30, "the reference rate is pinned (the opus table's own 30)");
+  // The delivered clock derives ONCE per plan — frames ÷ doc.fps. The SAME
+  // 15-frame window delivers different seconds at the doc's own rates and
+  // the FRAMES never move: both halves of the fps-free law.
+  const legacy30 = framePlanWindows([2000, 1500, 1000], 30);
+  const plan30 = t.planNativeTransitions({ scenes: legacy30.scenes, fps: 30, specs: [{ type: "crossfade", frames: 15 }] });
+  const legacy24 = framePlanWindows([2000, 1500, 1000], 24);
+  const plan24 = t.planNativeTransitions({ scenes: legacy24.scenes, fps: 24, specs: [{ type: "crossfade", frames: 15 }] });
+  ok(plan30 !== null && plan24 !== null, "both plans build");
+  eq(plan30.windows[0]?.frames, 15, "30 fps: the window is 15 frames");
+  eq(plan24.windows[0]?.frames, 15, "24 fps: the window is STILL 15 frames");
+  approx(plan30.windows[0]?.sec ?? 0, 0.5, 1e-9, "30 fps: 15f → 0.5s");
+  approx(plan24.windows[0]?.sec ?? 0, 15 / 24, 1e-9, "24 fps: 15f → 0.625s (the rate belongs to the doc)");
+  // The reference table is the ONLY frames→seconds conversion outside the
+  // plan — the module pins its own law with the S157 source-scan pattern.
+  const src = fs.readFileSync("src/lib/tubeforge/graphics/transitions.ts", "utf8");
+  ok(src.includes("GRAPHICS_TRANSITION_REFERENCE_FPS = 30"), "the reference rate has ONE pinned home");
+});
+
+await test("S163 Phase B: the seeded geometry — hash01/axisFor/cornerR are pure, deterministic, stateless", async () => {
+  const { hash01, axisFor, cornerR, compositeTransitionFrame } = await import("../src/lib/tubeforge/graphics/transitions");
+  // hash01 — a pure function of (seed, index): identical inputs → identical
+  // outputs across calls, orders and interleavings (NO shared mutable
+  // stream — the whiteboard roughen precedent).
+  const fresh = hash01(7, 3);
+  eq(hash01(7, 3), fresh, "same (seed, index) → same value");
+  ok(hash01(2, 9) >= 0 && hash01(1, 0) >= 0, "interleaved calls never disturb the stream (there is no stream)");
+  eq(hash01(7, 3), fresh, "the value survives the interleaving byte-for-byte");
+  ok(fresh >= 0 && fresh < 1, "the value is a 0..1 scalar");
+  ok(hash01(7, 4) !== fresh && hash01(8, 3) !== fresh, "distinct seeds and distinct indexes diverge");
+  for (let s = 0; s < 50; s++) {
+    const v = hash01(s, s * 7 + 1);
+    ok(v >= 0 && v < 1, `hash01(${s}, …) lands in 0..1 (got ${v})`);
+  }
+  // axisFor — the sweep table (wiperight travels +x, wipeleft mirrors).
+  eq(JSON.stringify(axisFor("wiperight")), JSON.stringify({ axis: "x", sign: 1 }), "wiperight travels +x");
+  eq(JSON.stringify(axisFor("wipeleft")), JSON.stringify({ axis: "x", sign: -1 }), "wipeleft mirrors (−x)");
+  eq(axisFor("crossfade").axis, "x", "non-wipe types stay total (the neutral axis)");
+  // cornerR — 1.5% of the surface height, floored at 0.
+  eq(cornerR(1080), 16, "1080p → 16px");
+  eq(cornerR(360), 5, "360p → 5px");
+  eq(cornerR(0), 0, "a degenerate height floors at 0");
+  // The compositor is a pure function: byte-identical descriptions across
+  // two computations, 3-dp quantization, and a loud refusal when the
+  // snapshots do not match the output surface (an engine bug, never a doc
+  // problem).
+  const ctx = { width: 640, height: 360 };
+  const spec = { type: "wiperight" as const, frames: 15, bands: 3, seed: 11, angle: 12 };
+  const d1 = compositeTransitionFrame(ctx, ctx, 0.4, spec, ctx);
+  eq(JSON.stringify(compositeTransitionFrame(ctx, ctx, 0.4, spec, ctx)), JSON.stringify(d1), "two computations — byte-identical");
+  eq(d1.progress, 0.4, "progress rides 3-dp");
+  let threw = false;
+  try {
+    compositeTransitionFrame({ width: 320, height: 180 }, ctx, 0.5, spec, ctx);
+  } catch {
+    threw = true;
+  }
+  ok(threw, "a snapshot/surface mismatch refuses loudly");
+});
+
+await test("S163 Phase B: the compositor — every native type rides the transform/alpha/mask hooks", async () => {
+  const t = await import("../src/lib/tubeforge/graphics/transitions");
+  const ctx = { width: 640, height: 360 };
+  const colorOf = (l: { source: "A" | "B" | { color: string } } | undefined): string | null =>
+    l && typeof l.source === "object" ? l.source.color : null;
+  // crossfade — A holds under B's rising alpha (the plain melt).
+  const cf = t.compositeTransitionFrame(ctx, ctx, 0.25, { type: "crossfade", frames: 15 }, ctx);
+  eq(cf.layers.length, 2, "A + B");
+  ok(cf.layers[0]?.source === "A" && cf.layers[0]?.alpha === 1, "A holds at full alpha");
+  approx(cf.layers[1]?.alpha ?? -1, 0.25, 1e-9, "B rides the raw progress");
+  // iris — the circle grows from the center to the half-diagonal (the
+  // radius that just covers the corners at p=1).
+  const iris = t.compositeTransitionFrame(ctx, ctx, 1, { type: "iris", frames: 8 }, ctx);
+  const irisMask = iris.layers[1]?.mask;
+  ok(irisMask?.kind === "circle", "the iris reveals through a circle mask");
+  approx(irisMask?.r ?? -1, Math.round((Math.hypot(640, 360) / 2) * 1000) / 1000, 1e-9, "p=1 → exactly the half-diagonal");
+  approx(irisMask?.cx ?? -1, 320, 1e-9, "centered on the surface");
+  // whiteout — two halves through the dip color; absent color → the house
+  // white (an absent decoration never changes the beat's shape).
+  const dipA = t.compositeTransitionFrame(ctx, ctx, 0.25, { type: "whiteout", frames: 42 }, ctx);
+  eq(colorOf(dipA.layers[1]), "#ffffff", "the house white fills when the spec carries none");
+  approx(dipA.layers[1]?.alpha ?? -1, 0.5, 1e-9, "first half: the dip rises at 2p");
+  const dipB = t.compositeTransitionFrame(ctx, ctx, 0.75, { type: "whiteout", frames: 42, color: "#1122ff" }, ctx);
+  ok(dipB.layers[0]?.source === "B", "second half: B reveals");
+  approx(dipB.layers[0]?.alpha ?? -1, 0.5, 1e-9, "…at (p−½)·2");
+  eq(colorOf(dipB.layers[1]), "#1122ff", "the authored dip color rides");
+  // zoomthrough — both scenes alive mid-window: A grows toward the camera
+  // and fades while B settles from the peak scale (no dip, the pass-through
+  // reads).
+  const zoom = t.compositeTransitionFrame(ctx, ctx, 0.5, { type: "zoomthrough", frames: 14 }, ctx);
+  approx(zoom.layers[1]?.scale ?? -1, 1 + (t.ZOOM_PEAK_SCALE - 1) * 0.5, 1e-9, "A grows from 1 toward the peak");
+  approx(zoom.layers[0]?.scale ?? -1, t.ZOOM_PEAK_SCALE - (t.ZOOM_PEAK_SCALE - 1) * 0.5, 1e-9, "B settles from the peak toward 1");
+  approx(zoom.layers[0]?.alpha ?? -1, 0.5, 1e-9, "the alphas cross at mid-window");
+  // wiperight, one band, default seed — the reveal is LEFT of the edge and
+  // the band-by-band lag is the WIPE_LAG_MAX × hash01(seed, band) formula
+  // itself (pinned through the module's own helpers, not magic numbers).
+  const wr = t.compositeTransitionFrame(ctx, ctx, 0.5, { type: "wiperight", frames: 15 }, ctx);
+  const wrMask = wr.layers[1]?.mask;
+  ok(wrMask?.kind === "rect", "no tilt → the sharp rect mask");
+  const wrLag = t.WIPE_LAG_MAX * t.hash01(t.GRAPHICS_TRANSITION_SEED_DEFAULT, 0);
+  const wrBp = (0.5 - wrLag) / (1 - wrLag);
+  approx(wrMask?.w ?? -1, Math.round((320 + (wrBp - 0.5) * 640) * 1000) / 1000, 1e-9, "the edge x rides the seeded lag formula");
+  approx(wrMask?.radius ?? -1, 5, 1e-9, "the band edge reads soft (cornerR at 360p)");
+  // bands + seed — one B layer per band, each lagging by its own hash01
+  // draw (the stagger IS the seeded edge).
+  const banded = t.compositeTransitionFrame(ctx, ctx, 0.3, { type: "wiperight", frames: 15, bands: 3, seed: 5 }, ctx);
+  eq(banded.layers.length, 4, "A + one B layer per band");
+  for (let b = 0; b < 3; b++) {
+    const lag = t.WIPE_LAG_MAX * t.hash01(5, b);
+    const bp = Math.max(0, Math.min(1, (0.3 - lag) / (1 - lag)));
+    const edge = Math.round((320 + (bp - 0.5) * 640) * 1000) / 1000;
+    const m = banded.layers[b + 1]?.mask;
+    ok(m?.kind === "rect", `band ${b} masks as a rect`);
+    approx(m && m.kind === "rect" ? m.w : -1, edge, 1e-9, `band ${b}'s reveal rides hash01(5, ${b})'s lag`);
+    approx(m && m.kind === "rect" ? m.y : -1, b * 120, 1e-9, `band ${b} owns its strip of the surface`);
+  }
+  // angle — the tilt switches the mask to the exact quad (the sheared
+  // edge's four corners, edge × band window).
+  const tilted = t.compositeTransitionFrame(ctx, ctx, 0.5, { type: "wipeleft", frames: 15, angle: 10 }, ctx);
+  const tiltMask = tilted.layers[1]?.mask;
+  ok(tiltMask?.kind === "poly", "a tilt → the poly mask (the exact quad)");
+  ok(tiltMask && tiltMask.kind === "poly" && tiltMask.pts.length === 4, "the quad carries its four corners");
+  // progress clamps (the open-interval ramp never asks for a junk p, but
+  // the compositor stays total).
+  eq(t.compositeTransitionFrame(ctx, ctx, 1.5, { type: "crossfade", frames: 15 }, ctx).progress, 1, "p clamps to 1");
+  eq(t.compositeTransitionFrame(ctx, ctx, -1, { type: "crossfade", frames: 15 }, ctx).progress, 0, "p clamps to 0");
+});
+
+await test("S163 Phase B: the spec sanitizer — the closed native set, the walls, junk drops honestly", async () => {
+  const t = await import("../src/lib/tubeforge/graphics/transitions");
+  const w: string[] = [];
+  // Junk shapes refuse (null), never throw.
+  eq(t.sanitizeNativeTransitionSpec(null, "t", w), null, "null → null");
+  eq(t.sanitizeNativeTransitionSpec("iris", "t", w), null, "a string is not a spec");
+  eq(t.sanitizeNativeTransitionSpec([1], "t", w), null, "an array is not a spec");
+  ok(w.some((x) => x.includes("not an object")), "the shape refusals warn");
+  // Junk type — the closed native set (grammar-sprawl law).
+  w.length = 0;
+  eq(t.sanitizeNativeTransitionSpec({ type: "spin" }, "t", w), null, "an unknown type drops");
+  ok(w.some((x) => x.includes(t.NATIVE_TRANSITION_TYPES.join(", "))), "the warning names the closed set");
+  // Absent decorations → the measured defaults fill; absent stays absent.
+  w.length = 0;
+  const bare = t.sanitizeNativeTransitionSpec({ type: "iris" }, "t", w);
+  ok(bare !== null, "a bare type parses");
+  eq(bare.frames, 8, "absent frames → the type's measured default");
+  ok(
+    bare.angle === undefined && bare.color === undefined && bare.bands === undefined && bare.seed === undefined,
+    "absent decorations stay absent (the additive-seam law)",
+  );
+  // frames — junk falls to the default with a note; fractions round; the
+  // walls clamp and name themselves.
+  w.length = 0;
+  eq(t.sanitizeNativeTransitionSpec({ type: "crossfade", frames: "soon" }, "t", w)?.frames, 15, "junk frames → the default");
+  ok(w.some((x) => x.includes("not a finite number")), "the junk note warns");
+  w.length = 0;
+  eq(t.sanitizeNativeTransitionSpec({ type: "crossfade", frames: 7.9 }, "t", w)?.frames, 8, "7.9 rounds to 8");
+  ok(w.some((x) => x.includes("rounded")), "the rounding note warns");
+  w.length = 0;
+  eq(t.sanitizeNativeTransitionSpec({ type: "crossfade", frames: 999 }, "t", w)?.frames, t.GRAPHICS_TRANSITION_FRAMES_MAX, "the ceiling clamps");
+  ok(w.some((x) => x.includes("wall")), "the clamp names the wall");
+  eq(t.sanitizeNativeTransitionSpec({ type: "crossfade", frames: 0 }, "t", [])?.frames, t.GRAPHICS_TRANSITION_FRAMES_MIN, "the floor clamps");
+  // angle — the wipe shear, clamped into ±45.
+  eq(t.sanitizeNativeTransitionSpec({ type: "wipeleft", angle: 90 }, "t", [])?.angle, t.GRAPHICS_TRANSITION_ANGLE_MAX, "angle clamps to +45");
+  eq(t.sanitizeNativeTransitionSpec({ type: "wipeleft", angle: -90 }, "t", [])?.angle, -t.GRAPHICS_TRANSITION_ANGLE_MAX, "angle clamps to −45");
+  eq(t.sanitizeNativeTransitionSpec({ type: "wipeleft", angle: "x" }, "t", [])?.angle, undefined, "junk angle drops");
+  // color — the grammar's hex law (a well-formed hex lowers; junk drops).
+  eq(t.sanitizeNativeTransitionSpec({ type: "whiteout", color: "#AABBCC" }, "t", [])?.color, "#aabbcc", "hex lowers at admission");
+  eq(t.sanitizeNativeTransitionSpec({ type: "whiteout", color: "blue" }, "t", [])?.color, undefined, "non-hex drops");
+  // bands — fractions round, the ceiling clamps, sub-1 junk drops.
+  eq(t.sanitizeNativeTransitionSpec({ type: "wiperight", bands: 3.7 }, "t", [])?.bands, 4, "3.7 rounds to 4");
+  eq(t.sanitizeNativeTransitionSpec({ type: "wiperight", bands: 99 }, "t", [])?.bands, t.GRAPHICS_TRANSITION_BANDS_MAX, "the band ceiling clamps");
+  eq(t.sanitizeNativeTransitionSpec({ type: "wiperight", bands: 0 }, "t", [])?.bands, undefined, "bands < 1 drop");
+  // seed — truncation notes, out-of-range wraps into the 31-bit wall.
+  eq(t.sanitizeNativeTransitionSpec({ type: "wiperight", seed: 1.9 }, "t", [])?.seed, 1, "1.9 truncates to 1");
+  eq(
+    t.sanitizeNativeTransitionSpec({ type: "wiperight", seed: -2 }, "t", [])?.seed,
+    t.GRAPHICS_TRANSITION_SEED_MAX - 1,
+    "−2 wraps into the wall (the same bits, a legal seed)",
+  );
+  eq(t.sanitizeNativeTransitionSpec({ type: "wiperight", seed: "x" }, "t", [])?.seed, undefined, "junk seed drops");
+  // Unknown fields warn, never error (the tolerance law).
+  w.length = 0;
+  t.sanitizeNativeTransitionSpec({ type: "iris", glow: true }, "t", w);
+  ok(w.some((x) => x.includes('unknown field "glow"')), "unknown fields note honestly");
+});
+
+await test("S163 Phase B: the doc grammar — nativeTransitions rides additive; absent stays absent", async () => {
+  // A legacy doc never gains the key — at the parse AND at the write.
+  const legacyRaw = gDoc([gScene("s1", [gEl("h1", "headline")]), gScene("s2", [gEl("h1", "headline")])]);
+  const legacy = mustValidate(legacyRaw, "legacy");
+  const legacyJson = writeGraphicsDoc(legacy);
+  ok(!legacyJson.includes("nativeTransitions"), "the legacy write never mentions the field");
+  eq(writeGraphicsDoc(mustParse(legacyJson, "re-parse")), legacyJson, "legacy round-trip byte-identical");
+  // A transitions doc round-trips byte-stable, the block riding after the
+  // scenes in the declared field order (type, frames, angle, color, bands,
+  // seed).
+  const raw = gDoc(
+    [
+      gScene("s1", [gEl("h1", "headline")]),
+      gScene("s2", [gEl("h1", "headline")]),
+      gScene("s3", [gEl("h1", "headline")]),
+    ],
+    {
+      nativeTransitions: [
+        { type: "iris", frames: 8 },
+        { type: "wipeleft", frames: 15, angle: 12, color: "#AABBCC", bands: 3, seed: 9 },
+      ],
+    },
+  );
+  const doc = mustValidate(raw, "transitions doc");
+  eq(doc.nativeTransitions?.length, 2, "both specs survive admission");
+  eq(doc.nativeTransitions?.[0]?.type, "iris", "spec 0 keeps its type");
+  eq(doc.nativeTransitions?.[1]?.color, "#aabbcc", "the hex lowers at admission");
+  const json = writeGraphicsDoc(doc);
+  ok(json.indexOf('"nativeTransitions"') > json.indexOf('"scenes"'), "the block rides after the scenes (declared order)");
+  eq(writeGraphicsDoc(mustParse(json, "re-parse")), json, "write→parse→write byte-identical");
+  ok(
+    json.includes('"angle":12') && json.includes('"bands":3') && json.includes('"seed":9') && json.includes('"color":"#aabbcc"'),
+    "the full decoration round-trips",
+  );
+  // The tolerant reads: junk shapes drop to absent with honest warnings.
+  const r1 = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")])], { nativeTransitions: "iris" }));
+  ok(r1.doc !== null && r1.doc.nativeTransitions === undefined, "a non-array drops to absent");
+  ok(r1.warnings.some((x) => x.includes("not an array")), "the drop warns");
+  // One scene → no boundaries exist: every entry warn-drops.
+  const r2 = validateGraphicsDoc(gDoc([gScene("s1", [gEl("h1", "headline")])], { nativeTransitions: [{ type: "iris" }] }));
+  ok(r2.doc !== null && r2.doc.nativeTransitions === undefined, "no boundaries → nothing survives");
+  ok(r2.warnings.some((x) => x.includes("boundaries exist")), "the wall names the boundary count");
+  ok(r2.warnings.some((x) => x.includes("no surviving specs")), "the all-dropped note lands (absent stays absent)");
+  // Extras beyond the boundary count warn-drop; survivors keep their INDEX
+  // (entry b joins scene b and b+1).
+  const r3 = validateGraphicsDoc(
+    gDoc([gScene("s1", [gEl("h1", "headline")]), gScene("s2", [gEl("h1", "headline")])], {
+      nativeTransitions: [{ type: "iris" }, { type: "whiteout" }, { type: "crossfade" }],
+    }),
+  );
+  eq(r3.doc?.nativeTransitions?.length, 1, "2 scenes → 1 boundary → the extras drop");
+  ok(r3.warnings.some((x) => x.includes("boundaries exist")), "the extras warn");
+  eq(r3.doc?.nativeTransitions?.[0]?.type, "iris", "the survivor keeps boundary 0");
+  // All-junk and EMPTY arrays land at absent (absent stays absent).
+  const r4 = validateGraphicsDoc(
+    gDoc([gScene("s1", [gEl("h1", "headline")]), gScene("s2", [gEl("h1", "headline")])], { nativeTransitions: [{ type: "nope" }] }),
+  );
+  ok(r4.doc?.nativeTransitions === undefined, "all-junk → absent");
+  const r5 = validateGraphicsDoc(
+    gDoc([gScene("s1", [gEl("h1", "headline")]), gScene("s2", [gEl("h1", "headline")])], { nativeTransitions: [] }),
+  );
+  ok(r5.doc?.nativeTransitions === undefined, "empty → absent (nothing opted in)");
+});
+
+await test("S163 Phase B: the overlap accounting — Σ clips + Σ windows ≡ Σ legacy frames, exactly", async () => {
+  const { planNativeTransitions } = await import("../src/lib/tubeforge/graphics/transitions");
+  const legacy = framePlanWindows([2000, 1500, 1000], 30);
+  eq(legacy.scenes.map((s) => s.frames).join(","), "60,45,30", "the legacy frame truth");
+  const plan = planNativeTransitions({
+    scenes: legacy.scenes,
+    fps: 30,
+    specs: [{ type: "crossfade", frames: 15 }, { type: "iris", frames: 8 }],
+  });
+  ok(plan !== null, "the plan builds");
+  eq(plan.sceneClipFrames.join(","), "45,37,30", "each outgoing scene loses its own window at its tail");
+  eq(plan.windows.map((x) => x.frames).join(","), "15,8", "the windows carry exactly the carved frames");
+  const sumClips = plan.sceneClipFrames.reduce((a, b) => a + b, 0);
+  const sumWins = plan.windows.reduce((a, x) => a + x.frames, 0);
+  const legacySum = legacy.scenes.reduce((a, s) => a + s.frames, 0);
+  eq(sumClips + sumWins, legacySum, "the INTEGER identity: nothing added, nothing lost, no double carve");
+  // The doc-clock total is UNCHANGED — the two-clock assert compares this
+  // against the tracks contract, so it must be the legacy number verbatim.
+  eq(plan.totalSec, legacy.totalSec, "the doc clock survives the carve (4.5s)");
+  // Seconds: the ONE conversion (frames ÷ doc.fps) per number.
+  approx(plan.sceneClipSec[0] ?? 0, 45 / 30, 1e-9, "clip 1 delivers 1.5s");
+  approx(plan.windows[0]?.sec ?? 0, 0.5, 1e-9, "window 1 delivers 0.5s");
+  // The window occupies the outgoing scene's tail: [clip end, scene end].
+  const s0 = legacy.scenes[0];
+  const w0 = plan.windows[0];
+  approx(w0?.startSec ?? 0, s0.startSec + (plan.sceneClipSec[0] ?? 0), 1e-9, "the window starts where the carved clip ends");
+  approx(w0?.endSec ?? 0, s0.endSec, 1e-9, "the window ends at the outgoing scene's doc-clock end");
+  eq(plan.sceneClipFrames[2], 30, "the incoming scene never cedes time (the last scene keeps its full clock)");
+  // The fps-free mirror: the same SPEC FRAMES carve whatever the legacy
+  // plan delivers, and the seconds follow the doc's rate.
+  const legacy24 = framePlanWindows([2000, 1500, 1000], 24);
+  const plan24 = planNativeTransitions({
+    scenes: legacy24.scenes,
+    fps: 24,
+    specs: [{ type: "crossfade", frames: 15 }, { type: "iris", frames: 8 }],
+  });
+  eq(plan24?.windows.map((x) => x.frames).join(","), "15,8", "the window FRAMES are fps-free");
+  approx(plan24?.windows[0]?.sec ?? 0, 15 / 24, 1e-9, "…the seconds follow the doc's rate");
+  eq(plan24?.sceneClipFrames.join(","), "33,28,24", "the carve lands on the 24 fps legacy truth (48,36,24 − 15,8)");
+  eq(plan24?.totalSec, legacy24.totalSec, "the 24 fps doc clock survives its carve too");
+  // Refusals — a structural mismatch is a caller bug: loud, pre-chromium.
+  let threw = "";
+  try {
+    planNativeTransitions({ scenes: legacy.scenes, fps: 30, specs: [{ type: "whiteout", frames: 60 }] });
+  } catch (e) {
+    threw = e instanceof Error ? e.message : String(e);
+  }
+  ok(threw.includes("exceeds scene 1's clock"), "a window longer than its scene refuses with the scene's clock named");
+  threw = "";
+  try {
+    planNativeTransitions({ scenes: legacy.scenes, fps: 0, specs: [{ type: "iris", frames: 8 }] });
+  } catch (e) {
+    threw = e instanceof Error ? e.message : String(e);
+  }
+  ok(threw.includes("junk fps"), "a junk fps refuses");
+  threw = "";
+  try {
+    planNativeTransitions({ scenes: legacy.scenes, fps: 30, specs: [{ type: "iris" }, { type: "iris" }, { type: "iris" }] });
+  } catch (e) {
+    threw = e instanceof Error ? e.message : String(e);
+  }
+  ok(threw.includes("only 2 boundaries"), "more specs than boundaries refuses");
+  // No specs → null (the legacy path's sentinel).
+  eq(planNativeTransitions({ scenes: legacy.scenes, fps: 30, specs: [] }), null, "no specs → no plan (the legacy path)");
+});
+
+await test("S163 Phase B: byte-identity — absent transitions take the exact legacy path", async () => {
+  const { graphicsConcatEntries, graphicsWindowFile, renderFingerprint } = await import("../src/lib/tubeforge/graphics/render");
+  const { graphicsExpectedCuts } = await import("../src/lib/tubeforge/graphics/qc");
+  // The concat list: an empty window map → the scene files VERBATIM (the
+  // legacy list byte-identical); a window joins exactly after its own
+  // outgoing scene; a plain boundary stays a hard cut.
+  const scenes = ["scene-1.mp4", "scene-2.mp4", "scene-3.mp4"];
+  eq(graphicsConcatEntries(scenes, new Map()).join("|"), "scene-1.mp4|scene-2.mp4|scene-3.mp4", "no windows → the legacy concat verbatim");
+  const both = graphicsConcatEntries(scenes, new Map([[0, "window-1.mp4"], [1, "window-2.mp4"]]));
+  eq(both.join("|"), "scene-1.mp4|window-1.mp4|scene-2.mp4|window-2.mp4|scene-3.mp4", "each window joins exactly after its outgoing scene");
+  const partial = graphicsConcatEntries(scenes, new Map([[1, "window-2.mp4"]]));
+  eq(partial.join("|"), "scene-1.mp4|scene-2.mp4|window-2.mp4|scene-3.mp4", "a plain boundary stays a cut (the shorter-array law)");
+  eq(graphicsWindowFile("/out", 0), "/out/window-1.mp4", "window numbering mirrors the scenes'");
+  // The QC expectation: a legacy doc books n−1 cuts and NO windows — the
+  // exact legacy shape.
+  const mkDoc = (nativeTransitions?: unknown) =>
+    mustValidate(
+      gDoc(
+        [2000, 1500, 1000].map((durationMs, i) =>
+          gScene(`s${i + 1}`, [gEl("h1", "headline")], { durationMs }),
+        ),
+        nativeTransitions === undefined ? {} : { nativeTransitions },
+      ),
+      "the expectation doc",
+    );
+  const legacyExp = graphicsExpectedCuts(mkDoc());
+  eq(legacyExp.cuts.join(","), "2,3.5", "legacy: n−1 hard cuts at the boundaries");
+  eq(legacyExp.windows.length, 0, "legacy: no windows booked");
+  // A transitions doc books its native boundaries as BLEND WINDOWS — the
+  // window occupies the outgoing scene's tail ([b − windowSec, b]) inside
+  // the builder's 0.3 probe pads — and no cut at that boundary.
+  const transExp = graphicsExpectedCuts(mkDoc([{ type: "crossfade", frames: 15 }, { type: "iris", frames: 8 }]));
+  eq(transExp.cuts.length, 0, "every native boundary stops being a cut");
+  eq(transExp.windows.length, 2, "every native boundary books a window");
+  approx(transExp.windows[0]?.[0] ?? 0, 2 - 15 / 24 - 0.3, 1e-9, "window 0 opens a windowSec before its boundary");
+  approx(transExp.windows[0]?.[1] ?? 0, 2.3, 1e-9, "window 0 closes 0.3 after (the builder's pad shape)");
+  approx(transExp.windows[1]?.[0] ?? 0, 3.5 - 8 / 24 - 0.3, 1e-9, "window 1 opens on its own boundary's tail");
+  // A PARTIAL spec array: the native boundary books a window, the plain
+  // boundary keeps its cut.
+  const partialExp = graphicsExpectedCuts(mkDoc([{ type: "crossfade", frames: 15 }]));
+  eq(partialExp.cuts.join(","), "3.5", "the plain boundary keeps its cut");
+  eq(partialExp.windows.length, 1, "the native boundary books its window");
+  // The resume fingerprint moves with the transition block (a resumed
+  // render never mixes two renders' scenes).
+  ok(
+    renderFingerprint(mkDoc(), { outDir: "/x" }) !== renderFingerprint(mkDoc([{ type: "iris" }]), { outDir: "/x" }),
+    "the fingerprint moves with the transition block",
+  );
+});
+
+await test("S163 Phase B: the sweep hash — same doc + seeds → identical frame plans across two computations", async () => {
+  const t = await import("../src/lib/tubeforge/graphics/transitions");
+  // The full frame-plan sweep: the plan plus every composited window frame
+  // description, hashed. Two complete computations must agree BYTE for
+  // BYTE (the determinism law extends to the transition window).
+  const legacy = framePlanWindows([2000, 1500, 1000], 30);
+  const ctx = { width: 640, height: 360 };
+  const sweep = (specs: t.TransitionSpec[]): string => {
+    const plan = t.planNativeTransitions({ scenes: legacy.scenes, fps: 30, specs });
+    if (plan === null) throw new Error("the sweep plan vanished");
+    const parts: string[] = [JSON.stringify(plan)];
+    for (const win of plan.windows) {
+      for (let k = 0; k < win.frames; k++) {
+        parts.push(JSON.stringify(t.compositeTransitionFrame(ctx, ctx, (k + 1) / (win.frames + 1), win.spec, ctx)));
+      }
+    }
+    return crypto.createHash("sha256").update(parts.join("\n")).digest("hex");
+  };
+  const specs: t.TransitionSpec[] = [
+    { type: "iris", frames: 8 },
+    { type: "wipeleft", frames: 15, angle: 12, bands: 3, seed: 4242, color: "#AABBCC" },
+  ];
+  const h1 = sweep(specs);
+  eq(sweep(specs), h1, "two full computations — the plan AND every composited frame hash identically");
+  // A one-digit seed change MUST move the hash (the seeded edge is real,
+  // not decorative).
+  const h3 = sweep([{ type: "iris", frames: 8 }, { type: "wipeleft", frames: 15, angle: 12, bands: 3, seed: 4243, color: "#aabbcc" }]);
+  ok(h3 !== h1, "a one-digit seed change moves the sweep hash");
+  // The frames are the pinned unit: the sweep shape (frame count per
+  // window) rides the plan, never the wall clock.
+  const planShape = t.planNativeTransitions({ scenes: legacy.scenes, fps: 30, specs });
+  eq(planShape?.windows.map((x) => x.frames).join(","), "8,15", "the swept frame counts are the plan's own");
+});
+
+await test("S163 Phase B: the window encode — the scene law mirrored, the carved VO tail continues", async () => {
+  const { graphicsWindowEncodeArgs } = await import("../src/lib/tubeforge/graphics/render");
+  // A voiced window: the OUTGOING scene's slot rides OFFSET by the outgoing
+  // clip's delivered seconds (-ss input-side) — narration spanning the seam
+  // continues through the window (never clipped mid-word); apad + the
+  // plan's -t bound the output; the video/audio lanes are the scene
+  // encoder's verbatim (the S87 slice-5 concat-homogeneity law).
+  const voiced = graphicsWindowEncodeArgs({
+    framesDir: "/out/window-1-frames",
+    fps: 24,
+    durSec: 8 / 24,
+    voPath: "/vo/s1.wav",
+    voOffsetSec: 1.5,
+    silentFill: false,
+    windowFile: "/out/window-1.mp4",
+  });
+  const idx = (a: string[], k: string): number => a.indexOf(k);
+  eq(voiced[1], "-framerate", "the window encodes at its own rate");
+  eq(voiced[2], "24", "…the rate passed by the caller (doc.fps or the look's)");
+  ok(voiced.includes("/out/window-1-frames/f%05d.jpg"), "the frames pattern is the scene encoder's");
+  eq(voiced[idx(voiced, "-ss") + 1], "1.500", "the VO slot seeks by the outgoing clip's seconds (3-dp)");
+  eq(voiced[idx(voiced, "-ss") + 2], "-i", "the seek rides input-side");
+  eq(voiced[idx(voiced, "-ss") + 3], "/vo/s1.wav", "the slot is the OUTGOING scene's");
+  ok(voiced.includes("apad"), "the slot pads (never -shortest)");
+  eq(voiced[idx(voiced, "-t") + 1], (8 / 24).toFixed(3), "-t reads the PLAN's seconds (3-dp), never re-derived");
+  const flat = voiced.join(" ");
+  ok(flat.includes("format=yuv420p") && flat.includes("libx264") && flat.includes("veryfast") && flat.includes("-crf 19"), "the video lane is the scene encoder's verbatim");
+  ok(voiced.includes("aac") && voiced.includes("160k"), "the audio lane is the scene encoder's verbatim");
+  // A silent scene in an otherwise-voiced program: the anullsrc fill rides,
+  // no seek (the stream-homogeneity law, mirrored).
+  const filled = graphicsWindowEncodeArgs({ framesDir: "d", fps: 30, durSec: 0.5, voPath: null, voOffsetSec: 2, silentFill: true, windowFile: "w.mp4" });
+  ok(filled.join(" ").includes("anullsrc=r=48000:cl=stereo"), "the silent fill rides");
+  ok(!filled.includes("-ss"), "no slot → no seek");
+  // A fully silent program: no audio stream at all (the scenes' own shape).
+  const silent = graphicsWindowEncodeArgs({ framesDir: "d", fps: 30, durSec: 0.5, voPath: null, voOffsetSec: 2, silentFill: false, windowFile: "w.mp4" });
+  ok(!silent.includes("1:a") && !silent.includes("aac"), "fully silent → no audio stream (concat-homogeneous with its scenes)");
+});
+
+await test("S163 Phase B: the applier + page — set-only, idempotent, the network-aborted page law", async () => {
+  const { APPLY_TRANSITION_FRAME_FN, transitionCompositorPage } = await import("../src/lib/tubeforge/graphics/transitions");
+  // The applier's construction laws — the compose.ts applier's list,
+  // mirrored (the determinism law holds inside the page too).
+  for (const banned of ["Date.now", "Math.random", "new Date", "createElement", "appendChild", "insertAdjacentHTML", "innerHTML", "getBBox"]) {
+    ok(!APPLY_TRANSITION_FRAME_FN.includes(banned), `no ${banned} in the transition applier`);
+  }
+  ok(APPLY_TRANSITION_FRAME_FN.includes("clearRect"), "the applier clears before painting (apply twice ≡ once)");
+  ok(APPLY_TRANSITION_FRAME_FN.includes("JSON.parse(descJson)"), "the applier takes the payload STRING (the P5 evaluate law)");
+  // The call site double-encodes the description into a quoted literal —
+  // interpolating raw JSON passes an OBJECT where the applier parses a
+  // string (the exact SyntaxError the live smoke caught).
+  const renderSrc = fs.readFileSync("src/lib/tubeforge/graphics/render.ts", "utf8");
+  ok(renderSrc.includes("JSON.stringify(JSON.stringify(desc))"), "the window loop double-encodes the description (the P5 law, mirrored)");
+  ok(APPLY_TRANSITION_FRAME_FN.includes("globalAlpha"), "the alpha hook rides");
+  ok(APPLY_TRANSITION_FRAME_FN.includes("clip()"), "the mask hook rides");
+  ok(APPLY_TRANSITION_FRAME_FN.includes('__timgA') && APPLY_TRANSITION_FRAME_FN.includes('__timgB'), "both snapshots' hooks ride");
+  // The compositor page: the canvas at the doc surface, both snapshots
+  // baked INTO the string, no external references (the security line 2 —
+  // the route-abort law's string half).
+  const page = transitionCompositorPage(640, 360, "data:image/jpeg;base64,AAAA", "data:image/jpeg;base64,BBBB");
+  ok(page.includes('id="tc"') && page.includes('width="640"') && page.includes('height="360"'), "the compositor canvas at the doc surface");
+  ok(page.includes("AAAA") && page.includes("BBBB"), "both snapshots ride inside the page string");
+  ok(!/<script[^>]*src=/.test(page) && !page.includes("<link") && !page.includes("http://"), "the page renders only what the string carries");
+  // The PURE module's own file: no wall clock, no randomness (the S157
+  // source-pin pattern — the USAGE scan, not the law's own comment).
+  const src = fs.readFileSync("src/lib/tubeforge/graphics/transitions.ts", "utf8");
+  ok(!/Math\.random\(/.test(src) && !/Date\.now\(/.test(src), "the transition module is frame-truth pure (no clock, no randomness)");
+});
+
 suiteStart("graphics — S123 P3: the renderer contract (pure seams), the draft viewport, the QC group");
 
 await test("S123 P3 — the draft viewport law: closed scales, even dims ≥ 64, non-reviewable, no credit (the b6 pattern)", () => {
