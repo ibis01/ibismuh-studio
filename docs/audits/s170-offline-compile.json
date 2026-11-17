@@ -1,0 +1,31 @@
+{
+  "acceptance": "disconnect the AI provider after the project has been approved — TubeForge must still render the complete video",
+  "proof": "the compile half: a fully-authored three-mode project compiles offline (data-in/data-out, zero provider imports); the render half rides the engines' own AI-free gates",
+  "compiledAtCommit": "HEAD",
+  "planSha256": "141e0ba3a5901ae39bf73d473392d00f27d7e55212a713f2392eb3295cb5fbe4",
+  "scenes": 3,
+  "totalMs": 19000,
+  "operationsByLane": [
+    {
+      "sceneId": "scene_001",
+      "kind": "graphics",
+      "ops": 3
+    },
+    {
+      "sceneId": "scene_002",
+      "kind": "character",
+      "ops": 1
+    },
+    {
+      "sceneId": "scene_003",
+      "kind": "3d",
+      "ops": 1
+    }
+  ],
+  "determinism": "compiled plan value-identical across two independent compiles (stable-form sha256 of record)",
+  "imports": [
+    "director-vocabulary",
+    "universal-scene",
+    "timeline"
+  ]
+}

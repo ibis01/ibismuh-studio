@@ -24364,6 +24364,113 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
   });
 }
 
+// ---------------------------------------------------------------------------
+// S170 — the Animation Compiler. Translates Director instructions into
+// native engine operations. THE acceptance: the AI provider disconnected
+// after approval must not matter — the compile is data-in/data-out, the
+// import graph carries zero provider modules (pinned by source scan).
+// ---------------------------------------------------------------------------
+{
+  const ac = await import("../src/lib/tubeforge/animation-compiler");
+
+  const threeModeProject = () => ({
+    version: 1,
+    title: "The offline compile",
+    mode: "free",
+    scenes: [
+      {
+        version: 1,
+        sceneId: "scene_001",
+        kind: "graphics",
+        durationMs: 8000,
+        narration: { text: "First the reach.", voiceId: "narrator_01" },
+        assets: [],
+        directives: [
+          { domain: "animation", target: "counter", action: "enter:count", params: { durationMs: 1200, ease: "expo-out" } },
+          { domain: "animation", target: "boundary:1", action: "transition:crossfade" },
+          { domain: "music", target: "project", action: "music:suggest", params: { mood: "warm" } },
+        ],
+      },
+      {
+        version: 1,
+        sceneId: "scene_002",
+        kind: "character",
+        durationMs: 6000,
+        narration: { text: "Then the retention." },
+        assets: [],
+        directives: [
+          { domain: "animation", target: "character", action: "gesture:emphasis" },
+          { domain: "camera", target: "scene-2", action: "camera:hold" },
+        ],
+      },
+      {
+        version: 1,
+        sceneId: "scene_003",
+        kind: "3d",
+        durationMs: 5000,
+        assets: [],
+        directives: [{ domain: "animation", target: "camera", action: "3d:push-in", params: { rate: 0.2 } }],
+      },
+    ],
+  });
+
+  await test("s170: the compiler walks the S169 project into typed engine operations", () => {
+    const verdict = ac.compileUniversalProject(threeModeProject());
+    ok(verdict.ok, JSON.stringify(verdict.ok ? [] : verdict.errors));
+    if (!verdict.ok) return;
+    const plan = verdict.plan;
+    eq(plan.version, 1, "the compiler version rides");
+    eq(plan.scenes.length, 3, "three scenes compile");
+    eq(plan.totalMs, 19000, "the total clock is the projection's arithmetic (8+6+5 s)");
+    const s1 = plan.scenes[0];
+    const enterOp = s1.operations.find((o) => o.op === "graphics-enter");
+    ok(enterOp !== undefined && enterOp.ease === "expo-out" && enterOp.durationMs === 1200, "the authored ease and duration are consumed from params");
+    ok(enterOp !== undefined && enterOp.atMs === undefined, "an element enter leaves sequencing to the engine (no invented atMs)");
+    const transOp = s1.operations.find((o) => o.op === "graphics-transition");
+    eq(transOp?.atMs, 8000, "boundary:1 sits at scene 1's end — the schema's own clocks");
+    const gestOp = plan.scenes[1].operations.find((o) => o.op === "gesture-intent");
+    eq(gestOp?.atMs, 8000, "a scene-scoped gesture rides the scene's window");
+    const camOp = plan.scenes[1].operations.find((o) => o.op === "camera-move");
+    eq(camOp?.action, "camera:hold", "the camera intent compiles by catalog name");
+    const d3 = plan.scenes[2].operations.find((o) => o.op === "3d-action");
+    eq(d3?.atMs, 14000, "the 3d op rides the third window");
+    eq(d3?.params.rate, 0.2, "unconsumed params ride verbatim");
+    eq(plan.suggestions.length, 1, "the music suggestion is a suggestion, not an op");
+    eq(plan.suggestions[0].action, "music:suggest", "the suggestion passes verbatim");
+  });
+
+  await test("s170: narration slots carry the scene windows", () => {
+    const verdict = ac.compileUniversalProject(threeModeProject());
+    ok(verdict.ok);
+    if (!verdict.ok) return;
+    const s1 = verdict.plan.scenes[0].narration;
+    ok(s1 !== null && s1.text === "First the reach." && s1.atMs === 0 && s1.durationMs === 8000, "scene 1's narration slot rides its window");
+    eq(verdict.plan.scenes[2].narration, null, "a scene without narration compiles to a null slot");
+  });
+
+  await test("s170: the ease wall and the boundary arithmetic are fail-closed", () => {
+    const badEase = threeModeProject() as { scenes: { directives: unknown[] }[] };
+    (badEase.scenes[0].directives as unknown[])[0] = { domain: "animation", target: "counter", action: "enter:count", params: { ease: "ease-springy-9000" } };
+    const v = ac.compileUniversalProject(badEase);
+    ok(!v.ok && v.errors.some((e) => e.message.includes("measured curve table")), "an ease outside the ONE table refuses");
+    const ghost = threeModeProject() as { scenes: { directives: unknown[] }[] };
+    (ghost.scenes[0].directives as unknown[])[2] = { domain: "animation", target: "boundary:5", action: "transition:iris" };
+    const v2 = ac.compileUniversalProject(ghost);
+    ok(!v2.ok && v2.errors.some((e) => e.message.includes("boundary:5")), "a boundary past the last scene refuses (defense in depth)");
+  });
+
+  await test("s170: THE acceptance — the import graph carries zero provider modules (the AI can be disconnected)", () => {
+    const src = fs.readFileSync("src/lib/tubeforge/animation-compiler.ts", "utf8");
+    const imports = [...src.matchAll(/from "\.\/([^"]+)"/g)].map((m) => m[1]);
+    ok(imports.length >= 2, "the module declares its imports");
+    for (const imp of imports) {
+      ok(!/(zai|llm|provider|voice|openai|research|ai\.ts)/.test(imp), `import "./${imp}" is data-only — no AI/provider module`);
+    }
+    ok(imports.includes("director-vocabulary") && imports.includes("universal-scene"), "the compiler rides the S168 vocabulary and the S169 schema");
+    ok(!src.includes("fetch(") && !src.includes("Date.now") && !src.includes("Math.random"), "no network, no wall-clock, no randomness in the compile path");
+  });
+}
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
