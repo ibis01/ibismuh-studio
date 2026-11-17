@@ -49,6 +49,19 @@ import { runProcess } from "../proc";
 import { framePlanWindows } from "../anim/clock";
 import { planFromTracks, type CompositionPlan } from "../composition-plan";
 import type { TimelineTrack } from "../timeline";
+// S165 — the ready-gate named diagnostics: every awaited pipeline step
+// carries a gate name + budget (page-load / compose / apply / screenshot /
+// encode / probe), so a wedged render names WHICH gate is stuck.
+import { withRenderGate } from "../render-gates";
+// S165 — the static-frame dedup decision law (the kenburns/holds lane):
+// the pure scan + the PSNR reading law; the render below walks it.
+import {
+  dedupDecision,
+  dedupSpotFrame,
+  findStaticStretches,
+  parsePsnrSummary,
+  type StaticStretch,
+} from "./static-dedup";
 import { APPLY_GRAPHICS_FRAME_FN, composeGraphicsScene, graphicsFramePayload } from "./compose";
 import { graphicsEventList, type GraphicsEventSlot } from "./events";
 import { frameAt, graphicsSceneDurationsMs } from "./frame";
@@ -67,12 +80,106 @@ import { graphicsTracks } from "./tracks";
 import { writeGraphicsDoc, type GraphicsDoc } from "./types";
 import { wavDurationSec } from "../wav";
 
-async function runFfmpeg(args: string[]): Promise<void> {
+async function runFfmpeg(args: string[], gateDetail?: string): Promise<void> {
   // The zombie-aware runner (proc.ts) — the engine doctrine (the S154
   // consistency fix): after Playwright has lived in this process, bun
   // intermittently stops reaping children; runProcess decides completion
-  // itself so a hung reaper can't stall a scene encode.
-  await runProcess("ffmpeg", args, { timeoutMs: 10 * 60 * 1000, label: "graphics-encode" });
+  // itself so a hung reaper can't stall a scene encode. S165: the runner
+  // rides the encode gate — a wedged encode names the scene/window/assembly
+  // that wedged instead of a bare runner timeout.
+  await withRenderGate(
+    { engine: "graphics", gate: "encode", detail: gateDetail },
+    () => runProcess("ffmpeg", args, { timeoutMs: 10 * 60 * 1000, label: "graphics-encode" }),
+  );
+}
+
+/** S165 — the dedup spot check's PSNR between two JPEG rasters, through
+ *  the same zombie-aware runner. Returns the summary's average PSNR in dB
+ *  (Infinity for identical frames) or null when the tool failed or printed
+ *  nothing parseable — the caller falls back per-frame on null (fail-closed,
+ *  never a vacuous pass). */
+async function psnrJpegFiles(fileA: string, fileB: string): Promise<number | null> {
+  try {
+    const res = await runProcess(
+      "ffmpeg",
+      ["-hide_banner", "-i", fileA, "-i", fileB, "-filter_complex", "[0:v][1:v]psnr", "-f", "null", "-"],
+      { timeoutMs: 60_000, label: "graphics-dedup-psnr" },
+    );
+    return parsePsnrSummary(res.stderr);
+  } catch {
+    return null;
+  }
+}
+
+/** S165 — render ONE static stretch (the dedup lane's workhorse): shoot the
+ *  anchor frame once, PSNR spot-check the stretch's middle frame against it
+ *  through the real raster, and on a pass write the anchor's bytes for the
+ *  whole run; on a fail (or an unmeasurable PSNR) re-shoot every remaining
+ *  frame per-frame — fail-closed. The spot file lives OUTSIDE the frames dir
+ *  (the image2 sequence must see exactly f%05d.jpg) and is always cleaned.
+ *  Returns the next frame index the caller continues from (st.end + 1),
+ *  plus the screenshot accounting for the honest receipt. */
+async function renderDedupedStretch(args: {
+  page: import("playwright").Page;
+  framesDir: string;
+  outDir: string;
+  sceneTag: string;
+  width: number;
+  height: number;
+  payloadKeys: readonly string[];
+  stretch: StaticStretch;
+}): Promise<{ next: number; screenshots: number; reused: number }> {
+  const { page, payloadKeys, stretch: st } = args;
+  const framePath = (f: number): string =>
+    path.join(args.framesDir, `f${String(f).padStart(5, "0")}.jpg`);
+  const shoot = async (f: number, target?: string): Promise<Buffer> => {
+    await withRenderGate(
+      { engine: "graphics", gate: "apply", detail: `${args.sceneTag} frame ${f}` },
+      () => page.evaluate(`(${APPLY_GRAPHICS_FRAME_FN})(${payloadKeys[f]})`),
+    );
+    return withRenderGate(
+      { engine: "graphics", gate: "screenshot", detail: `${args.sceneTag} frame ${f}` },
+      () =>
+        page.screenshot({
+          ...(target ? { path: target } : {}),
+          type: "jpeg",
+          quality: 92,
+          clip: { x: 0, y: 0, width: args.width, height: args.height },
+        }),
+    );
+  };
+
+  // The anchor — the ONE frame this stretch rasters for itself.
+  const anchorShot = await shoot(st.start, framePath(st.start));
+  let screenshots = 1;
+  const mid = dedupSpotFrame(st);
+  const spotPath = path.join(args.outDir, `dedup-spot-${st.start}-${mid}.jpg`);
+  try {
+    // The spot check — a REAL raster through the real applier, compared
+    // against the anchor at the pixel level. Identical pixels PSNR to
+    // Infinity; anything that actually moved lands far below the floor.
+    await shoot(mid, spotPath);
+    screenshots++;
+    const psnr = await psnrJpegFiles(framePath(st.start), spotPath);
+    if (dedupDecision(psnr) === "reuse") {
+      // Reuse: the anchor's bytes stand for every other frame of the run —
+      // the image2 sequence reads the same file count at the same framerate,
+      // so the delivered clock never moves (the two-clock law).
+      for (let f = st.start + 1; f <= st.end; f++) {
+        fs.writeFileSync(framePath(f), anchorShot);
+      }
+      return { next: st.end + 1, screenshots, reused: st.end - st.start };
+    }
+    // Fail-closed: a PSNR below the floor (or an unmeasurable run) falls
+    // back to per-frame rendering for the whole stretch.
+    for (let f = st.start + 1; f <= st.end; f++) {
+      await shoot(f, framePath(f));
+      screenshots++;
+    }
+    return { next: st.end + 1, screenshots, reused: 0 };
+  } finally {
+    fs.rmSync(spotPath, { force: true });
+  }
 }
 
 export interface RenderGraphicsOptions {
@@ -109,6 +216,16 @@ export interface RenderGraphicsOptions {
    *  completed render deletes its manifest: resume applies only to an
    *  INTERRUPTED run. */
   resume?: boolean;
+  /** S165 — the static-frame dedup lane (the kenburns/holds throughput):
+   *  hold stretches — runs of frames whose applier payloads serialize
+   *  identically — shoot their anchor frame once, PSNR spot-check it
+   *  against the real raster, and reuse the anchor's bytes across the run.
+   *  The delivered clock, the frames-dir shape and the encode args never
+   *  move (the two-clock law holds by construction); only the chromium
+   *  screenshot count drops. A PSNR below the floor (or unmeasurable)
+   *  falls back to per-frame rendering — fail-closed. Default ON; `false`
+   *  restores the per-frame loop verbatim (the benchmark's off arm). */
+  staticFrameDedup?: boolean;
 }
 
 export interface GraphicsSceneRenderResult {
@@ -116,6 +233,13 @@ export interface GraphicsSceneRenderResult {
   durationMs: number;
   frames: number;
   file: string;
+  /** S165 — the dedup receipt, present only when the scene carried at
+   *  least one deduped stretch: `reusedFrames` = delivered frames that
+   *  rode the anchor's bytes (the clock is unchanged — frames stays the
+   *  delivered count), `screenshotsTaken` = chromium rasters the scene
+   *  actually paid for. Absent on a fully per-frame scene (the additive
+   *  seam law). */
+  dedup?: { reusedFrames: number; screenshotsTaken: number };
 }
 
 /** S163 Phase B — one rendered transition window (an additive result
@@ -569,10 +693,21 @@ export async function renderGraphics(
             `unresolved sprite imports (${composed.missingAssets.join(", ")}) — resolve them through the import store before rendering`
           );
         }
-        await page.setContent(composed.html, { waitUntil: "load" });
+        await withRenderGate(
+          { engine: "graphics", gate: "page-load", detail: `scene ${si + 1} ("${scene.id}")` },
+          () => page.setContent(composed.html, { waitUntil: "load" }),
+        );
 
         const framesDir = path.join(opts.outDir, `scene-${si + 1}-frames`);
         fs.mkdirSync(framesDir, { recursive: true });
+        // S165 — the static-frame dedup scan (the kenburns/holds lane).
+        // Each delivered frame's applier input serializes to a key FIRST
+        // (frame.ts is pure, so the scan is math only — no chromium time);
+        // maximal equal-key runs are the static stretches. The serialized
+        // payload is ALSO the applier's per-frame input below, so the scan
+        // costs one stringify per frame and never re-derives it.
+        const sceneTag = `scene ${si + 1} ("${scene.id}")`;
+        const payloadKeys: string[] = new Array(frames);
         for (let f = 0; f < frames; f++) {
           // The GLOBAL doc clock — the exact truth the editor reads: scene
           // resolution + the scene-local motion evaluation stay one call
@@ -580,25 +715,66 @@ export async function renderGraphics(
           // exact ms sum, not the frame-quantized boundary). A look-rate
           // (step 2) samples every OTHER frame at its exact doc time.
           const tMs = cursorMs + ((f * step) / doc.fps) * 1000;
-          const payload = graphicsFramePayload(frameAt(doc, tMs, voMsBySceneId));
-          // The whiteboard's evaluate law verbatim: the payload STRING is
-          // double-encoded into a quoted literal — the applier JSON.parses
-          // it inside the page. Interpolating the raw JSON here would pass
-          // an OBJECT where the applier expects a string (the exact
-          // SyntaxError the P5 proof caught on its first run).
-          await page.evaluate(`(${APPLY_GRAPHICS_FRAME_FN})(${JSON.stringify(payload)})`);
-          await page.screenshot({
-            path: path.join(framesDir, `f${String(f).padStart(5, "0")}.jpg`),
-            type: "jpeg",
-            quality: 92,
-            clip: { x: 0, y: 0, width: doc.width, height: doc.height },
-          });
+          payloadKeys[f] = JSON.stringify(graphicsFramePayload(frameAt(doc, tMs, voMsBySceneId)));
+        }
+        const stretches =
+          opts.staticFrameDedup === false ? [] : findStaticStretches(payloadKeys);
+        let stretchIdx = 0;
+        let dedupScreenshots = 0;
+        let dedupReused = 0;
+        for (let f = 0; f < frames; ) {
+          const st = stretches[stretchIdx];
+          if (st !== undefined && st.start === f) {
+            // The dedup lane: anchor + PSNR spot check + reuse (or the
+            // fail-closed per-frame fallback inside).
+            const seg = await renderDedupedStretch({
+              page,
+              framesDir,
+              outDir: opts.outDir,
+              sceneTag,
+              width: doc.width,
+              height: doc.height,
+              payloadKeys,
+              stretch: st,
+            });
+            dedupScreenshots += seg.screenshots;
+            dedupReused += seg.reused;
+            if (seg.reused > 0) {
+              opts.onProgress?.(
+                `${sceneTag}: frame ${seg.next}/${frames} (dedup: ${seg.reused} frames reused from the anchor)`,
+                (si + seg.next / frames) / doc.scenes.length,
+              );
+            }
+            f = seg.next;
+            stretchIdx++;
+            continue;
+          }
+          // The per-frame lane (also the fallback for every non-stretch
+          // frame): the payload STRING is double-encoded into a quoted
+          // literal — the applier JSON.parses it inside the page
+          // (the whiteboard's evaluate law verbatim; the exact SyntaxError
+          // the P5 proof caught on its first run).
+          await withRenderGate(
+            { engine: "graphics", gate: "apply", detail: `${sceneTag} frame ${f}` },
+            () => page.evaluate(`(${APPLY_GRAPHICS_FRAME_FN})(${payloadKeys[f]})`),
+          );
+          await withRenderGate(
+            { engine: "graphics", gate: "screenshot", detail: `${sceneTag} frame ${f}` },
+            () =>
+              page.screenshot({
+                path: path.join(framesDir, `f${String(f).padStart(5, "0")}.jpg`),
+                type: "jpeg",
+                quality: 92,
+                clip: { x: 0, y: 0, width: doc.width, height: doc.height },
+              }),
+          );
           if (f % 24 === 0) {
             opts.onProgress?.(
-              `scene ${si + 1}/${doc.scenes.length} ("${scene.id}"): frame ${f + 1}/${frames}`,
-              (si + (f + 1) / frames) / doc.scenes.length
+              `${sceneTag}: frame ${f + 1}/${frames}`,
+              (si + (f + 1) / frames) / doc.scenes.length,
             );
           }
+          f++;
         }
 
         // Encode the scene: frames (+ VO when present). Music joins at
@@ -614,9 +790,16 @@ export async function renderGraphics(
           voPath,
           silentFill,
           sceneFile,
-        }));
+        }), `${sceneTag} encode`);
         fs.rmSync(framesDir, { recursive: true, force: true });
-        sceneFiles.push({ sceneId: scene.id, durationMs, frames, file: sceneFile });
+        sceneFiles.push({
+          sceneId: scene.id,
+          durationMs,
+          frames,
+          file: sceneFile,
+          // S165 — the honest dedup receipt (absent when nothing reused).
+          ...(dedupReused > 0 ? { dedup: { reusedFrames: dedupReused, screenshotsTaken: dedupScreenshots } } : {}),
+        });
         // S132 — the manifest records the encoded scene the moment it
         // exists: a crash after this line loses at most the NEXT scene.
         if (manifest !== null) {
@@ -666,6 +849,7 @@ export async function renderGraphics(
         const page = await context.newPage();
         try {
           const surface = { width: doc.width, height: doc.height };
+          const windowTag = `window ${boundary + 1} ("${outScene.id}" → "${inScene.id}", ${win.spec.type})`;
           const shot = async (target: typeof outScene, tMs: number): Promise<Buffer> => {
             const composed = composeGraphicsScene(target, doc, { spriteAssets: opts.spriteAssets });
             if (composed.missingAssets.length > 0) {
@@ -673,10 +857,19 @@ export async function renderGraphics(
                 `unresolved sprite imports (${composed.missingAssets.join(", ")}) — resolve them through the import store before rendering`,
               );
             }
-            await page.setContent(composed.html, { waitUntil: "load" });
+            await withRenderGate(
+              { engine: "graphics", gate: "page-load", detail: windowTag },
+              () => page.setContent(composed.html, { waitUntil: "load" }),
+            );
             const payload = graphicsFramePayload(frameAt(doc, tMs, voMsBySceneId));
-            await page.evaluate(`(${APPLY_GRAPHICS_FRAME_FN})(${JSON.stringify(payload)})`);
-            return page.screenshot({ type: "jpeg", quality: 92, clip: { x: 0, y: 0, width: doc.width, height: doc.height } });
+            await withRenderGate(
+              { engine: "graphics", gate: "apply", detail: windowTag },
+              () => page.evaluate(`(${APPLY_GRAPHICS_FRAME_FN})(${JSON.stringify(payload)})`),
+            );
+            return withRenderGate(
+              { engine: "graphics", gate: "screenshot", detail: windowTag },
+              () => page.screenshot({ type: "jpeg", quality: 92, clip: { x: 0, y: 0, width: doc.width, height: doc.height } }),
+            );
           };
           // The two SNAPSHOTS: the outgoing scene's final DELIVERED frame
           // (the frame its clip ends on — the window's p→0 limit continues
@@ -685,11 +878,21 @@ export async function renderGraphics(
           const outCursorMs = sceneCursorMs(sceneMs, boundary);
           const snapA = await shot(outScene, outCursorMs + ((nativePlan.sceneClipFrames[boundary] - 1) / doc.fps) * 1000);
           const snapB = await shot(inScene, sceneCursorMs(sceneMs, boundary + 1));
-          await page.setContent(
-            transitionCompositorPage(doc.width, doc.height, `data:image/jpeg;base64,${snapA.toString("base64")}`, `data:image/jpeg;base64,${snapB.toString("base64")}`),
-            { waitUntil: "load" },
+          await withRenderGate(
+            { engine: "graphics", gate: "page-load", detail: `${windowTag} compositor page` },
+            () =>
+              page.setContent(
+                transitionCompositorPage(doc.width, doc.height, `data:image/jpeg;base64,${snapA.toString("base64")}`, `data:image/jpeg;base64,${snapB.toString("base64")}`),
+                { waitUntil: "load" },
+              ),
           );
-          await page.evaluate("Promise.all([window.__timgA.decode(), window.__timgB.decode()]).then(() => true)");
+          // The compositor page's READY gate: the two seam images must be
+          // decoded before frame 0 rasters (a pending decode would screenshot
+          // a blank canvas).
+          await withRenderGate(
+            { engine: "graphics", gate: "compose", detail: `${windowTag} seam image decode` },
+            () => page.evaluate("Promise.all([window.__timgA.decode(), window.__timgB.decode()]).then(() => true)"),
+          );
 
           fs.mkdirSync(framesDir, { recursive: true });
           const windowFrames = Math.ceil(win.frames / step);
@@ -708,13 +911,20 @@ export async function renderGraphics(
             // the applier expects a string (the exact SyntaxError the P5
             // proof caught on its first run — and the live smoke caught
             // here).
-            await page.evaluate(`(${APPLY_TRANSITION_FRAME_FN})(${JSON.stringify(JSON.stringify(desc))})`);
-            await page.screenshot({
-              path: path.join(framesDir, `f${String(f).padStart(5, "0")}.jpg`),
-              type: "jpeg",
-              quality: 92,
-              clip: { x: 0, y: 0, width: doc.width, height: doc.height },
-            });
+            await withRenderGate(
+              { engine: "graphics", gate: "apply", detail: `${windowTag} frame ${f}` },
+              () => page.evaluate(`(${APPLY_TRANSITION_FRAME_FN})(${JSON.stringify(JSON.stringify(desc))})`),
+            );
+            await withRenderGate(
+              { engine: "graphics", gate: "screenshot", detail: `${windowTag} frame ${f}` },
+              () =>
+                page.screenshot({
+                  path: path.join(framesDir, `f${String(f).padStart(5, "0")}.jpg`),
+                  type: "jpeg",
+                  quality: 92,
+                  clip: { x: 0, y: 0, width: doc.width, height: doc.height },
+                }),
+            );
             if (f % 24 === 0) {
               opts.onProgress?.(
                 `window ${boundary + 1}/${nativePlan.windows.length} ("${outScene.id}" → "${inScene.id}", ${win.spec.type}): frame ${f + 1}/${windowFrames}`,
@@ -736,7 +946,7 @@ export async function renderGraphics(
             voOffsetSec: nativePlan.sceneClipSec[boundary],
             silentFill: !voPath && anyVoAudio,
             windowFile,
-          }));
+          }), `${windowTag} encode`);
           fs.rmSync(framesDir, { recursive: true, force: true });
           windowFiles.set(boundary, windowFile);
           windowResults.push({ boundary, type: win.spec.type, frames: windowFrames, file: windowFile });
@@ -772,7 +982,7 @@ export async function renderGraphics(
       totalSec,
       musicPath: opts.musicPath ?? null,
       anyVoAudio,
-    }));
+    }), "final assembly");
     // S132 — the render COMPLETED: the manifest's purpose (resuming an
     // interrupted run) is spent. Delete it so the next run starts fresh;
     // the scene mp4s stay (today's behavior).

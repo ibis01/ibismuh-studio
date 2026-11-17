@@ -42,6 +42,10 @@ import { chatComplete } from "./providers/chat";
 import { parseJsonLoose } from "./ai";
 import * as storage from "./storage";
 import { FOCAL_CENTER, zoompanForShot, OUTPUT_SIZES, type MotionScenePlan, type MotionSettings } from "./motion";
+// S165 — the ONE engine launch-args source: the slides engine's private
+// chromium args copy rides the shared constant, so the srgb/font-hinting
+// render-farm determinism flags reach the slide rasterizer too.
+import { WB_CHROMIUM_LAUNCH_ARGS } from "./whiteboard/render";
 
 // ---------------------------------------------------------------------------
 // Catalogs
@@ -930,7 +934,9 @@ export async function renderSlidePngs(
   } = {}
 ): Promise<string[]> {
   const { chromium } = await import("playwright");
-  const browser = await chromium.launch({ args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+  // S165 — the shared launch set (container pair + the srgb/font-hinting
+  // determinism flags); the private copy is retired.
+  const browser = await chromium.launch({ args: [...WB_CHROMIUM_LAUNCH_ARGS] });
   const written: string[] = [];
   const tmpHtml = path.join(videoDir(videoId), `slide-tmp-${Date.now()}.html`);
   try {

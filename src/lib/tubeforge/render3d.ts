@@ -34,6 +34,9 @@ import path from "path";
 import { promisify } from "util";
 import { log } from "./log";
 import { WB_CHROMIUM_LAUNCH_ARGS } from "./whiteboard/render";
+// S165 — the ready-gate named diagnostics: a wedged 3D render names WHICH
+// gate is stuck (launch / page-load / compose / apply / screenshot / encode).
+import { withRenderGate, type RenderGateName } from "./render-gates";
 import { cameraAt, objectAt, type Scene3D } from "./scene3d";
 
 const renderLog = log.child({ mod: "render3d" });
@@ -217,9 +220,21 @@ export async function renderScene3D(
   fs.mkdirSync(framesDir, { recursive: true });
 
   const { chromium } = await import("playwright");
-  const browser = await chromium.launch({ headless: true, args: [...WB_CHROMIUM_LAUNCH_ARGS, "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
+  // S165 — the launch rides its named gate (a hung chromium start says so).
+  const browser = await withRenderGate(
+    { engine: "3D", gate: "launch", detail: "swiftshader chromium start" },
+    () =>
+      chromium.launch({
+        headless: true,
+        args: [...WB_CHROMIUM_LAUNCH_ARGS, "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+      }),
+  );
   const timer = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), budgetMs));
   const holder: { browser?: import("playwright").Browser } = {};
+  // S165 — the WHICH-GATE-IS-STUCK tracker: the work below advances this
+  // as it proceeds; the budget race's timeout error names the gate the
+  // render was last inside — never a generic "exceeded the budget".
+  let currentGate: RenderGateName = "launch";
   const work = (async (): Promise<void> => {
     holder.browser = browser;
     const context = await browser.newContext({
@@ -231,12 +246,15 @@ export async function renderScene3D(
     const page = await context.newPage();
     const threeSource = fs.readFileSync(THREE_MODULE_PATH, "utf8");
     const threeCoreSource = fs.readFileSync(THREE_CORE_PATH, "utf8");
+    currentGate = "page-load";
     await page.setContent(
       pageHtml(doc.width, doc.height, threeSource, threeCoreSource, JSON.stringify(doc)),
       { waitUntil: "load" }
     );
     // The module script must have built the scene; the raster must exist.
     // A failure surfaces the page's own error — never a silent timeout.
+    // S165 — this IS the compose gate (the 3D scene build); the error says so.
+    currentGate = "compose";
     try {
       await page.waitForFunction("window.__READY__ === true", undefined, { timeout: 30_000 });
     } catch {
@@ -244,7 +262,7 @@ export async function renderScene3D(
         (window as unknown as { __ERROR__: string | null }).__ERROR__
       );
       throw new Error(
-        `the 3D renderer page failed to initialize${err ? `: ${err}` : " (no error recorded — check the WebGL deployment)"}`
+        `the 3D renderer's compose gate failed — the renderer page did not reach __READY__${err ? `: ${err}` : " (no error recorded — check the WebGL deployment)"}`
       );
     }
 
@@ -257,6 +275,7 @@ export async function renderScene3D(
       // their static fields — the same values the build pass set, so the
       // frames stay byte-identical to the pre-S134 lane.
       const states = doc.objects.map((o) => objectAt(o, t));
+      currentGate = "apply";
       await page.evaluate(
         ({ states, position, lookAt }) => {
           const w = window as unknown as {
@@ -268,6 +287,7 @@ export async function renderScene3D(
         },
         { states, position: cam.position, lookAt: cam.lookAt }
       );
+      currentGate = "screenshot";
       const shot = await page.screenshot({
         path: path.join(framesDir, `f${String(f).padStart(5, "0")}.jpg`),
         type: "jpeg",
@@ -284,7 +304,9 @@ export async function renderScene3D(
   try {
     const winner = await Promise.race([work, timer]);
     if (winner === "timeout")
-      throw new Error(`the 3D render exceeded the ${Math.round(budgetMs / 1000)}s frame budget`);
+      throw new Error(
+        `the 3D render exceeded the ${Math.round(budgetMs / 1000)}s frame budget while STUCK at the ${currentGate} gate`
+      );
   } finally {
     await holder.browser?.close().catch(() => {});
   }
@@ -292,13 +314,17 @@ export async function renderScene3D(
   // Encode: the frames → an ordinary video clip (no audio — the clip joins
   // the shared assembly like any footage, where narration/bed are mixed).
   const outFile = path.join(opts.outDir, "scene-3d.mp4");
-  await runFfmpeg([
-    "-y", "-framerate", String(doc.fps),
-    "-i", path.join(framesDir, "f%05d.jpg"),
-    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-    "-pix_fmt", "yuv420p",
-    outFile,
-  ]);
+  await withRenderGate(
+    { engine: "3D", gate: "encode", detail: "scene-3d encode" },
+    () =>
+      runFfmpeg([
+        "-y", "-framerate", String(doc.fps),
+        "-i", path.join(framesDir, "f%05d.jpg"),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+        "-pix_fmt", "yuv420p",
+        outFile,
+      ]),
+  );
   fs.rmSync(framesDir, { recursive: true, force: true });
 
   const stat = fs.statSync(outFile);

@@ -9779,11 +9779,21 @@ await test("S75: the assembly MIXES the narration — the voice track must reach
     "amix must not divide the voice by its input count (normalize=0)"
   );
 });
-await test("S75: the slides engine keeps its container-safe launch args (the original deployment contract)", async () => {
+await test("S75: the slides engine keeps its container-safe launch args (S165: through the SHARED constant)", async () => {
+  // S165 adoption: the slides engine's private args copy is retired — it
+  // now spreads WB_CHROMIUM_LAUNCH_ARGS (the one launch-args source), which
+  // carries the container-safe pair (--no-sandbox + --disable-dev-shm-usage,
+  // held by this suite's first pin) PLUS the S165 determinism flags. The
+  // contract is stronger, not weaker: the slide rasterizer inherits every
+  // future launch-arg law the constant gains.
   const slidesSrc = fs.readFileSync("src/lib/tubeforge/slides.ts", "utf8");
   ok(
-    slidesSrc.includes("--disable-dev-shm-usage") && slidesSrc.includes("--no-sandbox"),
-    "the slides engine lost its container-safe launch args"
+    slidesSrc.includes("import { WB_CHROMIUM_LAUNCH_ARGS } from \"./whiteboard/render\""),
+    "the slides engine no longer imports the shared launch-args constant",
+  );
+  ok(
+    slidesSrc.includes("chromium.launch({ args: [...WB_CHROMIUM_LAUNCH_ARGS] })"),
+    "the slides engine's chromium.launch no longer spreads the shared launch-args constant",
   );
 });
 

@@ -55,6 +55,10 @@ import { framePlanClock, whiteboardTracks } from "./tracks";
 import { planFromTracks, type CompositionPlan } from "../composition-plan";
 import type { TimelineTrack } from "../timeline";
 import type { AnimationEvent, BoardMode, WhiteboardProject } from "./storyboard";
+// S165 — the ready-gate named diagnostics: every awaited pipeline step
+// carries a gate name + budget (page-load / compose / apply / screenshot /
+// encode / probe), so a wedged render names WHICH gate is stuck.
+import { withRenderGate } from "../render-gates";
 
 const execFileP = promisify(execFile);
 
@@ -101,16 +105,22 @@ export async function normalizeVoSlot(
   }
   fs.mkdirSync(normDir, { recursive: true });
   const outPath = path.join(normDir, `vo-${sceneId}-norm.wav`);
-  await execFileP(
-    "ffmpeg",
-    [
-      "-y", "-v", "error",
-      "-i", srcPath,
-      "-af", normalizationFilter(measurement),
-      "-c:a", "pcm_s16le",
-      outPath,
-    ],
-    { maxBuffer: 32 * 1024 * 1024 },
+  // S165 — the VO normalize rides the encode gate (a wedged loudnorm pass
+  // names the scene slot instead of hanging the pre-flight silently).
+  await withRenderGate(
+    { engine: "whiteboard", gate: "encode", detail: `vo normalize ("${sceneId}")` },
+    () =>
+      execFileP(
+        "ffmpeg",
+        [
+          "-y", "-v", "error",
+          "-i", srcPath,
+          "-af", normalizationFilter(measurement),
+          "-c:a", "pcm_s16le",
+          outPath,
+        ],
+        { maxBuffer: 32 * 1024 * 1024 },
+      ),
   );
   return outPath;
 }
@@ -131,7 +141,7 @@ async function buildSceneSfxFile(
     await runFfmpeg([
       "-y", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
       "-t", durSec.toFixed(3), "-c:a", "pcm_s16le", outPath,
-    ]);
+    ], "sfx silent fill");
   };
   const kindPaths = new Map<string, string>();
   for (const c of cues) {
@@ -168,19 +178,50 @@ async function buildSceneSfxFile(
     "-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2",
     "-t", durSec.toFixed(3),
     outPath,
-  ]);
+  ], "sfx layer mix");
 }
 
 /**
- * The container-safe chromium launch args (the slides deployment contract,
- * now inherited by the whiteboard engine — the S75 E10 receipt: on a 4GB
- * container with the 64MB /dev/shm, a bare launch is SIGKILLed mid-scene
- * by the OOM killer when chromium's shared memory outgrows /dev/shm;
- * --disable-dev-shm-usage moves those segments to /tmp. --no-sandbox is
- * the container user-namespace reality). BOTH whiteboard launch sites
- * (the asset rasterize probe + the main render) MUST launch through these.
+ * S165 — the render-farm determinism flags (the HyperFrames render-farm
+ * pattern, adopted per-engine). These are the cross-machine byte-stability
+ * flags: a render farm's workers are NOT the author's laptop — different
+ * machines carry different display color profiles and different font
+ * rasterization stacks, and both silently change every frame's bytes.
+ *
+ *   --force-color-profile=srgb  — pins chromium's color management to sRGB
+ *     regardless of the host's ICC profile (a worker with a P3 display or
+ *     a color-managed X session would otherwise rasterize shifted colors).
+ *   --font-render-hinting=none  — pins text rasterization to unhinted
+ *     grayscale glyphs (hinting decisions differ across FreeType builds
+ *     and fontconfig configs; unhinted rendering is identical everywhere
+ *     the same font files are — the glyphs.ts text stack ships its faces).
+ *
+ * Named separately with this provenance so the pins can hold each flag;
+ * the engine launch set below spreads it.
  */
-export const WB_CHROMIUM_LAUNCH_ARGS = ["--no-sandbox", "--disable-dev-shm-usage"] as const;
+export const WB_CHROMIUM_DETERMINISM_ARGS = [
+  "--force-color-profile=srgb",
+  "--font-render-hinting=none",
+] as const;
+
+/**
+ * THE engine chromium launch set — the one launch-args source every
+ * engine's chromium.launch spreads. Composed of the container-safe pair
+ * (the slides deployment contract, inherited by the whiteboard engine —
+ * the S75 E10 receipt: on a 4GB container with the 64MB /dev/shm, a bare
+ * launch is SIGKILLed mid-scene by the OOM killer when chromium's shared
+ * memory outgrows /dev/shm; --disable-dev-shm-usage moves those segments
+ * to /tmp. --no-sandbox is the container user-namespace reality) + the
+ * S165 render-farm determinism flags above. BOTH whiteboard launch sites
+ * (the asset rasterize probe + the main render) launch through these, as
+ * do the graphics, 3D, kinetic-slides and rig rasterizers; the slides
+ * engine's former private args copy is retired this slice.
+ */
+export const WB_CHROMIUM_LAUNCH_ARGS = [
+  "--no-sandbox",
+  "--disable-dev-shm-usage",
+  ...WB_CHROMIUM_DETERMINISM_ARGS,
+] as const;
 
 export interface RenderWhiteboardOptions {
   outDir: string;
@@ -233,9 +274,16 @@ export interface WhiteboardRenderResult {
 // The renderer
 // ---------------------------------------------------------------------------
 
-async function runFfmpeg(args: string[]): Promise<void> {
-  await execFileP("ffmpeg", args, { maxBuffer: 32 * 1024 * 1024 }).catch((e) => {
-    throw new Error(`ffmpeg failed: ${String(e.stderr ?? e.message).slice(-1200)}`);
+async function runFfmpeg(args: string[], gateDetail?: string): Promise<void> {
+  // S165 — every whiteboard ffmpeg invocation rides the encode gate: the
+  // bare execFileP here carried NO timeout at all before this slice (a
+  // wedged encode could hang the render forever, silently). A timeout or
+  // failure now names its stage — scene encode, sfx build, vo normalize,
+  // final assembly — and keeps the runner's stderr inside the gate label.
+  await withRenderGate({ engine: "whiteboard", gate: "encode", detail: gateDetail }, async () => {
+    await execFileP("ffmpeg", args, { maxBuffer: 32 * 1024 * 1024 }).catch((e) => {
+      throw new Error(`ffmpeg failed: ${String(e.stderr ?? e.message).slice(-1200)}`);
+    });
   });
 }
 
@@ -307,7 +355,9 @@ export async function probeAssetRasterization(
       return {
         ok: false,
         ms: Date.now() - t0,
-        error: `rasterizing this SVG exceeded the ${Math.round(budgetMs / 1000)}s budget — simplify the paths (fewer points, shallower nesting)`,
+        // S165 — the PROBE gate, named: the budget race above IS the
+        // rasterize-before-trust probe gate; the error says so.
+        error: `the raster probe gate is stuck — rasterizing this SVG exceeded the ${Math.round(budgetMs / 1000)}s budget; simplify the paths (fewer points, shallower nesting)`,
       };
     return winner;
   } catch (err) {
@@ -491,8 +541,18 @@ export async function renderWhiteboard(
       };
       try {
         opts.onProgress?.(`scene ${si + 1}/${project.scenes.length} ("${scene.id}"): composing`, si / project.scenes.length);
+      const sceneTag = `scene ${si + 1} ("${scene.id}")`;
       const composed = composeScene(scene, project, lib.assets, carryPlan);
-      await page.setContent(composed.html, { waitUntil: "load" });
+      // The page-load gate: the composed SVG must actually land in the
+      // page (a wedged load names the scene instead of hanging silently).
+      await withRenderGate(
+        { engine: "whiteboard", gate: "page-load", detail: sceneTag },
+        () => page.setContent(composed.html, { waitUntil: "load" }),
+      );
+      // The compose gate: the setup pass (defs root + the hand pose groups
+      // + dasharrays from OUR geometry + the index maps the applier
+      // resolves through) must finish before frame 0 applies.
+      await withRenderGate({ engine: "whiteboard", gate: "compose", detail: `${sceneTag} setup pass` }, async () => {
       // Setup pass: defs root + the hand pose groups + dasharrays from OUR
       // geometry (the pure module owns the truth about every stroke length).
       await page.evaluate(
@@ -557,22 +617,31 @@ export async function renderWhiteboard(
           if (el) el.style.opacity = "0";
         }, elId);
       }
+      }); // — the compose gate closes here
 
       const framesDir = path.join(opts.outDir, `scene-${si + 1}-frames`);
       fs.mkdirSync(framesDir, { recursive: true });
       for (let f = 0; f < frames; f++) {
         const tMs = (f / project.fps) * 1000;
-        await apply(frameAt(project, scene, events, geometry, tMs, carryPlan, assetRoles));
-        await page.screenshot({
-          path: path.join(framesDir, `f${String(f).padStart(5, "0")}.jpg`),
-          type: "jpeg",
-          quality: 92,
-          clip: { x: 0, y: 0, width: project.width, height: project.height },
-        });
+        const frameDetail = `${sceneTag} frame ${f}`;
+        await withRenderGate(
+          { engine: "whiteboard", gate: "apply", detail: frameDetail },
+          () => apply(frameAt(project, scene, events, geometry, tMs, carryPlan, assetRoles)),
+        );
+        await withRenderGate(
+          { engine: "whiteboard", gate: "screenshot", detail: frameDetail },
+          () =>
+            page.screenshot({
+              path: path.join(framesDir, `f${String(f).padStart(5, "0")}.jpg`),
+              type: "jpeg",
+              quality: 92,
+              clip: { x: 0, y: 0, width: project.width, height: project.height },
+            }),
+        );
         if (f % 24 === 0) {
           opts.onProgress?.(
-            `scene ${si + 1}/${project.scenes.length} ("${scene.id}"): frame ${f + 1}/${frames}`,
-            (si + (f + 1) / frames) / project.scenes.length
+            `${sceneTag}: frame ${f + 1}/${frames}`,
+            (si + (f + 1) / frames) / project.scenes.length,
           );
         }
       }
@@ -611,7 +680,7 @@ export async function renderWhiteboard(
         "-t", durSec.toFixed(3),
         sceneFile,
       );
-      await runFfmpeg(args);
+      await runFfmpeg(args, `${sceneTag} encode`);
       fs.rmSync(framesDir, { recursive: true, force: true });
       sceneFiles.push({ sceneId: scene.id, durationMs, frames, file: sceneFile });
       } finally {
@@ -662,7 +731,7 @@ export async function renderWhiteboard(
         "-filter_complex", `concat=n=${parts.length}:v=0:a=1[a]`,
         "-map", "[a]", "-c:a", "pcm_s16le",
         sfxFile,
-      ]);
+      ], "sfx layer concat");
     }
     // The SFX input joins LAST (music stays index 1 — the bed chain's
     // labels below are built off the input order, so the SFX label moves).
@@ -708,7 +777,7 @@ export async function renderWhiteboard(
         // Every stream is already bounded: the bed by -t above, the mix by
         // amix duration=first, the video by the concat's own length.
         finalFile,
-      ]);
+      ], "final assembly (bed)");
     } else if (sfxFile) {
       // W7 — no bed, SFX on: with VO the layer amixes under the voice;
       // silent drafts map the layer directly (its levels are already tuned).
@@ -725,9 +794,9 @@ export async function renderWhiteboard(
         "-c:v", "libx264", "-preset", "veryfast", "-crf", "19",
         "-c:a", "aac", "-b:a", "160k",
         finalFile,
-      ]);
+      ], "final assembly (sfx)");
     } else {
-      await runFfmpeg(["-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", finalFile]);
+      await runFfmpeg(["-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", finalFile], "final concat copy");
     }
     return { scenes: sceneFiles, file: finalFile, tracks, plan, boardModes: project.scenes.map((s) => s.board?.mode ?? "clean") };
   } finally {
