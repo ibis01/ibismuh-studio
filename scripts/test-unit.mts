@@ -23263,6 +23263,109 @@ await test("S162 planner: the native enter table rides the measured vocabulary; 
   ok(llmSrc.includes('let ease: EaseName = "measured-out"'), "the degradation floor is the measured entrance");
 });
 
+await test("S162 part 2: the measured exit table — tail-anchored, legal, the list clears first and the title completes last", async () => {
+  const { nativeExitFor, GRAPHICS_EXIT_STAGGER_MS } = await import("../src/lib/tubeforge/graphics/planner");
+  const { MOTION_KINDS_BY_ELEMENT } = await import("../src/lib/tubeforge/graphics/types");
+  const sceneMs = 4000; // the estimator's floor — the tightest case the scaffold can emit
+  for (const kind of Object.keys(MOTION_KINDS_BY_ELEMENT) as Array<keyof typeof MOTION_KINDS_BY_ELEMENT>) {
+    const exit = nativeExitFor(kind, 0, sceneMs, 3);
+    const legal = MOTION_KINDS_BY_ELEMENT[kind] ?? [];
+    ok(legal.includes(exit.kind), `${kind} exits on a legal motion (${exit.kind})`);
+    ok(exit.delayMs >= 0, `${kind} exit delay non-negative`);
+    ok(exit.delayMs + exit.durationMs <= sceneMs, `${kind} exit fits the scene clock (ends ${exit.delayMs + exit.durationMs} ≤ ${sceneMs})`);
+    ok(exit.ease === "measured-in-out", `${kind} exits on the measured in-out settle`);
+  }
+  // The bullet cascade: entrance order = exit order, staggered by the
+  // exit constant; the first bullet's fade completes first, the last one
+  // completes exactly at the 640 anchor.
+  const b0 = nativeExitFor("bullet", 0, sceneMs, 3);
+  const b1 = nativeExitFor("bullet", 1, sceneMs, 3);
+  const b2 = nativeExitFor("bullet", 2, sceneMs, 3);
+  const b0End = b0.delayMs + b0.durationMs;
+  const b1End = b1.delayMs + b1.durationMs;
+  const b2End = b2.delayMs + b2.durationMs;
+  eq(b0End, sceneMs - 640 - 2 * GRAPHICS_EXIT_STAGGER_MS, "the first bullet completes first");
+  eq(b1End, sceneMs - 640 - GRAPHICS_EXIT_STAGGER_MS, "the second cascades by the exit stagger");
+  eq(b2End, sceneMs - 640, "the last bullet completes at the 640 anchor");
+  ok(b0.delayMs < b1.delayMs && b1.delayMs < b2.delayMs, "the bullets LEAVE in entrance order too");
+  const headline = nativeExitFor("headline", 0, sceneMs, 1);
+  ok(headline.delayMs > b0.delayMs, "the title starts leaving after the list has begun clearing");
+  ok(headline.delayMs + headline.durationMs > b2End, "the title's fade completes LAST — the identity holds longest");
+  // The chart un-reveal: a wipe exit (the grow's mirror).
+  const chart = nativeExitFor("barChart", 0, sceneMs, 1);
+  eq(chart.kind, "wipe", "the chart un-reveals instead of fading");
+});
+
+await test("S162 part 2: the camera breathe — two keys, the push completes AT the scene clock", async () => {
+  const { nativeCameraFor, GRAPHICS_CAMERA_PUSH_ZOOM } = await import("../src/lib/tubeforge/graphics/planner");
+  const cam = nativeCameraFor(4000);
+  eq(cam.length, 2, "two keys: the hold, then the push");
+  eq(cam[0]?.tMs, 0, "the hold starts at the scene head");
+  eq(cam[0]?.zoom, 1, "the board starts at zoom 1 (the S130 law)");
+  eq(cam[1]?.tMs, 4000, "the last key sits AT the scene clock — the validator's edge the planner owns");
+  eq(cam[1]?.zoom, GRAPHICS_CAMERA_PUSH_ZOOM, "the push magnitude rides the named constant");
+  eq(cam[1]?.ease, "measured-in-out", "the slow start never fights the entrances");
+});
+
+await test("S162 part 2: the scaffold stages the exit + the breathe — validator-clean, additive-absent", async () => {
+  const { scaffoldGraphicsDoc, GRAPHICS_CAMERA_PUSH_ZOOM } = await import("../src/lib/tubeforge/graphics/planner");
+  const { validateGraphicsDoc } = await import("../src/lib/tubeforge/graphics/types");
+  const { frameAt } = await import("../src/lib/tubeforge/graphics/frame");
+  const { estimateNarrationMs } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const doc = scaffoldGraphicsDoc({
+    scenes: [
+      { index: 1, title: "The opener", narration: "the setup takes minutes" },
+      { index: 2, title: "Why teams switch", narration: "First, the setup takes minutes. Next, the workflow runs itself. Finally, the results compound." },
+      { index: 3, title: "The chart", narration: "Compared with last year, 42 percent versus 87 percent share." },
+      { index: 4, title: "Start today", narration: "see the difference yourself" },
+    ],
+    topic: "staged exit",
+  });
+  const r = validateGraphicsDoc(JSON.parse(JSON.stringify(doc)));
+  ok(r.doc !== null && r.errors.length === 0, `the staged scaffold validates clean: ${r.errors.join(" | ")}`);
+  for (const scene of doc.scenes) {
+    const sceneMs = estimateNarrationMs(scene.narration);
+    ok(scene.camera !== undefined && scene.camera.length === 2, `${scene.id} carries the two-key camera`);
+    eq(scene.camera?.[1]?.tMs, sceneMs, `${scene.id} camera push completes at the scene clock`);
+    ok(scene.elements.length > 0, `${scene.id} served`);
+    for (const el of scene.elements) {
+      ok(el.exit !== undefined, `${scene.id}/${el.id} carries the measured exit`);
+      ok((el.exit?.delayMs ?? 0) + (el.exit?.durationMs ?? 0) <= sceneMs, `${scene.id}/${el.id} exit fits the clock`);
+    }
+  }
+  // The frame truth: mid-scene the push is moving and elements are up;
+  // at the tail the board is cleared and the push has settled.
+  const s1 = doc.scenes[0];
+  ok(s1 !== undefined, "the opener served");
+  const ms1 = estimateNarrationMs(s1.narration);
+  const mid = frameAt(doc, 2000);
+  ok(mid.camera !== undefined && mid.camera.zoom > 1 && mid.camera.zoom < GRAPHICS_CAMERA_PUSH_ZOOM, "mid-scene the push rides between the keys");
+  const tail = frameAt(doc, ms1 - 10);
+  ok(tail.camera !== undefined && Math.abs(tail.camera.zoom - GRAPHICS_CAMERA_PUSH_ZOOM) < 0.001, "the push has settled at the tail");
+  ok(tail.elements.every((e) => e.opacity === 0), "the tail holds the CLEARED board (the breath before the boundary)");
+  // The additive seam both ways: stripping the fields restores the
+  // legacy frame truth exactly.
+  const legacy = JSON.parse(JSON.stringify(doc));
+  for (const s of legacy.scenes) {
+    delete s.camera;
+    for (const el of s.elements) delete el.exit;
+  }
+  const legacyMid = frameAt(legacy, 2000);
+  ok(legacyMid.camera === undefined, "a camera-less doc stays camera-less (the additive-seam law)");
+  ok(legacyMid.elements.every((e) => e.opacity > 0), "an exit-less board never fades");
+  // Determinism: same story → byte-identical staged doc.
+  const again = scaffoldGraphicsDoc({
+    scenes: [
+      { index: 1, title: "The opener", narration: "the setup takes minutes" },
+      { index: 2, title: "Why teams switch", narration: "First, the setup takes minutes. Next, the workflow runs itself. Finally, the results compound." },
+      { index: 3, title: "The chart", narration: "Compared with last year, 42 percent versus 87 percent share." },
+      { index: 4, title: "Start today", narration: "see the difference yourself" },
+    ],
+    topic: "staged exit",
+  });
+  eq(JSON.stringify(again), JSON.stringify(doc), "the staged scaffold is deterministic (the determinism law)");
+});
+
 // ---------- S164: the whiteboard hand-drawn geometry slice (the Rough.js native port) ----------
 
 suiteStart("S164 — the whiteboard hand-drawn geometry slice (the Rough.js native port)");

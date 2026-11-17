@@ -15,10 +15,13 @@
 //
 // The graphics module stays a leaf: this planner imports the grammar
 // (types.ts), the whiteboard sentence splitter (beat-plan — ONE sentence
-// model, never a second) and nothing else. Pure and deterministic: same
-// input → the same doc, byte for byte (the determinism law extends to
-// the planner). $0 work — no AI call anywhere (design law 5).
+// model, never a second) and the whiteboard timing estimator (timing.ts —
+// ONE clock model, never a second) — nothing else. Pure and
+// deterministic: same input → the same doc, byte for byte (the
+// determinism law extends to the planner). $0 work — no AI call anywhere
+// (design law 5).
 import { splitSentences } from "../whiteboard/beat-plan";
+import { estimateNarrationMs } from "../whiteboard/timing";
 import type { Placement } from "../whiteboard/svg";
 import { GRAPHICS_MOTION_SEMANTICS } from "./frame";
 import {
@@ -27,6 +30,7 @@ import {
   GRAPHICS_VERSION,
   type BarDatum,
   type ElementMotion,
+  type GraphicsCameraKeyframe,
   type GraphicsDoc,
   type GraphicsElement,
   type GraphicsElementKind,
@@ -210,6 +214,118 @@ export function nativeEnterFor(kind: GraphicsElementKind, order: number): Elemen
   }
 }
 
+// ---------------------------------------------------------------------------
+// S162 part 2 — the measured EXIT + the camera breathe. The craft the
+// round-1 blind tie asked for: the delta must READ, and an element that
+// never leaves (a board that never moves) does not read. Both tables are
+// TAIL-ANCHORED on the ONE clock: the caller supplies the scene clock
+// (estimateNarrationMs — the same model the frame engine resolves), so
+// with no VO the plan IS the delivered clock; a VO-extended scene holds
+// the plan's pushed state past the last camera key (the motion clamp
+// law — the documented estimate anchor). Pure: same inputs → the same
+// windows, byte for byte (the determinism law).
+// ---------------------------------------------------------------------------
+
+/** The exit cascade's stagger — one bullet leaves this many ms after the
+ *  previous (a fraction of the enter stagger: the clearing reads calmer
+ *  than the build). */
+export const GRAPHICS_EXIT_STAGGER_MS = 90;
+
+/** The camera breathe's push magnitude — zoom 1 → 1.05 across the scene
+ *  (the S130 bounds keep zoom ≥ 1, the board never shrinks into void;
+ *  1.05 reads as presence, never as a zoom effect). */
+export const GRAPHICS_CAMERA_PUSH_ZOOM = 1.05;
+
+/**
+ * The default exit motion per kind — endings as deliberate as the
+ * entrances. Every window completes at or before `sceneMs − 60`, so the
+ * scene's final frames hold the CLEARED board (the breath before the
+ * next scene's transition). The choreography arc: the bullet list is
+ * consumed FIRST (one bullet every GRAPHICS_EXIT_STAGGER_MS in entrance
+ * order — the list leaves the way it was told), then the furniture
+ * (kicker / context / icon), and the headline (with the stat's counter)
+ * leaves LAST — the scene's identity holds while everything else clears.
+ * Chart bars UN-REVEAL (a wipe exit drains reveal progress 1→0 — the
+ * grow's mirror, continuity in both directions). Every span fits the
+ * validator's time-sanity law (delayMs + durationMs ≤ sceneMs) for any
+ * sceneMs ≥ 4000 — the estimator's own floor. Every kind rides its
+ * MOTION_KINDS_BY_ELEMENT row (a planner never proposes an illegal
+ * motion).
+ *
+ * `order`/`count` carry the element's index and total among its kind —
+ * the same order semantics nativeEnterFor staggers by.
+ */
+export function nativeExitFor(
+  kind: GraphicsElementKind,
+  order: number,
+  sceneMs: number,
+  count: number,
+): ElementMotion {
+  // The fade helper: completes `endBefore` ms ahead of the scene tail.
+  const fadeAt = (endBefore: number, durationMs: number): ElementMotion => ({
+    kind: "fade",
+    durationMs,
+    delayMs: Math.max(0, sceneMs - endBefore - durationMs),
+    ease: "measured-in-out",
+  });
+  switch (kind) {
+    case "headline":
+    case "counter":
+      // The title (and the stat it carries) leaves last.
+      return fadeAt(420, 360);
+    case "subhead":
+    case "callout":
+      return fadeAt(500, 380);
+    case "bullet": {
+      // Entrance order = exit order; the first bullet's fade completes
+      // first and the last bullet's completes at the 640 anchor — the
+      // list is the first wave out (the cascade overlaps, the house
+      // kinetic law; the arc still reads: list, furniture, title).
+      const remaining = Math.max(0, count - 1 - order);
+      const durationMs = 260;
+      return {
+        kind: "fade",
+        durationMs,
+        delayMs: Math.max(0, sceneMs - 640 - remaining * GRAPHICS_EXIT_STAGGER_MS - durationMs),
+        ease: "measured-in-out",
+      };
+    }
+    case "bar":
+    case "barChart":
+      // The un-reveal: progress drains 1→0 (the grow's mirror).
+      return {
+        kind: "wipe",
+        durationMs: 420,
+        delayMs: Math.max(0, sceneMs - 500 - 420),
+        ease: "measured-in-out",
+      };
+    case "icon":
+      return fadeAt(460, 300);
+    case "shape":
+      return fadeAt(420, 300);
+    case "group":
+    case "sprite":
+      return fadeAt(460, 320);
+  }
+}
+
+/**
+ * The camera breathe: the house default push-in (the VQ1 P4 camera
+ * choreography, riding the S130 camera seam — no new grammar, no new
+ * renderer). Two keys: the board holds at zoom 1 while the entrances
+ * play, then the +5% push completes AT the scene tail — "measured-in-out"
+ * (the slow start never fights the entrances; the settle lands with the
+ * exits). The last key sits exactly at the scene clock (the validator's
+ * time-sanity law: a key past the clock is an error — at the clock is
+ * the edge the planner owns).
+ */
+export function nativeCameraFor(sceneMs: number): GraphicsCameraKeyframe[] {
+  return [
+    { tMs: 0, zoom: 1, tx: 0, ty: 0 },
+    { tMs: sceneMs, zoom: GRAPHICS_CAMERA_PUSH_ZOOM, tx: 0, ty: 0, ease: "measured-in-out" },
+  ];
+}
+
 /** The kind-generic default placement, remapped onto the real surface —
  *  the LLM planner's degradation target for absent/junk placements. */
 export function nativePlacementFor(kind: GraphicsElementKind, width: number, height: number): Placement {
@@ -324,7 +440,7 @@ export function scaffoldGraphicsDoc(input: {
   const fps = input.fps === 30 ? 30 : 24;
   const topic = capLine(input.topic, 120);
 
-  const scenes: GraphicsScene[] = input.scenes.map((s, i) => {
+  const draft: GraphicsScene[] = input.scenes.map((s, i) => {
     const isFirst = i === 0;
     const isLast = i === input.scenes.length - 1 && input.scenes.length > 1;
     const narrationText = `${s.title} ${s.narration}`;
@@ -409,12 +525,35 @@ export function scaffoldGraphicsDoc(input: {
     return { id: `scene-${s.index}`, narration: s.narration, background: "#ffffff", elements };
   });
 
+  // S162 part 2 — the staged exit + the camera breathe. Every element
+  // leaves as deliberately as it entered (nativeExitFor), and every scene
+  // carries the push (nativeCameraFor). ONE clock per scene:
+  // estimateNarrationMs of the SAME narration the frame engine resolves —
+  // with no VO the plan IS the delivered clock (the exit windows land on
+  // the real tail). The additive-seam law holds both ways: a doc WITHOUT
+  // these fields renders byte-identically (the appliers no-op); THIS
+  // scaffold now emits them, which is the deliberate visual change the
+  // golden harness re-baselines on purpose.
+  const staged: GraphicsScene[] = draft.map((scene) => {
+    const sceneMs = estimateNarrationMs(scene.narration);
+    const counts = new Map<string, number>();
+    for (const el of scene.elements) counts.set(el.kind, (counts.get(el.kind) ?? 0) + 1);
+    const seen = new Map<string, number>();
+    const elements = scene.elements.map((el) => {
+      const order = seen.get(el.kind) ?? 0;
+      seen.set(el.kind, order + 1);
+      const count = counts.get(el.kind) ?? 1;
+      return { ...el, exit: nativeExitFor(el.kind, order, sceneMs, count) };
+    });
+    return { ...scene, elements, camera: nativeCameraFor(sceneMs) };
+  });
+
   return {
     version: GRAPHICS_VERSION,
     title: input.topic ? `Graphics — ${topic}`.slice(0, 120) : "Graphics",
     width,
     height,
     fps,
-    scenes,
+    scenes: staged,
   };
 }
