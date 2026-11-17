@@ -562,6 +562,30 @@ walls, no new dependencies. Order = visual impact per LOC × risk.
   smoke; duck envelope pins.
 - **Complexity**: medium; the 3D wiring touches the compositor contract.
 
+> **LANDED** — `57a6ab2` (the slice) + `cb5ffb5` (the smoke receipt) +
+> `a511a45` (the lint law); battery 952/952 — the 947 stay green + 5;
+> CI 8/8. `anim/camera.ts` + `scene3d.ts` gain the fBM shake channel —
+> the in-house seeded Perlin fBM, pure (it passes the frame-truth scan),
+> zero at strength 0, bounded, seeded; exponential hold push-ins ride
+> S162's curve. `studio-doc.ts` carries the per-scene SOP/CDL grade
+> scalars (additive optional — neutral/absent compiles the legacy
+> stream byte-for-byte); the CDL compile to ffmpeg `colorbalance`/`curves`
+> is pinned. `audiomix.ts` (NEW, 126 LOC) lands the duck automation
+> lanes — attack 0.15 / release 0.4 provenance-pinned keyframed
+> envelopes. PlanVisualKind "3d" is admitted as an engine segment (the
+> admission law fail-closed without the segment, admitted with it). THE
+> ACCEPTANCE'S E2E ARM, ON REAL BYTES
+> (`docs/audits/s167-3d-assembly-smoke.json` + `scripts/s167-3d-assembly-smoke.mts`):
+> the finisher doc (fBM seed 167, pushIn 0.18) through the 3D engine
+> (SwiftShader chromium, 48 frames @ 24 fps), the schema-2 tracks doc
+> reading the 3d kind through planFromTracks, the compositor staging
+> both segments through the SAME function (identical codec parameters —
+> the concat's -c copy law) — the probe reads duration exactly 3.00s,
+> the 3d window carries real raster ink (luma variance 204.7 vs the flat
+> card window 0.0, mean |Δ| 12.13 — different pictures), and the
+> hold-frame |Δ| = 0.296 proves the finisher channels are live in the
+> raster. THE 3D-NOT-COMPOSITOR-WIRED GAP (Part 0.3) IS CLOSED.
+
 ### Deliberately NOT adopted (recorded rejections)
 
 - Remotion/React/GSAP as dependencies (framework lock-in; license posture).
