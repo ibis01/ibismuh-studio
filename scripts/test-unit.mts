@@ -21675,15 +21675,19 @@ await test("S155 the batch rides THE ONE script job — storm patience, ordered 
 suiteStart("S156 — the title font ladder and the position-aligned doc read");
 
 await test("S156 the title font is a RUNTIME ladder — a slim image degrades the overlay, never the render", async () => {
-  const src = await fsp.readFile("src/lib/tubeforge/studio-doc.ts", "utf8");
+  // S157 — the ladder lives in ./title-font now: the studio-doc module rides
+  // the browser chunk, and the S156 fs import there killed the production
+  // build (Turbopack's browser chunking refuses node:fs externals).
+  const src = await fsp.readFile("src/lib/tubeforge/title-font.ts", "utf8");
   ok(src.includes("export function resolveTitleFontFile"), "the ladder is exported (the render consumes it)");
   ok(src.includes("TUBEFORGE_TITLE_FONT"), "the operator's explicit override wins first");
   ok(src.includes("LiberationSans-Regular.ttf") && src.includes("DejaVuSans.ttf"), "the shipped faces are candidates");
   ok(!src.includes('?? "/usr/share/fonts/truetype/chinese/NotoSansSC-Regular.ttf"'), "the hardcoded missing-font default is gone");
   const eng = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
   ok(eng.includes("title overlay skipped — no usable title font"), "the skip is a visible log note, not a dead encode");
+  ok(eng.includes('from "./title-font"'), "the render consumes the server-only seam, not studio-doc");
   // The real ladder answers on this host (an executable receipt, not a source pin).
-  const { resolveTitleFontFile } = await import("../src/lib/tubeforge/studio-doc");
+  const { resolveTitleFontFile } = await import("../src/lib/tubeforge/title-font");
   ok(resolveTitleFontFile() !== null || process.env.CI === "true", "the ladder resolves a font on any host that carries one");
 });
 
@@ -21691,6 +21695,25 @@ await test("S156 docScenes reads by POSITION — the preview's channel pick matc
   const eng = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
   ok(eng.includes("docCameraKeys = scenes.map((_s, i) => docScenes?.[i]?.cameraKeys != null)"), "the doc camera-keys read is position-aligned");
   ok(!eng.includes("docScenes?.[s.index - 1]"), "the scene-number-indexed misalignment is gone");
+});
+
+suiteStart("S157 — the browser-chunk seam (the production-build law)");
+
+await test("S157 studio-doc rides the browser chunk — no node builtins may enter the client graph", async () => {
+  // The receipt: S156 put `import fs from "node:fs"` in studio-doc.ts for the
+  // font ladder; the client components (timeline-studio, video-detail-dialog)
+  // import studio-doc VALUES, so the whole module — node builtin included —
+  // entered the /page browser chunk and Turbopack died: "the chunking context
+  // (unknown) does not support external modules (request: node:fs)". The pin
+  // guards the seam, not the incident: any node builtin in this module
+  // detonates the production build the same way.
+  const src = await fsp.readFile("src/lib/tubeforge/studio-doc.ts", "utf8");
+  ok(!src.includes("node:") && !src.includes("import fs"), "studio-doc imports no node builtins and no fs (the client graph reaches it)");
+  // The moved seam keeps the S156 law: the ladder + the drawtext chain live
+  // server-side, the null-skip degradation stays in the filter itself.
+  const font = await fsp.readFile("src/lib/tubeforge/title-font.ts", "utf8");
+  ok(font.includes("import fs from \"node:fs\""), "the disk-touching seam imports fs (server-only)");
+  ok(font.includes("if (!fontFile) return null;"), "a missing font degrades the overlay, never the render");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

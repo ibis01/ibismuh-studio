@@ -308,6 +308,7 @@ async function partC(): Promise<void> {
   const { scaffoldGraphicsDocLlm } = await import("../src/lib/tubeforge/graphics/llm-planner");
   const { graphicsTracks } = await import("../src/lib/tubeforge/graphics/tracks");
   const { planFromTracks } = await import("../src/lib/tubeforge/composition-plan");
+  const { wavDurationSec } = await import("../src/lib/tubeforge/wav");
 
   const dir = path.join(OUT_DIR, "graphics");
   fs.mkdirSync(dir, { recursive: true });
@@ -332,7 +333,22 @@ async function partC(): Promise<void> {
   const bed = path.join(dir, "bed.flac");
   await ffmpeg(["-f", "lavfi", "-i", "sine=frequency=220:duration=12", "-ar", "48000", "-ac", "2", bed]);
 
-  const expectedTracks = graphicsTracks(doc, { voSceneIds: ["scene-2"], musicOn: true });
+  // S152 — the MEASURED-VO clock: the render measures each narration WAV
+  // (header math, Math.round(sec*1000)) and threads the map through the ONE
+  // derivation, so an unplanned scene extends to its narration + the 350 ms
+  // tail. The expected side of the contract must ride the SAME measured
+  // clock — deriving it from the estimate alone compared two different
+  // worlds (the CI receipt: vo2 is a real 2.0 s WAV, the estimate for the
+  // same line lands elsewhere, and the byte-identity check read the
+  // mismatch as an engine bug). The battery measures the SAME file the
+  // render receives, with the SAME function, and mirrors the renderer's
+  // rounding exactly.
+  const vo2Ms = Math.round(wavDurationSec(fs.readFileSync(vo2)) * 1000);
+  const expectedTracks = graphicsTracks(doc, {
+    voSceneIds: ["scene-2"],
+    musicOn: true,
+    voMsBySceneId: new Map([["scene-2", vo2Ms]]),
+  });
 
   const result = await renderGraphics(doc, {
     outDir: dir,

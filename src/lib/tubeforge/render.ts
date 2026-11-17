@@ -84,7 +84,6 @@ import { parseRigDoc, parseRigParts, type CharacterRigDoc, type RigPartArt } fro
 import { sceneVoiceAnchors } from "./whiteboard/voice-anchors";
 import {
   gradeFilter,
-  titleDrawtextFilter,
   chromaFilterChain,
   pipOverlayFilter,
   QUALITY_ENCODING,
@@ -96,6 +95,10 @@ import {
   type ScenePip,
   type ExportQuality,
 } from "./studio-doc";
+// S157 — the title-overlay seam is server-only now: titleDrawtextFilter +
+// the font ladder live in ./title-font (studio-doc rides the browser chunk
+// and must stay free of node builtins).
+import { titleDrawtextFilter } from "./title-font";
 import { getApprovedMotionMap, getApprovedAudioMap, getApprovedPlan, type DirectorScene } from "./director-plan";
 import { buildSceneShots, ensureShotImages, PSEUDO_CROPS, type SceneShotPlan } from "./shots";
 import { sanitizePromptForPolicy } from "./restricted-subjects";
