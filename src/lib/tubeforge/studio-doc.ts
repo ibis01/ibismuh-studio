@@ -20,6 +20,42 @@
 // (or a hostile client) may carry and returns either a clean value or null.
 // The studio normalizes on load; the render re-sanitizes on consume — the
 // two can never disagree because both call these exact functions.
+import fs from "node:fs";
+
+// ---------- title font (S156 — the font ladder) ----------
+
+/** The title font candidates, in preference order: the operator's explicit
+ *  override wins, then the CJK-capable Noto face, then the Liberation face
+ *  the shipped image installs, then DejaVu. The old default hardcoded a
+ *  path that a slim image does not carry — drawtext with a missing fontfile
+ *  ERRORS, so any scene with a studio title overlay failed its segment
+ *  encode. The ladder resolves what EXISTS; the render skips the overlay
+ *  (with a visible log note) when nothing does — a title that cannot be
+ *  drawn is a degradation, never a dead render. */
+const TITLE_FONT_CANDIDATES = [
+  "/usr/share/fonts/truetype/chinese/NotoSansSC-Regular.ttf",
+  "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+  "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+];
+
+export function resolveTitleFontFile(): string | null {
+  const env = process.env.TUBEFORGE_TITLE_FONT;
+  if (env) {
+    try {
+      if (fs.existsSync(env)) return env;
+    } catch {
+      /* stat failure → fall through the ladder */
+    }
+  }
+  for (const candidate of TITLE_FONT_CANDIDATES) {
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      /* stat failure → next candidate */
+    }
+  }
+  return null;
+}
 
 // ---------- grade ----------
 
@@ -155,7 +191,13 @@ export function titleDrawtextFilter(
   const face = Math.round(480 * (vertical ? 0.05 : 0.062) * title.size); // ≈30px @1080p
   const margin = vertical ? Math.round(480 * 0.09) : Math.round(480 * 0.075);
   const text = escapeDrawtext(title.text);
-  const common = `fontfile=${process.env.TUBEFORGE_TITLE_FONT ?? "/usr/share/fonts/truetype/chinese/NotoSansSC-Regular.ttf"}`;
+  // S156 — the font ladder: resolve what the host ACTUALLY carries; a host
+  // with no usable face answers null and the CALLER skips the overlay with
+  // a note (the drawtext filter with a missing fontfile is a hard error —
+  // the old hardcoded default failed every titled scene on slim images).
+  const fontFile = resolveTitleFontFile();
+  if (!fontFile) return null;
+  const common = `fontfile=${fontFile}`;
 
   // Style → weight / box / outline.
   let look: string;

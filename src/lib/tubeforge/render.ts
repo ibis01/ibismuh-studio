@@ -822,6 +822,15 @@ async function buildSegment(opts: {
       : "";
   if (hasPip) tail = "[vp]";
   const titleChain = titleDrawtextFilter(opts.docTitle ?? null, dur, aspect !== "16:9", tail);
+  if (opts.docTitle && !titleChain) {
+    // S156 — the title overlay SKIPPED, never a dead encode: the host has
+    // no usable title font (the ladder answered null). Visible in the log,
+    // never a failed segment.
+    renderLog.warn(
+      "title overlay skipped — no usable title font on this host (set TUBEFORGE_TITLE_FONT)",
+      { scene: scene.index }
+    );
+  }
   // vMap follows the chain's tail so input order and labels can never drift.
   const vMap = titleChain ? "[vt]" : tail;
   const fullVisual = (base: string, pipIdx: number | null): string => {
@@ -1848,7 +1857,12 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
       (s) => approvedPlan?.scenes.find((p) => p.sceneIndex === s.index)?.motion === "off"
     );
     const humanMotionOff = scenes.map((s) => motionOverrides.get(s.index) === "off");
-    const docCameraKeys = scenes.map((s) => docScenes?.[s.index - 1]?.cameraKeys != null);
+    // S156 — docScenes is POSITION-ALIGNED (every other reader slices it by
+    // position — the doc's per-scene settings at :2082, the previews' slices
+    // in video-jobs): the old read indexed it by scene NUMBER, so a partial
+    // or boundary render read the wrong row's camera keys as present/absent
+    // and the preview could pick a different motion channel than the final.
+    const docCameraKeys = scenes.map((_s, i) => docScenes?.[i]?.cameraKeys != null);
     // S125 (K1) — the native rig's inputs: the character's stored rig columns
     // parsed ONCE (additive — junk/null = no rig, the byte-identical legacy
     // path). The rig is cast-scene-only (the continuity law) and the flags

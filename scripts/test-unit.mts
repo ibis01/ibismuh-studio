@@ -21670,6 +21670,29 @@ await test("S155 the batch rides THE ONE script job — storm patience, ordered 
   ok(/renderMode === "whiteboard" \|\| renderMode === "graphics"\) &&\n      format !== "story"/.test(src), "the engine-lane contradiction gate covers graphics AND whiteboard (the single-create alignment)");
 });
 
+// ---------- suite: S156 — the cross-cutting hardening ----------
+
+suiteStart("S156 — the title font ladder and the position-aligned doc read");
+
+await test("S156 the title font is a RUNTIME ladder — a slim image degrades the overlay, never the render", async () => {
+  const src = await fsp.readFile("src/lib/tubeforge/studio-doc.ts", "utf8");
+  ok(src.includes("export function resolveTitleFontFile"), "the ladder is exported (the render consumes it)");
+  ok(src.includes("TUBEFORGE_TITLE_FONT"), "the operator's explicit override wins first");
+  ok(src.includes("LiberationSans-Regular.ttf") && src.includes("DejaVuSans.ttf"), "the shipped faces are candidates");
+  ok(!src.includes('?? "/usr/share/fonts/truetype/chinese/NotoSansSC-Regular.ttf"'), "the hardcoded missing-font default is gone");
+  const eng = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  ok(eng.includes("title overlay skipped — no usable title font"), "the skip is a visible log note, not a dead encode");
+  // The real ladder answers on this host (an executable receipt, not a source pin).
+  const { resolveTitleFontFile } = await import("../src/lib/tubeforge/studio-doc");
+  ok(resolveTitleFontFile() !== null || process.env.CI === "true", "the ladder resolves a font on any host that carries one");
+});
+
+await test("S156 docScenes reads by POSITION — the preview's channel pick matches the final's", async () => {
+  const eng = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  ok(eng.includes("docCameraKeys = scenes.map((_s, i) => docScenes?.[i]?.cameraKeys != null)"), "the doc camera-keys read is position-aligned");
+  ok(!eng.includes("docScenes?.[s.index - 1]"), "the scene-number-indexed misalignment is gone");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
