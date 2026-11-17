@@ -24931,6 +24931,220 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
   });
 }
 
+// ---------------------------------------------------------------------------
+// S185 — the deployment readiness slice, part 1: the CONFIG-TRUTH SCAN.
+//
+// The deployment of record (fly.toml + Dockerfile) had drifted from its own
+// measured contracts, and nothing in the tree watched that corner: the
+// production image rode node:20 while the lockfile's strictest engines floor
+// is undici 8.12.4's `node >=22.19.0` — node 20 was not merely stale, it sat
+// OUTSIDE a runtime dependency's declared support — and BOTH fly configs
+// sized the worker at 2 GB while DEPLOYMENT.md §5.3 measured the 4 GB
+// envelope (peak RSS 444/442/285 MB per 1080p scene, the E10 OOM receipt;
+// the staging file even cited §5.3 in its own comment while violating it).
+// CI rides node 24 everywhere (the S128-ext receipt), so the image now
+// builds and runs the SAME major every golden pin was recorded on.
+//
+// This suite closes the blind corner: the lockfile's engines floors, the
+// Dockerfile FROM lines, the CI node-version lines, the fly worker blocks
+// and the deployment doc's measured numbers are PARSED and held to each
+// other. Pure file truth — no network, no clock (the determinism law).
+// ---------------------------------------------------------------------------
+{
+  suiteStart("S185 — the deployment readiness slice (part 1: the config-truth scan)");
+
+  const readRepo = (p: string): string => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+
+  // --- the parsers (pure string → data, reused by the planted fixtures) ---
+
+  // One engines.node clause vs a candidate node MAJOR. The honest scope:
+  // major-granularity npm semantics. `>=A` → major ≥ A; `>A` → major > A;
+  // `<A` → major < A; `<=A` → major ≤ A; `^A`/`~A`/`=A`/bare `A` → the
+  // package declares exactly-major support; an unparseable clause is never
+  // invented into a violation.
+  const satisfiesClauseAtMajor = (clause: string, major: number): boolean => {
+    const m = clause.match(/^\s*(>=|<=|>|<|\^|~|=)?\s*v?(\d+)/);
+    if (!m || m[2] === undefined) return true;
+    const op = m[1] ?? "";
+    const a = Number(m[2]);
+    switch (op) {
+      case ">=":
+        return major >= a;
+      case ">":
+        return major > a;
+      case "<=":
+        return major <= a;
+      case "<":
+        return major < a;
+      case "^":
+      case "~":
+      case "=":
+        return major === a;
+      default:
+        return major >= a;
+    }
+  };
+
+  type LockShape = {
+    packages?: Record<
+      string,
+      { engines?: { node?: string }; os?: string[]; cpu?: string[] } | undefined
+    >;
+  };
+
+  // Every lockfile package's engines.node vs the candidate major, FOR A
+  // TARGET PLATFORM. npm's own os/cpu gate runs FIRST: a package whose os/cpu
+  // excludes the target never installs there, so its engines floor cannot
+  // constrain that runtime (the receipt: @img/sharp-win32-ia32 declares
+  // `^20.9.0` but is os:"win32" cpu:"ia32" — it cannot exist on the bookworm
+  // image, and pedantry would fail the battery on a package that cannot load
+  // on it). "||" alternatives satisfy if ANY alternative satisfies;
+  // space-separated clauses satisfy only if EVERY clause satisfies (npm
+  // semantics). Default target: linux/x64 — the production image's shape.
+  const enginesViolations = (
+    lockText: string,
+    nodeMajor: number,
+    target: { os: string; cpu: string } = { os: "linux", cpu: "x64" },
+  ): string[] => {
+    const lock = JSON.parse(lockText) as LockShape;
+    const out: string[] = [];
+    for (const [p, meta] of Object.entries(lock.packages ?? {})) {
+      if (!meta) continue;
+      if (meta.os && !meta.os.includes(target.os)) continue;
+      if (meta.cpu && !meta.cpu.includes(target.cpu)) continue;
+      const spec = meta.engines?.node;
+      if (!spec) continue;
+      const alts = spec
+        .split("||")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const okAlt = alts.some((alt) =>
+        alt
+          .split(/\s+/)
+          .filter(Boolean)
+          .every((clause) => satisfiesClauseAtMajor(clause, nodeMajor)),
+      );
+      if (!okAlt) out.push(`${p || "(root)"}: engines.node ${spec}`);
+    }
+    return out;
+  };
+
+  const dockerfileNodeMajors = (text: string): number[] =>
+    [...text.matchAll(/^FROM node:(\d+)/gm)].map((m) => Number(m[1] ?? 0));
+
+  const ciNodeMajors = (text: string): number[] => [
+    ...new Set([...text.matchAll(/node-version:\s*(\d+)/g)].map((m) => Number(m[1] ?? 0))),
+  ].sort((a, b) => a - b);
+
+  // The worker [[vm]] block's memory in GB — null means UNPARSED (a block
+  // missing, no worker process, or a memory string that is not whole GB).
+  // Unparsed is a FAILURE state, never a pass (the QC three-state law).
+  const flyWorkerMemoryGb = (text: string): number | null => {
+    for (const b of text.split(/\[\[vm\]\]/).slice(1)) {
+      const procs = b.match(/processes\s*=\s*\[([^\]]*)\]/);
+      if (procs && procs[1]?.includes("worker")) {
+        const mem = b.match(/memory\s*=\s*"(\d+)gb"/);
+        return mem ? Number(mem[1] ?? 0) : null;
+      }
+    }
+    return null;
+  };
+
+  const docMeasuredWorkerGb = (text: string): number | null => {
+    const m = text.match(/Size the worker VM at (\d+) GB/);
+    return m ? Number(m[1] ?? 0) : null;
+  };
+
+  // --- test 1: the node base is a pinned contract, both directions ---
+  await test("S185: the image's node base satisfies the lockfile's engines floor AND the CI-recorded runtime — the undici receipt enforced", () => {
+    const dockerfile = readRepo("Dockerfile");
+    const lock = readRepo("package-lock.json");
+    const imgMajors = dockerfileNodeMajors(dockerfile);
+    ok(imgMajors.length >= 3, `all three stages pin a node base (${imgMajors.length} FROM node lines found)`);
+    eq([...new Set(imgMajors)].length, 1, "ONE node major across deps/build/runner — no mixed runtimes in the image");
+    const img = imgMajors[0] ?? 0;
+    eq(ciNodeMajors(readRepo(".github/workflows/ci.yml")), [img], `ci.yml and the image ride the SAME major (node ${img}) — the pins' runtime`);
+    eq(ciNodeMajors(readRepo(".github/workflows/nightly.yml")), [img], `nightly.yml agrees (node ${img})`);
+    const viols = enginesViolations(lock, img);
+    eq(viols, [], `every linux/x64 engines floor is satisfied by node ${img}${viols.length ? ` — ${viols.join("; ")}` : ""}`);
+    const violsArm = enginesViolations(lock, img, { os: "linux", cpu: "arm64" });
+    eq(violsArm, [], `every linux/arm64 engines floor is satisfied too (the image is platform-portable)${violsArm.length ? ` — ${violsArm.join("; ")}` : ""}`);
+    // The named receipts, asserted — not folklore: the floor that ruled node
+    // 20 out is undici's, and it is still inside the candidate's reach; the
+    // one stricter floor in the tree (sharp's win32-ia32 build) is
+    // platform-locked to windows and cannot constrain a linux image.
+    const lockJson = JSON.parse(lock) as LockShape;
+    const undici = lockJson.packages?.["node_modules/undici"];
+    ok(undici?.engines?.node === ">=22.19.0", `undici's engines floor is on record (${undici?.engines?.node ?? "missing"})`);
+    const sharpWin32 = lockJson.packages?.["node_modules/@img/sharp-win32-ia32"];
+    ok(
+      sharpWin32?.engines?.node === "^20.9.0" && sharpWin32?.os?.includes("win32") === true,
+      `the sharp win32-ia32 floor (^${sharpWin32?.engines?.node?.replace("^", "") ?? "missing"}) is platform-locked to win32 — exempt by npm's own gate, not by a shrug`,
+    );
+  });
+
+  // --- test 2: the worker VM carries the measured envelope, both configs ---
+  await test("S185: the fly worker VM carries the DEPLOYMENT §5.3 measured envelope — both configs, one number, parsed not asserted", () => {
+    const deployment = readRepo("DEPLOYMENT.md");
+    const docGb = docMeasuredWorkerGb(deployment);
+    eq(docGb, 4, `§5.3's measured envelope is on record (${docGb} GB — peak RSS 444/442/285 MB per 1080p scene)`);
+    for (const f of ["fly.toml", "fly.staging.toml"]) {
+      const gb = flyWorkerMemoryGb(readRepo(f));
+      eq(gb, docGb, `${f} worker VM carries the measured envelope (${gb ?? "unparsed"} vs §5.3 ${docGb} GB)`);
+    }
+    // The web group stays small on purpose — renders happen on the worker;
+    // a web block that quietly inherits 4 GB would be a different drift.
+    const webGb = Number(
+      readRepo("fly.toml")
+        .split(/\[\[vm\]\]/)
+        .slice(1)
+        .find((b) => b.includes("web"))
+        ?.match(/memory\s*=\s*"(\d+)gb"/)?.[1] ?? 0,
+    );
+    ok(webGb > 0 && webGb < (docGb ?? 0), `the web VM stays the small shape (${webGb} GB < worker ${docGb} GB)`);
+  });
+
+  // --- test 3: the scan is earned, not vacuous ---
+  await test("S185: the scan is earned, not vacuous — planted drift is caught and NAMED, honest files ride clean", () => {
+    // Engines drift: a floor ABOVE the image's major, and a ^-pinned exact
+    // major — both must be caught, with the package and constraint named.
+    const plantedLock = JSON.stringify({
+      packages: {
+        "node_modules/undici": { version: "9.0.0", engines: { node: ">=25.1.0" } },
+        "node_modules/tiny": { engines: { node: "^18" } },
+        "node_modules/honest": { engines: { node: ">=14" } },
+        "node_modules/win-only": { engines: { node: ">=99" }, os: ["win32"], cpu: ["ia32"] },
+        "node_modules/lin-floor": { engines: { node: ">=99" }, os: ["linux"], cpu: ["x64"] },
+      },
+    });
+    const caught = enginesViolations(plantedLock, 24);
+    eq(caught.length, 3, "three planted violations on linux/x64 (the honest package and the win32-locked floor ride clean)");
+    ok(caught[0]?.includes("node_modules/undici") && caught[0]?.includes(">=25.1.0"), "the floor violation names the package and the constraint");
+    ok(caught[1]?.includes("node_modules/tiny") && caught[1]?.includes("^18"), "the ^-pinned violation is caught too");
+    ok(caught.some((v) => v.includes("node_modules/lin-floor")), "an impossible floor on a linux/x64 package IS caught — the os/cpu gate is earned, not a blind skip");
+    const caughtArm = enginesViolations(plantedLock, 24, { os: "linux", cpu: "arm64" });
+    eq(caughtArm.length, 2, "on linux/arm64 the x64-locked floor is exempted — the platform gate follows the target");
+    eq(enginesViolations(plantedLock, 18).length, 2, "node 18 satisfies ^18 but not the two >= floors — the parser is directional, not a constant");
+    // Node-base drift: the planted image mixes majors — including the
+    // node:20 this repo actually shipped uncaught before S185.
+    const mixed = "FROM node:20-bookworm-slim AS deps\nFROM node:24-bookworm-slim AS build\nFROM node:20-bookworm-slim AS runner";
+    const mixedMajors = dockerfileNodeMajors(mixed);
+    eq([...new Set(mixedMajors)].length, 2, "a mixed-base image is caught (two majors)");
+    ok(mixedMajors.includes(20), "the planted node:20 base parses — the exact drift this scan exists to refuse");
+    eq(ciNodeMajors("jobs:\n  build:\n    steps:\n      - uses: actions/setup-node\n        with:\n          node-version: 24\n  lint:\n    steps:\n      - uses: actions/setup-node\n        with:\n          node-version: 24"), [24], "repeated agreeing CI lines collapse to one major");
+    // Memory drift: the planted worker block reads 2 GB against a 4 GB doc —
+    // the exact fly.toml + fly.staging.toml state S185 found in the tree.
+    const plantedFly =
+      '[[vm]]\n  processes = ["web"]\n  memory = "1gb"\n\n[[vm]]\n  processes = ["worker"]\n  memory = "2gb"';
+    eq(flyWorkerMemoryGb(plantedFly), 2, "the planted worker block parses to 2 GB");
+    eq(flyWorkerMemoryGb('[[vm]]\n  processes = ["worker"]\n  memory = "4gb"'), 4, "the honest block parses to 4 GB");
+    eq(flyWorkerMemoryGb('[[vm]]\n  processes = ["worker"]\n  memory = "512mb"'), null, "a non-GB memory string reads as UNPARSED, never as clean (the QC law)");
+    eq(flyWorkerMemoryGb('[[vm]]\n  processes = ["web"]\n  memory = "4gb"'), null, "a worker-less vm file reads as UNPARSED, never as clean");
+    eq(docMeasuredWorkerGb("Size the worker VM at 4 GB (the measured shape)"), 4, "the doc sentence parses");
+    eq(docMeasuredWorkerGb("size the worker at some other shape"), null, "a missing doc sentence reads as UNPARSED, never as clean");
+  });
+}
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

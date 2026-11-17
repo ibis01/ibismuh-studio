@@ -14,15 +14,24 @@
 #
 # Build:  docker build -t tubeforge .
 # Run:    see docker-compose.yml
+#
+# The node base is a CONTRACT, not a taste (S185 config-truth scan pins it):
+#   - the lockfile's strictest engines floor — undici 8.12.4 declares
+#     `node >=22.19.0`, so node 20 is not merely stale, it is OUTSIDE the
+#     dependency's declared support;
+#   - CI rides node 24 everywhere (`.github/workflows/ci.yml`, the S128-ext
+#     receipt: node 22's parser hit a recursion limit on a frozen file; node
+#     24 is where every golden pin and lint gate was recorded) — the image
+#     builds and runs the SAME major the pins were recorded on.
 
 # ---------- 1. deps ----------
-FROM node:20-bookworm-slim AS deps
+FROM node:24-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
 # ---------- 2. build ----------
-FROM node:20-bookworm-slim AS build
+FROM node:24-bookworm-slim AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 # Prisma needs a DATABASE_URL at generate time — any syntactically valid one.
@@ -34,7 +43,7 @@ RUN npx prisma generate --schema prisma/schema.prisma
 RUN npx next build
 
 # ---------- 3. runtime ----------
-FROM node:20-bookworm-slim AS runner
+FROM node:24-bookworm-slim AS runner
 WORKDIR /app
 
 # ffmpeg/ffprobe (render + QC), ca-certificates (TLS to providers/S3),

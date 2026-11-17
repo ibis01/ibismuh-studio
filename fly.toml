@@ -62,10 +62,14 @@ primary_region = "iad"
   memory = "1gb"
 
 # worker: ffmpeg + AI stage coordination wants headroom.
+# The 4 GB is the MEASURED envelope, not a preference (DEPLOYMENT.md §5.3:
+# peak RSS 444/442/285 MB per scene at 1080p on a 4 GB worker — 1 GB untested,
+# expected to OOM). The S185 config-truth scan pins this file to the §5.3
+# number so the two documents cannot drift apart silently again.
 [[vm]]
   processes = ["worker"]
   size = "shared-cpu-4x"
-  memory = "2gb"
+  memory = "4gb"
 
 # Persistent uploads volume for LOCAL storage mode (optional; S3 mode does
 # not need it). Uncomment and `fly volumes create tubeforge_uploads --size 10`.

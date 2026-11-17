@@ -178,6 +178,23 @@ and checks the video row. (The pre-S105 caveat — "the dev sandbox has
 no Docker daemon, so the image itself is unverified" — is historical:
 the gate now runs where the daemon is, on every push to main.)
 
+**Status (S185): the image's node base is a pinned contract — node 24
+bookworm-slim, all three stages.** Two receipts, both hard:
+
+- The lockfile's strictest `engines.node` floor is
+  **`>=22.19.0`** (undici 8.12.4) — node 20 was not merely stale, it
+  sat OUTSIDE a runtime dependency's declared support.
+- CI rides **node 24** everywhere (`ci.yml`, the S128-ext receipt:
+  node 22's parser hit a recursion limit on a frozen file; node 24 is
+  where every golden pin and lint gate was recorded) — the production
+  image now builds and runs the SAME major the pins were recorded on.
+
+The S185 config-truth scan (`scripts/test-unit.mts`, suite S185) parses
+the lockfile's engines floors, the Dockerfile `FROM` lines and the CI
+`node-version:` lines and fails the battery on drift in EITHER
+direction: a dependency bump that raises the floor past the image's
+node, or an image bump that leaves the CI-recorded runtime behind.
+
 **5.2 — The launch args are mandatory.** Chromium must launch with
 `--no-sandbox --disable-dev-shm-usage` — encoded as
 `WB_CHROMIUM_LAUNCH_ARGS` in `src/lib/tubeforge/whiteboard/render.ts`
@@ -193,6 +210,15 @@ for the whole project (the one-page approach OOMs the 4 GB worker
 mid-render). Measured envelope at 1080p: peak RSS 444 / 442 / 285 MB
 across 16:9 / 9:16 / 1:1. Size the worker VM at 4 GB (the measured
 shape); 1 GB is untested and expected to OOM on 1080p projects.
+
+**Status (S185): the number is encoded where the machines are actually
+sized** — both `fly.toml` and `fly.staging.toml` carry worker
+`memory = "4gb"` (both had drifted to 2 GB while this document measured
+4 GB; the staging file even cited §5.3 in its own comment). The S185
+config-truth scan parses the worker `[[vm]]` block in BOTH files and
+fails the battery if either number drifts from the "Size the worker VM
+at N GB" sentence in this document — the two documents cannot disagree
+silently again.
 
 **5.4 — The worker is already a proper long-running process.**
 `scripts/worker.mts` runs the claim loop under `tini`
