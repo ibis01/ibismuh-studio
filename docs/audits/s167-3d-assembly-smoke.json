@@ -1,0 +1,73 @@
+{
+  "slice": "S167",
+  "what": "the 3D clip appears in a rendered assembly — the Part 0.3 gap closed on real bytes",
+  "doc": {
+    "aspect": "16:9",
+    "fps": 24,
+    "durationSec": 2,
+    "frames": 48,
+    "finisher": {
+      "pushIn": 0.18,
+      "shake": {
+        "strength": 0.06,
+        "seed": 167
+      }
+    }
+  },
+  "stages": {
+    "engineRender": "/tmp/s167-smoke-mvUWw5/3d/scene-3d.mp4",
+    "engineRenderBytes": 26496,
+    "stagingArgs": [
+      "-y",
+      "-i",
+      "/tmp/s167-smoke-mvUWw5/3d/scene-3d.mp4",
+      "-r",
+      "24",
+      "-vf",
+      "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "20",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "160k",
+      "-ar",
+      "48000",
+      "-ac",
+      "2",
+      "/tmp/s167-smoke-mvUWw5/seg-01.mp4"
+    ],
+    "assemblyList": "seg-01.mp4 (the 3d engine segment) + seg-02.mp4 (the card, same staging)",
+    "stitch": "concat demuxer, -c copy"
+  },
+  "measured": {
+    "holdFrameMeanAbsDelta": 0.2958,
+    "finalDurationSec": 3,
+    "lumaVariance3dWindow": 204.7,
+    "lumaVarianceCardWindow": 0,
+    "windowMeanAbsDelta": 12.134,
+    "finalBytes": 55245
+  },
+  "admission": {
+    "planKinds": [
+      "3d",
+      "video"
+    ],
+    "failClosed": {
+      "ok": false,
+      "missing": [
+        {
+          "position": 0,
+          "kind": "3d"
+        }
+      ]
+    },
+    "admitted": true
+  },
+  "at": "1970-01-01T00:00:00.000Z",
+  "note": "rendered in the dev sandbox, foreground; the timestamp is pinned to epoch (the receipt is content-addressed, not clock-addressed)"
+}
