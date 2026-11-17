@@ -47,6 +47,12 @@ export interface WhiteboardAsset {
    *  committed handwriting outlines at registration (the single-face law);
    *  absent/"marker" keeps the marker wipe byte-for-byte. */
   textMode?: "glyph" | "marker";
+  /** S164 — the Rough.js hand-drawn knobs. Either one present switches the
+   *  asset's geometry to the roughened pass (bowing double-stroke lines,
+   *  rough Catmull-Rom, polygon-clipped hachure); BOTH absent keeps the
+   *  S139 sketch pass byte-for-byte (the additive-absent law). */
+  roughness?: number;
+  bowing?: number;
 }
 
 const A = (
@@ -54,7 +60,7 @@ const A = (
   viewBox: { w: number; h: number },
   tags: string[],
   svg: string,
-  meta: Partial<Pick<WhiteboardAsset, "role" | "penGroups" | "drawOrder" | "durWeight" | "framing" | "alts" | "a11y" | "textMode">> = {}
+  meta: Partial<Pick<WhiteboardAsset, "role" | "penGroups" | "drawOrder" | "durWeight" | "framing" | "alts" | "a11y" | "textMode" | "roughness" | "bowing">> = {}
 ): WhiteboardAsset => ({ id, viewBox, tags, svg: sanitizeSvg(svg), ...meta });
 
 // ---------------------------------------------------------------------------
@@ -610,8 +616,15 @@ export function loadLibrary(uploaded: WhiteboardAsset[] = []): {
     // ride the ordinary schedule/pen/page/camera machinery like authored
     // strokes. Hands are excluded (a hand is not drawn; it draws) — the
     // renderer embeds them verbatim and a dithered hand would look broken.
+    // S164 — assets that carry the additive roughness/bowing knobs ride
+    // the Rough.js geometry BEHIND that pass; absent knobs (every built-in)
+    // take the exact legacy call, byte for byte.
     if (!(a.id.startsWith("hand-") || a.tags.includes("hand"))) {
-      const sk = withSketchPasses(effective.svg, a.id);
+      const knobs =
+        a.roughness !== undefined || a.bowing !== undefined
+          ? { roughness: a.roughness, bowing: a.bowing }
+          : undefined;
+      const sk = withSketchPasses(effective.svg, a.id, knobs);
       effective = { ...effective, svg: sk.svg };
     }
     const ex = extractAsset(effective);

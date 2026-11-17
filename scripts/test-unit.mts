@@ -22778,6 +22778,401 @@ await test("S162 planner: the native enter table rides the measured vocabulary; 
   ok(llmSrc.includes('let ease: EaseName = "measured-out"'), "the degradation floor is the measured entrance");
 });
 
+// ---------- S164: the whiteboard hand-drawn geometry slice (the Rough.js native port) ----------
+
+suiteStart("S164 — the whiteboard hand-drawn geometry slice (the Rough.js native port)");
+
+await test("S164 (a) byte-identity — same doc + seeds → identical d strings across two independent computations", async () => {
+  const { roughenPath, minstd, roughnessGain } = await import("../src/lib/tubeforge/whiteboard/roughen");
+  const { buildFill } = await import("../src/lib/tubeforge/whiteboard/fills");
+  const sketch = await import("../src/lib/tubeforge/whiteboard/sketch");
+
+  // The authored source: a curve chain, a closed square, an authored ellipse.
+  const curve = "M 20 100 C 60 60, 140 140, 180 100";
+  const square = "M 20 20 L 180 20 L 180 180 L 20 180 Z";
+  const ellipse = "M 100 100 A 50 50 0 1 1 100 200 A 50 50 0 1 1 100 100 Z";
+  const doc =
+    `<path id="a" d="${curve}" fill="none" stroke="#1d3557" stroke-width="4" stroke-linecap="round"/>` +
+    `<path id="b" d="${square}" fill="#e63946" fill-opacity="0" stroke="#1d3557" stroke-width="4"/>` +
+    `<path id="c" d="${ellipse}" fill="none" stroke="#1d3557" stroke-width="4"/>`;
+  const knobs = { roughness: 1, bowing: 1 };
+
+  // TWO INDEPENDENT computations of the whole knob-active pass — identical
+  // bytes, main passes, overlays and the derived hachure included.
+  const pass1 = sketch.withSketchPasses(doc, "asset-x", knobs);
+  const pass2 = sketch.withSketchPasses(doc, "asset-x", knobs);
+  eq(pass1.svg, pass2.svg, "two computations of the knob-active pass — byte-identical svg");
+  ok(pass1.svg.includes('data-s164="1"'), "the roughened mains carry the marker");
+  eq(JSON.stringify(pass1.stats), JSON.stringify({ overdraws: 3, hatches: 1 }), "three overlays + the filled square's hachure derive");
+
+  // The module level: roughenPath twice with an UNRELATED shape's call
+  // interleaved between — the interleaving never disturbs a stream (there
+  // is no shared stream to disturb).
+  const ra = roughenPath(curve, 12345, knobs);
+  const rb = roughenPath(square, 999, knobs);
+  const ra2 = roughenPath(curve, 12345, knobs);
+  ok(ra !== null && ra2 !== null && rb !== null && ra.main.length > 0 && rb.main.length > 0, "all three roughenings produce ink");
+  eq(ra.main, ra2.main, "the first shape's main d survives the interleaving byte-for-byte");
+  eq(ra.overlay, ra2.overlay, "the overlay (the seed+1 stream) survives byte-for-byte");
+  ok(ra.main !== rb.main, "different seeds roughen differently (the streams diverge)");
+
+  // buildFill twice — the hachure ink is byte-stable per seed.
+  const sq = [{ x: 20, y: 20 }, { x: 180, y: 20 }, { x: 180, y: 180 }, { x: 20, y: 180 }];
+  const f1 = buildFill([sq], 42, knobs, { kind: "hachure" }, 3);
+  const f2 = buildFill([sq], 42, knobs, { kind: "hachure" }, 3);
+  ok(f1.commands > 0, "the fill produced ink");
+  eq(f1.d, f2.d, "two buildFill computations — byte-identical d");
+
+  // MINSTD with the seed-0 landmine fixed: seed 0 collapses to state 1
+  // (Rough.js's fallback was ambient randomness; ours is a fixed stream).
+  const s0a = minstd(0);
+  const s0b = minstd(0);
+  const s1 = minstd(1);
+  const draws = [s0a(), s0a(), s0a()];
+  eq([s0b(), s0b(), s0b()], draws, "two seed-0 streams agree draw-for-draw");
+  eq([s1(), s1(), s1()], draws, "seed 0 rides the SAME stream as seed 1");
+  ok(draws.every((v) => v > 0 && v < 1), "every draw is an open-interval 0..1 scalar");
+  const many = Array.from({ length: 1000 }, (_, i) => minstd(77 + i)()).join(",");
+  eq(many, Array.from({ length: 1000 }, (_, i) => minstd(77 + i)()).join(","), "1000 fresh streams reproduce byte-identically");
+
+  // The length-based roughness gain: 1 below 200px, 0.4 above 500px, the
+  // linear branch CONTINUOUS at both walls (no pen-speed cliff).
+  eq(roughnessGain(100), 1, "short strokes ride the full gain");
+  approx(roughnessGain(200), 1, 1e-9, "the gain is 1 AT the 200px wall");
+  approx(roughnessGain(500), 0.4, 1e-9, "the gain is 0.4 AT the 500px wall");
+  approx(roughnessGain(350), 0.7, 1e-9, "the midpoint rides the line");
+  approx(roughnessGain(200.1), 1 - 0.002 * 0.1, 1e-9, "no discontinuity just past the wall");
+  eq(roughnessGain(600), 0.4, "long strokes calm to 0.4");
+  eq(roughnessGain(NaN), 1, "a junk length rides the safe default");
+});
+
+await test("S164 (b) the banned-token source-pin — no ambient randomness in the whiteboard tree, no clock in the pure geometry", async () => {
+  const dir = "src/lib/tubeforge/whiteboard";
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".ts"));
+  ok(files.includes("roughen.ts") && files.includes("fills.ts"), "the scan INCLUDES the new modules (a stale scan cannot pass)");
+  ok(files.length >= 22, `the tree is scanned whole (${files.length} files)`);
+  // The S157 pattern: the USAGE scan — a call site, not the law's own comment.
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(dir, f), "utf8");
+    ok(!/Math\.random\(/.test(src), `${f}: no ambient randomness call (the audit's landmine class, tree-wide)`);
+  }
+  // The PURE geometry modules owe the stronger law: no wall clock, no fs.
+  for (const f of ["roughen.ts", "fills.ts", "svg.ts", "sketch.ts"]) {
+    const src = fs.readFileSync(path.join(dir, f), "utf8");
+    ok(!/Date\.now\(/.test(src) && !/\bnew Date\(/.test(src) && !/performance\.now\(/.test(src), `${f}: no wall-clock call (frame-truth pure)`);
+    ok(!/\bfrom "node:fs"\b/.test(src) && !/\bfs\.\b/.test(src), `${f}: no fs (pure geometry)`);
+  }
+});
+
+await test("S164 (c) the command-cap guard — a too-large fill refuses loudly; every count is the expanded truth", async () => {
+  const fills = await import("../src/lib/tubeforge/whiteboard/fills");
+  const { roughenPath } = await import("../src/lib/tubeforge/whiteboard/roughen");
+  const svgMod = await import("../src/lib/tubeforge/whiteboard/svg");
+
+  // A 144-square field at gap 3 sweeps hundreds of rows × hundreds of
+  // spans — far past the 512 budget. The raw API refuses LOUDLY.
+  const big = Array.from({ length: 12 }, (_, r) =>
+    Array.from({ length: 12 }, (_, c) => [
+      { x: r * 60, y: c * 60 },
+      { x: r * 60 + 56, y: c * 60 },
+      { x: r * 60 + 56, y: c * 60 + 56 },
+      { x: r * 60, y: c * 60 + 56 },
+    ])
+  ).flat();
+  let threw = "";
+  try {
+    fills.roughFillD(big, 9, { roughness: 1, bowing: 1 }, { kind: "hachure", gap: 3 });
+  } catch (e) {
+    threw = e instanceof Error ? e.message : String(e);
+  }
+  ok(threw.length > 0, "a fill past the cap refuses LOUDLY (throws — it never truncates silently)");
+  ok(threw.includes("command cap") && threw.includes("512"), "the refusal names the cap and the budget");
+  ok(threw.includes("hachure"), "the refusal names the offending style");
+
+  // The budget's unit of account: the reported count IS countPathCommands
+  // of the emitted d — the fill's own bookkeeping and svg.ts's expanded
+  // counter can never disagree.
+  const square = [{ x: 20, y: 20 }, { x: 180, y: 20 }, { x: 180, y: 180 }, { x: 20, y: 180 }];
+  const kinds = ["hachure", "cross-hatch", "zigzag", "zigzag-line", "dashed", "dots"] as const;
+  for (const kind of kinds) {
+    const res = fills.buildFill([square], 33, { roughness: 1, bowing: 1 }, { kind }, 3);
+    ok(res.commands > 0, `${kind} produces ink`);
+    eq(res.commands, svgMod.countPathCommands(res.d), `${kind}: the reported count is countPathCommands(d) exactly`);
+    // The RAW builder is the un-walled generator by contract; the LAW is
+    // that a fill either rides under the cap or the raw API refuses it
+    // loudly — never a silent over-budget emit.
+    if (res.commands > fills.MAX_FILL_COMMANDS) {
+      let refused = "";
+      try {
+        fills.roughFillD([square], 33, { roughness: 1, bowing: 1 }, { kind }, 3);
+      } catch (e) {
+        refused = e instanceof Error ? e.message : String(e);
+      }
+      ok(refused.includes("command cap"), `${kind}: an over-budget build is refused loudly by roughFillD`);
+      const spec = fills.clampFillSpec([square], 33, { roughness: 1, bowing: 1 }, { kind }, 3);
+      const clamped = fills.buildFill([square], 33, { roughness: 1, bowing: 1 }, spec, 3);
+      ok(clamped.commands <= fills.MAX_FILL_COMMANDS, `${kind}: the clamp finds a spec that fits`);
+    }
+  }
+  eq(fills.MAX_FILL_COMMANDS, 512, "the cap constant is 512 (the WB_PATH_COMMAND_BUDGET law)");
+
+  // The clamp half: the same huge field grows its gap until the ACTUAL
+  // build (same seed, same code path) fits — the clamped spec builds
+  // under the cap without throwing.
+  const spec = fills.clampFillSpec(big, 9, { roughness: 1, bowing: 1 }, { kind: "hachure", gap: 3 }, 3);
+  ok((spec.gap ?? 0) > 3, "the clamp grew the gap");
+  const clamped = fills.buildFill(big, 9, { roughness: 1, bowing: 1 }, spec, 3);
+  ok(clamped.commands <= fills.MAX_FILL_COMMANDS, "the clamped build fits the budget");
+  eq(clamped.commands, svgMod.countPathCommands(clamped.d), "the clamped count is still the expanded truth");
+
+  // The stroke side rides the same wall: a 600-point polyline roughens
+  // past 512 expanded commands — roughenPath declines deterministically
+  // (null) and the caller keeps the authored geometry.
+  const huge = `M 20 20 ${Array.from({ length: 600 }, (_, i) => `L ${20 + i} ${(i % 2) * 40 + 20}`).join(" ")}`;
+  ok(svgMod.countPathCommands(huge) > 512, "the authored stroke itself is past the budget");
+  eq(roughenPath(huge, 5, { roughness: 1, bowing: 1 }), null, "a too-large stroke declines (never truncates, never throws at the caller)");
+});
+
+await test("S164 (d) per-shape seed independence — changing ONE shape's assetId::pathId moves ONLY that shape's ink", async () => {
+  const sketch = await import("../src/lib/tubeforge/whiteboard/sketch");
+  // shapeSeed IS the fnv1a(assetId::pathId) derivation — one home, exact.
+  eq(sketch.shapeSeed("asset-x", "p7"), sketch.fnv1a("asset-x::p7"), "the seed IS fnv1a(assetId::pathId)");
+  ok(sketch.shapeSeed("asset-x", "p7") !== sketch.shapeSeed("asset-x", "p8"), "a different pathId derives a different seed");
+  ok(sketch.shapeSeed("asset-x", "p7") !== sketch.shapeSeed("asset-y", "p7"), "a different assetId derives a different seed");
+
+  const doc = (bid: string): string =>
+    `<path id="a" d="M 20 100 C 60 60, 140 140, 180 100" fill="none" stroke="#1d3557" stroke-width="4" stroke-linecap="round"/>` +
+    `<path id="${bid}" d="M 20 20 L 180 20 L 180 180 L 20 180 Z" fill="#e63946" fill-opacity="0" stroke="#1d3557" stroke-width="4"/>`;
+  const knobs = { roughness: 1, bowing: 1 };
+  const p1 = sketch.withSketchPasses(doc("b"), "asset-x", knobs);
+  const p2 = sketch.withSketchPasses(doc("b2"), "asset-x", knobs);
+  const mainD = (svg: string, id: string): string => {
+    const tag = svg.split("<path").find((t) => t.includes(`id="${id}"`)) ?? "";
+    return / d="([^"]+)"/.exec(tag)?.[1] ?? "";
+  };
+  ok(mainD(p1.svg, "a").length > 0 && mainD(p2.svg, "a").length > 0, "both docs roughened");
+  eq(mainD(p1.svg, "a"), mainD(p2.svg, "a"), "shape a's roughened main is BYTE-IDENTICAL — the untouched neighbor never moves");
+  ok(mainD(p1.svg, "b") !== mainD(p2.svg, "b2"), "shape b's roughened main moved with its pathId");
+  eq(mainD(p1.svg, "a-od"), mainD(p2.svg, "a-od"), "shape a's overlay follows its own seed only");
+  ok(mainD(p1.svg, "b-od") !== mainD(p2.svg, "b2-od"), "shape b's overlay moved too");
+  const p3 = sketch.withSketchPasses(doc("b"), "asset-y", knobs);
+  ok(mainD(p1.svg, "a") !== mainD(p3.svg, "a"), "a different assetId moves every shape (both derive their own seed)");
+});
+
+await test("S164 (e) absent-knob byte-identity — the S139 legacy pass rides untouched, byte for byte", async () => {
+  const sketch = await import("../src/lib/tubeforge/whiteboard/sketch");
+  const stroke = "M 20 100 C 60 60, 140 140, 180 100";
+  const doc =
+    `<path id="a" d="${stroke}" fill="none" stroke="#1d3557" stroke-width="4" stroke-linecap="round"/>` +
+    `<path id="b" d="M 20 20 L 180 20 L 180 180 L 20 180 Z" fill="#e63946" fill-opacity="0" stroke="#1d3557" stroke-width="4"/>`;
+  // The literals below were CAPTURED from the pre-s164 tree (eb7fc95) by
+  // running its own sketch.ts over these exact inputs — the battery holds
+  // the current code to the legacy bytes.
+  eq(sketch.strokeDither(stroke, 12345, 1.2), "M 20 100 L 31.02 93.39 L 43.05 89.19 L 56.01 88.45 L 68.8 90.95 L 81.23 94.75 L 93.69 98.38 L 106.36 101.46 L 118.9 104.79 L 131.3 108.56 L 143.98 111.66 L 157.04 111.62 L 169.38 107.41 L 180 100", "strokeDither's bytes did not move with the fmt2 hoist");
+  eq(sketch.overdrawStroke("asset-a", "p1", stroke, { stroke: "#1d3557", strokeWidth: 4, linecap: "round" })?.svg ?? "", "<path id=\"p1-od\" d=\"M 20 100 L 30.54 92.46 L 42.97 88.48 L 56 88.93 L 68.95 90.28 L 81.45 93.96 L 93.65 98.49 L 106.24 101.85 L 118.44 106.43 L 131.09 109.54 L 144.01 110.75 L 156.99 111.18 L 169.2 107.05 L 180 100\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"3.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>", "the legacy retrace svg is byte-identical");
+  eq(sketch.hatchForFill("asset-a", "p2", "M 20 20 L 180 20 L 180 180 L 20 180 Z", "#e63946")?.svg ?? "", "<clipPath id=\"p2-h-clip\"><path d=\"M 20 20 L 180 20 L 180 180 L 20 180 Z\"/></clipPath><path id=\"p2-h\" d=\"M 22.5 29.42 L 177.5 30.22 L 177.5 42.25 L 22.5 42.25 L 22.5 55.08 L 177.5 55.48 L 177.5 67.92 L 22.5 67.52 L 22.5 80.75 L 177.5 79.95 L 177.5 93.58 L 22.5 93.58 L 22.5 106.42 L 177.5 106.82 L 177.5 119.25 L 22.5 118.85 L 22.5 132.08 L 177.5 131.28 L 177.5 144.92 L 22.5 144.92 L 22.5 157.75 L 177.5 158.15 L 177.5 170.58 L 22.5 171.38\" fill=\"none\" stroke=\"#e63946\" stroke-width=\"5.5\" stroke-linecap=\"round\" clip-path=\"url(#p2-h-clip)\"/>", "the legacy hatch svg is byte-identical");
+  eq(sketch.withSketchPasses(doc, "asset-k").svg, "<path id=\"a\" d=\"M 20 100 C 60 60, 140 140, 180 100\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"4\" stroke-linecap=\"round\"/><path id=\"a-od\" d=\"M 20 100 L 30.91 93.17 L 43.02 88.95 L 56.01 88.55 L 68.78 91.04 L 81.51 93.76 L 93.88 97.79 L 105.95 102.7 L 118.58 105.95 L 131.34 108.39 L 143.99 111.44 L 157.03 111.54 L 169.25 107.14 L 180 100\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"3.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path id=\"b\" d=\"M 20 20 L 180 20 L 180 180 L 20 180 Z\" fill=\"#e63946\" fill-opacity=\"0\" stroke=\"#1d3557\" stroke-width=\"4\"/><path id=\"b-od\" d=\"M 20 20 L 33.91 19.84 L 47.83 19.59 L 61.74 18.44 L 75.65 18.81 L 89.57 20.13 L 103.48 20.12 L 117.39 19.96 L 131.3 21.15 L 145.22 21.62 L 159.13 20.41 L 173.04 19.94 L 179.65 26.96 L 180.51 40.87 L 181.65 54.78 L 180.97 68.7 L 180.1 82.61 L 180.5 96.52 L 180.17 110.43 L 178.71 124.35 L 178.62 138.26 L 179.64 152.17 L 179.5 166.09 L 179.28 180 L 166.09 180.62 L 152.17 181.49 L 138.26 180.69 L 124.35 180.45 L 110.43 181.02 L 96.52 180.18 L 82.61 178.76 L 68.7 179.02 L 54.78 179.59 L 40.87 178.95 L 26.96 179.1 L 19.35 173.04 L 18.9 159.13 L 19.57 145.22 L 19.14 131.3 L 18.63 117.39 L 19.87 103.48 L 20.96 89.57 L 20.5 75.65 L 20.55 61.74 L 21.47 47.83 L 20.91 33.91 L 20 20\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"3.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><clipPath id=\"b-h-clip\"><path d=\"M 20 20 L 180 20 L 180 180 L 20 180 Z\"/></clipPath><path id=\"b-h\" d=\"M 22.5 29.42 L 177.5 29.82 L 177.5 42.25 L 22.5 43.05 L 22.5 55.08 L 177.5 55.88 L 177.5 67.92 L 22.5 68.72 L 22.5 80.75 L 177.5 81.55 L 177.5 93.58 L 22.5 94.38 L 22.5 106.42 L 177.5 107.22 L 177.5 119.25 L 22.5 119.25 L 22.5 132.08 L 177.5 132.48 L 177.5 144.92 L 22.5 144.52 L 22.5 157.75 L 177.5 158.15 L 177.5 170.58 L 22.5 171.38\" fill=\"none\" stroke=\"#e63946\" stroke-width=\"5.5\" stroke-linecap=\"round\" clip-path=\"url(#b-h-clip)\"/>", "withSketchPasses with NO knobs is the legacy pass, byte for byte");
+  eq(sketch.withSketchPasses(doc, "asset-k", undefined).svg, "<path id=\"a\" d=\"M 20 100 C 60 60, 140 140, 180 100\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"4\" stroke-linecap=\"round\"/><path id=\"a-od\" d=\"M 20 100 L 30.91 93.17 L 43.02 88.95 L 56.01 88.55 L 68.78 91.04 L 81.51 93.76 L 93.88 97.79 L 105.95 102.7 L 118.58 105.95 L 131.34 108.39 L 143.99 111.44 L 157.03 111.54 L 169.25 107.14 L 180 100\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"3.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path id=\"b\" d=\"M 20 20 L 180 20 L 180 180 L 20 180 Z\" fill=\"#e63946\" fill-opacity=\"0\" stroke=\"#1d3557\" stroke-width=\"4\"/><path id=\"b-od\" d=\"M 20 20 L 33.91 19.84 L 47.83 19.59 L 61.74 18.44 L 75.65 18.81 L 89.57 20.13 L 103.48 20.12 L 117.39 19.96 L 131.3 21.15 L 145.22 21.62 L 159.13 20.41 L 173.04 19.94 L 179.65 26.96 L 180.51 40.87 L 181.65 54.78 L 180.97 68.7 L 180.1 82.61 L 180.5 96.52 L 180.17 110.43 L 178.71 124.35 L 178.62 138.26 L 179.64 152.17 L 179.5 166.09 L 179.28 180 L 166.09 180.62 L 152.17 181.49 L 138.26 180.69 L 124.35 180.45 L 110.43 181.02 L 96.52 180.18 L 82.61 178.76 L 68.7 179.02 L 54.78 179.59 L 40.87 178.95 L 26.96 179.1 L 19.35 173.04 L 18.9 159.13 L 19.57 145.22 L 19.14 131.3 L 18.63 117.39 L 19.87 103.48 L 20.96 89.57 L 20.5 75.65 L 20.55 61.74 L 21.47 47.83 L 20.91 33.91 L 20 20\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"3.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><clipPath id=\"b-h-clip\"><path d=\"M 20 20 L 180 20 L 180 180 L 20 180 Z\"/></clipPath><path id=\"b-h\" d=\"M 22.5 29.42 L 177.5 29.82 L 177.5 42.25 L 22.5 43.05 L 22.5 55.08 L 177.5 55.88 L 177.5 67.92 L 22.5 68.72 L 22.5 80.75 L 177.5 81.55 L 177.5 93.58 L 22.5 94.38 L 22.5 106.42 L 177.5 107.22 L 177.5 119.25 L 22.5 119.25 L 22.5 132.08 L 177.5 132.48 L 177.5 144.92 L 22.5 144.52 L 22.5 157.75 L 177.5 158.15 L 177.5 170.58 L 22.5 171.38\" fill=\"none\" stroke=\"#e63946\" stroke-width=\"5.5\" stroke-linecap=\"round\" clip-path=\"url(#b-h-clip)\"/>", "explicit undefined knobs ride the same bytes");
+  eq(sketch.withSketchPasses(doc, "asset-k", {}).svg, "<path id=\"a\" d=\"M 20 100 C 60 60, 140 140, 180 100\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"4\" stroke-linecap=\"round\"/><path id=\"a-od\" d=\"M 20 100 L 30.91 93.17 L 43.02 88.95 L 56.01 88.55 L 68.78 91.04 L 81.51 93.76 L 93.88 97.79 L 105.95 102.7 L 118.58 105.95 L 131.34 108.39 L 143.99 111.44 L 157.03 111.54 L 169.25 107.14 L 180 100\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"3.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><path id=\"b\" d=\"M 20 20 L 180 20 L 180 180 L 20 180 Z\" fill=\"#e63946\" fill-opacity=\"0\" stroke=\"#1d3557\" stroke-width=\"4\"/><path id=\"b-od\" d=\"M 20 20 L 33.91 19.84 L 47.83 19.59 L 61.74 18.44 L 75.65 18.81 L 89.57 20.13 L 103.48 20.12 L 117.39 19.96 L 131.3 21.15 L 145.22 21.62 L 159.13 20.41 L 173.04 19.94 L 179.65 26.96 L 180.51 40.87 L 181.65 54.78 L 180.97 68.7 L 180.1 82.61 L 180.5 96.52 L 180.17 110.43 L 178.71 124.35 L 178.62 138.26 L 179.64 152.17 L 179.5 166.09 L 179.28 180 L 166.09 180.62 L 152.17 181.49 L 138.26 180.69 L 124.35 180.45 L 110.43 181.02 L 96.52 180.18 L 82.61 178.76 L 68.7 179.02 L 54.78 179.59 L 40.87 178.95 L 26.96 179.1 L 19.35 173.04 L 18.9 159.13 L 19.57 145.22 L 19.14 131.3 L 18.63 117.39 L 19.87 103.48 L 20.96 89.57 L 20.5 75.65 L 20.55 61.74 L 21.47 47.83 L 20.91 33.91 L 20 20\" fill=\"none\" stroke=\"#1d3557\" stroke-width=\"3.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/><clipPath id=\"b-h-clip\"><path d=\"M 20 20 L 180 20 L 180 180 L 20 180 Z\"/></clipPath><path id=\"b-h\" d=\"M 22.5 29.42 L 177.5 29.82 L 177.5 42.25 L 22.5 43.05 L 22.5 55.08 L 177.5 55.88 L 177.5 67.92 L 22.5 68.72 L 22.5 80.75 L 177.5 81.55 L 177.5 93.58 L 22.5 94.38 L 22.5 106.42 L 177.5 107.22 L 177.5 119.25 L 22.5 119.25 L 22.5 132.08 L 177.5 132.48 L 177.5 144.92 L 22.5 144.52 L 22.5 157.75 L 177.5 158.15 L 177.5 170.58 L 22.5 171.38\" fill=\"none\" stroke=\"#e63946\" stroke-width=\"5.5\" stroke-linecap=\"round\" clip-path=\"url(#b-h-clip)\"/>", "an empty knob object is knob-INACTIVE (both knobs absent)");
+  eq(JSON.stringify(sketch.withSketchPasses(doc, "asset-k").stats), "{\"overdraws\":2,\"hatches\":1}", "the legacy stats ride");
+  ok(!sketch.withSketchPasses(doc, "asset-k").svg.includes("data-s164"), "the legacy pass never emits the S164 marker");
+});
+
+await test("S164 (f) fixed-decimal parity — every generator emits through svg.ts's ONE serializer", async () => {
+  const { fmt2, flattenSubpathPoints, bezierFlatPoints, rdp } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const roughen = await import("../src/lib/tubeforge/whiteboard/roughen");
+  const fills = await import("../src/lib/tubeforge/whiteboard/fills");
+  const sketch = await import("../src/lib/tubeforge/whiteboard/sketch");
+
+  // fmt2 IS the glyph table's old discipline — the hoisted serializer must
+  // behave identically at the function level.
+  eq(fmt2(0.5), "0.5", "halves stay halves");
+  eq(fmt2(3.14159), "3.14", "two decimals, trimmed");
+  eq(fmt2(100), "100", "integral values carry no decimal tail");
+  eq(fmt2(-2), "-2", "negatives survive");
+  eq(fmt2(-0.001), "0", "sub-half-hundredth rounds to zero");
+  eq(fmt2(-0.004), "0", "the negative-zero trap is fixed");
+  eq(fmt2(NaN), "0", "junk collapses to 0");
+
+  // BEHAVIOR: re-serializing every numeric token of a generated d through
+  // fmt2 reproduces the SAME bytes — no generator escapes the serializer.
+  const reser = (d: string): string => d.replace(/-?\d*\.?\d+(?:e[+-]?\d+)?/g, (m) => fmt2(Number(m)));
+  const curve = "M 20 100 C 60 60, 140 140, 180 100";
+  const ellipse = "M 100 100 A 50 50 0 1 1 100 200 A 50 50 0 1 1 100 100 Z";
+  const rp = roughen.roughenPath(curve, 4242, { roughness: 1.3, bowing: 0.8 });
+  ok(rp !== null && rp.main.length > 0, "the roughening produced ink");
+  if (rp) {
+    eq(reser(rp.main), rp.main, "the roughened main is byte-stable under fmt2 re-serialization");
+    eq(reser(rp.overlay), rp.overlay, "the overlay rides the same serializer");
+  }
+  const rpe = roughen.roughenPath(ellipse, 77, { roughness: 1, bowing: 1 });
+  ok(rpe !== null, "the authored ellipse roughens through the overshoot primitive");
+  if (rpe) eq(reser(rpe.main), rpe.main, "the overshoot ring rides the ONE serializer");
+  const square = [{ x: 20, y: 20 }, { x: 180, y: 20 }, { x: 180, y: 180 }, { x: 20, y: 180 }];
+  for (const kind of ["hachure", "cross-hatch", "zigzag", "zigzag-line", "dashed", "dots"] as const) {
+    const f = fills.buildFill([square], 88, { roughness: 1, bowing: 1 }, { kind }, 3);
+    ok(f.d.length > 0, `${kind} emitted ink`);
+    eq(reser(f.d), f.d, `${kind}: the fill rides the ONE serializer`);
+  }
+  const doc =
+    `<path id="a" d="${curve}" fill="none" stroke="#1d3557" stroke-width="4" stroke-linecap="round"/>` +
+    `<path id="b" d="M 20 20 L 180 20 L 180 180 L 20 180 Z" fill="#e63946" fill-opacity="0" stroke="#1d3557" stroke-width="4"/>`;
+  const pass = sketch.withSketchPasses(doc, "asset-z", { roughness: 1.2, bowing: 1.1 });
+  const ds = [...pass.svg.matchAll(/ d="([^"]+)"/g)].map((m) => m[1]);
+  ok(ds.length >= 4, "the knob-active pass derives main + overlay + hatch + clip");
+  for (const d of ds) eq(reser(d), d, "every d in the knob-active pass is byte-stable under fmt2");
+
+  // SOURCE: the serializer has ONE home; the generators import it and
+  // define NO parallel rounding.
+  for (const f of ["roughen.ts", "fills.ts", "sketch.ts"]) {
+    const src = fs.readFileSync(path.join("src/lib/tubeforge/whiteboard", f), "utf8");
+    ok(src.includes('from "./svg"'), `${f} imports the shared svg module`);
+    ok(!/toFixed/.test(src), `${f} carries NO local toFixed rounding (no parallel serializer)`);
+  }
+  const svgSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/svg.ts", "utf8");
+  ok(svgSrc.includes("export function fmt2"), "svg.ts is the ONE fmt2 home");
+
+  // The authored-curve pipeline rides the same discipline: rdp keeps the
+  // endpoints and only ever removes interior points; the flattener's
+  // deviation gate catches what the structural test alone reads as flat;
+  // authored two-arc circles surface their exact geometry.
+  const pts = [{ x: 0, y: 0 }, { x: 1, y: 0.1 }, { x: 2, y: 0 }, { x: 3, y: 0.1 }, { x: 4, y: 0 }];
+  const simplified = rdp(pts, 0.2);
+  eq([simplified[0], simplified[simplified.length - 1]], [pts[0], pts[4]], "rdp keeps both endpoints");
+  ok(simplified.length >= 2 && simplified.length <= pts.length, "rdp only ever removes interior points");
+  eq(rdp(pts, 0), pts, "epsilon 0 keeps the polyline whole");
+  eq(bezierFlatPoints({ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 20, y: 0 }, { x: 30, y: 0 }, 0.15).length, 2, "a structurally flat bezier emits just its endpoints");
+  ok(bezierFlatPoints({ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 100, y: 100 }, { x: 100, y: 0 }, 0.15).length > 2, "a real arc subdivides (the deviation gate earns its keep)");
+  const subs = flattenSubpathPoints(ellipse);
+  eq(subs.length, 1, "the two-arc circle is ONE subpath");
+  ok(subs[0] !== undefined && subs[0].ellipse !== null, "the authored ellipse surfaces its geometry for the overshoot primitive");
+  eq(subs[0]?.ellipse ?? null, { cx: 100, cy: 150, rx: 50, ry: 50 }, "the ellipse geometry is exact");
+  eq(subs[0]?.closed ?? null, true, "the Z-terminated ring rides closed (the seam law)");
+});
+
+await test("S164 the roughen primitives — the bowing double-stroke, the rough Catmull-Rom, the ellipse overshoot", async () => {
+  const roughen = await import("../src/lib/tubeforge/whiteboard/roughen");
+  const { fmt2 } = await import("../src/lib/tubeforge/whiteboard/svg");
+
+  // THE BOW LAW — the deterministic perpendicular formula verbatim: with
+  // the endpoints pinned (chain interiors), a horizontal chord's control
+  // y sits at exactly bowing·2·(x1−x2)/200. Zero bowing → zero bow.
+  const flat = roughen.roughLineCubic(0, 0, 200, 0, roughen.minstd(11), 1, 0, false, false);
+  approx(flat.c1.y, 0, 1e-9, "bowing 0 → the control line is the chord");
+  const bowed = roughen.roughLineCubic(0, 0, 200, 0, roughen.minstd(11), 1, 1, false, false);
+  approx(bowed.c1.y, -2, 1e-9, "bowing 1 → the bow formula's exact −2");
+  approx(bowed.c2.y, -2, 1e-9, "both controls ride the same bow");
+  const bowed2 = roughen.roughLineCubic(0, 0, 200, 0, roughen.minstd(11), 1, 2, false, false);
+  approx(bowed2.c1.y, -4, 1e-9, "the bow scales linearly with the knob");
+
+  // The endpoint jitter stays under its caps: the offset wall and the
+  // length/10 cap (a 15px stroke can never drift more than 1.5px).
+  const short = roughen.roughLineCubic(0, 0, 15, 0, roughen.minstd(12), 1, 0);
+  ok(short !== null);
+  // The offset is an axis-bound box (Rough.js's own shape): each axis's
+  // drift stays under min(maxRandomnessOffset·gain, length/10) = 1.5.
+  ok(Math.abs(short.p0.x) <= 1.5 + 1e-9 && Math.abs(short.p0.y) <= 1.5 + 1e-9, "the start jitter respects the length/10 cap per axis");
+  ok(Math.abs(short.p3.x - 15) <= 1.5 + 1e-9 && Math.abs(short.p3.y) <= 1.5 + 1e-9, "the end jitter respects the length/10 cap per axis");
+  const long = roughen.roughLineCubic(0, 0, 300, 0, roughen.minstd(12), 1, 0);
+  ok(Math.abs(long.p0.x) <= 2 + 1e-9 && Math.abs(long.p0.y) <= 2 + 1e-9, "a long stroke's jitter stays under the offset wall (2)");
+
+  // The chain law: interior joints land EXACTLY on the authored points
+  // (the pen never teleports between segments); only open ends drift.
+  const pts = [{ x: 10, y: 10 }, { x: 60.5, y: 60.25 }, { x: 120, y: 30 }];
+  const chain = roughen.roughLinesD(pts, false, roughen.minstd(13), 1, 1);
+  const joint = `${fmt2(pts[1].x)} ${fmt2(pts[1].y)} C`;
+  ok(chain.includes(joint), "the interior joint lands exactly on the authored point");
+  const roughness0 = roughen.roughLinesD(pts, false, roughen.minstd(14), 0, 0);
+  ok(roughness0.startsWith(`M ${fmt2(pts[0].x)} ${fmt2(pts[0].y)}`), "roughness 0 pins the start exactly");
+  ok(roughness0.endsWith(`${fmt2(pts[2].x)} ${fmt2(pts[2].y)}`), "roughness 0 pins the end exactly");
+
+  // THE ROUGH CATMULL-ROM — the first cubic is emitted twice (the audit's
+  // double-drawn first/last points) and a closed ring over-closes: the d
+  // ends with an L back to the start (the hand-drawn crossed circle).
+  const curvePts = [{ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 20, y: 0 }];
+  const cd = roughen.curveD(curvePts, false);
+  const groups = cd.split(" C ").slice(1);
+  ok(groups.length >= 3, "the curve emits its cubics");
+  eq(groups[0], groups[1], "the first bezier is emitted TWICE");
+  const ring = roughen.curveD([{ x: 0, y: 0 }, { x: 30, y: 5 }, { x: 40, y: 40 }, { x: 5, y: 35 }], true);
+  ok(ring.endsWith(`L ${fmt2(0)} ${fmt2(0)}`), "a closed ring over-closes back to its start");
+
+  // THE ELLIPSE OVERSHOOT — at roughness 0 the ring's radius jitter is
+  // exactly zero, so the past-the-seam trio sits at 1.0 / 0.98 / 0.9 of
+  // the radius, EXACTLY, and the ring does NOT close (the pen crosses).
+  const ringPts = roughen.roughEllipseRing(100, 150, 50, 50, roughen.minstd(5), 0);
+  ok(ringPts.length >= 13 + 4, "the size-scaled step count grew past the floor");
+  const dist = (p: { x: number; y: number }): number => Math.hypot(p.x - 100, p.y - 150);
+  approx(dist(ringPts[ringPts.length - 3]), 50, 1e-9, "the overshoot trio's first point rides the full radius");
+  approx(dist(ringPts[ringPts.length - 2]), 49, 1e-9, "…the second at 0.98");
+  approx(dist(ringPts[ringPts.length - 1]), 45, 1e-9, "…the third at 0.9");
+  ok(dist(ringPts[ringPts.length - 1]) > 0, "the ring overshoots past the seam");
+  const ed = roughen.roughEllipseD(100, 150, 50, 50, roughen.minstd(6), 0.5);
+  ok(!ed.includes("Z"), "the overshoot ring never closes with a Z (the crossing is the seam)");
+});
+
+await test("S164 the fill styles — hachure inside by construction, the wrappers, the seeded-skip flourish, dots with the seeded jitter", async () => {
+  const fills = await import("../src/lib/tubeforge/whiteboard/fills");
+  const { minstd } = await import("../src/lib/tubeforge/whiteboard/roughen");
+
+  // The even-odd inside test (the pin's own lens, independent of the module).
+  const inside = (poly: { x: number; y: number }[], p: { x: number; y: number }): boolean => {
+    let crossings = 0;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i];
+      const b = poly[(i + 1) % poly.length];
+      if ((a.y <= p.y && b.y > p.y) || (b.y <= p.y && a.y > p.y)) {
+        const t = (p.y - a.y) / (b.y - a.y);
+        if (a.x + (b.x - a.x) * t > p.x) crossings++;
+      }
+    }
+    return crossings % 2 === 1;
+  };
+
+  // HACHURE — every span's midpoint is INSIDE the shape (the ink stays
+  // inside by construction; no clipPath needed for the lines themselves).
+  const triangle = [{ x: 100, y: 20 }, { x: 180, y: 180 }, { x: 20, y: 180 }];
+  const segs = fills.hachureSegments([triangle], -41, 12);
+  ok(segs.length >= 5, `a 160px triangle sweeps multiple rows (got ${segs.length})`);
+  for (const s of segs) {
+    const mid = { x: (s.a.x + s.b.x) / 2, y: (s.a.y + s.b.y) / 2 };
+    ok(inside(triangle, mid), "every hachure span's midpoint is inside the shape");
+  }
+
+  // THE §2.3 FLOURISH — roughness≥1 skips ~30% of rows, SEEDED: the same
+  // seed skips the same rows, the subset is a real subset, the fill never
+  // empties.
+  const plain = fills.hachureSegments([triangle], -41, 12);
+  const skipped = fills.hachureSegments([triangle], -41, 12, { rng: minstd(3) });
+  ok(skipped.length < plain.length && skipped.length > 0, `the flourish drops rows without emptying the fill (${skipped.length}/${plain.length})`);
+  eq(fills.hachureSegments([triangle], -41, 12, { rng: minstd(3) }).length, skipped.length, "the skip pattern is seed-stable");
+  const skipped2 = fills.hachureSegments([triangle], -41, 12, { rng: minstd(4) });
+  ok(JSON.stringify(skipped2) !== JSON.stringify(skipped), "a different seed skips different rows");
+
+  // THE WRAPPERS — each is the audit's ≤50-LOC composition over the hatch.
+  const ch = fills.crossHatchSegments([triangle], -41, 12);
+  ok(ch.length > segs.length, "cross-hatch adds the +90° second pass");
+  const zz = fills.zigzagSegments(segs, 4, minstd(8));
+  eq(zz.length, Math.floor(segs.length / 2), "zigzag pairs the hatch lines into ribbons");
+  ok(zz.every((p) => p.length === 7), "each ribbon carries its three kinked connectors");
+  const zzl = fills.zigzagLineSegments(segs, 4, minstd(8));
+  eq(zzl.length, segs.length, "zigzag-line keeps every hatch line alone");
+  ok(zzl.every((p) => p.length === 3), "each carries exactly one midpoint kink");
+  const dashes = fills.dashSegments(segs, 12);
+  ok(dashes.length > segs.length, "dashing splits the hatch lines");
+  for (const s of dashes) ok(Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) >= 2, "each dash is a real span");
+
+  // DOTS — the landmine fix: the grid jitters from the PER-SHAPE stream.
+  const square = [{ x: 20, y: 20 }, { x: 180, y: 20 }, { x: 180, y: 180 }, { x: 20, y: 180 }];
+  const d1 = fills.dotPoints([square], 20, minstd(21));
+  const d1b = fills.dotPoints([square], 20, minstd(21));
+  const d2 = fills.dotPoints([square], 20, minstd(22));
+  ok(d1.length > 20, `the grid densifies (got ${d1.length})`);
+  eq(JSON.stringify(d1), JSON.stringify(d1b), "same seed → identical dots (the landmine is fixed)");
+  ok(JSON.stringify(d1) !== JSON.stringify(d2), "a different seed dots differently");
+  for (const p of d1) ok(inside(square, p), "every dot kept is inside the shape");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

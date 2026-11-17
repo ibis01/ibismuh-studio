@@ -455,3 +455,297 @@ export function transformPoint(p: Point, pl: Placement): Point {
     y: pl.y + sx * sin + sy * cos,
   };
 }
+
+// ---------------------------------------------------------------------------
+// 4. S164 — the fixed-decimal serializer + the authored-curve flattener.
+//
+// The Rough.js port's two svg-level primitives:
+//   1. fmt2 — the ONE fixed-decimal number formatter (2dp, trimmed). The
+//      glyph table's own discipline, hoisted here so every generator
+//      (sketch, roughen, fills) emits through the same serializer — no
+//      parallel rounding anywhere (the byte-stable `d` law).
+//   2. bezierFlatPoints + rdp — adaptive Bézier flattening (the
+//      points-on-curve flatness test `ux = 3p2−2p1−p4, vx = 3p3−2p4−p1`)
+//      and Ramer–Douglas–Peucker simplification. Authored curves flatten
+//      deterministically into lean point sets BEFORE roughening.
+// ---------------------------------------------------------------------------
+
+/** Fixed-precision (2dp, trimmed) path number — the ONE serializer the
+ *  whiteboard tree rounds through (byte-stable `d` strings across runs). */
+export function fmt2(v: number): string {
+  if (!Number.isFinite(v)) return "0";
+  let s = v.toFixed(2);
+  if (s === "-0.00") s = "0.00";
+  s = s.replace(/\.?0+$/, "");
+  return s === "-0" ? "0" : s;
+}
+
+/** Serialize a polyline as an M/L chain through the shared serializer (the
+ *  fill module's zigzag family and any future line ink ride this). */
+export function polylineD(points: Point[]): string {
+  if (points.length === 0) return "";
+  let out = `M ${fmt2(points[0].x)} ${fmt2(points[0].y)}`;
+  for (let i = 1; i < points.length; i++) out += ` L ${fmt2(points[i].x)} ${fmt2(points[i].y)}`;
+  return out;
+}
+
+/**
+ * Ramer–Douglas–Peucker polyline simplification. Deterministic: the
+ * first/last points always survive; each split keeps the farthest point;
+ * the explicit stack processes left ranges before right ones (no
+ * recursion-depth cliffs, one fixed traversal order).
+ */
+export function rdp(points: Point[], epsilon: number): Point[] {
+  const n = points.length;
+  if (n <= 2 || !(epsilon > 0)) return points.slice();
+  const keep = new Array<boolean>(n).fill(false);
+  keep[0] = true;
+  keep[n - 1] = true;
+  const stack: [number, number][] = [[0, n - 1]];
+  while (stack.length > 0) {
+    const [lo, hi] = stack.pop() as [number, number];
+    if (hi - lo < 2) continue;
+    const a = points[lo];
+    const b = points[hi];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const denom = Math.hypot(dx, dy);
+    let best = -1;
+    let bestDist = -1;
+    for (let i = lo + 1; i < hi; i++) {
+      const p = points[i];
+      // Perpendicular distance to the chord (exact at denom 0: point-to-a).
+      const dist = denom > 0 ? Math.abs(dy * (p.x - a.x) - dx * (p.y - a.y)) / denom : Math.hypot(p.x - a.x, p.y - a.y);
+      if (dist > bestDist) {
+        bestDist = dist;
+        best = i;
+      }
+    }
+    if (best >= 0 && bestDist > epsilon) {
+      keep[best] = true;
+      stack.push([lo, best]);
+      stack.push([best, hi]);
+    }
+  }
+  const out: Point[] = [];
+  for (let i = 0; i < n; i++) if (keep[i]) out.push(points[i]);
+  return out;
+}
+
+/** Adaptive cubic-Bézier flattening (the points-on-curve algorithm): the
+ *  structural flatness test `ux = 3p2−2p1−p4` vs `vx = 3p3−2p4−p1` (per
+ *  axis, squared) AND a deviation gate — both control points must sit
+ *  within `tolerance` of the endpoint chord — recurse at the midpoint
+ *  until both hold (the structural test alone reads symmetric arcs as
+ *  flat, which would corner-cut authored curves). Deterministic;
+ *  depth-capped. */
+export function bezierFlatPoints(p0: Point, c1: Point, c2: Point, p3: Point, tolerance = 0.15): Point[] {
+  const out: Point[] = [];
+  const tol = Number.isFinite(tolerance) && tolerance > 0 ? tolerance : 0.15;
+  const walk = (a: Point, b: Point, c: Point, d: Point, depth: number): void => {
+    const ux = (3 * b.x - 2 * a.x - d.x) * (3 * b.x - 2 * a.x - d.x);
+    const uy = (3 * b.y - 2 * a.y - d.y) * (3 * b.y - 2 * a.y - d.y);
+    const vx = (3 * c.x - 2 * d.x - a.x) * (3 * c.x - 2 * d.x - a.x);
+    const vy = (3 * c.y - 2 * d.y - a.y) * (3 * c.y - 2 * d.y - a.y);
+    // The deviation gate: perpendicular distance of each control point to
+    // the endpoint chord (the RDP family's own measure).
+    const denom = Math.hypot(d.x - a.x, d.y - a.y);
+    const dev = (p: Point): number =>
+      denom > 0 ? Math.abs((d.y - a.y) * (p.x - a.x) - (d.x - a.x) * (p.y - a.y)) / denom : Math.hypot(p.x - a.x, p.y - a.y);
+    const flat = ux <= vx && uy <= vy && dev(b) <= tol && dev(c) <= tol;
+    if (depth >= 16 || flat) {
+      out.push(d);
+      return;
+    }
+    // de Casteljau at t = 0.5.
+    const ab = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    const bc = { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 };
+    const cd = { x: (c.x + d.x) / 2, y: (c.y + d.y) / 2 };
+    const abc = { x: (ab.x + bc.x) / 2, y: (ab.y + bc.y) / 2 };
+    const bcd = { x: (bc.x + cd.x) / 2, y: (bc.y + cd.y) / 2 };
+    const mid = { x: (abc.x + bcd.x) / 2, y: (abc.y + bcd.y) / 2 };
+    walk(a, ab, abc, mid, depth + 1);
+    walk(mid, bcd, cd, d, depth + 1);
+  };
+  out.push(p0);
+  walk(p0, c1, c2, p3, 0);
+  return out;
+}
+
+export interface FlattenedSubpath {
+  points: Point[];
+  closed: boolean;
+  /** True when the subpath carried any curve command (C/S/Q/T). */
+  curved: boolean;
+  /** For an authored ellipse (M A A Z with rotation 0, shared radii): the
+   *  center + radii the overshoot primitive rides. Null otherwise. */
+  ellipse: { cx: number; cy: number; rx: number; ry: number } | null;
+}
+
+/** Flatten a path-data string into per-subpath point sets for the ROUGHEN
+ *  pass: authored Béziers ride the adaptive flattener (deterministic, lean
+ *  point sets — `curveTolerance` is the control-deviation gate, the
+ *  audit's (1+roughness)/2 epsilon family), straight chains ride their
+ *  endpoints, arc-bearing subpaths sample through the fixed-step arc
+ *  flattener, and authored ellipses (M A A Z, rotation 0, shared radii)
+ *  surface their geometry for the overshoot primitive. Pure; one fixed
+ *  traversal order. */
+export function flattenSubpathPoints(d: string, curveTolerance = 1): FlattenedSubpath[] {
+  const cmds = normalizeCommands(parsePathData(d));
+  const subs: FlattenedSubpath[] = [];
+  let cur: { pts: Point[]; curved: boolean; arcs: number; ellipse: FlattenedSubpath["ellipse"] } | null = null;
+  let cx = 0;
+  let cy = 0;
+  let sx = 0;
+  let sy = 0;
+  let lastC: Point | null = null;
+  let lastQ: Point | null = null;
+  const pushPt = (p: Point): void => {
+    if (!cur) return;
+    const last = cur.pts[cur.pts.length - 1];
+    if (last && Math.abs(last.x - p.x) < 1e-9 && Math.abs(last.y - p.y) < 1e-9) return;
+    cur.pts.push(p);
+  };
+  const endSub = (closed: boolean): void => {
+    if (cur && cur.pts.length > 1) {
+      subs.push({ points: cur.pts, closed, curved: cur.curved, ellipse: cur.ellipse });
+    }
+    cur = null;
+    lastC = null;
+    lastQ = null;
+  };
+  for (const { cmd, args } of cmds) {
+    const upper = cmd.toUpperCase();
+    const rel = cmd !== upper;
+    const A = (n: number, anchor: number): number => (rel ? anchor + n : n);
+    if (upper === "M") {
+      endSub(false);
+      cx = A(args[0], cx);
+      cy = A(args[1], cy);
+      sx = cx;
+      sy = cy;
+      cur = { pts: [{ x: cx, y: cy }], curved: false, arcs: 0, ellipse: null };
+      continue;
+    }
+    if (!cur) {
+      // A path that starts without M: the grammar treats it as M 0 0.
+      cur = { pts: [{ x: cx, y: cy }], curved: false, arcs: 0, ellipse: null };
+    }
+    switch (upper) {
+      case "L": {
+        cx = A(args[0], cx);
+        cy = A(args[1], cy);
+        pushPt({ x: cx, y: cy });
+        lastC = null;
+        lastQ = null;
+        break;
+      }
+      case "H": {
+        cx = A(args[0], cx);
+        pushPt({ x: cx, y: cy });
+        lastC = null;
+        lastQ = null;
+        break;
+      }
+      case "V": {
+        cy = A(args[0], cy);
+        pushPt({ x: cx, y: cy });
+        lastC = null;
+        lastQ = null;
+        break;
+      }
+      case "C": {
+        const c1 = { x: A(args[0], cx), y: A(args[1], cy) };
+        const c2 = { x: A(args[2], cx), y: A(args[3], cy) };
+        const p = { x: A(args[4], cx), y: A(args[5], cy) };
+        for (const pt of bezierFlatPoints({ x: cx, y: cy }, c1, c2, p, curveTolerance)) pushPt(pt);
+        cur.curved = true;
+        lastC = c2;
+        lastQ = null;
+        cx = p.x;
+        cy = p.y;
+        break;
+      }
+      case "S": {
+        const c2 = { x: A(args[0], cx), y: A(args[1], cy) };
+        const p = { x: A(args[2], cx), y: A(args[3], cy) };
+        const c1 = lastC ? { x: 2 * cx - lastC.x, y: 2 * cy - lastC.y } : { x: cx, y: cy };
+        for (const pt of bezierFlatPoints({ x: cx, y: cy }, c1, c2, p, curveTolerance)) pushPt(pt);
+        cur.curved = true;
+        lastC = c2;
+        lastQ = null;
+        cx = p.x;
+        cy = p.y;
+        break;
+      }
+      case "Q": {
+        const c = { x: A(args[0], cx), y: A(args[1], cy) };
+        const p = { x: A(args[2], cx), y: A(args[3], cy) };
+        // Quadratic → cubic (the standard degree lift): c1 = q0 + 2/3(q−q0).
+        const c1 = { x: cx + (2 / 3) * (c.x - cx), y: cy + (2 / 3) * (c.y - cy) };
+        const c2 = { x: p.x + (2 / 3) * (c.x - p.x), y: p.y + (2 / 3) * (c.y - p.y) };
+        for (const pt of bezierFlatPoints({ x: cx, y: cy }, c1, c2, p, curveTolerance)) pushPt(pt);
+        cur.curved = true;
+        lastQ = c;
+        lastC = null;
+        cx = p.x;
+        cy = p.y;
+        break;
+      }
+      case "T": {
+        const p = { x: A(args[0], cx), y: A(args[1], cy) };
+        const c = lastQ ? { x: 2 * cx - lastQ.x, y: 2 * cy - lastQ.y } : { x: cx, y: cy };
+        const c1 = { x: cx + (2 / 3) * (c.x - cx), y: cy + (2 / 3) * (c.y - cy) };
+        const c2 = { x: p.x + (2 / 3) * (c.x - p.x), y: p.y + (2 / 3) * (c.y - p.y) };
+        for (const pt of bezierFlatPoints({ x: cx, y: cy }, c1, c2, p, curveTolerance)) pushPt(pt);
+        cur.curved = true;
+        lastQ = c;
+        lastC = null;
+        cx = p.x;
+        cy = p.y;
+        break;
+      }
+      case "A": {
+        const nx = A(args[5], cx);
+        const ny = A(args[6], cy);
+        const from = cur.pts[cur.pts.length - 1] ?? { x: cx, y: cy };
+        // Authored ellipse candidate: the FIRST arc of a potential M A A Z
+        // (rotation 0, shared radii). The SECOND arc must close it back to
+        // the subpath start with the same radii, else the candidate drops.
+        if (cur.arcs === 0 && args[2] === 0 && cur.pts.length === 1 && Math.abs(args[0] - args[1]) < 1e-9 && Math.abs(args[0]) > 0) {
+          cur.ellipse = { cx: (from.x + nx) / 2, cy: (from.y + ny) / 2, rx: Math.abs(args[0]), ry: Math.abs(args[1]) };
+        } else if (cur.arcs === 1 && cur.ellipse) {
+          const ok =
+            Math.abs(args[0] - cur.ellipse.rx) < 1e-9 &&
+            Math.abs(args[1] - cur.ellipse.ry) < 1e-9 &&
+            Math.abs(args[2]) < 1e-9 &&
+            Math.abs(nx - sx) < 1e-9 &&
+            Math.abs(ny - sy) < 1e-9;
+          cur.ellipse = ok ? cur.ellipse : null;
+        }
+        // Arc-bearing subpaths sample through the fixed-step arc flattener so
+        // the sweep stays true (the walker never re-parameterizes arcs).
+        const arcPts = flattenArc(from, args[0], args[1], args[2], args[3] !== 0, args[4] !== 0, { x: nx, y: ny }, ARC_STEPS);
+        for (const pt of arcPts) pushPt(pt);
+        cur.arcs += 1;
+        cx = nx;
+        cy = ny;
+        lastC = null;
+        lastQ = null;
+        break;
+      }
+      case "Z": {
+        pushPt({ x: sx, y: sy });
+        // Every Z-terminated subpath is CLOSED (the seam law: a ring's
+        // first/last points stay joined through the roughen pass) — the
+        // authored-ellipse flag rides cur.ellipse independently.
+        endSub(true);
+        cx = sx;
+        cy = sy;
+        break;
+      }
+    }
+  }
+  endSub(false);
+  return subs;
+}

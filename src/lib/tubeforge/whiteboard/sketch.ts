@@ -18,7 +18,20 @@
 // the ordinary path machinery — geometry, scheduleScene, the pen follow,
 // the page applier, the camera director, the QC lenses. Hands are
 // excluded (a hand is not drawn; it draws).
-import { pathSegments, totalLength, sampleAtLength, countPathCommands } from "./svg";
+//
+// S164 — the Rough.js native port rides BEHIND this transform: an asset
+// that carries the additive knobs (`roughness`/`bowing`) has its source
+// strokes roughened FIRST (the bowing double-stroke line / rough
+// Catmull-Rom / ellipse overshoot — roughen.ts), and the S139 derivation
+// structure survives ON TOP unchanged (the -od retrace becomes the rough
+// double-stroke's overlay pass; the -h hatch becomes the true
+// polygon-clipped hachure — fills.ts). ASSENT IS OPT-IN: absent knobs take
+// the exact legacy path below, byte for byte (the additive-absent law).
+// The roughened source carries a `data-s164="1"` marker so re-running the
+// pass on its own output is still byte-identical (the idempotence law).
+import { fmt2, flattenSubpathPoints, pathSegments, totalLength, sampleAtLength, countPathCommands } from "./svg";
+import { roughenPath, type RoughKnobs } from "./roughen";
+import { buildFill, clampFillSpec, MAX_FILL_COMMANDS } from "./fills";
 
 /** FNV-1a 32-bit — the seed law: stable across machines and processes. */
 export function fnv1a(input: string): number {
@@ -30,14 +43,12 @@ export function fnv1a(input: string): number {
   return h >>> 0;
 }
 
-/** Fixed-precision (2dp, trimmed) path numbers — the glyph table's own
- *  discipline, so re-transforms of derived strokes stay stable. */
-function fmt2(v: number): string {
-  if (!Number.isFinite(v)) return "0";
-  let s = v.toFixed(2);
-  if (s === "-0.00") s = "0.00";
-  s = s.replace(/\.?0+$/, "");
-  return s === "-0" ? "0" : s;
+/** The per-shape seed (S164): fnv1a(assetId::pathId) — every shape derives
+ *  its OWN seed from its two stable ids, so changing ONE shape's ids moves
+ *  ONLY that shape's roughened geometry (no shared mutable PRNG stream
+ *  anywhere downstream: roughen.ts/fills.ts build fresh streams per call). */
+export function shapeSeed(assetId: string, pathId: string): number {
+  return fnv1a(`${assetId}::${pathId}`);
 }
 
 /** The naturalist dither: resample a path's polyline and offset each
@@ -158,6 +169,50 @@ function pathAttrs(tag: string): { stroke?: string; strokeWidth?: number; lineca
   };
 }
 
+/** S164 — the rough double-stroke's overlay as a derived `-od` path: the
+ *  SAME id suffix, the SAME attr law (strokeWidth·0.9, min 1) as the
+ *  legacy retrace — only the geometry method upgrades. */
+function roughOverlaySvg(pathId: string, d: string, attrs: { stroke?: string; strokeWidth?: number; linecap?: string }): string {
+  const sw = attrs.strokeWidth && attrs.strokeWidth > 0 ? Math.max(1, attrs.strokeWidth * 0.9) : 3;
+  return (
+    `<path id="${pathId}${OVERDRAW_SUFFIX}" d="${d}"` +
+    ` fill="none" stroke="${attrs.stroke ?? "#1d3557"}" stroke-width="${Math.round(sw * 100) / 100}"` +
+    ` stroke-linecap="${attrs.linecap ?? "round"}" stroke-linejoin="round"/>`
+  );
+}
+
+/** S164 — the rough fill as a derived `-h` layer: true polygon-clipped
+ *  hachure (fills.ts), gap-clamped under the command cap, the SAME clip/
+ *  stroke/opacity laws as the legacy hatch (the page applier's -h cap
+ *  rides the suffix, not the geometry). */
+function roughHatchSvg(assetId: string, pathId: string, d: string, fillColor: string, strokeWidth: number | undefined, knobs: RoughKnobs): string | null {
+  const subs = flattenSubpathPoints(d);
+  const polygons = subs.map((s) => s.points).filter((p) => p.length >= 3);
+  if (polygons.length === 0) return null;
+  const len = totalLength(pathSegments(d));
+  if (len < 40 || countPathCommands(d) > 512) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const poly of polygons) {
+    for (const pt of poly) {
+      if (pt.x < minX) minX = pt.x;
+      if (pt.y < minY) minY = pt.y;
+      if (pt.x > maxX) maxX = pt.x;
+      if (pt.y > maxY) maxY = pt.y;
+    }
+  }
+  if (!(maxX - minX > 16 && maxY - minY > 16)) return null;
+  const seed = fnv1a(`${assetId}::${pathId}${HATCH_SUFFIX}`);
+  const spec = clampFillSpec(polygons, seed, knobs, { kind: "hachure" }, strokeWidth ?? 3);
+  const res = buildFill(polygons, seed, knobs, spec, strokeWidth ?? 3);
+  if (!res.d || res.commands > MAX_FILL_COMMANDS) return null; // belt + suspenders under the clamp
+  const clipId = `${pathId}${HATCH_SUFFIX}-clip`;
+  return (
+    `<clipPath id="${clipId}"><path d="${d}"/></clipPath>` +
+    `<path id="${pathId}${HATCH_SUFFIX}" d="${res.d}" fill="none" stroke="${fillColor}"` +
+    ` stroke-width="5.5" stroke-linecap="round" clip-path="url(#${clipId})"/>`
+  );
+}
+
 export interface SketchPassStats {
   overdraws: number;
   hatches: number;
@@ -168,9 +223,17 @@ export interface SketchPassStats {
  *  hatch. Document order is preserved (each derivation lands right after
  *  its source), ids stay inside the WB_ID_RE charset, and hands are the
  *  caller's exclusion (this function never decides). Deterministic:
- *  same svg bytes → byte-identical output. */
-export function withSketchPasses(svg: string, assetId: string): { svg: string; stats: SketchPassStats } {
+ *  same svg bytes → byte-identical output.
+ *
+ *  S164 — `knobs` (the additive per-asset `roughness`/`bowing` metadata)
+ *  switches the GEOMETRY source to the Rough.js port while the S139
+ *  structure (ids, suffixes, clip, attr laws, opacity caps) rides
+ *  unchanged on top. Knobs absent ⇒ this function is byte-identical to
+ *  the legacy S139 pass (the additive-absent law). */
+export function withSketchPasses(svg: string, assetId: string, knobs?: RoughKnobs): { svg: string; stats: SketchPassStats } {
   const stats: SketchPassStats = { overdraws: 0, hatches: 0 };
+  const knobActive =
+    knobs !== undefined && (knobs.roughness !== undefined || knobs.bowing !== undefined);
   // The existing-derivations set: a source path that ALREADY carries its
   // retrace/hatch (the idempotence law — re-running the pass on its own
   // output must be byte-identical) is skipped wholesale.
@@ -181,9 +244,34 @@ export function withSketchPasses(svg: string, assetId: string): { svg: string; s
     const dRaw = /\sd="([^"]+)"/.exec(tag)?.[1];
     if (!id || !dRaw) return full;
     if (id.endsWith(OVERDRAW_SUFFIX) || id.endsWith(HATCH_SUFFIX)) return full; // derived ids never re-derive
+    const attrs = pathAttrs(tag);
+    // S164 — knob-active paths roughen FIRST (the pass rides BEHIND the
+    // sketch derivations); the marker keeps re-runs byte-identical.
+    if (knobActive && !/\sdata-s164="1"/.test(tag)) {
+      const knobsN: RoughKnobs = { roughness: knobs?.roughness, bowing: knobs?.bowing };
+      const rp = roughenPath(dRaw, shapeSeed(assetId, id), knobsN);
+      if (rp) {
+        const pieces: string[] = [full.replace(`d="${dRaw}"`, `d="${rp.main}"`).replace(/\/>$/, ' data-s164="1"/>')];
+        if (!existing.has(id + OVERDRAW_SUFFIX) && totalLength(pathSegments(rp.main)) >= 26 && rp.overlay) {
+          pieces.push(roughOverlaySvg(id, rp.overlay, attrs));
+          stats.overdraws += 1;
+        }
+        const fill = attrs.fill;
+        if (fill && fill !== "none" && !existing.has(id + HATCH_SUFFIX)) {
+          const hatch = roughHatchSvg(assetId, id, rp.main, fill, attrs.strokeWidth, knobsN);
+          if (hatch) {
+            pieces.push(hatch);
+            stats.hatches += 1;
+          }
+        }
+        return pieces.join("");
+      }
+      // roughenPath declined (too small / over budget) — the legacy
+      // derivations ride unchanged below (a deterministic decline, so the
+      // outcome is stable across re-runs).
+    }
     const pieces: string[] = [full];
     if (!existing.has(id + OVERDRAW_SUFFIX)) {
-      const attrs = pathAttrs(tag);
       const od = overdrawStroke(assetId, id, dRaw, attrs);
       if (od) {
         pieces.push(od.svg);
