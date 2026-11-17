@@ -24240,6 +24240,130 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
   });
 }
 
+// ---------------------------------------------------------------------------
+// S169 — the Universal Scene Schema. The Director-authored envelope over
+// the six modes: strict validation (machine-authored data, junk is an
+// error), provenance closure (no undeclared references), the S168
+// directive gate, and the ONE mapping onto the S87 timeline.
+// ---------------------------------------------------------------------------
+{
+  const us = await import("../src/lib/tubeforge/universal-scene");
+
+  const goodScene = () => ({
+    version: 1,
+    sceneId: "scene_001",
+    kind: "graphics",
+    durationMs: 8000,
+    background: { type: "image", assetId: "asset_001" },
+    narration: { text: "The universe contains billions of galaxies.", voiceId: "narrator_01" },
+    assets: [{ id: "asset_001", kind: "image", origin: "generated" }],
+    directives: [
+      { domain: "animation", target: "headline", action: "enter:rise" },
+      { domain: "animation", target: "boundary:1", action: "transition:crossfade" },
+    ],
+  });
+
+  await test("s169: the six modes are the closed kind set", () => {
+    eq([...us.UNIVERSAL_SCENE_KINDS], ["graphics", "whiteboard", "slides", "classic", "character", "3d"], "the six production modes");
+    eq([...us.UNIVERSAL_ASSET_ORIGINS], ["native", "stock", "generated", "upload", "reuse"], "the provenance origins");
+    eq([...us.UNIVERSAL_PRODUCTION_MODES], ["free", "standard", "premium"], "the S184 operating modes ride the schema");
+  });
+
+  await test("s169: a valid scene passes strict validation", () => {
+    const verdict = us.validateUniversalScene(goodScene());
+    ok(verdict.ok, JSON.stringify(verdict.ok ? [] : verdict.errors));
+  });
+
+  await test("s169: the provenance closure refuses undeclared references", () => {
+    const bad = { ...goodScene(), background: { type: "image", assetId: "asset_ghost" } };
+    const v = us.validateUniversalScene(bad);
+    eq(v.ok, false, "a background pointing outside assets[] is refused");
+    ok(!v.ok && v.errors.some((e) => e.code === "provenance-closure"), "the closure error names the code");
+    const dup = { ...goodScene(), assets: [{ id: "a", kind: "image", origin: "stock" }, { id: "a", kind: "audio", origin: "stock" }] };
+    const v2 = us.validateUniversalScene(dup);
+    ok(!v2.ok && v2.errors.some((e) => e.message.includes("duplicate asset id")), "duplicate asset ids are refused");
+  });
+
+  await test("s169: the clock walls and the closed sets hold", () => {
+    for (const bad of [0, 200, Number.NaN, 2_000_000, 8000.5]) {
+      ok(!us.validateUniversalScene({ ...goodScene(), durationMs: bad }).ok, `duration ${bad} is refused`);
+    }
+    ok(!us.validateUniversalScene({ ...goodScene(), kind: "hologram" }).ok, "a seventh mode is refused");
+    ok(!us.validateUniversalScene({ ...goodScene(), background: { type: "color", color: "blue" } }).ok, "a junk color is refused");
+    ok(!us.validateUniversalScene({ ...goodScene(), assets: [{ id: "a", kind: "image", origin: "stock", sha256: "deadbeef" }] }).ok, "a short sha256 is refused");
+  });
+
+  await test("s169: an invented directive invalidates the scene (the S168 gate rides)", () => {
+    const v = us.validateUniversalScene({
+      ...goodScene(),
+      directives: [{ domain: "animation", target: "x", action: "enter:explode-into-confetti" }],
+    });
+    eq(v.ok, false, "the scene does not validate");
+    ok(!v.ok && v.errors.some((e) => e.code === "directives" && e.message.includes("enter:explode-into-confetti")), "the error names the invented action");
+  });
+
+  await test("s169: the timeline projection maps the six modes onto the S87 track kinds", () => {
+    const trackOf = (kind: string): string => {
+      const scene = { ...goodScene(), kind } as never;
+      const clip = us.projectUniversalScene(scene as never, 1, 0, 8);
+      return clip.kind;
+    };
+    eq(trackOf("graphics"), "graphics", "graphics keeps its track kind");
+    eq(trackOf("whiteboard"), "whiteboard", "whiteboard keeps its track kind");
+    eq(trackOf("3d"), "3d", "3d keeps its track kind (the S167 admission)");
+    eq(trackOf("character"), "character", "character keeps its track kind");
+    eq(trackOf("slides"), "video", "slides render through the video lane");
+    eq(trackOf("classic"), "video", "classic renders through the video lane");
+  });
+
+  await test("s169: the projection reads the inbound transition from the PREVIOUS scene's boundary", () => {
+    const prev = { ...goodScene(), sceneId: "scene_001" } as never;
+    const next = { ...goodScene(), sceneId: "scene_002", directives: [] } as never;
+    // prev carries transition:crossfade on boundary:1 — the join 1→2 — so
+    // scene 2's clip enters with it.
+    const clip = us.projectUniversalScene(next as never, 2, 8, 16, prev as never);
+    eq(clip.transitionIn, "crossfade", "the boundary directive becomes the clip's transitionIn");
+    eq(clip.id, "s2", "the clip id follows the S2 doctrine");
+    const first = us.projectUniversalScene(prev as never, 1, 0, 8);
+    eq(first.transitionIn, null, "the first scene enters with no transition");
+  });
+
+  await test("s169: the project timeline sequences back-to-back, atSec wins when present", () => {
+    const project = {
+      version: 1,
+      title: "The demo",
+      mode: "free",
+      scenes: [
+        goodScene(),
+        { ...goodScene(), sceneId: "scene_002", durationMs: 4000, atSec: 20 },
+        { ...goodScene(), sceneId: "scene_003", durationMs: 4000 },
+      ],
+    } as never;
+    const clips = us.projectUniversalTimeline(project as never);
+    eq(clips.length, 3, "three clips project");
+    eq(clips[1].startSec, 20, "the explicit atSec wins");
+    eq(clips[2].startSec, 24, "the scene after the jump sequences from the cursor");
+  });
+
+  await test("s169: project validation enforces uniqueness and the closed mode set", () => {
+    const dup = { version: 1, title: "T", mode: "free", scenes: [goodScene(), goodScene()] };
+    const v = us.validateUniversalProject(dup);
+    eq(v.ok, false, "duplicate sceneIds are refused");
+    ok(!us.validateUniversalProject({ ...dup, mode: "enterprise", scenes: [{ ...goodScene(), sceneId: "scene_002" }] }).ok, "a bad mode is refused");
+    ok(!us.validateUniversalProject({ ...dup, scenes: [] }).ok, "an empty project is refused");
+    const good = { version: 1, title: "T", mode: "standard", scenes: [{ ...goodScene(), sceneId: "scene_002" }] };
+    ok(us.validateUniversalProject(good).ok, "a clean project passes");
+  });
+
+  await test("s169: serialization is JSON-stable (sorted keys, round-trip equal)", () => {
+    const scene = goodScene() as never;
+    const s1 = us.serializeUniversalScene(scene);
+    const s2 = us.serializeUniversalScene(JSON.parse(s1) as never);
+    eq(s1, s2, "the scene round-trips byte-stably");
+    ok(s1.indexOf('"action"') < s1.indexOf('"target"'), "keys serialize sorted");
+  });
+}
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
