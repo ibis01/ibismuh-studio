@@ -24144,6 +24144,102 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
   ok(r3.includes("rollDeg"), "the page carries the roll channel (the shake's view-axis rotation)");
 });
 
+// ---------------------------------------------------------------------------
+// S168 — the Director's closed authority vocabulary. The law: the Director
+// NAMES supported commands, never INVENTS them. The catalogs DERIVE from
+// the engines' own constants (membership is enforced here; ranges stay
+// the engines' sanitizers' job — one writer each).
+// ---------------------------------------------------------------------------
+{
+  const dv = await import("../src/lib/tubeforge/director-vocabulary");
+
+  await test("s168: the decision domains are the closed nine from the roadmap ask", () => {
+    eq([...dv.DIRECTOR_DECISION_DOMAINS], [
+      "script", "storyboard", "scene-duration", "visual-style", "camera",
+      "animation", "music", "sound", "production-mode",
+    ], "the domain set is closed and matches the spec");
+  });
+
+  await test("s168: the animation catalog DERIVES from the engines' own constants", async () => {
+    // Derivation, not duplication: the transition list IS the engine's
+    // set (same module-level reference), the enters ARE the union of the
+    // doc validator's own compatibility table, the eases ARE the ONE
+    // curve table's keys.
+    const tr = await import("../src/lib/tubeforge/graphics/transitions");
+    ok(dv.DIRECTOR_TRANSITIONS === tr.NATIVE_TRANSITION_TYPES, "transitions derive from graphics/transitions (same reference, not a copy)");
+    ok(dv.DIRECTOR_GRAPHICS_ENTERS.length >= 8 && dv.DIRECTOR_GRAPHICS_ENTERS.includes("count") && dv.DIRECTOR_GRAPHICS_ENTERS.includes("draw"),
+      "the enter vocabulary covers the measured grammar");
+    ok(dv.DIRECTOR_EASES.includes("measured-out") && dv.DIRECTOR_EASES.includes("expo-out") && dv.DIRECTOR_EASES.includes("parabolic-in-out"),
+      "the ease vocabulary rides the S162-anchored curve table");
+    eq(dv.DIRECTOR_CAMERA_MOVES.length, 14, "the classic camera list carries the whole MoveKind union");
+    ok(dv.DIRECTOR_CAMERA_MOVES.includes("shake") && dv.DIRECTOR_CAMERA_MOVES.includes("hold"), "the finisher-era moves ride the catalog");
+    eq(dv.DIRECTOR_SLIDE_CAMERAS.length, 4, "the slide camera set is the closed four");
+    eq([...dv.DIRECTOR_3D_ACTIONS], ["object-add", "light-add", "camera-keyframe", "push-in", "shake"], "the 3D actions match the scene3d grammar");
+    eq([...dv.DIRECTOR_WHITEBOARD_KNOBS], ["roughness", "bowing"], "the whiteboard knobs are the S164 pair");
+    eq([...dv.DIRECTOR_GESTURE_INTENTS], ["setup", "action", "emphasis", "rest"], "the gesture intents are purposes, not poses");
+    const expected = dv.DIRECTOR_GRAPHICS_ENTERS.length + dv.DIRECTOR_TRANSITIONS.length +
+      dv.DIRECTOR_CAMERA_MOVES.length + dv.DIRECTOR_SLIDE_CAMERAS.length + 1 +
+      dv.DIRECTOR_3D_ACTIONS.length + dv.DIRECTOR_WHITEBOARD_KNOBS.length + dv.DIRECTOR_GESTURE_INTENTS.length;
+    eq(dv.DIRECTOR_ANIMATION_CATALOG.length, expected, "the catalog is exactly the union of its derived parts");
+    for (const entry of dv.DIRECTOR_ANIMATION_CATALOG) {
+      ok(typeof entry.implements === "string" && entry.implements.length > 8, `action ${entry.action} names its native implementor`);
+    }
+  });
+
+  await test("s168: valid directives pass the validator", () => {
+    eq(dv.validateDirectorDirective({ domain: "animation", target: "boundary:1", action: "transition:crossfade" }), { ok: true }, "a boundary transition passes");
+    eq(dv.validateDirectorDirective({ domain: "animation", target: "counter", action: "enter:count", params: { durationMs: 1200 } }), { ok: true }, "an element enter passes where the engine's table allows it");
+    eq(dv.validateDirectorDirective({ domain: "animation", target: "headline", action: "enter:fade" }), { ok: true }, "a legal per-kind enter passes");
+    eq(dv.validateDirectorDirective({ domain: "camera", target: "scene-1", action: "camera:push-follow" }), { ok: true }, "a camera intent passes");
+    eq(dv.validateDirectorDirective({ domain: "production-mode", target: "project", action: "mode:free" }), { ok: true }, "a production mode passes");
+    eq(dv.validateDirectorDirective({ domain: "animation", target: "character", action: "gesture:emphasis" }), { ok: true }, "a gesture intent passes");
+    eq(dv.validateDirectorDirective({ domain: "animation", target: "asset-1", action: "whiteboard:roughness", params: { value: 1.4 } }), { ok: true }, "a whiteboard knob passes");
+  });
+
+  await test("s168: invented commands are REJECTED, never coerced", () => {
+    eq(dv.validateDirectorDirective({ domain: "animation", target: "x", action: "enter:explode-into-confetti" }).ok, false, "an invented enter is refused");
+    eq(dv.validateDirectorDirective({ domain: "animation", target: "x", action: "morphIntoDragon" }).ok, false, "a bare invented action is refused");
+    eq(dv.validateDirectorDirective({ domain: "unknown-domain" as never, target: "x", action: "anything" }).ok, false, "an unknown domain is refused");
+    eq(dv.validateDirectorDirective({ domain: "camera", target: "x", action: "camera:dolly-circles" }).ok, false, "a camera move outside the MoveKind union is refused");
+    eq(dv.validateDirectorDirective({ domain: "music", target: "x", action: "music:generate-hit-single" }).ok, false, "music stays a suggestion namespace");
+    eq(dv.validateDirectorDirective({ domain: "animation", target: "unicorn-element", action: "enter:fade" }).ok, false, "an enter on a non-element target is refused");
+    eq(dv.validateDirectorDirective({ domain: "animation", target: "headline", action: "enter:count" }).ok, false, "the engine's own per-kind table refuses an illegal enter (count on a headline)");
+    eq(dv.validateDirectorDirective({ domain: "animation", target: "counter", action: "transition:crossfade" }).ok, false, "a transition on a non-boundary target is refused");
+  });
+
+  await test("s168: the per-target and per-param walls hold", () => {
+    const smuggle = dv.validateDirectorDirective({ domain: "animation", target: "character", action: "gesture:setup", params: { rotationZ: 42 } });
+    eq(smuggle.ok, false, "a gesture param smuggling pose geometry is refused");
+    const nan = dv.validateDirectorDirective({ domain: "animation", target: "counter", action: "enter:count", params: { durationMs: Number.NaN } });
+    eq(nan.ok, false, "a NaN param is refused");
+  });
+
+  await test("s168: the batch gate is fail-closed and names the rejections", () => {
+    const batch = [
+      { domain: "animation", target: "boundary:1", action: "transition:iris" },
+      { domain: "animation", target: "x", action: "enter:but-first-dance" },
+      { domain: "camera", target: "scene-2", action: "camera:hold" },
+    ];
+    const res = dv.assertNoInventedCommands(batch as never[]);
+    eq(res.ok, false, "a batch with an invented command fails");
+    eq([...res.rejections.keys()], [1], "the rejection names exactly the offending index");
+  });
+
+  await test("s168: serialization is JSON-stable (sorted keys, round-trip equal)", () => {
+    const dir = { domain: "animation", target: "counter", action: "enter:count", params: { z: 1, a: 2 } };
+    const s1 = dv.serializeDirectorDirective(dir);
+    const s2 = dv.serializeDirectorDirective(JSON.parse(s1) as typeof dir);
+    eq(s1, s2, "the directive round-trips byte-stably");
+    ok(s1.indexOf('"a"') < s1.indexOf('"z"'), "the params serialize key-sorted");
+  });
+
+  await test("s168: the prohibitions ride as data (the never-list)", () => {
+    ok(dv.DIRECTOR_PROHIBITIONS.length >= 7, "the never-list is on record");
+    ok(dv.DIRECTOR_PROHIBITIONS.some((p) => p.startsWith("no invented animation commands")), "the headline law is first among them");
+    ok(dv.DIRECTOR_PROHIBITIONS.some((p) => p.includes("the engines render deterministically without AI")), "the AI-independence law rides");
+  });
+}
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);
