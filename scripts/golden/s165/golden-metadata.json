@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "slice": "S165 — the render-farm determinism + throughput slice",
+  "law": "The golden harness (scripts/s87-acceptance-battery.mts Part D) renders the SAME deterministic fixture per engine and holds the delivered bytes to the COMMITTED baseline within these committed tolerances: per-frame PSNR floor (minPsnr), allowed frames below that floor (maxFrameFailures), and the audio Pearson correlation floor (minAudioCorrelation; null = the fixture carries no audio). A pixel change that matters lands far BELOW the PSNR floor; codec/build drift lands far above it. A DELIBERATE visual change re-baselines on purpose: node --import tsx scripts/s87-acceptance-battery.mts --only=D --write-golden — that commit IS the review moment this harness exists to force.",
+  "rebaseline": "node --import tsx scripts/s87-acceptance-battery.mts --only=D --write-golden",
+  "engines": [
+    {
+      "engine": "graphics",
+      "baseline": "graphics-golden.mp4",
+      "minPsnr": 30,
+      "maxFrameFailures": 2,
+      "minAudioCorrelation": 0.95,
+      "fixture": "scaffoldGraphicsDoc — the pure native rule-table scaffold (the production degradation floor), deliberately NOT scaffoldGraphicsDocLlm: without a provided `call` that planner dials the real gateway when the environment carries keys, and a golden fixture must be deterministic by construction. One scene ('The golden frame' / 'one two three four five'), 640x360 @24fps, a 220Hz sine music bed mixed at the house gains. Deterministic: rule-table picks, no network, no randomness, no clock."
+    },
+    {
+      "engine": "whiteboard",
+      "baseline": "whiteboard-golden.mp4",
+      "minPsnr": 30,
+      "maxFrameFailures": 2,
+      "minAudioCorrelation": 0.95,
+      "fixture": "scaffoldWhiteboardProject rule-table scaffold — one scene ('The golden board' / 'one two three four five'), explicit 3000ms clock, 640x360 @24fps, a 220Hz sine bed. Chromium rasterizes the library assets through the S139/S164 sketch pass."
+    },
+    {
+      "engine": "scene3d",
+      "baseline": "scene3d-golden.mp4",
+      "minPsnr": 30,
+      "maxFrameFailures": 2,
+      "minAudioCorrelation": null,
+      "fixture": "A hand-built 4s Scene3D doc (640x360 @24fps, lit ground + cube + pillar + sphere under the S160 look seam: sky dome + sun shadows + Neutral tone map, one glide camera key with measured-out ease) through the SwiftShader chromium lane. Silent — scene-3d.mp4 carries no audio stream (minAudioCorrelation=null)."
+    }
+  ]
+}

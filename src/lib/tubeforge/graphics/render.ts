@@ -62,7 +62,7 @@ import {
   parsePsnrSummary,
   type StaticStretch,
 } from "./static-dedup";
-import { APPLY_GRAPHICS_FRAME_FN, composeGraphicsScene, graphicsFramePayload } from "./compose";
+import { APPLY_GRAPHICS_FRAME_FN, composeGraphicsScene, graphicsFrameApplierKey, graphicsFramePayload } from "./compose";
 import { graphicsEventList, type GraphicsEventSlot } from "./events";
 import { frameAt, graphicsSceneDurationsMs } from "./frame";
 import { assertGraphicsBudget } from "./preflight";
@@ -703,11 +703,17 @@ export async function renderGraphics(
         // S165 — the static-frame dedup scan (the kenburns/holds lane).
         // Each delivered frame's applier input serializes to a key FIRST
         // (frame.ts is pure, so the scan is math only — no chromium time);
-        // maximal equal-key runs are the static stretches. The serialized
-        // payload is ALSO the applier's per-frame input below, so the scan
-        // costs one stringify per frame and never re-derives it.
+        // maximal equal-key runs are the static stretches. THE KEY IS THE
+        // APPLIER'S EFFECTIVE INPUT (graphicsFrameApplierKey — elements +
+        // camera, NOT the provenance sceneTMs/sceneId the applier never
+        // reads): a hold's clock advances, its picture does not. Equal keys
+        // ⇒ equal DOM ⇒ equal pixels by the idempotence law; the real-raster
+        // PSNR spot check below still verifies it against the LIVE page.
+        // payloadKeys (the full payload, clock included) stay the applier's
+        // per-frame input — byte-identical to the pre-dedup render.
         const sceneTag = `scene ${si + 1} ("${scene.id}")`;
         const payloadKeys: string[] = new Array(frames);
+        const applierKeys: string[] = new Array(frames);
         for (let f = 0; f < frames; f++) {
           // The GLOBAL doc clock — the exact truth the editor reads: scene
           // resolution + the scene-local motion evaluation stay one call
@@ -715,10 +721,12 @@ export async function renderGraphics(
           // exact ms sum, not the frame-quantized boundary). A look-rate
           // (step 2) samples every OTHER frame at its exact doc time.
           const tMs = cursorMs + ((f * step) / doc.fps) * 1000;
-          payloadKeys[f] = JSON.stringify(graphicsFramePayload(frameAt(doc, tMs, voMsBySceneId)));
+          const frame = frameAt(doc, tMs, voMsBySceneId);
+          payloadKeys[f] = JSON.stringify(graphicsFramePayload(frame));
+          applierKeys[f] = graphicsFrameApplierKey(frame);
         }
         const stretches =
-          opts.staticFrameDedup === false ? [] : findStaticStretches(payloadKeys);
+          opts.staticFrameDedup === false ? [] : findStaticStretches(applierKeys);
         let stretchIdx = 0;
         let dedupScreenshots = 0;
         let dedupReused = 0;

@@ -81,14 +81,17 @@ export function dedupSpotFrame(stretch: StaticStretch): number {
   return stretch.start + Math.floor((stretch.end - stretch.start) / 2);
 }
 
-/** The dedup decision (pure; fail-closed): `reuse` only on a measured
- *  PSNR at or above the floor. An unmeasurable run (null — the psnr pass
- *  crashed, the tool printed nothing parseable) falls back, never ships. */
+/** The dedup decision (pure; fail-closed): `reuse` only on a MEASURED PSNR
+ *  at or above the floor — Infinity (identical pixels) is the strongest
+ *  measured pass there is, never a fallback case. An UNmeasurable run
+ *  (null — the psnr pass crashed — or NaN, garbage the tool printed)
+ *  falls back, never ships. */
 export function dedupDecision(
   psnrDb: number | null,
   floorDb: number = DEDUP_PSNR_FLOOR_DB,
 ): "reuse" | "fallback" {
-  if (psnrDb === null || !Number.isFinite(psnrDb) || psnrDb < floorDb) return "fallback";
+  if (psnrDb === null || Number.isNaN(psnrDb)) return "fallback";
+  if (psnrDb < floorDb) return "fallback";
   return "reuse";
 }
 
@@ -156,7 +159,9 @@ export function parsePsnrFrameStats(text: string, floorDb: number): PsnrRunStats
   }
   let failures = 0;
   for (const v of psnrAvg) {
-    if (!Number.isFinite(v) || v < floorDb) failures++;
+    // Infinity is a PASS — it is the exact encoding of identical pixels.
+    // Only NaN (unparseable) or a finite value below the floor fails.
+    if (Number.isNaN(v) || (Number.isFinite(v) && v < floorDb)) failures++;
   }
   const averagePsnr =
     psnrAvg.length === 0

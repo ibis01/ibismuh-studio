@@ -26,11 +26,15 @@
 //             real render's own numbers).
 //
 // Usage: node --import tsx scripts/s87-acceptance-battery.mts [--out DIR]
+//        [--only A,B,C,D,E]   (run a subset — the S165 parts run standalone)
+//        [--write-golden]     (with --only=D: re-render + commit the S165
+//                              golden baselines — a DELIBERATE act)
 // Exit 0 = the battery passed; anything else prints the failing condition.
 // Artifacts (final.mp4s, per-scene encodes, the report JSON) stay in the
 // out dir for human review — the battery never claims visual quality.
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { execFile as execFileCb } from "child_process";
 import { promisify } from "util";
 
@@ -40,6 +44,15 @@ const OUT_DIR = (() => {
   const i = process.argv.indexOf("--out");
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : "/tmp/s87-battery";
 })();
+
+// S165 — the subset selector: "--only D" runs just the golden harness,
+// "--only E" just the dedup benchmark; absent, ALL parts run (A–E).
+const ONLY = (() => {
+  const i = process.argv.indexOf("--only");
+  return i > 0 && process.argv[i + 1] ? process.argv[i + 1].split(",") : null;
+})();
+const WRITE_GOLDEN = process.argv.includes("--write-golden");
+const runPart = (id: string): boolean => ONLY === null || ONLY.includes(id);
 
 // ---- receipts -------------------------------------------------------------
 interface Check {
@@ -392,12 +405,372 @@ async function partC(): Promise<void> {
 }
 
 // ===========================================================================
+// PART D — the S165 GOLDEN-VIDEO regression harness. The audit's staging:
+// "golden-video regression harness extension to the s87 battery (committed
+// baselines + {minPsnr, maxFrameFailures, minAudioCorrelation} metadata)".
+//
+// Each engine renders the SAME tiny deterministic fixture it always
+// renders (zero-AI scaffolds / a hand-built 3D doc — no network, no
+// randomness), and the delivered bytes are held to the COMMITTED baseline
+// within committed tolerances:
+//   • minPsnr          — the per-frame PSNR floor vs the baseline video
+//   • maxFrameFailures — how many frames may fall below that floor
+//   • minAudioCorrelation — the Pearson r between the fresh and baseline
+//     audio (null = the fixture carries no audio — the 3D clip is silent)
+// A pixel change that matters drops PSNR far below 30 dB; codec/build
+// drift lands far above it. A DELIBERATE visual change re-baselines on
+// purpose (--only=D --write-golden), which is exactly the review moment
+// the harness exists to force.
+// ===========================================================================
+
+const GOLDEN_DIR = path.join(fileURLToPath(new URL(".", import.meta.url)), "golden", "s165");
+
+interface GoldenEngineMeta {
+  engine: string;
+  baseline: string;
+  minPsnr: number;
+  maxFrameFailures: number;
+  minAudioCorrelation: number | null;
+  fixture: string;
+}
+
+async function countVideoFrames(file: string): Promise<number | null> {
+  try {
+    const { stdout } = await execFileP("ffprobe", [
+      "-v", "error", "-select_streams", "v", "-count_frames",
+      "-show_entries", "stream=nb_read_frames", "-of", "json", file,
+    ]);
+    return Number(JSON.parse(stdout).streams?.[0]?.nb_read_frames ?? NaN) || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Per-frame PSNR between two videos via the psnr filter's stats_file —
+ *  parsed by the ONE reading law in graphics/static-dedup.ts. */
+async function psnrRunStats(fresh: string, baseline: string, floorDb: number): Promise<import("../src/lib/tubeforge/graphics/static-dedup").PsnrRunStats | null> {
+  const statsPath = path.join(OUT_DIR, "golden-psnr-stats.txt");
+  try {
+    await execFileP("ffmpeg", [
+      "-y", "-v", "error", "-i", fresh, "-i", baseline,
+      "-filter_complex", `[0:v][1:v]psnr=stats_file=${statsPath}`,
+      "-f", "null", "-",
+    ], { maxBuffer: 32 * 1024 * 1024 });
+    const { parsePsnrFrameStats } = await import("../src/lib/tubeforge/graphics/static-dedup");
+    return parsePsnrFrameStats(fs.readFileSync(statsPath, "utf8"), floorDb);
+  } catch {
+    return null;
+  }
+}
+
+/** The Pearson correlation between two files' mono 48 kHz float PCM. */
+async function audioCorrelation(a: string, b: string): Promise<number | null> {
+  try {
+    const pcmA = path.join(OUT_DIR, "golden-a.pcm");
+    const pcmB = path.join(OUT_DIR, "golden-b.pcm");
+    for (const [file, out] of [[a, pcmA], [b, pcmB]] as const) {
+      await execFileP("ffmpeg", ["-y", "-v", "error", "-i", file, "-f", "f32le", "-ac", "1", "-ar", "48000", out], { maxBuffer: 32 * 1024 * 1024 });
+    }
+    const read = (p: string): Float32Array => {
+      const buf = fs.readFileSync(p);
+      return new Float32Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 4));
+    };
+    const x = read(pcmA);
+    const y = read(pcmB);
+    const n = Math.min(x.length, y.length);
+    if (n < 4800) return null; // <0.1s — nothing to correlate
+    const at = (v: Float32Array, i: number): number => v[i] ?? 0;
+    let sx = 0, sy = 0;
+    for (let i = 0; i < n; i++) { sx += at(x, i); sy += at(y, i); }
+    const mx = sx / n, my = sy / n;
+    let num = 0, dx2 = 0, dy2 = 0;
+    for (let i = 0; i < n; i++) {
+      const dx = at(x, i) - mx, dy = at(y, i) - my;
+      num += dx * dy; dx2 += dx * dx; dy2 += dy * dy;
+    }
+    if (dx2 === 0 && dy2 === 0) return 1; // both silent — same silence
+    if (dx2 === 0 || dy2 === 0) return 0;
+    return num / Math.sqrt(dx2 * dy2);
+  } catch {
+    return null;
+  }
+}
+
+// The deterministic fixture renderers — one per engine, all $0 AI spend.
+// The metadata's `fixture` field describes each; changing one is a
+// re-baseline (deliberate, via --write-golden).
+
+async function renderGoldenGraphics(dir: string): Promise<string> {
+  const { renderGraphics } = await import("../src/lib/tubeforge/graphics/render");
+  // THE PURE NATIVE SCAFFOLD — deliberately NOT scaffoldGraphicsDocLlm:
+  // without a provided `call` that planner dials the REAL gateway when the
+  // environment carries keys (temperature 0.3 — different plan every run),
+  // and a golden fixture must be bit-deterministic BY CONSTRUCTION, not
+  // deterministic-when-the-gateway-is-down. The rule-table base IS the
+  // production degradation floor — the same shape Part C renders in CI.
+  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
+  const doc = scaffoldGraphicsDoc({
+    scenes: [{ index: 1, title: "The golden frame", narration: "one two three four five" }],
+    topic: "s165 golden graphics",
+    width: 640,
+    height: 360,
+    fps: 24,
+  });
+  const bed = path.join(dir, "bed.flac");
+  await ffmpeg(["-f", "lavfi", "-i", "sine=frequency=220:duration=8", "-ar", "48000", "-ac", "2", bed]);
+  const res = await renderGraphics(doc, { outDir: dir, musicPath: bed });
+  return res.file;
+}
+
+async function renderGoldenWhiteboard(dir: string): Promise<string> {
+  const { renderWhiteboard } = await import("../src/lib/tubeforge/whiteboard/render");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
+  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const project = scaffoldWhiteboardProject({
+    scenes: [{ index: 1, title: "The golden board", narration: "one two three four five" }],
+    topic: "s165 golden whiteboard",
+    width: 640,
+    height: 360,
+    fps: 24,
+  });
+  project.scenes[0].durationMs = 3000; // explicit clock — the fixture stays small
+  const lib = loadLibrary();
+  const { project: valid, errors } = validateWhiteboardProject(project, lib.libraryIndex);
+  if (!valid) throw new Error(`the golden whiteboard fixture is invalid: ${errors.join("; ")}`);
+  const bed = path.join(dir, "bed.flac");
+  await ffmpeg(["-f", "lavfi", "-i", "sine=frequency=220:duration=6", "-ar", "48000", "-ac", "2", bed]);
+  const res = await renderWhiteboard(valid, { outDir: dir, musicPath: bed });
+  return res.file;
+}
+
+async function renderGoldenScene3d(dir: string): Promise<string> {
+  const { renderScene3D } = await import("../src/lib/tubeforge/render3d");
+  // 640x360 + the S160 look seam (sky, shadows, several lit objects): the
+  // first frame must carry real raster detail — the engine's blank-frame
+  // guard refuses a sub-4KB first JPEG, and a tiny dark canvas can duck
+  // under it while rendering perfectly.
+  const doc: import("../src/lib/tubeforge/scene3d").Scene3D = {
+    version: 1,
+    aspect: "16:9",
+    width: 640,
+    height: 360,
+    fps: 24,
+    durationSec: 4,
+    background: "#1a2436",
+    sky: { top: "#7fb0e8", horizon: "#f0d8b8" },
+    shadows: true,
+    camera: {
+      fov: 55,
+      keyframes: [
+        { t: 0, position: [0, 2.2, 7], lookAt: [0, 0.3, 0] },
+        { t: 0.5, position: [1.6, 2.2, 5.6], lookAt: [0, 0.3, 0], ease: "measured-out" },
+        { t: 1, position: [-1.2, 2.8, 4.8], lookAt: [0, 0.3, 0], ease: "measured-in-out" },
+      ],
+    },
+    objects: [
+      { id: "ground", kind: "plane", position: [0, -0.5, 0], scale: [12, 1, 12], material: { color: "#c8b890", roughness: 0.9 } },
+      { id: "cube", kind: "box", position: [0, 0.3, 0], material: { color: "#e08040", metalness: 0.1, roughness: 0.5 } },
+      { id: "pillar", kind: "box", position: [-1.4, 0.5, -0.8], scale: [0.6, 2, 0.6], material: { color: "#40a080", roughness: 0.6 } },
+      { id: "ball", kind: "sphere", position: [1.3, 0.4, 0.5], scale: [1.4, 1.4, 1.4], material: { color: "#8050c0", roughness: 0.35 } },
+    ],
+    lights: [
+      { kind: "ambient", color: "#8fa8c0", intensity: 0.5 },
+      { kind: "directional", color: "#ffffff", intensity: 1.2, direction: [0.4, 1, 0.6] },
+    ],
+  };
+  const res = await renderScene3D(doc, { outDir: dir });
+  return res.file;
+}
+
+const GOLDEN_FIXTURES: Record<string, (dir: string) => Promise<string>> = {
+  graphics: renderGoldenGraphics,
+  whiteboard: renderGoldenWhiteboard,
+  scene3d: renderGoldenScene3d,
+};
+
+async function partD(): Promise<void> {
+  console.log("\nPart D — the S165 golden-video harness (committed baselines + tolerance metadata)");
+  const metaPath = path.join(GOLDEN_DIR, "golden-metadata.json");
+  const meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as {
+    version: number;
+    engines: GoldenEngineMeta[];
+  };
+  if (meta.version !== 1 || !Array.isArray(meta.engines) || meta.engines.length === 0) {
+    throw new Error("the golden metadata is not a v1 engines table — the harness cannot run");
+  }
+  check("GOLDEN", "the committed metadata covers three engines",
+    meta.engines.length === 3 && meta.engines.every((e) => e.engine && e.baseline),
+    meta.engines.map((e) => e.engine).join(", "));
+
+  for (const engine of meta.engines) {
+    const render = GOLDEN_FIXTURES[engine.engine];
+    if (!render) throw new Error(`no fixture renderer for engine ${engine.engine} — the metadata names an unknown engine`);
+    const dir = path.join(OUT_DIR, `golden-${engine.engine}`);
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+
+    const fresh = await render(dir);
+    const baselinePath = path.join(GOLDEN_DIR, engine.baseline);
+    if (!fs.existsSync(baselinePath)) {
+      check("GOLDEN", `${engine.engine}: the committed baseline exists`, false, `${engine.baseline} missing — run --only=D --write-golden to baseline deliberately`);
+      continue;
+    }
+
+    // Frame counts + the delivered clock first (the two-clock law rides
+    // the golden lane too — a clock drift fails before any pixel math).
+    const freshFrames = await countVideoFrames(fresh);
+    const baseFrames = await countVideoFrames(baselinePath);
+    check("GOLDEN", `${engine.engine}: the fresh render delivers the baseline's frame count`,
+      freshFrames !== null && freshFrames === baseFrames,
+      `fresh ${freshFrames} vs baseline ${baseFrames}`);
+    const freshDur = (await probeDurationSec(fresh)) ?? -1;
+    const baseDur = (await probeDurationSec(baselinePath)) ?? -1;
+    check("GOLDEN", `${engine.engine}: the delivered duration matches the baseline`,
+      Math.abs(freshDur - baseDur) <= 0.06,
+      near(freshDur, baseDur, 0.06));
+
+    // The per-frame PSNR pass — the committed tolerances.
+    const stats = await psnrRunStats(fresh, baselinePath, engine.minPsnr);
+    if (stats === null) {
+      check("GOLDEN", `${engine.engine}: the PSNR pass ran`, false, "the psnr filter produced no stats — the harness cannot judge");
+      continue;
+    }
+    check("GOLDEN", `${engine.engine}: per-frame PSNR within the committed floor (${engine.minPsnr} dB)`,
+      stats.failures <= engine.maxFrameFailures,
+      `mean ${Number.isFinite(stats.averagePsnr) ? (stats.averagePsnr ?? 0).toFixed(2) : "inf"} dB, ${stats.failures}/${stats.frames} frames below the floor (allowed ${engine.maxFrameFailures})`);
+
+    // The audio correlation — null floor means the fixture is silent.
+    if (engine.minAudioCorrelation === null) {
+      check("GOLDEN", `${engine.engine}: audio correlation skipped (the fixture is silent)`, true, "minAudioCorrelation=null in the metadata");
+    } else {
+      const r = await audioCorrelation(fresh, baselinePath);
+      check("GOLDEN", `${engine.engine}: audio correlation within the committed floor (${engine.minAudioCorrelation})`,
+        r !== null && r >= engine.minAudioCorrelation,
+        r === null ? "unmeasurable" : `r=${r.toFixed(4)}`);
+    }
+  }
+
+  // The deliberate re-baseline: render fresh, overwrite the committed
+  // baselines. Metadata floors stay hand-authored (never machine-stamped).
+  if (WRITE_GOLDEN) {
+    console.log("\n  --write-golden: re-rendering the baselines (a DELIBERATE re-baseline)");
+    for (const engine of meta.engines) {
+      const rebaseline = GOLDEN_FIXTURES[engine.engine];
+      if (!rebaseline) throw new Error(`no fixture renderer for engine ${engine.engine} — the metadata names an unknown engine`);
+      const dir = path.join(OUT_DIR, `golden-${engine.engine}`);
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.mkdirSync(dir, { recursive: true });
+      const fresh = await rebaseline(dir);
+      fs.copyFileSync(fresh, path.join(GOLDEN_DIR, engine.baseline));
+      console.log(`  ✓ ${engine.engine}: baseline rewritten (${engine.baseline})`);
+    }
+  }
+}
+
+// ===========================================================================
+// PART E — the S165 DEDUP THROUGHPUT BENCHMARK (the audit's acceptance:
+// "throughput benchmark, dedup on a 30s hold scene"). One graphics scene,
+// motion for ~2s then a ~28s legal hold, rendered TWICE through the SAME
+// pipeline — staticFrameDedup:false (the per-frame loop) vs default (the
+// anchor + PSNR + reuse lane) — and the honest numbers land in the report.
+// The faithfulness half matters as much as the speed: the two finals must
+// carry the same frame count, the same duration (the two-clock law) and
+// PSNR-identical pixels.
+// ===========================================================================
+
+async function partE(): Promise<void> {
+  console.log("\nPart E — the S165 dedup throughput benchmark (a 30s hold scene)");
+  const { renderGraphics } = await import("../src/lib/tubeforge/graphics/render");
+  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
+  const { parsePsnrSummary } = await import("../src/lib/tubeforge/graphics/static-dedup");
+
+  // THE PURE NATIVE SCAFFOLD — deliberately NOT scaffoldGraphicsDocLlm: the
+  // benchmark renders the SAME doc TWICE and compares the arms; without a
+  // provided `call` that planner dials the REAL gateway when the environment
+  // carries keys (temperature 0.3 — the two arms could get two different
+  // docs and the comparison would be a lie). The rule-table base is
+  // deterministic by construction, $0 AI spend, same shape Part D baselines.
+  const makeDoc = (): import("../src/lib/tubeforge/graphics/types").GraphicsDoc => {
+    const doc = scaffoldGraphicsDoc({
+      scenes: [{ index: 1, title: "The long hold", narration: "one two three four five" }],
+      topic: "s165 dedup benchmark",
+      width: 640,
+      height: 360,
+      fps: 24,
+    });
+    doc.scenes[0].durationMs = 30_000; // ~2s of motion, ~28s of legal hold
+    return doc;
+  };
+
+  const runArm = async (dedup: boolean): Promise<{
+    wallMs: number; file: string; result: Awaited<ReturnType<typeof renderGraphics>>;
+  }> => {
+    const dir = path.join(OUT_DIR, dedup ? "dedup-on" : "dedup-off");
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.mkdirSync(dir, { recursive: true });
+    const doc = makeDoc();
+    const t0 = Date.now();
+    const result = await renderGraphics(doc, { outDir: dir, staticFrameDedup: dedup });
+    return { wallMs: Date.now() - t0, file: result.file, result };
+  };
+
+  const off = await runArm(false);
+  const on = await runArm(true);
+
+  const onScene = on.result.scenes[0];
+  const offFrames = (await countVideoFrames(off.file)) ?? -1;
+  const onFrames = (await countVideoFrames(on.file)) ?? -1;
+  const offDur = (await probeDurationSec(off.file)) ?? -1;
+  const onDur = (await probeDurationSec(on.file)) ?? -1;
+  const reused = onScene?.dedup?.reusedFrames ?? 0;
+  const shotsOn = onScene?.dedup?.screenshotsTaken ?? onFrames;
+  const shotsOff = offFrames;
+
+  // The two-clock law: dedup must not move the delivered clock.
+  check("DEDUP", "the delivered clock NEVER changes (frames + duration identical, dedup on vs off)",
+    onFrames === offFrames && Math.abs(onDur - offDur) <= 0.06,
+    `${onFrames} frames ≡ ${offFrames} frames, ${onDur.toFixed(2)}s ≡ ${offDur.toFixed(2)}s`);
+  // The faithfulness half: the deduped pixels ARE the per-frame pixels.
+  // The psnr summary rides stderr at info level; a nonzero exit still
+  // carries the summary in the rejection's stderr.
+  let psnrDb: number | null = null;
+  try {
+    const { stderr } = await execFileP("ffmpeg", [
+      "-hide_banner", "-i", on.file, "-i", off.file,
+      "-filter_complex", "[0:v][1:v]psnr", "-f", "null", "-",
+    ], { maxBuffer: 32 * 1024 * 1024 });
+    psnrDb = parsePsnrSummary(stderr);
+  } catch (e) {
+    const err = e as { stderr?: string };
+    psnrDb = parsePsnrSummary(err.stderr ?? "");
+  }
+  check("DEDUP", "the dedup lane is pixel-faithful (PSNR dedup-on vs dedup-off)",
+    psnrDb !== null && psnrDb >= 60,
+    psnrDb === null ? "unmeasurable" : `${Number.isFinite(psnrDb) ? psnrDb.toFixed(2) + " dB" : "inf"} (floor 60)`);
+  // The throughput half — recorded honestly, whatever the numbers say.
+  check("DEDUP", "the hold stretch rode the anchor (reuse happened)",
+    reused > 0 && shotsOn < shotsOff,
+    `${reused} of ${offFrames} frames reused; screenshots ${shotsOn} vs ${shotsOff}`);
+  const speedup = off.wallMs / Math.max(1, on.wallMs);
+  check("DEDUP", "the wall-clock throughput win is recorded (honest numbers, never fabricated)",
+    on.wallMs < off.wallMs,
+    `dedup off ${off.wallMs}ms vs on ${on.wallMs}ms (${speedup.toFixed(2)}×)`);
+
+  console.log(`\n  benchmark receipt: 30s hold scene @640×360/24 — dedup OFF: ${off.wallMs}ms wall, ${shotsOff} chromium screenshots; ` +
+    `dedup ON: ${on.wallMs}ms wall, ${shotsOn} screenshots, ${reused} frames reused (${speedup.toFixed(2)}×); ` +
+    `delivered clock identical (${onFrames} frames, ${onDur.toFixed(2)}s); PSNR off-vs-on ${psnrDb === null ? "unmeasurable" : Number.isFinite(psnrDb) ? psnrDb.toFixed(1) + " dB" : "inf"}`);
+}
+
+// ===========================================================================
 async function main(): Promise<void> {
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const t0 = Date.now();
-  await partA();
-  await partB();
-  await partC();
+  if (runPart("A")) await partA();
+  if (runPart("B")) await partB();
+  if (runPart("C")) await partC();
+  if (runPart("D")) await partD();
+  if (runPart("E")) await partE();
 
   const report = {
     battery: "S87 slice 5 — the §4.C acceptance battery",

@@ -23183,6 +23183,272 @@ await test("S164 the fill styles — hachure inside by construction, the wrapper
   for (const p of d1) ok(inside(square, p), "every dot kept is inside the shape");
 });
 
+// ---------- S165: the render-farm determinism + throughput slice ----------
+
+suiteStart("S165 — the render-farm determinism + throughput slice (golden harness, static dedup, the frame-truth scan)");
+
+await test("S165 (a) the static-dedup pure law — stretches, the plan's two-clock shape, the fail-closed decision", async () => {
+  const sd = await import("../src/lib/tubeforge/graphics/static-dedup");
+  eq(sd.DEDUP_MIN_STRETCH_FRAMES, 8, "the stretch floor (the spot check must pay for itself)");
+  eq(sd.DEDUP_PSNR_FLOOR_DB, 60, "the spot-check floor (identical pixels measure inf; a 1-value drift ≈48; motion <30)");
+
+  const keysOf = (n: number, k: string): string[] => Array.from({ length: n }, () => k);
+  // THE STRETCH SCAN: maximal equal-key runs at or above the floor.
+  eq(sd.findStaticStretches([]).length, 0, "an empty payload scans to no stretches");
+  eq(sd.findStaticStretches(keysOf(7, "a")).length, 0, "a 7-frame run is below the floor — per-frame, untouched");
+  eq(sd.findStaticStretches(keysOf(8, "a")).map((s) => [s.start, s.end]), [[0, 7]], "an 8-frame run IS a stretch (the floor is exact)");
+  eq(
+    sd.findStaticStretches([...keysOf(10, "a"), "b", ...keysOf(9, "c")]).map((s) => [s.start, s.end]),
+    [[0, 9], [11, 19]],
+    "two runs separated by one differing key are two stretches",
+  );
+  eq(
+    sd.findStaticStretches([...keysOf(15, "a"), "b", ...keysOf(14, "a")]).map((s) => [s.start, s.end]),
+    [[0, 14], [16, 29]],
+    "ONE changed payload key splits the hold (the drift detector)",
+  );
+  eq(
+    sd.findStaticStretches(keysOf(20, "a"), 12).map((s) => [s.start, s.end]),
+    [[0, 19]],
+    "a custom minStretch is honored",
+  );
+
+  // THE PLAN — the two-clock law by construction: the plan is the delivered
+  // count, every frame gets exactly one step, anchors shoot, members reuse.
+  const payload = [...keysOf(15, "a"), "b", ...keysOf(14, "a")];
+  const plan = sd.staticDedupPlan(payload);
+  const stepAt = (i: number) => {
+    const s = plan[i];
+    if (s === undefined) throw new Error(`no plan step at frame ${i}`);
+    return s;
+  };
+  eq(plan.length, payload.length, "the plan is the delivered count (the two-clock law)");
+  eq(plan.filter((s) => s.kind === "shoot").length, payload.length - 27, "27 frames reuse (14 + 13); every other frame shoots");
+  eq(stepAt(0).kind, "shoot", "the stretch anchor shoots");
+  eq(stepAt(15).kind, "shoot", "the differing frame between the stretches shoots");
+  eq(stepAt(5).kind, "reuse", "stretch members reuse");
+  const step5 = stepAt(5);
+  ok(step5.kind === "reuse" && step5.anchor === 0, "member 5 rides anchor 0");
+  eq(stepAt(16).kind, "shoot", "a stretch's FIRST frame never reuses itself");
+  const reuseAnchors = plan.filter((s) => s.kind === "reuse").map((s) => (s.kind === "reuse" ? s.anchor : -1));
+  ok(reuseAnchors.every((a) => a === 0 || a === 16), "every reuse rides ITS OWN stretch's anchor");
+  // No holds → everything shoots (the absent-feature identity, inside the lane).
+  const noHold = sd.staticDedupPlan(Array.from({ length: 20 }, (_, i) => `k${i}`));
+  ok(noHold.every((s) => s.kind === "shoot"), "all-distinct payloads plan zero reuse");
+  // Σ shoot + Σ reuse ≡ delivered count (the accounting closes).
+  const shootN = plan.filter((s) => s.kind === "shoot").length;
+  const reuseN = plan.filter((s) => s.kind === "reuse").length;
+  eq(shootN + reuseN, payload.length, "Σ shoot + Σ reuse ≡ the delivered count");
+
+  // THE SPOT FRAME: the stretch's middle, never its anchor.
+  eq(sd.dedupSpotFrame({ start: 0, end: 7 }), 3, "the midpoint of [0,7]");
+  eq(sd.dedupSpotFrame({ start: 16, end: 29 }), 22, "the midpoint of [16,29]");
+  for (const st of sd.findStaticStretches(payload)) {
+    ok(sd.dedupSpotFrame(st) > st.start, `the spot check of [${st.start},${st.end}] is never the anchor`);
+  }
+
+  // THE DECISION — fail-closed: reuse ONLY on a measured PSNR at/above the floor.
+  eq(sd.dedupDecision(null), "fallback", "unmeasurable → fallback (never a vacuous pass)");
+  eq(sd.dedupDecision(Number.NaN), "fallback", "NaN → fallback");
+  eq(sd.dedupDecision(59.9), "fallback", "below the floor → fallback (per-frame rendering)");
+  eq(sd.dedupDecision(60), "reuse", "at the floor → reuse");
+  eq(sd.dedupDecision(Infinity), "reuse", "inf (identical pixels) → reuse");
+  eq(sd.dedupDecision(61, 65), "fallback", "a custom floor is honored");
+});
+
+await test("S165 (b) the PSNR reading law — inf is a PASS (identical pixels), unparseable fails, one parser for both consumers", async () => {
+  const sd = await import("../src/lib/tubeforge/graphics/static-dedup");
+  // The summary line (the render's spot check): last average wins.
+  eq(
+    sd.parsePsnrSummary("[Parsed_psnr_0 @ 0xdeadbeef] PSNR y:47.32 u:46.90 v:47.81 average:47.32"),
+    47.32,
+    "the ffmpeg summary's average parses",
+  );
+  eq(
+    sd.parsePsnrSummary("PSNR y:inf u:inf v:inf average:inf"),
+    Infinity,
+    "identical pixels print inf — preserved as Infinity, never read as a failure",
+  );
+  eq(sd.parsePsnrSummary("frame= 720 fps=120 q=-1.0 Lsize=    N/A"), null, "no summary → null (fail-closed)");
+  eq(
+    sd.parsePsnrSummary("PSNR y:30.1 average:30.1\n[psnr] PSNR y:44.2 average:44.2"),
+    44.2,
+    "the LAST summary line wins",
+  );
+  // The per-frame stats file (the golden harness): inf passes, NaN/unparseable fails.
+  const stats = sd.parsePsnrFrameStats(
+    [
+      "n:1 mse:283412.03 psnr_avg:26.49",
+      "n:2 mse:0.00 psnr_avg:inf",
+      "n:3 mse:104.31 psnr_avg:31.22",
+    ].join("\n"),
+    30,
+  );
+  eq(stats.frames, 3, "one line per compared frame");
+  eq(stats.failures, 1, "only the sub-floor finite frame fails — inf (identical pixels) is a PASS");
+  ok(stats.averagePsnr === Infinity, "the mean honestly includes the identical frame (any inf ⇒ mean inf)");
+  const finite = sd.parsePsnrFrameStats(
+    ["n:1 mse:283412.03 psnr_avg:26.49", "n:2 mse:19.2 psnr_avg:40.12", "n:3 mse:104.31 psnr_avg:31.22"].join("\n"),
+    30,
+  );
+  eq(finite.failures, 1, "the finite-only run fails its one sub-floor frame");
+  approx(finite.averagePsnr, (26.49 + 40.12 + 31.22) / 3, 0.001, "the mean averages the finite frames");
+  const withInf = sd.parsePsnrFrameStats("n:1 mse:0.00 psnr_avg:inf\nn:2 mse:0.00 psnr_avg:inf", 60);
+  eq(withInf.failures, 0, "an all-identical run fails nothing");
+  ok(withInf.averagePsnr === Infinity, "an all-identical run's mean is the honest Infinity");
+  const unparseable = sd.parsePsnrFrameStats("n:1 mse:0.00 psnr_avg:\nn:2 mse:0.00 psnr_avg:garbage", 30);
+  eq(unparseable.frames, 2, "the line count still counts");
+  eq(unparseable.failures, 2, "unparseable values count as failures (fail-closed, never a vacuous pass)");
+  const empty = sd.parsePsnrFrameStats("", 30);
+  eq(empty.frames, 0, "no stats lines → zero frames");
+  eq(empty.averagePsnr, null, "no frames → null mean");
+});
+
+await test("S165 (c) the render wiring — the dedup lane rides the graphics render, default ON, fail-closed (the S157 usage-scan pattern)", async () => {
+  const src = fs.readFileSync("src/lib/tubeforge/graphics/render.ts", "utf8");
+  ok(src.includes('from "./static-dedup"'), "the render imports the pure dedup law");
+  ok(
+    src.includes("opts.staticFrameDedup === false ? [] : findStaticStretches(applierKeys)"),
+    "default ON — `false` restores the per-frame loop verbatim (the benchmark's off arm)",
+  );
+  // THE KEY LAW: the scan keys the applier's EFFECTIVE input, not the raw
+  // payload — the payload carries the advancing scene clock (sceneTMs), and
+  // a hold's clock moves while its picture does not. The applier never
+  // reads the provenance fields (grep the applier string itself); equal
+  // effective input ⇒ equal DOM ⇒ equal pixels (the idempotence law).
+  const composeSrc = fs.readFileSync("src/lib/tubeforge/graphics/compose.ts", "utf8");
+  ok(composeSrc.includes("export function graphicsFrameApplierKey"), "compose exports the applier key (the scan's comparison basis)");
+  const { APPLY_GRAPHICS_FRAME_FN, graphicsFramePayload, graphicsFrameApplierKey } = await import("../src/lib/tubeforge/graphics/compose");
+  ok(!APPLY_GRAPHICS_FRAME_FN.includes("sceneTMs") && !APPLY_GRAPHICS_FRAME_FN.includes("sceneId"), "the ONE applier never reads the provenance clock/scene fields");
+  const frameAt = (sceneTMs: number) => ({
+    sceneId: "s1",
+    sceneTMs,
+    camera: { zoom: 1, tx: 0, ty: 0 },
+    elements: [{ id: "a", opacity: 1, x: 10, y: 20, scale: 1, rotateDeg: 0, progress: 1 }],
+  });
+  eq(graphicsFrameApplierKey(frameAt(24000)), graphicsFrameApplierKey(frameAt(24417)), "a hold's two frames key EQUAL (the clock moved, the picture did not)");
+  ok(graphicsFramePayload(frameAt(24000)) !== graphicsFramePayload(frameAt(24417)), "the payload strings still differ (the provenance clock rides the wire, untouched)");
+  ok(graphicsFramePayload(frameAt(5)).startsWith('{"sceneId":"s1","sceneTMs":5,'), "the payload keeps its landed key order (sceneId, sceneTMs, …)");
+  ok(src.includes("graphicsFrameApplierKey(frame)"), "the render builds the applier keys beside the payloads");
+  ok(src.includes("dedupDecision(psnr)") && src.includes("psnrJpegFiles"), "the real-raster PSNR spot check rides (not just the payload scan)");
+  ok(
+    src.includes("Fail-closed: a PSNR below the floor"),
+    "the fallback for a sub-floor (or unmeasurable) spot check is in the render path",
+  );
+  ok(src.includes("reusedFrames") && src.includes("screenshotsTaken"), "the honest receipt fields ride the scene result");
+  ok(
+    src.includes("dedupReused > 0 ? { dedup:"),
+    "the receipt is ADDITIVE — absent on a fully per-frame scene (the absent-feature law)",
+  );
+  // The pure law module itself: no fs, no clock, no randomness (it rides the
+  // S165 (e) walk too — this pin names the promise, that walk enforces it).
+  const law = fs.readFileSync("src/lib/tubeforge/graphics/static-dedup.ts", "utf8");
+  ok(!/Math\.random\(/.test(law) && !/Date\.now\(/.test(law) && !/performance\.now\(/.test(law) && !/\bnew Date\(/.test(law), "static-dedup.ts is pure");
+  ok(!/\bfrom "node:fs"/.test(law) && !/\bfs\.\b/.test(law), "static-dedup.ts never touches fs");
+});
+
+await test("S165 (d) the golden-video harness — committed baselines + the tolerance metadata per engine", async () => {
+  const metaPath = "scripts/golden/s165/golden-metadata.json";
+  const meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as {
+    version: number;
+    rebaseline: string;
+    engines: { engine: string; baseline: string; minPsnr: number; maxFrameFailures: number; minAudioCorrelation: number | null; fixture: string }[];
+  };
+  eq(meta.version, 1, "the metadata is versioned");
+  ok(meta.rebaseline.includes("--write-golden"), "the deliberate re-baseline command is on record");
+  eq(meta.engines.map((e) => e.engine), ["graphics", "whiteboard", "scene3d"], "the harness covers THREE engines (the audit's acceptance)");
+  for (const e of meta.engines) {
+    ok(typeof e.minPsnr === "number" && e.minPsnr >= 20 && e.minPsnr <= 45, `${e.engine}: the PSNR floor sits in the codec-drift-safe band (got ${e.minPsnr})`);
+    ok(Number.isInteger(e.maxFrameFailures) && e.maxFrameFailures >= 0 && e.maxFrameFailures <= 8, `${e.engine}: maxFrameFailures is a sane small integer (got ${e.maxFrameFailures})`);
+    ok(
+      e.minAudioCorrelation === null || (typeof e.minAudioCorrelation === "number" && e.minAudioCorrelation >= 0.5 && e.minAudioCorrelation <= 1),
+      `${e.engine}: the audio floor is null (silent fixture) or a correlation in [0.5,1]`,
+    );
+    ok(e.baseline.endsWith(".mp4"), `${e.engine}: the baseline names an mp4`);
+    const p = path.join("scripts/golden/s165", e.baseline);
+    ok(fs.existsSync(p), `${e.engine}: the committed baseline exists (${e.baseline})`);
+    const bytes = fs.statSync(p).size;
+    ok(bytes > 10_000, `${e.engine}: the baseline carries real bytes (${bytes})`);
+    ok(typeof e.fixture === "string" && e.fixture.length > 20, `${e.engine}: the fixture is described (changing it is a deliberate re-baseline)`);
+  }
+  eq(meta.engines.find((e) => e.engine === "scene3d")?.minAudioCorrelation, null, "the 3D fixture is silent (minAudioCorrelation=null)");
+  // The battery actually READS the three tolerances (the usage scan — the
+  // metadata is the contract, Part D is its enforcement).
+  const battery = fs.readFileSync("scripts/s87-acceptance-battery.mts", "utf8");
+  for (const field of ["engine.minPsnr", "engine.maxFrameFailures", "engine.minAudioCorrelation"]) {
+    ok(battery.includes(field), `the harness reads ${field} from the committed metadata`);
+  }
+  ok(battery.includes("--write-golden"), "the harness carries the deliberate re-baseline path");
+  for (const renderer of ["renderGoldenGraphics", "renderGoldenWhiteboard", "renderGoldenScene3d"]) {
+    ok(battery.includes(renderer), `the ${renderer.replace("renderGolden", "").toLowerCase()} fixture renderer rides the battery`);
+  }
+});
+
+await test("S165 (e) THE FRAME-TRUTH SCAN — the real tree is green, the planted nondeterminism fixture is CAUGHT", async () => {
+  const ft = await import("../src/lib/tubeforge/frame-truth-scan");
+  // The rule table is the SUPERSET: every token class the existing pins ban,
+  // generalized (the existing pins stay green untouched — this ADDS coverage).
+  eq(
+    ft.FRAME_TRUTH_RULES.map((r) => r.name),
+    ["Date.now", "Date constructor", "Math.random", "performance.now"],
+    "the four banned pattern classes (the audit's list, complete)",
+  );
+  // The walk is no vacuous formality: it must INCLUDE the previously-pinned
+  // frame-truth modules (a stale manifest cannot pass) and be non-trivial.
+  const files = ft.collectFrameTruthFiles(".");
+  ok(files.length >= 24, `the walk is a real tree (${files.length} modules)`);
+  for (const must of [
+    "graphics/frame.ts", "graphics/transitions.ts", "graphics/static-dedup.ts",
+    "whiteboard/roughen.ts", "whiteboard/fills.ts", "whiteboard/svg.ts", "whiteboard/sketch.ts",
+    "characters/rig-frame.ts", "anim/easing.ts",
+  ]) {
+    ok(files.some((f) => f.endsWith(must)), `the walk INCLUDES ${must} (previously a hand-written pin)`);
+  }
+  // THE REAL TREE: zero violations (the one law, 32+ modules, no hand list).
+  const realTree = ft.scanFrameTruthTree(".");
+  eq(realTree.length, 0, realTree.length === 0 ? "the frame-truth tree is clean" : `VIOLATIONS: ${realTree.map((v) => `${v.file}:${v.line} ${v.rule}`).join("; ")}`);
+
+  // THE DELIBERATE NONDETERMINISM FIXTURE — planted in THIS scaffolding,
+  // never in shipped engine code. The scan must CATCH all four classes,
+  // name their lines, and refuse call sites while EXEMPTING commentary.
+  const fixture = [
+    "// the planted module — a frame-truth module that cheats",
+    "// (a comment naming Date.now() must NOT count — call sites, not commentary)",
+    "export function cheat(t: number): number {",
+    "  const wall = Date.now();",
+    "  const roll = Math.random();",
+    "  const perf = performance.now();",
+    "  const d = new Date(2020, 0, 1);",
+    "  return wall + roll + perf + d.getTime() + t;",
+    "}",
+  ].join("\n");
+  const caught = ft.scanFrameTruthSource(fixture, "planted-frame.ts");
+  eq(caught.length, 4, "all FOUR banned call sites are caught (the comment mention is exempt)");
+  eq(caught.map((v) => v.rule), ["Date.now", "Math.random", "performance.now", "Date constructor"], "every rule fired once, in line order");
+  eq(caught.map((v) => v.line), [4, 5, 6, 7], "the line numbers are true to the file");
+  for (const v of caught) ok(v.excerpt.length > 0 && v.why.length > 0, `${v.rule}: the violation carries its excerpt and its why`);
+  // Not vacuous: strip the cheat lines and the same scan goes clean.
+  const clean = fixture
+    .split("\n")
+    .filter((l) => !l.includes("Date.now();") && !l.includes("Math.random();") && !l.includes("performance.now();") && !l.includes("new Date("))
+    .join("\n");
+  eq(ft.scanFrameTruthSource(clean).length, 0, "the same scan passes the honest module (the fixture's catch is earned, not vacuous)");
+
+  // The WALK catches a planted file too — through the same readdir → read →
+  // scan path the real tree rides. The temp dir dies before anything ships.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "s165-scan-fixture-"));
+  try {
+    fs.writeFileSync(path.join(tmp, "planted-frame.ts"), fixture);
+    fs.writeFileSync(path.join(tmp, "innocent-frame.ts"), "// a clean module (its comment may name performance.now() freely)\nexport const honest = (t: number): number => t;\n");
+    const walked = ft.scanFrameTruthDir(tmp);
+    eq(walked.length, 4, "the dir walk catches the planted module and nothing else");
+    ok(walked.every((v) => v.file.endsWith("planted-frame.ts")), "the innocent file rides clean (comment immunity holds through the walk)");
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+  ok(!fs.existsSync(tmp), "the planted fixture is deleted — it never ships (test scaffolding only)");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);
 process.exit(failed > 0 ? 1 : 0);

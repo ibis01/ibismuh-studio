@@ -658,12 +658,15 @@ ${scene.camera !== undefined ? `<g id="gcam">${parts.join("\n")}</g>` : parts.jo
 // The payload + the ONE applier
 // ---------------------------------------------------------------------------
 
-/** The frame truth serialized for the page — frameAt's state, verbatim,
- *  in doc order. Key order stable; byte-identical for equal frames. */
-export function graphicsFramePayload(frame: GraphicsFrameState): string {
-  return JSON.stringify({
-    sceneId: frame.sceneId,
-    sceneTMs: frame.sceneTMs,
+/** S165 — the applier's EFFECTIVE input shape: everything the ONE applier
+ *  actually reads (the elements' channels + the camera). sceneTMs/sceneId
+ *  ride graphicsFramePayload as provenance, but the applier never reads
+ *  them — its writes are absolute sets from these fields alone (the
+ *  idempotence law), so equal shape ⇒ equal DOM ⇒ equal pixels. The dedup
+ *  scan keys frames on THIS: a hold's clock advances; its picture does
+ *  not. Key order stable; byte-identical for equal frames. */
+function frameApplierShape(frame: GraphicsFrameState) {
+  return {
     ...(frame.camera !== undefined ? { camera: frame.camera } : {}),
     elements: frame.elements.map((e) => ({
       id: e.id,
@@ -676,7 +679,25 @@ export function graphicsFramePayload(frame: GraphicsFrameState): string {
       ...(e.counterValue !== undefined ? { counterValue: e.counterValue } : {}),
       ...(e.frameIndex !== undefined ? { frameIndex: e.frameIndex } : {}),
     })),
+  };
+}
+
+/** The frame truth serialized for the page — frameAt's state, verbatim,
+ *  in doc order (the applier's provenance fields FIRST, then the shape it
+ *  reads). Key order stable; byte-identical for equal frames. */
+export function graphicsFramePayload(frame: GraphicsFrameState): string {
+  return JSON.stringify({
+    sceneId: frame.sceneId,
+    sceneTMs: frame.sceneTMs,
+    ...frameApplierShape(frame),
   });
+}
+
+/** S165 — the dedup scan's key: the applier's effective input alone (see
+ *  frameApplierShape). Deliberately NOT graphicsFramePayload — the payload
+ *  carries the advancing scene clock, and a hold would never key equal. */
+export function graphicsFrameApplierKey(frame: GraphicsFrameState): string {
+  return JSON.stringify(frameApplierShape(frame));
 }
 
 /** The ONE applier — shared by the renderer (page.evaluate) and the editor
