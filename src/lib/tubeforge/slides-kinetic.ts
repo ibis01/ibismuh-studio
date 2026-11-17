@@ -40,9 +40,11 @@
 //
 // SECURITY POSTURE (whiteboard/graphics/rig parity): the composed HTML is the
 // composer's own output (esc() at every interpolation); chromium launches
-// with ALL network routes aborted; the page loads via file:// (the photo-art
-// + logo subresource law); per-scene context recycling hands chromium's
-// memory back (the S75 E10 receipt).
+// with ALL network routes aborted; the page mounts via setContent — the
+// photo art and the brand logo ride as data URIs, so the page needs NO
+// network and NO file navigation (an aborted route can never break a
+// navigation — the graphics engine's exact shape); per-scene context
+// recycling hands chromium's memory back (the S75 E10 receipt).
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -502,6 +504,26 @@ function slideKineticClipPath(videoDirPath: string, sceneIndex: number): string 
   return path.join(videoDirPath, `slide-anim-${String(sceneIndex).padStart(2, "0")}.mp4`);
 }
 
+/** File path (or file:// URL) → data URI (null when unreadable) — the
+ *  page mounts via setContent with ALL routes aborted, so every image must
+ *  ride INSIDE the document (the graphics engine's no-navigation shape). */
+async function dataUriFromFile(p: string | null | undefined): Promise<string | null> {
+  if (!p) return null;
+  const file = p.startsWith("file://") ? p.slice("file://".length) : p;
+  try {
+    const bytes = fs.readFileSync(file);
+    const ext = path.extname(file).toLowerCase();
+    const mime =
+      ext === ".png" ? "image/png" :
+      ext === ".webp" ? "image/webp" :
+      ext === ".svg" ? "image/svg+xml" :
+      ext === ".gif" ? "image/gif" : "image/jpeg";
+    return `data:${mime};base64,${bytes.toString("base64")}`;
+  } catch {
+    return null; // unreadable art → the photo layout degrades to its fallback (the composer's law)
+  }
+}
+
 /** Render the deck's kinetic clips. Per scene: a cache hit answers the clip
  *  path; a miss renders frames + encodes; a FAILURE of one scene answers
  *  null for it (that scene falls back to the static deck — the honest
@@ -517,9 +539,11 @@ export async function renderKineticSlideClips(
   const browser = await chromium.launch({ headless: true, args: [...WB_CHROMIUM_LAUNCH_ARGS] });
   const out: (string | null)[] = new Array(items.length).fill(null);
   const fps = Math.min(opts.fps, 30); // the D3 shared timebase (the rig law)
-  const tmpHtml = path.join(opts.outDir, `slide-anim-tmp-${Date.now()}.html`);
   const isCancel = (e: unknown): boolean =>
     e instanceof Error && e.name === "JobCancelledError";
+  // The brand's logo rides INSIDE the page too (one read per deck).
+  const brandDataUri = await dataUriFromFile(opts.brand?.logoUrl ?? null);
+  const brand = brandDataUri && opts.brand ? { ...opts.brand, logoUrl: brandDataUri } : opts.brand;
   try {
     for (const [i, item] of items.entries()) {
       const clipPath = slideKineticClipPath(videoDirPath, item.scene.index);
@@ -551,10 +575,11 @@ export async function renderKineticSlideClips(
       try {
         fs.mkdirSync(framesDir, { recursive: true });
         const durSec = frames / fps;
-        fs.writeFileSync(
-          tmpHtml,
-          slideHtml(item.spec, item.imageUrl ?? null, opts.brand ?? null, true)
-        );
+        // The photo art rides as a data URI — setContent + ALL routes
+        // aborted (the graphics engine's page shape; a route abort must
+        // never be able to break the page's own mounting).
+        const imageDataUri = await dataUriFromFile(item.imageUrl);
+        const html = slideHtml(item.spec, imageDataUri, brand ?? null, true);
         const context = await browser.newContext({
           viewport: { width: SLIDE_OUT_W, height: SLIDE_OUT_H },
           deviceScaleFactor: SLIDE_KINETIC_SCALE,
@@ -562,7 +587,7 @@ export async function renderKineticSlideClips(
         await context.route("**/*", (route) => route.abort());
         const page = await context.newPage();
         try {
-          await page.goto(`file://${tmpHtml}`, { waitUntil: "load" });
+          await page.setContent(html, { waitUntil: "load" });
           await page.waitForTimeout(30); // font shaping settle (the PNG law)
           for (let f = 0; f < frames; f++) {
             const tMs = (f / fps) * 1000;
@@ -601,7 +626,6 @@ export async function renderKineticSlideClips(
       }
     }
   } finally {
-    fs.rmSync(tmpHtml, { force: true });
     await browser.close();
   }
   return out;
