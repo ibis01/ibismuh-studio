@@ -16,7 +16,8 @@ import { voiceCatalog } from "./providers/tts";
 import { parseReferenceKeys, CHARACTER_REFERENCE_CAP } from "./references";
 import * as storage from "./storage";
 import {
-  RIG_MOUTH_SLOTS,
+  RIG_MOUTH_LEGACY_SLOTS,
+  RIG_MOUTH_NEW_SLOTS,
   scaffoldRigDoc,
   validateRigDoc,
   validateRigParts,
@@ -356,9 +357,12 @@ export function characterSceneFragment(character: {
 //
 // DEGRADATION (per-part, the graphics llm-planner shape): every proposed
 // row is policed individually against the closed grammar — a bad part is
-// dropped with a reason, never silent; a PARTIAL mouth set drops ALL mouth
-// parts (the mouthless rig renders closed-mouth honestly — a partial set
-// would visibly break the speaking beats); the pose proposal keeps only
+// dropped with a reason, never silent; a PARTIAL legacy mouth set drops ALL
+// mouth parts (the mouthless rig renders closed-mouth honestly — a partial
+// set would visibly break the speaking beats); S166 — the two new classes
+// (mbp, rest) are OPTIONAL art: the prompt asks for the seven, the floor
+// stays the S125 five, a missing new class is a warning (the schedule's
+// closure/rest windows degrade to closed); the pose proposal keeps only
 // poses whose joints reference surviving parts inside the bands; a proposal
 // the validator refuses degrades to the empty sheet (the standard poses
 // arrive from the author — the validator's warnings name them). The pass
@@ -421,8 +425,9 @@ Return JSON with exactly these keys:
     { "id": "arm-l", "slot": "arm-l", "svg": "<...>" },
     { "id": "arm-r", "slot": "arm-r", "svg": "<...>" }
     ...plus any of: eye, forearm-l, forearm-r, hand-l, hand-r, leg-l, leg-r, prop
-    ...and the FIVE mouth parts, slot "mouth", each with variant:
-        closed | open | wide | oh | smile  (five separate parts, same mouth position ~(540,470))
+    ...and the SEVEN mouth parts, slot "mouth", each with variant:
+        closed | open | wide | oh | smile | mbp | rest  (seven separate parts, same mouth position ~(540,470);
+        mbp = lips pressed together (bilabial closure for m/b/p syllables), rest = the neutral relaxed mouth for pauses)
   ],
   "poses": [
     { "id": "arm-l-raise", "name": "Raise left arm", "joints": { "arm-l": { "rotateDeg": -140 } } },
@@ -435,7 +440,7 @@ Return JSON with exactly these keys:
   ]
 }
 
-Rules: every part id lowercase-kebab; every svg is ONE small SVG fragment (under 2000 chars) in stage coordinates; the five mouth parts share the exact same position so they swap invisibly; poses reference ONLY part ids you defined.`,
+Rules: every part id lowercase-kebab; every svg is ONE small SVG fragment (under 2000 chars) in stage coordinates; all seven mouth parts share the exact same position so they swap invisibly; poses reference ONLY part ids you defined.`,
     })
   );
 
@@ -460,22 +465,32 @@ Rules: every part id lowercase-kebab; every svg is ONE small SVG fragment (under
       `the parts pass returned no usable parts (${warnings.slice(0, 3).join("; ")}) — adjust the appearance description and retry`
     );
   }
-  // The partial-mouth law: a set that is not exactly the five shapes drops
-  // ALL mouth rows (the mouthless rig renders closed-mouth honestly).
+  // The partial-mouth law (S166): the FLOOR is the S125 five — a set that
+  // is not exactly the five drops ALL mouth rows (the mouthless rig renders
+  // closed-mouth honestly). The two S166 classes ride OUTSIDE the floor:
+  // kept when the model authors them, warned when missing (the schedule's
+  // closure/rest windows degrade to closed).
   const mouthVariants = survivors
     .map((r) => (r as { variant?: unknown }).variant)
     .filter((v): v is string => typeof v === "string");
   const completeMouth =
-    keptSlots.has("mouth") && RIG_MOUTH_SLOTS.every((s) => mouthVariants.includes(s));
+    keptSlots.has("mouth") && RIG_MOUTH_LEGACY_SLOTS.every((s) => mouthVariants.includes(s));
   if (keptSlots.has("mouth") && !completeMouth) {
     const before = survivors.length;
-    for (const s of RIG_MOUTH_SLOTS) {
+    for (const s of RIG_MOUTH_LEGACY_SLOTS) {
       const idx = survivors.findIndex(
         (r) => (r as { slot?: unknown }).slot === "mouth" && (r as { variant?: unknown }).variant === s
       );
       if (idx >= 0) survivors.splice(idx, 1);
     }
     warnings.push(`mouth parts dropped (${before - survivors.length}) — the set was incomplete; the rig renders closed-mouth`);
+  } else if (keptSlots.has("mouth")) {
+    const missingNew = RIG_MOUTH_NEW_SLOTS.filter((s) => !mouthVariants.includes(s));
+    if (missingNew.length > 0) {
+      warnings.push(
+        `mouth set missing the S166 classes (${missingNew.join(", ")}) — bilabial-closure and rest windows degrade to closed (add the two mouth parts to opt in)`
+      );
+    }
   }
   const art = validateRigParts(survivors);
   if (!art.parts) {

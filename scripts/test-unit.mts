@@ -20766,6 +20766,481 @@ await test("S125 the admission routes — the validator is the gate, the pass de
 });
 
 // ---------------------------------------------------------------------------
+// S166 — the character expressiveness slice (OpenToonz adoptions): the
+// mouth classes (the syllable→class map gains mbp closure windows + rest on
+// pauses), the parts set's two new art variants, and the pose tween schema
+// v-next (polar deltas + per-part rigidity — additive optional fields that
+// ride the S162 curves). The K2 gate (chain-reduction + DLS IK) is recorded,
+// NOT implemented — docs/audits/s166-k2-gate-record.md.
+// ---------------------------------------------------------------------------
+
+suiteStart("characters — S166 the expressiveness slice (mouth classes + pose v-next)");
+
+import {
+  MOUTH_CLOSURE_CLASS,
+  MOUTH_REST_CLASS,
+  MOUTH_REST_MIN_MS,
+  MOUTH_VOWEL_CYCLE,
+  SPEECH_CYCLE,
+  restSegmentsFromSpans,
+  syllableChunks,
+} from "../src/lib/tubeforge/characters/rig-frame";
+import { RIG_MOUTH_LEGACY_SLOTS, RIG_MOUTH_NEW_SLOTS } from "../src/lib/tubeforge/characters/rig2d";
+import { evalEase } from "../src/lib/tubeforge/anim/easing";
+
+/** The S166 legacy fixture — the S125 art/doc with the literal FIVE mouth
+ *  shapes (the pre-S166 set), rebuilt here so the byte goldens stay honest
+ *  whatever RIG_MOUTH_SLOTS grows to. */
+const S166_LEGACY_VARIANTS = ["closed", "open", "wide", "oh", "smile"] as const;
+const S166_LEGACY_ART: RigPartArt[] = [
+  ...ART.filter((a) => a.slot !== "mouth"),
+  ...S166_LEGACY_VARIANTS.map((v) =>
+    rigArt({ id: `mouth-${v}-art`, slot: "mouth", variant: v, svg: `<ellipse cx="540" cy="470" rx="30" ry="14" fill="#7a2e3a"/>` })
+  ),
+];
+function s166LegacyDocInput(): Record<string, unknown> {
+  const base = rigDocInput();
+  const parts = (base.parts as Record<string, unknown>[]).filter((p) => p.slot !== "mouth");
+  parts.push(
+    ...S166_LEGACY_VARIANTS.map((v, i) => ({
+      id: `mouth-${v}`,
+      slot: "mouth",
+      variant: v,
+      svgRef: `mouth-${v}-art`,
+      z: 24 + i,
+      pivot: { x: 540, y: 470 },
+      parent: "head",
+      rest: { x: 0, y: 0, scale: 1, rotateDeg: 0 },
+    }))
+  );
+  return { ...base, parts };
+}
+
+const sha256 = (s: string): string => crypto.createHash("sha256").update(s).digest("hex");
+
+await test("S166 the mouth classes — the cycle gains mbp + rest; the S125 five stay the floor", () => {
+  eq(
+    [...SPEECH_CYCLE],
+    ["open", "wide", "oh", "mbp", "rest"],
+    "the class set = the S125 vowel cycle + the two OT classes (the audit's staging, verbatim)"
+  );
+  eq([...MOUTH_VOWEL_CYCLE], ["open", "wide", "oh"], "the vowel parity cycle rides indices 0..2");
+  eq(MOUTH_CLOSURE_CLASS, "mbp", "the closure class is mbp (bilabial m/b/p)");
+  eq(MOUTH_REST_CLASS, "rest", "the pause class is rest");
+  eq(MOUTH_REST_MIN_MS, 120, "the pause floor is named, not magic");
+  eq(RIG_MOUTH_SLOTS.length, 7, "the art vocabulary carries seven shapes");
+  eq([...RIG_MOUTH_LEGACY_SLOTS], ["closed", "open", "wide", "oh", "smile"], "the S125 five are the REQUIRED floor");
+  eq([...RIG_MOUTH_NEW_SLOTS], ["mbp", "rest"], "the two S166 classes ride OUTSIDE the floor");
+  ok(RIG_MOUTH_SLOTS.slice(0, 5).join() === RIG_MOUTH_LEGACY_SLOTS.join(), "the legacy floor is a prefix (the art-swap order rides)");
+});
+
+await test("S166 the syllable chunker — onsets line up with the countSyllables slots", () => {
+  eq(syllableChunks("money"), ["mo", "ney"], "the onset maximization: m rides the first chunk");
+  eq(syllableChunks("hello"), ["he", "llo"], "two onsets (h, l) — non-bilabial");
+  eq(syllableChunks("paper"), ["pa", "per"], "both onsets bilabial");
+  eq(syllableChunks("make"), ["make"], "the silent trailing e rides the single chunk (onset m)");
+  eq(syllableChunks("tube"), ["tube"], "onset t, the coda merges");
+  eq(syllableChunks(""), [""], "junk still beats once (the countSyllables law)");
+  // The lockstep invariant — chunks ≡ syllables, always, or the class map
+  // would drift off its beat slots.
+  for (const w of ["money", "make", "tube", "paper", "hello", "beautiful", "character", "extraordinary", "workshops", "a", "m", "hmm"]) {
+    eq(syllableChunks(w).length, countSyllables(w), `chunks ≡ syllables for "${w}"`);
+  }
+});
+
+await test("S166 mbp closure windows — a bilabial onset rides the closure class, strictly inside its span", () => {
+  const beats = mouthBeatsFromSpans([{ word: "make", startMs: 0, endMs: 400 }], 1000);
+  eq(beats.length, 1, "one syllable, one window");
+  eq(beats[0].variant, "mbp", "the m-onset syllable rides the CLOSURE class (lips pressed, not an open vowel)");
+  ok(beats[0].startMs >= 0 && beats[0].endMs <= 400, "the closure window sits strictly inside its span (the W4 tolerance)");
+  eq(
+    mouthBeatsFromSpans([{ word: "paper", startMs: 0, endMs: 600 }], 1000).map((b) => b.variant),
+    ["mbp", "mbp"],
+    "p-onsets ride closure on both syllables"
+  );
+  eq(
+    mouthBeatsFromSpans([{ word: "hello", startMs: 0, endMs: 400 }], 1000).map((b) => b.variant),
+    ["open", "wide"],
+    "non-bilabial syllables keep the S125 parity (byte-stable beats)"
+  );
+  eq(
+    mouthBeatsFromSpans([{ word: "a", startMs: 0, endMs: 50 }], 100)[0].variant,
+    "open",
+    "the sub-floor span still beats once, on the vowel cycle"
+  );
+});
+
+await test("S166 rest on pauses — anchored gaps ≥ the floor ride rest (a pause, never speech)", () => {
+  const spans: WordSpan[] = [
+    { word: "hello", startMs: 0, endMs: 400 },
+    { word: "there", startMs: 500, endMs: 800 }, // 100ms articulation gap — below the floor
+    { word: "friend", startMs: 1300, endMs: 1600 }, // 500ms pause
+  ];
+  const rests = restSegmentsFromSpans(spans, 2000);
+  eq(
+    rests,
+    [
+      { startMs: 800, endMs: 1300, variant: "rest", speaking: false },
+      { startMs: 1600, endMs: 2000, variant: "rest", speaking: false },
+    ],
+    "exactly the pause + the trailing silence ride rest, each carrying speaking false"
+  );
+  ok(!rests.some((r) => r.startMs >= 400 && r.endMs <= 500), "the 100ms gap stays out (below the pause floor — the S125 world)");
+  // The floor is inclusive at the boundary.
+  eq(restSegmentsFromSpans([{ word: "a", startMs: 0, endMs: 100 }, { word: "b", startMs: 220, endMs: 400 }], 500).length, 1, "a 120ms gap IS a pause");
+  eq(restSegmentsFromSpans([{ word: "a", startMs: 0, endMs: 100 }, { word: "b", startMs: 219, endMs: 400 }], 500).length, 0, "a 119ms gap is articulation");
+});
+
+await test("S166 the schedule rides rest — estimator byte-stable, anchored pauses rest, the frame truth follows", () => {
+  // The estimator's spans TILE the clock: no gaps ≥ the floor, so its
+  // schedule keeps the S125 shape (pinned byte-exact below in the golden).
+  const narration = "hello there friend";
+  const anchors = {
+    byWord: [
+      { index: 0, startMs: 0, endMs: 400 },
+      { index: 1, startMs: 500, endMs: 800 },
+      { index: 2, startMs: 1300, endMs: 1600 },
+    ],
+  };
+  const schedule = mouthSchedule({ narration, anchors, durationMs: 2000 });
+  ok(schedule.speaking, "beats exist — the scene speaks");
+  const rests = schedule.segments.filter((s) => s.variant === MOUTH_REST_CLASS);
+  eq(
+    rests.map((r) => [r.startMs, r.endMs, r.speaking === false]),
+    [[800, 1300, true], [1600, 2000, true]],
+    "the anchored pauses ride rest windows (never speech)"
+  );
+  for (const s of schedule.segments) {
+    const owner = spans2().find((w) => s.startMs >= w.startMs && s.endMs <= w.endMs);
+    if (s.variant !== MOUTH_REST_CLASS) ok(owner !== undefined, `beat ${s.startMs}..${s.endMs} inside its word span`);
+  }
+  function spans2(): WordSpan[] {
+    return [
+      { word: "hello", startMs: 0, endMs: 400 },
+      { word: "there", startMs: 500, endMs: 800 },
+      { word: "friend", startMs: 1300, endMs: 1600 },
+    ];
+  }
+  // The frame truth: rest shows the rest art and is NOT speaking; the
+  // quick intra-phrase gap stays closed.
+  const timeline = { durationMs: 2000, rows: [] };
+  const atRest = poseAt(RIG_DOC, timeline, 1000, schedule);
+  eq(atRest.mouthVariant, "rest", "the rest window owns the variant");
+  eq(atRest.speaking, false, "a pause is not speech");
+  eq(atRest.parts.filter((p) => p.id.startsWith("mouth-") && p.visible).map((p) => p.id), ["mouth-rest"], "exactly the rest shape shows");
+  const inGap = poseAt(RIG_DOC, timeline, 450, schedule);
+  eq(inGap.mouthVariant, "closed", "the 100ms articulation gap stays closed");
+  const atBeat = poseAt(RIG_DOC, timeline, 100, schedule);
+  ok(atBeat.speaking && atBeat.mouthVariant !== "closed" && atBeat.mouthVariant !== "rest", "a beat is speech");
+});
+
+await test("S166 the honest degradation — a legacy (five-shape) rig renders closed; the closure beat stays speech", () => {
+  const legacyDoc = mustValidateDoc(s166LegacyDocInput(), S166_LEGACY_ART, "s166 legacy fixture");
+  ok(
+    true,
+    "the legacy doc validates (the S166 classes ride OUTSIDE the completeness floor)"
+  );
+  const timeline = { durationMs: 1000, rows: [] };
+  const mbp = poseAt(legacyDoc, timeline, 100, {
+    segments: [{ startMs: 0, endMs: 300, variant: MOUTH_CLOSURE_CLASS }],
+    speaking: true,
+  });
+  eq(mbp.mouthVariant, "closed", "no mbp art → closed renders");
+  eq(mbp.speaking, true, "but the closure beat is STILL speech (pressed lips are speech)");
+  const rest = poseAt(legacyDoc, timeline, 100, {
+    segments: [{ startMs: 0, endMs: 300, variant: MOUTH_REST_CLASS, speaking: false }],
+    speaking: true,
+  });
+  eq(rest.mouthVariant, "closed", "no rest art → closed renders");
+  eq(rest.speaking, false, "a pause stays non-speech");
+  // The seven-shape rig uses its art; the gesture override keeps the class
+  // law (rest is never speech, mbp is).
+  const restArt = poseAt(RIG_DOC, timeline, 100, {
+    segments: [{ startMs: 0, endMs: 300, variant: MOUTH_CLOSURE_CLASS }],
+    speaking: true,
+  });
+  eq(restArt.mouthVariant, "mbp", "the rig's mbp art swaps in");
+  ok(restArt.speaking, "speaking on the closure beat");
+  const gestureRest = poseAt(
+    RIG_DOC,
+    { durationMs: 2000, rows: [{ tMs: 0, poseId: null, mouth: MOUTH_REST_CLASS }] },
+    500
+  );
+  eq(gestureRest.mouthVariant, "rest", "a row may pin the rest class");
+  eq(gestureRest.speaking, false, "even as a gesture, rest is a pause (never speech)");
+});
+
+await test("S166 the additive-absent law — the legacy FK, doc, parts and schedule bytes ride the S125 goldens", async () => {
+  const artCheck = validateRigParts(S166_LEGACY_ART);
+  ok(artCheck.parts !== null, "the legacy library passes the gate");
+  const docCheck = validateRigDoc(s166LegacyDocInput(), artCheck.parts);
+  ok(docCheck.doc !== null, "the legacy doc passes (warned about the new classes, never refused)");
+  ok(docCheck.warnings.some((w) => w.includes("S166 classes") && w.includes("mbp, rest")), "the missing-classes warning names them");
+  const doc = docCheck.doc as NonNullable<typeof docCheck.doc>;
+  // HEAD-captured goldens (5e36d74, pre-S166) — one changed byte fails here.
+  eq(sha256(writeRigDoc(doc)), "05fd5d5331ebf7517841dfaddcd80d5bc0c091b880639da1a5ce26b1f6f7d160", "the doc bytes are the S125 bytes (absent v-next fields never write)");
+  eq(sha256(writeRigParts(artCheck.parts as RigPartArt[])), "7425ec069934e083a3353d2ebb4dfba024cb0776de2f86fc6a20be03c24928ef", "the parts bytes unchanged");
+  const timeline = {
+    durationMs: 4000,
+    rows: [
+      { tMs: 0, poseId: "arm-l-raise" },
+      { tMs: 2000, poseId: "arm-r-point", ease: "pop" as const },
+    ],
+  };
+  eq(sha256(JSON.stringify(poseAt(doc, timeline, 1300))), "224ce124373c0ff64de79b15df2537e8f8d62122814d6fd8dff757319c359ed8", "the FK hold frame (t=1300) is the S125 bytes");
+  eq(sha256(JSON.stringify(poseAt(doc, timeline, 2160))), "694914c0d012bb81d76989a3acc63b002e4a7949e1ef8060ff336de527733744", "the FK mid-tween frame (t=2160, pop) is the S125 bytes");
+  eq(sha256(JSON.stringify(poseAt(doc, timeline, 2600))), "9fc78c67cf70fd7f00561f3e24f7551daa4339ba8c445623df825f981c3f6ffb", "the FK settled frame (t=2600) is the S125 bytes");
+  eq(sha256(JSON.stringify(restRigFrame(doc))), "0a3f2b3ba744de58dcb032695af0a8071d6ef4f9d5300eeb639f3176d8bb23ca", "the rest frame is the S125 bytes");
+  eq(
+    sha256(JSON.stringify(mouthSchedule({ narration: "hello there tiny workshops", anchors: null, durationMs: 2000 }))),
+    "9153a46ed1d9b61e95d5a79c73fba7ddc3bab2ef9026afc87207771713edbb2b",
+    "the estimator schedule is the S125 bytes (its spans tile the clock — no rests, no bilabial words)"
+  );
+});
+
+await test("S166 the parts pass asks for the two new art variants; the floor stays the S125 five (source pins)", async () => {
+  const charsSrc = await fsp.readFile("src/lib/tubeforge/characters.ts", "utf8");
+  ok(charsSrc.includes("the SEVEN mouth parts"), "the prompt asks for the two new art variants");
+  ok(charsSrc.includes("closed | open | wide | oh | smile | mbp | rest"), "the variant menu lists the seven");
+  ok(charsSrc.includes("RIG_MOUTH_LEGACY_SLOTS.every"), "the drop floor reads the legacy five (a five-shape proposal still lands)");
+  ok(charsSrc.includes("mouth parts dropped"), "a partial legacy set still drops ALL mouth rows (the S125 honesty law rides)");
+  ok(charsSrc.includes("mbp = lips pressed together"), "the prompt says what the closure class draws");
+  ok(charsSrc.includes("rest = the neutral relaxed mouth"), "the prompt says what the rest class draws");
+});
+
+await test("S166 the pose schema v-next validates — polar bands, rigid boolean, polar seniority", () => {
+  const badAngle = validateRigDoc(
+    rigDocInput({ poses: [{ id: "x", name: "X", joints: { "arm-l": { rotateDeg: 0, polar: { angleDeg: 361, distance: 10 } } } }] }),
+    ART
+  );
+  ok(badAngle.doc === null && badAngle.errors[0].includes("polar angleDeg 361 outside the band"), "the polar angle rides the rotation band");
+  const badDistance = validateRigDoc(
+    rigDocInput({ poses: [{ id: "x", name: "X", joints: { "arm-l": { rotateDeg: 0, polar: { angleDeg: 10, distance: 2000 } } } }] }),
+    ART
+  );
+  ok(badDistance.doc === null && badDistance.errors[0].includes("polar distance 2000 outside the band"), "the polar distance rides the offset band");
+  const negative = validateRigDoc(
+    rigDocInput({ poses: [{ id: "x", name: "X", joints: { "arm-l": { rotateDeg: 0, polar: { angleDeg: 10, distance: -1 } } } }] }),
+    ART
+  );
+  ok(negative.doc === null && negative.errors[0].includes("polar distance -1"), "a negative distance refuses");
+  const junkRigid = validateRigDoc(
+    rigDocInput({ poses: [{ id: "x", name: "X", joints: { "arm-l": { rotateDeg: 0, rigid: "yes" as unknown as boolean } } }] }),
+    ART
+  );
+  ok(junkRigid.doc === null && junkRigid.errors[0].includes("rigid must be a boolean"), "rigid is boolean or absent");
+  const senior = validateRigDoc(
+    rigDocInput({ poses: [{ id: "x", name: "X", joints: { "arm-l": { rotateDeg: 0, x: 999, y: 999, polar: { angleDeg: 0, distance: 100 } } } }] }),
+    ART
+  );
+  ok(senior.doc !== null, "polar + x/y validates");
+  ok(senior.warnings.some((w) => w.includes("polar overrides x/y")), "the redundancy is warned, never obeyed");
+  const doc = senior.doc as NonNullable<typeof senior.doc>;
+  const xOnly = mustValidateDoc(
+    rigDocInput({ poses: [{ id: "x", name: "X", joints: { "arm-l": { rotateDeg: 0, polar: { angleDeg: 0, distance: 100 } } } }] }),
+    ART,
+    "polar-only"
+  );
+  eq(
+    JSON.stringify(poseAt(doc, { durationMs: 1000, rows: [{ tMs: 0, poseId: "x" }] }, POSE_TWEEN_MS + 1).parts.find((p) => p.id === "arm-l")),
+    JSON.stringify(poseAt(xOnly, { durationMs: 1000, rows: [{ tMs: 0, poseId: "x" }] }, POSE_TWEEN_MS + 1).parts.find((p) => p.id === "arm-l")),
+    "polar IS the positional delta — the ignored x/y byte-matches the polar-only doc"
+  );
+});
+
+await test("S166 polar deltas — the axis-equivalence is exact, the tween rides the ARC, not the chord", () => {
+  // angle 0: cos 0 = 1, sin 0 = 0 EXACTLY — the polar delta byte-matches its cartesian twin.
+  const polarDoc = mustValidateDoc(
+    rigDocInput({ poses: [{ id: "p", name: "P", joints: { "arm-l": { rotateDeg: 0, polar: { angleDeg: 0, distance: 100 } } } }] }),
+    ART,
+    "polar-axis"
+  );
+  const cartDoc = mustValidateDoc(
+    rigDocInput({ poses: [{ id: "p", name: "P", joints: { "arm-l": { rotateDeg: 0, x: 100 } } }] }),
+    ART,
+    "cart-twin"
+  );
+  const at = POSE_TWEEN_MS + 1;
+  const polarArm = poseAt(polarDoc, { durationMs: 1000, rows: [{ tMs: 0, poseId: "p" }] }, at).parts.find((p) => p.id === "arm-l");
+  const cartArm = poseAt(cartDoc, { durationMs: 1000, rows: [{ tMs: 0, poseId: "p" }] }, at).parts.find((p) => p.id === "arm-l");
+  ok(polarArm && cartArm, "frames exist");
+  eq(JSON.stringify(polarArm?.matrix), JSON.stringify(cartArm?.matrix), "polar(angle 0, 100) ≡ x:100 BYTE-IDENTICAL at settle");
+  // The ARC: both keys polar → the angle+distance tween as scalars. The
+  // mid-tween (ease-in-out is symmetric: u = 0.5 exactly) sits at the
+  // half-angle OFF the straight chord, at the constant radius.
+  const arcPose = { id: "arc90", name: "Arc", joints: { "arm-l": { rotateDeg: 0, polar: { angleDeg: 90, distance: 100 } } } };
+  const arcDoc = mustValidateDoc(
+    rigDocInput({
+      poses: [
+        { id: "arc0", name: "Arc start", joints: { "arm-l": { rotateDeg: 0, polar: { angleDeg: 0, distance: 100 } } } },
+        arcPose,
+      ],
+    }),
+    ART,
+    "arc fixture"
+  );
+  const arcTimeline = {
+    durationMs: 2000,
+    rows: [
+      { tMs: 0, poseId: "arc0" },
+      { tMs: 1000, poseId: "arc90" },
+    ],
+  };
+  const mid = poseAt(arcDoc, arcTimeline, 1000 + POSE_TWEEN_MS / 2).parts.find((p) => p.id === "arm-l") as { matrix: Matrix6 };
+  const [e, f] = [mid.matrix[4], mid.matrix[5]];
+  approx(Math.hypot(e, f), 100, 1e-9, "the arc keeps the radius constant (polar keys blend trivially)");
+  approx(e, 100 * Math.cos(Math.PI / 4), 1e-9, "the mid-tween sits at the half-angle (45°)");
+  ok(Math.abs(e - 50) > 10, "the arc bulges OFF the straight chord (the chord midpoint would read 50)");
+  const a = poseAt(arcDoc, arcTimeline, 1000 + POSE_TWEEN_MS / 2);
+  const b = poseAt(arcDoc, arcTimeline, 1000 + POSE_TWEEN_MS / 2);
+  eq(JSON.stringify(a), JSON.stringify(b), "the arc tween double-runs byte-identical");
+});
+
+await test("S166 per-part rigidity — the pose never scales a rigid part; the subtree stays rigid; rotation still rides", () => {
+  const doc = mustValidateDoc(
+    rigDocInput({
+      poses: [
+        { id: "squash", name: "Squash", joints: { torso: { rotateDeg: 0, scale: 3 } } },
+        { id: "rigid-squash", name: "Rigid", joints: { torso: { rotateDeg: 0, scale: 3 }, head: { rotateDeg: 0, rigid: true } } },
+        { id: "rigid-own", name: "Rigid own", joints: { "arm-l": { rotateDeg: 0, scale: 2, rigid: true } } },
+        { id: "rigid-turn", name: "Rigid turn", joints: { torso: { rotateDeg: 30, scale: 3 }, head: { rotateDeg: 10, rigid: true } } },
+      ],
+    }),
+    ART,
+    "rigid fixture"
+  );
+  const at = (poseId: string) => poseAt(doc, { durationMs: 1000, rows: [{ tMs: 0, poseId }] }, POSE_TWEEN_MS + 1);
+  const partOf = (f: ReturnType<typeof poseAt>, id: string) => f.parts.find((p) => p.id === id) as { matrix: Matrix6 };
+  // The legacy world: a parent scale squashes the whole subtree.
+  const squash = at("squash");
+  approx(partOf(squash, "torso").matrix[0], 3, 1e-9, "the torso scales (unchanged legacy FK)");
+  approx(partOf(squash, "head").matrix[0], 3, 1e-9, "the head inherits the parent scale (the S125 FK, byte-law)");
+  // The rigid world: the head (and its subtree) reads authored size.
+  const rigid = at("rigid-squash");
+  approx(partOf(rigid, "torso").matrix[0], 3, 1e-9, "the non-rigid parent keeps its pose scale");
+  approx(partOf(rigid, "head").matrix[0], 1, 1e-9, "the rigid head reads authored size — inherited pose scale stripped");
+  approx(partOf(rigid, "brow").matrix[0], 1, 1e-9, "the sub-drawing under the rigid joint stays rigid too");
+  approx(partOf(rigid, "mouth-closed").matrix[0], 1, 1e-9, "the whole subtree rides rigid");
+  // The part's OWN scale delta is inert under rigidity.
+  approx(partOf(at("rigid-own"), "arm-l").matrix[0], 1, 1e-9, "a rigid part ignores its own pose scale (the pose never scales it)");
+  // Rotation and translation still ride the rigid part.
+  const turn = at("rigid-turn");
+  approx(impliedRotation(partOf(turn, "head").matrix), 40, 0.001, "the rigid head still rides the carried rotation (30 carried + 10 own)");
+  approx(Math.hypot(partOf(turn, "head").matrix[0], partOf(turn, "head").matrix[1]), 1, 1e-9, "…at authored size (the rotation block is a unit rotation — scale 1 under 40°)");
+});
+
+await test("S166 tweens INTO rigidity blend honestly; the v-next band edges stay NaN-free", () => {
+  const doc = mustValidateDoc(
+    rigDocInput({
+      poses: [
+        { id: "squash", name: "Squash", joints: { torso: { rotateDeg: 0, scale: 3 } } },
+        { id: "rigid-squash", name: "Rigid", joints: { torso: { rotateDeg: 0, scale: 3 }, head: { rotateDeg: 0, rigid: true } } },
+        { id: "scaled-head", name: "Scaled head", joints: { head: { rotateDeg: 0, scale: 3 } } },
+        { id: "rigid-head", name: "Rigid head", joints: { head: { rotateDeg: 0, scale: 3, rigid: true } } },
+        { id: "edges", name: "Edges", joints: { head: { rotateDeg: 0, polar: { angleDeg: 360, distance: 1600 }, rigid: true }, "arm-l": { rotateDeg: 0, scale: 0.2, polar: { angleDeg: -360, distance: 0 } } } },
+      ],
+    }),
+    ART,
+    "v-next edges"
+  );
+  // The inherited strip rides the DESTINATION from the segment start (no
+  // scale flash): the rigid head is authored-size through the whole segment.
+  const timeline = {
+    durationMs: 3000,
+    rows: [
+      { tMs: 0, poseId: "squash" },
+      { tMs: 1000, poseId: "rigid-squash" },
+    ],
+  };
+  const headOf = (t: number) => poseAt(doc, timeline, t).parts.find((p) => p.id === "head") as { matrix: Matrix6 };
+  approx(headOf(1000 + POSE_TWEEN_MS + 1).matrix[0], 1, 1e-9, "settled rigid: authored size");
+  approx(headOf(1000 + POSE_TWEEN_MS / 2).matrix[0], 1, 1e-9, "the inherited scale is stripped from the segment start (the destination owns it)");
+  ok(headOf(500).matrix.every(Number.isFinite), "finite through the non-rigid segment");
+  // The part's OWN outgoing scale blends back to authored (the pose blend
+  // is honest — the previous pose did scale it).
+  const ownTimeline = {
+    durationMs: 3000,
+    rows: [
+      { tMs: 0, poseId: "scaled-head" },
+      { tMs: 1000, poseId: "rigid-head" },
+    ],
+  };
+  const ownHead = (t: number) => poseAt(doc, ownTimeline, t).parts.find((p) => p.id === "head") as { matrix: Matrix6 };
+  approx(ownHead(1000 + POSE_TWEEN_MS + 1).matrix[0], 1, 1e-9, "the rigid pose never scales the part (settled)");
+  approx(ownHead(1000 + POSE_TWEEN_MS / 2).matrix[0], 2, 1e-9, "the outgoing scale tweens back to authored (3 → 1, mid reads 2)");
+  const edgeTimeline = { durationMs: 1000, rows: [{ tMs: 0, poseId: "edges" }] };
+  ok(poseAt(doc, edgeTimeline, POSE_TWEEN_MS / 2).parts.every((p) => p.matrix.every(Number.isFinite)), "the v-next band edges are NaN-free mid-tween");
+  ok(poseAt(doc, edgeTimeline, POSE_TWEEN_MS + 1).parts.every((p) => p.matrix.every(Number.isFinite)), "…and settled");
+  const a = poseAt(doc, edgeTimeline, 137);
+  const b = poseAt(doc, edgeTimeline, 137);
+  eq(JSON.stringify(a), JSON.stringify(b), "the v-next frame truth double-runs byte-identical");
+});
+
+await test("S166 the new fields ride the S162 curves — the pose math reads the ONE curve table", () => {
+  const doc = mustValidateDoc(
+    rigDocInput({
+      poses: [{ id: "arc90", name: "Arc", joints: { "arm-l": { rotateDeg: 0, polar: { angleDeg: 90, distance: 100 } } } }],
+    }),
+    ART,
+    "curve fixture"
+  );
+  // A polar rest key at t=0 (inline joints), the polar target eased by the
+  // S162 curves — the implied angle MUST equal evalEase's value (the pose
+  // math re-implements nothing). The tween window is POSE_TWEEN_MS from the
+  // row's tMs (the hold law), so the samples ride 1000 + fraction·320.
+  const rows = (ease: "parabolic-in-out" | "exponential") => [
+    { tMs: 0, poseId: null, joints: { "arm-l": { rotateDeg: 0, polar: { angleDeg: 0, distance: 100 } } } },
+    { tMs: 1000, poseId: "arc90", ease },
+  ];
+  for (const ease of ["parabolic-in-out", "exponential"] as const) {
+    const frame = poseAt(doc, { durationMs: 2000, rows: rows(ease) }, 1000 + 0.3 * POSE_TWEEN_MS).parts.find((p) => p.id === "arm-l") as { matrix: Matrix6 };
+    const u = evalEase(ease, 0.3);
+    const expectedAngle = (90 * u * Math.PI) / 180;
+    const impliedAngle = Math.atan2(frame.matrix[5], frame.matrix[4]);
+    approx(impliedAngle, expectedAngle, 1e-9, `the ${ease} tween rides evalEase (the implied angle matches the shared curve)`);
+    approx(Math.hypot(frame.matrix[4], frame.matrix[5]), 100, 1e-9, `the ${ease} arc keeps the radius`);
+  }
+  // The parabolic middle is LINEAR at the pose level: equal angular steps
+  // either side of the midpoint (the constant-velocity middle, measured).
+  const parRows = rows("parabolic-in-out");
+  const angleAt = (t: number) => {
+    const f = poseAt(doc, { durationMs: 2000, rows: parRows }, t).parts.find((p) => p.id === "arm-l") as { matrix: Matrix6 };
+    return Math.atan2(f.matrix[5], f.matrix[4]);
+  };
+  const d1 = angleAt(1000 + 0.5 * POSE_TWEEN_MS) - angleAt(1000 + 0.4 * POSE_TWEEN_MS);
+  const d2 = angleAt(1000 + 0.6 * POSE_TWEEN_MS) - angleAt(1000 + 0.5 * POSE_TWEEN_MS);
+  approx(d1, d2, 1e-9, "the parabolic middle advances the pose at constant velocity (the OT ease's law, at the pose level)");
+  // The exponential's symmetry: f(0.3) + f(0.7) = 1 → the angle at 30%
+  // plus the angle at 70% spans the full 90°.
+  const expRows = rows("exponential");
+  const expAngle = (t: number) => {
+    const f = poseAt(doc, { durationMs: 2000, rows: expRows }, t).parts.find((p) => p.id === "arm-l") as { matrix: Matrix6 };
+    return Math.atan2(f.matrix[5], f.matrix[4]);
+  };
+  approx(
+    expAngle(1000 + 0.3 * POSE_TWEEN_MS) / (Math.PI / 2) + expAngle(1000 + 0.7 * POSE_TWEEN_MS) / (Math.PI / 2),
+    1,
+    1e-6,
+    "the exponential symmetry f(t)+f(1−t)=1, measured through the pose"
+  );
+});
+
+await test("S166 the v-next fields round-trip byte-stable (write ∘ validate ∘ parse ∘ write)", () => {
+  const doc = mustValidateDoc(
+    rigDocInput({
+      poses: [{ id: "v", name: "V", joints: { "arm-l": { rotateDeg: 10, polar: { angleDeg: 45, distance: 60 }, rigid: true } } }],
+    }),
+    ART,
+    "round-trip v-next"
+  );
+  const bytes = writeRigDoc(doc);
+  ok(bytes.includes('"polar":{"angleDeg":45,"distance":60}') && bytes.includes('"rigid":true'), "the v-next fields write (only when present)");
+  const reparsed = parseRigDoc(bytes, writeRigParts(ART));
+  ok(reparsed !== null, "the strict write reparses with the v-next fields");
+  eq(writeRigDoc(reparsed as NonNullable<typeof reparsed>), bytes, "byte-stable round-trip with the v-next fields");
+});
+
+// ---------------------------------------------------------------------------
 // S126 — the external import lane: the sprite grammar (the ONE syntax
 // extension), the frame index channel, the compose/applier seats, the
 // G1-IMP lens, the pure gates, and the source pins (design record

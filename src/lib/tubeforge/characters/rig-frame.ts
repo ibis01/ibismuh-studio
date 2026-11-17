@@ -37,6 +37,26 @@
 //   house estimator over the scene clock (the W4 fallback shape); no
 //   narration → no beats (the character is not speaking — closed mouth).
 //
+// S166 — THE MOUTH CLASSES (the six-engine audit Part 2.5: OT names ten
+// lip-sync classes; ours was missing "mbp" (bilabial closure) and "rest" —
+// the two cheapest accuracy wins) and THE POSE SCHEMA V-NEXT (the OT
+// polar-delta pose model + per-part rigidity, additive optional fields):
+//   The syllable→class map: a syllable whose ONSET letter is a bilabial
+//   (m/b/p — letters, not sounds: the honest beat-sync approximation) rides
+//   the closure class "mbp" — a lips-pressed window where the vowel beats
+//   open; pauses (inter-word gaps ≥ MOUTH_REST_MIN_MS, plus leading and
+//   trailing silence) ride the rest class — a PAUSE, never speech. The
+//   vowel cycle keeps the S125 parity law, so non-bilabial words beat
+//   BYTE-IDENTICALLY (the estimator's spans tile the clock, so its schedules
+//   are untouched too — rests only exist where an anchor clock leaves gaps).
+//   A rig without the new art degrades to closed (the honest ladder; the
+//   closure beat's speech-ness survives the art fallback).
+//   The v-next FK: a joint state may carry `polar` (ANGLE Δ/DISTANCE Δ off
+//   the part's pivot — OT plasticskeletondeformation) and `rigid` (the pose
+//   never scales the part and inherited pose scale is stripped — sub-
+//   drawings stay rigid). Absent fields ⇒ byte-identical legacy FK (the
+//   additive-absent law, pinned against the S125 goldens).
+//
 // PURE — no fs, no clock, no randomness (the S64 law generalizes). Callers
 // pass VALIDATED rigs (rig2d) and COMPILED timelines (rig-director); this
 // module carries no defensive re-validation.
@@ -59,9 +79,24 @@ export const MOUTH_OPEN_RATIO = 0.55;
 export const MOUTH_MIN_OPEN_MS = 40;
 export const MOUTH_SHORT_SPAN_MS = 90;
 
-/** The speech cycle — deterministic per (word, syllable) parity; smile is a
- *  GESTURE (never speech); closed is the rest. Exported for the pins. */
-export const SPEECH_CYCLE: readonly RigMouthSlot[] = ["open", "wide", "oh"];
+/** The pause floor (S166): an inter-word gap at least this long is a PAUSE
+ *  and rides the rest class; shorter gaps are articulation and stay closed.
+ *  Named + pinned — the one table, no magic numbers elsewhere. */
+export const MOUTH_REST_MIN_MS = 120;
+
+/** The S166 mouth classes — the syllable→class map's domain (the audit's
+ *  staging: "SPEECH_CYCLE gains mbp + rest classes"). The S125 vowel cycle
+ *  rides MOUTH_VOWEL_CYCLE (indices 0..2 — the parity law, byte-stable
+ *  beats); the closure class overrides a bilabial syllable's window; rest
+ *  owns pauses (never a beat — silence is not speech). Exported for pins. */
+export const MOUTH_VOWEL_CYCLE: readonly RigMouthSlot[] = ["open", "wide", "oh"];
+export const MOUTH_CLOSURE_CLASS: RigMouthSlot = "mbp";
+export const MOUTH_REST_CLASS: RigMouthSlot = "rest";
+export const SPEECH_CYCLE: readonly RigMouthSlot[] = [
+  ...MOUTH_VOWEL_CYCLE,
+  MOUTH_CLOSURE_CLASS,
+  MOUTH_REST_CLASS,
+];
 
 // ---------------------------------------------------------------------------
 // The frame contracts
@@ -127,8 +162,6 @@ export interface RigPoseTimeline {
 
 const IDENTITY: Matrix6 = [1, 0, 0, 1, 0, 0];
 
-const REST_JOINT: Required<RigJointState> = { rotateDeg: 0, x: 0, y: 0, scale: 1 };
-
 function compose(out: Matrix6, over: Matrix6): Matrix6 {
   // out ∘ over  (apply `over` first, then `out`)
   const [pa, pb, pc, pd, pe, pf] = out;
@@ -146,7 +179,10 @@ function compose(out: Matrix6, over: Matrix6): Matrix6 {
 /** The local delta matrix about the part's pivot:
  *  M = T(dx,dy) ∘ R(pivot, dRot) ∘ S(pivot, dScale)
  *    = translate(dx+px, dy+py) ∘ rotate ∘ scale ∘ translate(-px,-py). */
-function localMatrix(j: Required<RigJointState>, pivot: { x: number; y: number }): Matrix6 {
+function localMatrix(
+  j: { rotateDeg: number; x: number; y: number; scale: number },
+  pivot: { x: number; y: number }
+): Matrix6 {
   const r = (j.rotateDeg * Math.PI) / 180;
   const cos = Math.cos(r);
   const sin = Math.sin(r);
@@ -160,18 +196,85 @@ function localMatrix(j: Required<RigJointState>, pivot: { x: number; y: number }
   return [a, b, c, d, px - (a * pivot.x + c * pivot.y), py - (b * pivot.x + d * pivot.y)];
 }
 
-function lerpJoint(a: Required<RigJointState>, b: Required<RigJointState>, u: number): Required<RigJointState> {
+// ---------------------------------------------------------------------------
+// S166 v-next — the resolved-delta FK (the polar + rigid adoption)
+// ---------------------------------------------------------------------------
+
+/** One joint's delta RESOLVED to FK-ready numbers: the polar fields (when
+ *  authored) derived to (x, y), rigidity normalized. Same inputs,
+ *  byte-identical outputs — a legacy joint (no polar/rigid) resolves to
+ *  exactly the S125 numbers (the additive-absent law). */
+interface ResolvedJoint {
+  rotateDeg: number;
+  x: number;
+  y: number;
+  scale: number;
+  /** The authored polar keys (null when the delta is cartesian) — the
+   *  tween's representation switch: two polar keys blend on the arc. */
+  polar: { angleDeg: number; distance: number } | null;
+  rigid: boolean;
+}
+
+const REST_RESOLVED: ResolvedJoint = { rotateDeg: 0, x: 0, y: 0, scale: 1, polar: null, rigid: false };
+
+function resolveJoint(j: RigJointState | undefined): ResolvedJoint {
+  // A keyless/undefined joint IS rest (the jointOf law, unchanged).
+  if (!j || typeof j.rotateDeg !== "number") return { ...REST_RESOLVED };
+  const polar = j.polar ? { angleDeg: j.polar.angleDeg, distance: j.polar.distance } : null;
+  const r = polar ? (polar.angleDeg * Math.PI) / 180 : 0;
   return {
-    rotateDeg: a.rotateDeg + (b.rotateDeg - a.rotateDeg) * u,
-    x: a.x + (b.x - a.x) * u,
-    y: a.y + (b.y - a.y) * u,
-    scale: a.scale + (b.scale - a.scale) * u,
+    rotateDeg: j.rotateDeg,
+    x: polar ? polar.distance * Math.cos(r) : (j.x ?? 0),
+    y: polar ? polar.distance * Math.sin(r) : (j.y ?? 0),
+    scale: j.scale ?? 1,
+    polar,
+    rigid: j.rigid === true,
   };
 }
 
-function jointOf(pose: RigPose | null, partId: string): Required<RigJointState> {
-  const j = pose?.joints[partId];
-  return j ? { ...REST_JOINT, ...j } : { ...REST_JOINT };
+/** The v-next tween: when BOTH segment keys ride polar, angle+distance tween
+ *  as scalars and the position derives at each u — the part sweeps the ARC
+ *  (the OT "keys blend trivially"; the midpoint sits at the half-angle, off
+ *  the straight chord). Any cartesian key falls back to the legacy chord
+ *  lerp of the derived (x, y) — the additive law. A RIGID destination keeps
+ *  its scale contribution inert (1): the blend returns the part to authored
+ *  size and the pose holds it there. The destination owns the segment (the
+ *  easing-ownership law), so `rigid` reads the target side. */
+function lerpResolved(a: ResolvedJoint, b: ResolvedJoint, u: number): ResolvedJoint {
+  const rotateDeg = a.rotateDeg + (b.rotateDeg - a.rotateDeg) * u;
+  const scale = a.scale + ((b.rigid ? 1 : b.scale) - a.scale) * u;
+  if (a.polar && b.polar) {
+    const angleDeg = a.polar.angleDeg + (b.polar.angleDeg - a.polar.angleDeg) * u;
+    const distance = a.polar.distance + (b.polar.distance - a.polar.distance) * u;
+    const r = (angleDeg * Math.PI) / 180;
+    return {
+      rotateDeg,
+      x: distance * Math.cos(r),
+      y: distance * Math.sin(r),
+      scale,
+      polar: { angleDeg, distance },
+      rigid: b.rigid,
+    };
+  }
+  return {
+    rotateDeg,
+    x: a.x + (b.x - a.x) * u,
+    y: a.y + (b.y - a.y) * u,
+    scale,
+    polar: null,
+    rigid: b.rigid,
+  };
+}
+
+/** Strip the uniform scale from an inherited affine frame (rotation +
+ *  translation kept) — a rigid part's chain reads authored size. Our pose
+ *  scales are ONE uniform multiplier (the joint bands), so s = √(a²+b²)
+ *  recovers it; scale 0 cannot arise (bands floor at 0.2, rest = identity).
+ *  Runs ONLY on rigid segments — the legacy FK bytes never pass through. */
+function stripScale(m: Matrix6): Matrix6 {
+  const s = Math.sqrt(m[0] * m[0] + m[1] * m[1]);
+  if (s === 0) return m;
+  return [m[0] / s, m[1] / s, m[2] / s, m[3] / s, m[4], m[5]];
 }
 
 /**
@@ -216,15 +319,48 @@ export function countSyllables(raw: string): number {
 }
 
 // ---------------------------------------------------------------------------
+// S166 — the syllable chunker (the syllable→class map's unit)
+// ---------------------------------------------------------------------------
+
+/** The syllable chunks of a word: each vowel group owns the consonants
+ *  since the previous group's end (its ONSET — the onset-maximization the
+ *  beat estimator already leans on); trailing consonants ride the last
+ *  chunk as a coda (never an onset). chunks.length ≡ countSyllables(word)
+ *  ALWAYS — the same vowel-group law, the same silent-trailing-e, the same
+ *  1..5 clamp (a capped word's last chunk absorbs the overflow letters) —
+ *  so the beat slots and the classes stay in lockstep. PURE. */
+export function syllableChunks(raw: string): string[] {
+  const w = raw.toLowerCase().replace(/[^a-z]/g, "");
+  if (!w) return [""];
+  const groups = [...w.matchAll(/[aeiouy]+/g)];
+  if (groups.length === 0) return [w];
+  let n = groups.length;
+  if (w.length > 2 && w.endsWith("e") && n > 1) n -= 1; // the silent trailing e
+  if (n > 5) n = 5; // the countSyllables clamp
+  const groupEnd = (i: number) => (groups[i].index as number) + groups[i][0].length;
+  const chunks: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const prevEnd = i > 0 ? groupEnd(i - 1) : 0;
+    // The last kept chunk spans to the word's end (it owns its coda — and,
+    // when the count was clamped, the dropped groups' letters too).
+    chunks.push(w.slice(prevEnd, i === n - 1 ? w.length : groupEnd(i)));
+  }
+  return chunks;
+}
+
+// ---------------------------------------------------------------------------
 // The mouth schedule
 // ---------------------------------------------------------------------------
 
 /** One mouth segment — a variant window. Between segments the mouth is
- *  closed. Segments are non-overlapping, time-ascending, clock-clamped. */
+ *  closed. Segments are non-overlapping, time-ascending, clock-clamped.
+ *  S166 — `speaking` is the segment's own speech-ness: rest windows are a
+ *  PAUSE (speaking false); absent ⇒ speech (every legacy segment beats). */
 export interface MouthSegment {
   startMs: number;
   endMs: number;
   variant: RigMouthSlot;
+  speaking?: boolean;
 }
 
 /** Word spans — the schedule's input shape (from anchors or the estimator). */
@@ -266,10 +402,23 @@ export function wordSpansFromAnchors(narration: string, anchors: WordAnchors | n
   return spans;
 }
 
+/** The bilabial onset test — the syllable→class map's closure rule. A
+ *  syllable whose first ONSET LETTER is m, b or p rides the closure class
+ *  (the lips-pressed window). Letters, not sounds: the honest beat-sync
+ *  approximation — "ph" misrides (it sounds /f/), the doc says so. */
+function isBilabialOnset(chunk: string): boolean {
+  const c = chunk[0];
+  return c === "m" || c === "b" || c === "p";
+}
+
 /** The open/close beat compiler: per word span, `countSyllables` slots; each
  *  slot opens for its OPEN_RATIO slice (≥ MOUTH_MIN_OPEN_MS when the span
  *  can hold it), the remainder closes. Every open beat sits STRICTLY INSIDE
- *  its span (the W4 tolerance pin — beats never bleed across word bounds). */
+ *  its span (the W4 tolerance pin — beats never bleed across word bounds).
+ *  S166 — the syllable→class map names each slot's variant: a bilabial
+ *  onset rides the closure class (MOUTH_CLOSURE_CLASS); every other
+ *  syllable keeps the S125 (word, syllable) parity over the vowel cycle —
+ *  non-bilabial words beat BYTE-IDENTICALLY to the S125 schedule. */
 export function mouthBeatsFromSpans(spans: WordSpan[], durationMs: number): MouthSegment[] {
   const out: MouthSegment[] = [];
   const clampMs = (v: number) => Math.max(0, Math.min(durationMs, v));
@@ -279,6 +428,7 @@ export function mouthBeatsFromSpans(spans: WordSpan[], durationMs: number): Mout
     const end = clampMs(span.endMs);
     if (!(end > start)) continue;
     const syllables = countSyllables(span.word);
+    const chunks = syllableChunks(span.word); // same count — the shared vowel-group law
     const slotMs = (end - start) / syllables;
     const openMs = slotMs >= MOUTH_SHORT_SPAN_MS
       ? Math.max(MOUTH_MIN_OPEN_MS, slotMs * MOUTH_OPEN_RATIO)
@@ -290,11 +440,37 @@ export function mouthBeatsFromSpans(spans: WordSpan[], durationMs: number): Mout
         out.push({
           startMs: openStart,
           endMs: openEnd,
-          variant: SPEECH_CYCLE[(wi + s) % SPEECH_CYCLE.length],
+          variant: isBilabialOnset(chunks[s] ?? "")
+            ? MOUTH_CLOSURE_CLASS
+            : MOUTH_VOWEL_CYCLE[(wi + s) % MOUTH_VOWEL_CYCLE.length],
         });
       }
     }
   }
+  return out;
+}
+
+/** The rest half of the S166 mapping — "rest on pauses": the gaps BETWEEN
+ *  word spans (plus leading/trailing silence) that clear MOUTH_REST_MIN_MS
+ *  ride the rest class; intra-word beat gaps stay closed (the mouth is
+ *  still shaping speech there). Rest is a PAUSE, never speech: the segments
+ *  carry speaking false. PURE. */
+export function restSegmentsFromSpans(spans: WordSpan[], durationMs: number): MouthSegment[] {
+  if (spans.length === 0 || !(durationMs > 0)) return [];
+  const clampMs = (v: number) => Math.max(0, Math.min(durationMs, v));
+  const clamped = spans
+    .map((s) => ({ word: s.word, startMs: clampMs(s.startMs), endMs: clampMs(s.endMs) }))
+    .filter((s) => s.endMs > s.startMs);
+  const out: MouthSegment[] = [];
+  const push = (startMs: number, endMs: number) => {
+    if (endMs - startMs >= MOUTH_REST_MIN_MS) {
+      out.push({ startMs, endMs, variant: MOUTH_REST_CLASS, speaking: false });
+    }
+  };
+  if (clamped.length === 0) return out;
+  push(0, clamped[0].startMs);
+  for (let i = 1; i < clamped.length; i++) push(clamped[i - 1].endMs, clamped[i].startMs);
+  push(clamped[clamped.length - 1].endMs, durationMs);
   return out;
 }
 
@@ -311,7 +487,10 @@ export interface MouthSchedule {
 }
 
 /** The scene's mouth schedule — anchors first, estimator fallback, no
- *  narration → no speech (the honesty ladder). PURE. */
+ *  narration → no speech (the honesty ladder). S166: the beats gain the
+ *  closure class, and the anchor clock's pauses ride rest segments (the
+ *  estimator's spans TILE the clock — no gaps ≥ the floor — so its
+ *  schedules stay byte-identical to the S125 shape). PURE. */
 export function mouthSchedule(input: MouthScheduleInput): MouthSchedule {
   const { narration, anchors, durationMs } = input;
   if (!narration || narration.trim() === "" || !(durationMs > 0)) {
@@ -320,8 +499,13 @@ export function mouthSchedule(input: MouthScheduleInput): MouthSchedule {
   const spans =
     wordSpansFromAnchors(narration, anchors ?? null, durationMs) ??
     wordSpansFromEstimate(narration, durationMs);
-  const segments = mouthBeatsFromSpans(spans, durationMs);
-  return { segments, speaking: segments.length > 0 };
+  const beats = mouthBeatsFromSpans(spans, durationMs);
+  const segments = [...beats, ...restSegmentsFromSpans(spans, durationMs)].sort(
+    (a, b) => a.startMs - b.startMs || a.endMs - b.endMs
+  );
+  // speaking is the BEATS' truth — a schedule of only rest windows is not
+  // speech (the rig will not fake speech).
+  return { segments, speaking: beats.length > 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -407,11 +591,18 @@ export function poseAt(
   const absolute = new Map<string, Matrix6>();
   for (const part of topological) {
     const parentAbs = part.parent ? (absolute.get(part.parent) ?? IDENTITY) : IDENTITY;
-    const target = jointOf(targetPose, part.id);
-    const prev = jointOf(prevPose, part.id);
-    const j = lerpJoint(prev, target, u);
+    // S166 v-next — the resolved-delta FK. resolveJoint derives polar to
+    // cartesian and normalizes rigidity; lerpResolved keeps the legacy
+    // chord math byte-identical when the fields are absent.
+    const target = resolveJoint(targetPose?.joints[part.id]);
+    const prev = resolveJoint(prevPose?.joints[part.id]);
+    const j = lerpResolved(prev, target, u);
+    // S166 v-next — per-part rigidity: the DESTINATION owns the segment, so
+    // a rigid target strips the parent chain's pose scale for the whole
+    // segment while its own scale contribution blends back to authored size.
+    const parentFrame = target.rigid ? stripScale(parentAbs) : parentAbs;
     const local = localMatrix(j, part.pivot);
-    absolute.set(part.id, compose(parentAbs, local));
+    absolute.set(part.id, compose(parentFrame, local));
   }
   const frames: RigPartFrame[] = rig.parts.map((part) => ({
     id: part.id,
@@ -434,20 +625,31 @@ export function poseAt(
   let speaking = false;
   if (override && tMs < override.untilMs && isMouthSlot(override.variant)) {
     variant = override.variant;
-    speaking = variant !== "closed";
+    // S166 — rest is a PAUSE, never speech (the class carries its own truth).
+    speaking = variant !== "closed" && variant !== MOUTH_REST_CLASS;
   } else if (speech) {
     for (const seg of speech.segments) {
       if (tMs >= seg.startMs && tMs < seg.endMs) {
         variant = seg.variant;
-        speaking = true;
+        // S166 — a segment carries its own speech-ness (rest windows ride
+        // speaking false); absent ⇒ speech (every legacy segment beats).
+        speaking = seg.speaking !== false;
         break;
       }
     }
   }
   const hasMouth = rig.parts.some((p) => p.slot === "mouth" && p.variant === variant);
   if (!hasMouth && variant !== "closed") {
-    variant = "closed";
-    speaking = false;
+    // S166 degradation: a rig without the new class's art renders closed —
+    // but the closure beat's speech-ness SURVIVES the art fallback (pressed
+    // lips are still speech); rest stays non-speech. Every other missing
+    // variant keeps the S125 honest fallback (closed, not speaking).
+    if (variant === MOUTH_CLOSURE_CLASS) {
+      variant = "closed";
+    } else {
+      variant = "closed";
+      speaking = false;
+    }
   }
 
   // Draw order (z asc, id tiebreak) + mouth visibility (the art swap).

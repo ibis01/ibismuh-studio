@@ -28,6 +28,16 @@
 // cover explainer poses — the §6 non-goals); missing standard poses are a
 // warning and the planner degrades to rest — quality loss, never breakage.
 //
+// S166 — the expressiveness adoption (six-engine audit Part 4 S166):
+// the mouth set gains the two OT lip-sync classes the audit names as the
+// cheapest accuracy wins — "mbp" (bilabial closure: m/b/p onsets render the
+// lips pressed) and "rest" (the neutral pause shape). THE ADDITIVE LAW: the
+// S125 five stay the REQUIRED set (a rig missing any of them still errors);
+// the two new classes are OPTIONAL art (missing ⇒ warned, and the schedule's
+// closure/rest windows degrade to closed — rig-frame's honest ladder).
+// The pose schema gains the v-next optional fields (polar deltas + per-part
+// rigidity — rig-frame's FK reads them; absent ⇒ byte-identical legacy FK).
+//
 // PURE — no fs, no clock, no randomness (the S64 law generalizes). Same
 // inputs, byte-identical results.
 import { isEaseName } from "../anim/easing";
@@ -68,11 +78,22 @@ export const RIG_JOINT_BANDS = {
 // The slot vocabulary
 // ---------------------------------------------------------------------------
 
-/** The mouth set — five shapes, an art swap (part variants), enough for
- *  honest beat-sync at explainer quality (the §6 wording; the scope claim is
- *  BEAT-SYNC, never phoneme lip-sync, in every doc/UI string). */
-export const RIG_MOUTH_SLOTS = ["closed", "open", "wide", "oh", "smile"] as const;
+/** The mouth set — SEVEN shapes, an art swap (part variants). The S125 five
+ *  carry beat-sync at explainer quality (the §6 wording; the scope claim is
+ *  BEAT-SYNC, never phoneme lip-sync, in every doc/UI string); S166 adds the
+ *  two OT lip-sync classes ("mbp" — bilabial closure, "rest" — the pause
+ *  shape). The scope claim stays beat-sync with CLASSES: the syllable→class
+ *  map is still a deterministic approximation, never phoneme recognition. */
+export const RIG_MOUTH_SLOTS = ["closed", "open", "wide", "oh", "smile", "mbp", "rest"] as const;
 export type RigMouthSlot = (typeof RIG_MOUTH_SLOTS)[number];
+
+/** The S125 five — the REQUIRED mouth set (the completeness floor). A rig
+ *  with mouth art carries these five or errors (the S125 law, unchanged);
+ *  "mbp"/"rest" ride outside the floor as optional S166 art. */
+export const RIG_MOUTH_LEGACY_SLOTS = ["closed", "open", "wide", "oh", "smile"] as const;
+
+/** The S166 classes — the optional art beyond the legacy floor. */
+export const RIG_MOUTH_NEW_SLOTS = ["mbp", "rest"] as const;
 
 export function isMouthSlot(v: string): v is RigMouthSlot {
   return (RIG_MOUTH_SLOTS as readonly string[]).includes(v);
@@ -152,12 +173,36 @@ export interface RigPart {
 }
 
 /** One joint state — a delta from rest. rotateDeg is required (the FK verb);
- *  the rest are optional refinements. All values validator-bounded. */
+ *  the rest are optional refinements. All values validator-bounded.
+ *
+ *  S166 v-next (ADDITIVE OPTIONAL — absent ⇒ byte-identical legacy FK, the
+ *  additive-absent law):
+ *  - `polar` — the OT polar-delta pose model (plasticskeletondeformation:
+ *    ANGLE Δ / DISTANCE Δ): the joint's POSITIONAL delta authored in polar
+ *    form off the part's pivot (stage axes). When present it IS the delta —
+ *    senior over x/y (a same-joint x/y is redundant junk, warned). Tweens
+ *    between two polar keys ride the arc (angle+distance as scalars — keys
+ *    blend trivially, the OT property), not the straight chord.
+ *  - `rigid` — per-part rigidity: the pose never scales this part (its own
+ *    scale delta is inert) and the parent chain's pose scale is stripped, so
+ *    the part AND its subtree render at authored size while rotation and
+ *    translation still apply (the OT "rigidity keeps sub-drawings rigid").
+ *    The destination pose owns the segment (the easing-ownership law). */
 export interface RigJointState {
   rotateDeg: number;
   x?: number;
   y?: number;
   scale?: number;
+  polar?: RigPolarDelta;
+  rigid?: boolean;
+}
+
+/** The polar delta pair (v-next): degrees from the +X stage axis, distance
+ *  in stage px. Angles tween RAW (no wrap normalization — a 350°→10° pair
+ *  sweeps the long way deterministically; authors write contiguous keys). */
+export interface RigPolarDelta {
+  angleDeg: number;
+  distance: number;
 }
 
 /** One pose — a named joint state over the rig's parts. `joints` keys are
@@ -347,7 +392,13 @@ export function writeRigParts(parts: RigPartArt[]): string {
 // The rig doc validator
 // ---------------------------------------------------------------------------
 
-function parsePose(raw: unknown, partIds: Set<string>, errors: string[], stageMax: number): RigPose | null {
+function parsePose(
+  raw: unknown,
+  partIds: Set<string>,
+  errors: string[],
+  warnings: string[],
+  stageMax: number
+): RigPose | null {
   const r = asRecord(raw);
   if (!r) {
     errors.push("a pose is not an object");
@@ -396,6 +447,47 @@ function parsePose(raw: unknown, partIds: Set<string>, errors: string[], stageMa
     const x = num(j.x);
     const y = num(j.y);
     const scale = num(j.scale);
+    // S166 v-next — the polar delta (additive optional): both fields finite,
+    // the angle inside the rotation band, the distance inside the offset
+    // band (a polar delta IS the positional delta — it cannot exceed the
+    // band its cartesian twin is held to). polar is SENIOR over x/y — a
+    // same-joint x/y is redundant junk, warned, never obeyed.
+    const polarRaw = asRecord(j.polar);
+    if (j.polar !== undefined && !polarRaw) {
+      errors.push(`${where}: joint "${partId}" polar must be {angleDeg, distance}`);
+      return null;
+    }
+    if (polarRaw) {
+      const angleDeg = num(polarRaw.angleDeg);
+      const distance = num(polarRaw.distance);
+      if (angleDeg === null || distance === null) {
+        errors.push(`${where}: joint "${partId}" polar needs finite angleDeg + distance`);
+        return null;
+      }
+      if (Math.abs(angleDeg) > RIG_JOINT_BANDS.rotateDegMax) {
+        errors.push(
+          `${where}: joint "${partId}" polar angleDeg ${angleDeg} outside the band (±${RIG_JOINT_BANDS.rotateDegMax})`
+        );
+        return null;
+      }
+      if (distance < 0 || distance > stageMax) {
+        errors.push(
+          `${where}: joint "${partId}" polar distance ${distance} outside the band (0..${Math.round(stageMax)}px)`
+        );
+        return null;
+      }
+      state.polar = { angleDeg, distance };
+      if (j.x !== undefined || j.y !== undefined) {
+        warnings.push(`${where}: joint "${partId}" polar overrides x/y (one positional representation wins)`);
+      }
+    }
+    if (j.rigid !== undefined) {
+      if (typeof j.rigid !== "boolean") {
+        errors.push(`${where}: joint "${partId}" rigid must be a boolean`);
+        return null;
+      }
+      state.rigid = j.rigid;
+    }
     if (j.x !== undefined && x === null) {
       errors.push(`${where}: joint "${partId}" x must be a finite number`);
       return null;
@@ -627,11 +719,16 @@ export function validateRigDoc(raw: unknown, parts: RigPartArt[] | null): RigVal
   }
 
   // Mouth-set completeness over the RIG's mouth parts (the speaking contract).
+  // S166 — the FLOOR is still the S125 five (a partial legacy set visibly
+  // breaks the speaking beats = ERROR); the new classes ride OUTSIDE the
+  // floor: missing ⇒ the honest warning, and the schedule's closure/rest
+  // windows degrade to closed (rig-frame's ladder — quality loss, never
+  // breakage; every pre-S166 doc validates unchanged).
   const rigMouths = partRaw.filter((p) => p.slot === "mouth").map((p) => p.variant as RigMouthSlot);
   if (rigMouths.length === 0) {
     warnings.push("rig has no mouth parts — the speaking schedule renders closed-mouth (the rig will not fake speech)");
   } else {
-    const missing = RIG_MOUTH_SLOTS.filter((s) => !rigMouths.includes(s));
+    const missing = RIG_MOUTH_LEGACY_SLOTS.filter((s) => !rigMouths.includes(s));
     if (missing.length > 0) {
       errors.push(`rig mouth set incomplete — missing ${missing.join(", ")} (a partial set visibly breaks the speaking beats)`);
       return { doc: null, errors, warnings };
@@ -640,6 +737,12 @@ export function validateRigDoc(raw: unknown, parts: RigPartArt[] | null): RigVal
     if (dupMouth.length > 0) {
       errors.push(`rig mouth set duplicates — ${[...new Set(dupMouth)].join(", ")}`);
       return { doc: null, errors, warnings };
+    }
+    const missingNew = RIG_MOUTH_NEW_SLOTS.filter((s) => !rigMouths.includes(s));
+    if (missingNew.length > 0) {
+      warnings.push(
+        `mouth set missing the S166 classes (${missingNew.join(", ")}) — bilabial-closure and rest windows degrade to closed (the honest ladder; add the two mouth parts to opt in)`
+      );
     }
   }
 
@@ -656,7 +759,7 @@ export function validateRigDoc(raw: unknown, parts: RigPartArt[] | null): RigVal
   const poses: RigPose[] = [];
   const stageMax = Math.max(width, height) * RIG_JOINT_BANDS.offsetFactorMax;
   for (const rawPose of root.poses) {
-    const pose = parsePose(rawPose, partIds, errors, stageMax);
+    const pose = parsePose(rawPose, partIds, errors, warnings, stageMax);
     if (!pose) continue;
     if (poseSeen.has(pose.id)) {
       errors.push(`pose "${pose.id}": duplicate id`);
@@ -735,6 +838,10 @@ function serializeJoint(j: RigJointState): Record<string, unknown> {
   if (j.x !== undefined) out.x = j.x;
   if (j.y !== undefined) out.y = j.y;
   if (j.scale !== undefined) out.scale = j.scale;
+  // S166 v-next — the optional fields write ONLY when present (absent ⇒
+  // byte-identical legacy bytes, the additive-absent law).
+  if (j.polar !== undefined) out.polar = { angleDeg: j.polar.angleDeg, distance: j.polar.distance };
+  if (j.rigid !== undefined) out.rigid = j.rigid;
   return out;
 }
 
