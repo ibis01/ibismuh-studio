@@ -7022,3 +7022,65 @@ order, narration alignment — is the operator's next human step.
   profile blurb for legacy vocabulary. Same walk shape as B1's three stage-E escapes.
 - Battery 1008 → 1013, 0 failed; tsc/lint/build green; e2e 37/37 (two spec flows
   deliberately re-pointed dialog → workspace); walk receipts 1440px + 390px clean.
+
+## B4 — the Creative Workspace Enhancement + the security pass + the production test (2026-11)
+
+- THE SESSION'S ARC: the operator verified B1–B3 (CI 8/8 on `49955af`) and
+  commissioned B4 — "audit the actual 2D, 3D, timeline and audio engines;
+  identify what is implemented, what is incomplete, what needs better UX;
+  then prepare implementation tasks and acceptance tests" — with four
+  priorities (professional editing layout, 2D motion graphics, 3D
+  production, audio production) and a three-project production test as the
+  gate. "Do not restart the design. Do not rewrite B1–B3."
+- THE AUDIT (docs/audits/b4-creative-workspace-audit.md, read-only): the
+  engines are AHEAD of the UI — S129 tweens, S130 camera, S131 events, 15
+  S162 curves, the Scene3D schema and the keyframed duck envelope all exist
+  behind validated seams while the product surface exposes none of them, and
+  the five workspace areas are exclusive tabs (react-resizable-panels was
+  installed and unused). Every claim file:line.
+- THE SECURITY PASS (adc2281, carried over pending): the review's P0×2/P1×3/
+  P2×2 landed — the malformed-signature 500 closed, diag guarded in-handler
+  with a session-only schema inventory, the secret policy closed BY AGREEMENT
+  (≥16 floor stays, one-shot warning, setup generates 64-hex), PBKDF2 600k +
+  transparent login rehash, setup/lock session-only, the alert probe on the
+  nightly AND the nightly's ffmpeg step got the pinned static outage net
+  (nightly run 1 had starved exactly the way ci.yml outgrew). P1-2 decided
+  and DOCUMENTED (verification stays non-gating). Battery 1013 → 1019.
+- B4 (af15635): the five tabs became a three-surface editor at ≥1024px —
+  work-area center + always-mounted Inspector rail + always-mounted Timeline
+  strip (the videoTab split into timelineStrip + renderShipPanel; one
+  TimelineStudio instance; the S86 tab law and e2e selectors ride untouched;
+  the Studio's own voiceover gate got an honest placeholder — the walk caught
+  the silent null). B4-2: the Motion panel in the GraphicsStudio element
+  strip (insertion palette, enter/exit/emphasis with the 15-curve ease
+  dropdown, tween channels/keys, camera keys with the zoom pins) — everything
+  through the SAME buffer → validated PUT. B4-3: the Scene3D card + the
+  additive PUT over the ONE parse law. B4-4: the S131 sfx events finally
+  reach the mix (adelay at projected times, one amix; NO cues ⇒ byte-identical
+  args, pinned) + the Inspector's Final mix preview card.
+- THE FLAKE THAT WASN'T: the e2e suite's alternating-victim 429 flake was a
+  REAL post-rebrand escape — playwright.config.ts still raised the ceilings
+  under the dead legacy TUBEFORGE_RATE_* names, which rebrand stage-B left
+  reading at NEITHER limiter layer. Fixed to the current names + a
+  config-truth pin. E2E then 37/37 (2.0m).
+- THE PRODUCTION TEST (5f4d30a, docs/audits/b4-three-project-production-test
+  .md): 13/13 checks. P2 delivered a COMPLETE offline production (hand-
+  authored doc → real render → QC all-pass, −17.3 LUFS mixed program) AND
+  CAUGHT A LATENT MAIN BUG — e78702b (2026-11-01) made the music storage key
+  MUSIC_DIR-relative (bare name) while trackAbsolutePath composes
+  UPLOAD_ROOT + key: every fresh-seeded and uploaded bed failed every
+  bed-mixed assembly at the encode gate. Fixed in both shapes + battery
+  pin. P1's honest gates held (the render gate's 400); P3's K1 rig smoke
+  rendered real pixel-verified animation. Battery 1026/1026; tsc clean;
+  changed-file lint 0 errors.
+- WALK RECEIPTS: scripts/b4-walk.sh — the pro layout at 1440px (center + rail
+  + strip simultaneous, 2 panel groups, 2 keyboard-focusable handles, the
+  real TimelineStudio painting in the strip), the S86 jumps, the Scene3D
+  card, the audio card, and the 390px stacked-tab law (no panels,
+  scrollWidth 390). Screenshots /tmp/b4walk (session artifact).
+- HONEST GAPS RECORDED: music/SFX as draggable timeline clips, the
+  ducking-envelope editor, per-scene voice assignment, in-browser mic
+  recording, the heavy rig pose editor, light keyframes (point/spot), text
+  animators, motion paths — each named in the audit with an owner slice.
+  The S162 blind human gate and the S125 identity VCE row stay with the
+  humans, as always.
