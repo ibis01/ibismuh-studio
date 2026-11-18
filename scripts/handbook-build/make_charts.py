@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Charts for the TubeForge Maintenance Handbook (real repo data)."""
+"""Charts for the Ibismuh Studio Maintenance Handbook (real repo data)."""
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.font_manager as fm

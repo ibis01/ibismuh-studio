@@ -22,7 +22,7 @@
 #
 # Usage:
 #   npm run db:backup:pg                      # dump to backups/pg/
-#   BACKUP_S3_URI=s3://bucket/tubeforge \
+#   BACKUP_S3_URI=s3://bucket/ibismuh \
 #     npm run db:backup:pg                    # + off-box upload
 #
 # Environment:
@@ -40,7 +40,7 @@ cd "$ROOT"
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
 BACKUP_DIR="${IBISMUH_STUDIO_BACKUP_DIR:-$ROOT/backups/pg}"
 STAMP="$(date +%Y-%m-%d_%H%M%S)"
-DUMP="$BACKUP_DIR/tubeforge-$STAMP.dump"
+DUMP="$BACKUP_DIR/ibismuh-$STAMP.dump"
 
 # --- resolve DATABASE_URL from env or .env (same parse as backup.sh) -------
 DB_URL="${DATABASE_URL:-}"
@@ -88,12 +88,12 @@ echo "[backup:pg] checksum: $(cut -d' ' -f1 "$DUMP.sha256")"
 SIZE="$(du -h "$DUMP" | cut -f1)"
 if [ -n "${BACKUP_S3_URI:-}" ]; then
   if command -v aws >/dev/null 2>&1; then
-    aws s3 cp "$DUMP" "$BACKUP_S3_URI/tubeforge-$STAMP.dump"
-    aws s3 cp "$DUMP.sha256" "$BACKUP_S3_URI/tubeforge-$STAMP.dump.sha256"
+    aws s3 cp "$DUMP" "$BACKUP_S3_URI/ibismuh-$STAMP.dump"
+    aws s3 cp "$DUMP.sha256" "$BACKUP_S3_URI/ibismuh-$STAMP.dump.sha256"
     echo "[backup:pg] uploaded via aws CLI to $BACKUP_S3_URI"
   elif command -v rclone >/dev/null 2>&1; then
     rclone copy "$DUMP" "rclone-remote:${BACKUP_S3_URI#s3://}" 2>/dev/null \
-      || rclone copyto "$DUMP" "$BACKUP_S3_URI/tubeforge-$STAMP.dump"
+      || rclone copyto "$DUMP" "$BACKUP_S3_URI/ibismuh-$STAMP.dump"
     echo "[backup:pg] uploaded via rclone to $BACKUP_S3_URI"
   else
     echo "[backup:pg] WARNING: BACKUP_S3_URI set but neither aws nor rclone found —" >&2

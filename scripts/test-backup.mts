@@ -92,7 +92,7 @@ try {
   execFileSync("npm", ["run", "backup"], { cwd: ROOT, stdio: "inherit", env: { ...process.env, CI: "1" } });
   const newest = fs
     .readdirSync(backupDir)
-    .filter((d) => d.startsWith("tubeforge-"))
+    .filter((d) => d.startsWith("ibismuh-"))
     .sort()
     .at(-1);
   if (!newest) fail("no backup directory was created by `npm run backup`");
@@ -105,7 +105,7 @@ try {
   fs.rmSync(backupDir, { recursive: true, force: true });
   fs.mkdirSync(backupDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-  const fallbackDir = path.join(backupDir, `tubeforge-${stamp}`);
+  const fallbackDir = path.join(backupDir, `ibismuh-${stamp}`);
   fs.mkdirSync(fallbackDir, { recursive: true });
   backupDbPath = path.join(fallbackDir, "database.db");
   fs.copyFileSync(dbFile, backupDbPath);
@@ -113,7 +113,7 @@ try {
     path.join(fallbackDir, "MANIFEST.txt"),
     `Ibismuh Studio backup (fallback snapshot via fs.copyFileSync — sqlite3 CLI missing)\nCreated: ${new Date().toISOString()}\n`
   );
-  ok(`fallback snapshot created: tubeforge-${stamp}`);
+  ok(`fallback snapshot created: ibismuh-${stamp}`);
 }
 
 // 3. Probe the backup is a valid SQLite file with the same row counts.

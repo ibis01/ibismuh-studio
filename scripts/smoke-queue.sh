@@ -10,7 +10,7 @@ RUN="q$(date +%s)"
 JAR=$(mktemp)
 echo "── register probe $RUN"
 curl -s -c "$JAR" -X POST "$BASE/api/auth/register" -H 'Content-Type: application/json' \
-  -d "{\"name\":\"Queue Smoke\",\"email\":\"$RUN@tubeforge.test\",\"password\":\"queue-smoke-123\"}" > /tmp/reg.json
+  -d "{\"name\":\"Queue Smoke\",\"email\":\"$RUN@ibismuh.test\",\"password\":\"queue-smoke-123\"}" > /tmp/reg.json
 VERIFY_URL=$(python3 -c "import json;print(json.load(open('/tmp/reg.json')).get('verification',{}).get('url',''))")
 [ -n "$VERIFY_URL" ] && curl -s -o /dev/null "$VERIFY_URL"
 echo "   registered + verified"

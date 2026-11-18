@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tf-push.sh — the REUSABLE, credential-safe landing gate (successor to the
+# ibismuh-push.sh — the REUSABLE, credential-safe landing gate (successor to the
 # one-shot tf_s66/s67/s73_push.sh family).
 #
 # Credential handling (the 2026-11-10 review fix — execution-time safety,
@@ -20,7 +20,7 @@
 #     at all, which is the preferred production posture.
 #
 # Usage:
-#   TF_TOKEN=<workflow-scoped-PAT> bash scripts/tf-push.sh [expected-remote-sha]
+#   TF_TOKEN=<workflow-scoped-PAT> bash scripts/ibismuh-push.sh [expected-remote-sha]
 #
 # The optional argument is the drift guard: the SHA origin/main must be at
 # BEFORE the push (the one-shot gates pinned this; a reusable gate can
@@ -33,7 +33,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-REPO="ibis01/tubeforge"
+REPO="ibis01/ibismuh-studio"
 PLAIN_URL="https://github.com/${REPO}.git"
 TIP="$(git rev-parse main)"
 BRANCH="main"

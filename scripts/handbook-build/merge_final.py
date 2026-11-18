@@ -7,7 +7,7 @@ A4_W, A4_H = 595.28, 841.89
 BUILD = '/home/z/my-project/scripts/handbook-build'
 COVER = f'{BUILD}/cover.pdf'
 BODY = f'{BUILD}/body.pdf'
-OUT = '/home/z/my-project/download/TubeForge_Maintenance_Handbook.pdf'
+OUT = '/home/z/my-project/download/Ibismuh_Studio_Maintenance_Handbook.pdf'
 
 
 def normalize_page_to_a4(page):
@@ -23,10 +23,10 @@ writer.add_page(normalize_page_to_a4(PdfReader(COVER).pages[0]))
 for page in PdfReader(BODY).pages:
     writer.add_page(normalize_page_to_a4(page))
 writer.add_metadata({
-    '/Title': 'TubeForge Maintenance Handbook',
+    '/Title': 'Ibismuh Studio Maintenance Handbook',
     '/Author': 'Z.ai',
     '/Creator': 'Z.ai',
-    '/Subject': 'Maintenance handbook for the TubeForge multi-tenant AI video platform',
+    '/Subject': 'Maintenance handbook for the Ibismuh Studio multi-tenant AI video platform',
 })
 with open(OUT, 'wb') as f:
     writer.write(f)

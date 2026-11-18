@@ -23,7 +23,7 @@ assert delim not in voice, "delimiter collision!"
 
 header = (
     "#!/usr/bin/env bash\n"
-    "# TubeForge voice server - ALL-IN-ONE Oracle Cloud installer.\n"
+    "# Ibismuh Studio voice server - ALL-IN-ONE Oracle Cloud installer.\n"
     "# voice_server.py is embedded below, so this single file is all you need.\n"
     "#\n"
     "# Usage (on the VM):\n"

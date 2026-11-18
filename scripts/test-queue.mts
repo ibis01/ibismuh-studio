@@ -124,7 +124,7 @@ async function phaseA(): Promise<void> {
   });
   const user = await db.user.create({
     data: {
-      email: `payload-${run}@tubeforge.test`,
+      email: `payload-${run}@ibismuh.test`,
       passwordHash: "pbkdf2$120000$probe$probe",
       name: "Payload Probe",
     },
@@ -350,7 +350,7 @@ async function phaseB(): Promise<void> {
   });
   const user = await db.user.create({
     data: {
-      email: `queue-${run}@tubeforge.test`,
+      email: `queue-${run}@ibismuh.test`,
       passwordHash: "pbkdf2$120000$probe$probe",
       name: "Queue Probe",
     },

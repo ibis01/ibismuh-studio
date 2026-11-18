@@ -2,7 +2,7 @@
 # Ibismuh Studio local packaging — restored in Stage 1 (task T-1.1; was referenced
 # by SECURITY.md's distribution guidance but missing from the shipped tree).
 #
-# Builds download/tubeforge-local.zip for local-machine deployment. The
+# Builds download/ibismuh-local.zip for local-machine deployment. The
 # archive deliberately EXCLUDES everything that could leak secrets or state:
 #   db/            live SQLite database (contains provider API keys!)
 #   uploads/       user media
@@ -23,7 +23,7 @@ if ! command -v zip >/dev/null 2>&1; then
 fi
 
 STAMP="$(date +%Y-%m-%d)"
-OUT="$ROOT/download/tubeforge-local.zip"
+OUT="$ROOT/download/ibismuh-local.zip"
 mkdir -p "$ROOT/download"
 
 rm -f "$OUT"

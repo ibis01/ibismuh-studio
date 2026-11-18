@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TubeForge Maintenance Handbook - body PDF (ReportLab, Report route).
+"""Ibismuh Studio Maintenance Handbook - body PDF (ReportLab, Report route).
 
 Cover is rendered separately (Template 07 Crystal Blue via html2poster.js)
 and merged as page 0 by merge_final.py.
@@ -80,8 +80,8 @@ AVAIL_H = PAGE_H - TOP_MARGIN - BOTTOM_MARGIN
 H1_ORPHAN = AVAIL_H * 0.25
 MAX_KEEP = PAGE_H * 0.4
 
-DOC_TITLE = 'TubeForge Maintenance Handbook'
-DOC_FOOT = 'ibis01/tubeforge  -  November 2026'
+DOC_TITLE = 'Ibismuh Studio Maintenance Handbook'
+DOC_FOOT = 'ibis01/ibismuh-studio  -  November 2026'
 
 # ------------------------------------------------------------------
 # Styles
@@ -361,7 +361,7 @@ doc = TocDocTemplate(
     leftMargin=MARGIN, rightMargin=MARGIN,
     topMargin=TOP_MARGIN, bottomMargin=BOTTOM_MARGIN,
     title=DOC_TITLE, author='Z.ai', creator='Z.ai',
-    subject='Maintenance handbook for the TubeForge multi-tenant AI video platform',
+    subject='Maintenance handbook for the Ibismuh Studio multi-tenant AI video platform',
 )
 
 story = []
@@ -381,7 +381,7 @@ story.append(BodyStartMarker())
 # =================================================================
 h1(story, '1. System Overview and Repository Baseline')
 body(story,
-     'TubeForge is a multi-tenant AI video production platform. A user inside an '
+     'Ibismuh Studio is a multi-tenant AI video production platform. A user inside an '
      'organization moves from a script idea to a published video through AI-assisted '
      'scripting, storyboarding, casting, voiceover, rendering and publishing, all '
      'inside one product. The front end is a Next.js 16 App Router application '
@@ -814,7 +814,7 @@ make_table(story,
             'scene audio, targets per beat role.', center_cols=(0, 1, 2))
 h2(story, '7.3 The 2.0 intelligent systems')
 body(story,
-     'The TubeForge 2.0 track (ROADMAP items 4 through 13) layered intelligence '
+     'The Ibismuh Studio 2.0 track (ROADMAP items 4 through 13) layered intelligence '
      'onto the shared systems rather than forking pipelines. All thirteen items are '
      'landed at v1; the governing rule throughout was "shared contracts first, no '
      'parallel pipelines."')
@@ -832,7 +832,7 @@ make_table(story,
         ['3D engine', 'S94', 'three.js under SwiftShader through the whiteboard pipeline; the clip rides as an ordinary video-kind asset; Blender recorded as the offline exporter.'],
     ],
     [0.22, 0.12, 0.66],
-    caption='Table 9 - The TubeForge 2.0 intelligent systems (all at v1).',
+    caption='Table 9 - The Ibismuh Studio 2.0 intelligent systems (all at v1).',
     center_cols=(1,), font_size=8.6)
 
 # =================================================================

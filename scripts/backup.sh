@@ -7,7 +7,7 @@
 # Postgres mode: uses pg_dump when available, otherwise prints the command
 # to run manually. Keep at least one backup off-machine.
 #
-# Usage: npm run backup   →  backups/tubeforge-<timestamp>/
+# Usage: npm run backup   →  backups/ibismuh-<timestamp>/
 
 set -euo pipefail
 
@@ -15,7 +15,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 STAMP="$(date +%Y-%m-%d_%H%M%S)"
-DEST="$ROOT/backups/tubeforge-$STAMP"
+DEST="$ROOT/backups/ibismuh-$STAMP"
 mkdir -p "$DEST"
 
 # --- resolve DATABASE_URL from .env (same parse as postinstall.mjs) ---

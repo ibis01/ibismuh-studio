@@ -55,7 +55,7 @@ let seq = 0;
 
 export default function loadScenario() {
   seq += 1;
-  const email = `k6-${RUN}-${seq}@tubeforge.test`;
+  const email = `k6-${RUN}-${seq}@ibismuh.test`;
   const password = "k6-load-test-123";
 
   // 1. Register

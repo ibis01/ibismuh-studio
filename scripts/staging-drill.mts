@@ -132,7 +132,7 @@ function sleep(ms: number): Promise<void> {
 // A registered, logged-in user. Each suite mints its own (no shared state
 // between suites — a failing suite cannot contaminate the next one).
 async function freshUser(tag: string): Promise<{ email: string; password: string }> {
-  const email = `stg-${RUN}-${tag}@staging.tubeforge.test`;
+  const email = `stg-${RUN}-${tag}@staging.ibismuh.test`;
   const password = `drill-${RUN}-Aa1!`;
   const reg = await post("/api/auth/register", { name: "Staging Drill", email, password });
   if (reg.status !== 201)

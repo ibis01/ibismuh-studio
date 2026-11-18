@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TubeForge voice server - ALL-IN-ONE installer for ORACLE LINUX (also any RHEL-family).
+# Ibismuh Studio voice server - ALL-IN-ONE installer for ORACLE LINUX (also any RHEL-family).
 # No dnf/apt needed: uv-managed Python 3.11 + static ffmpeg. ARM64 and x86_64.
 #
 # Usage (as root, e.g. via OCI Run command):
@@ -10,10 +10,10 @@ echo "==> unpacking embedded voice_server.py into $DIR"
 cat > "$DIR/voice_server.py" <<'IBISMUH_STUDIO_VOICE_PY_EOF_9x7'
 #!/usr/bin/env python3
 """
-TubeForge voice server — self-hosted voice cloning on YOUR machine.
+Ibismuh Studio voice server — self-hosted voice cloning on YOUR machine.
 
 Wraps Chatterbox (Resemble AI, MIT license — commercial use allowed) behind a
-tiny HTTP API that TubeForge calls for narration:
+tiny HTTP API that Ibismuh Studio calls for narration:
 
     POST /tts     {"text": "...", "voice": "<base64 wav or empty>", "speed": 1.0}
                   header: X-Voice-Key: <secret>          (only if you started
@@ -32,10 +32,10 @@ a 15-second narration paragraph takes ~15-45 s.
 Run:
     python voice_server.py --key my-secret            # auth recommended when
                                                       # exposed via a tunnel
-Expose to TubeForge (Vercel) with a free Cloudflare quick tunnel:
+Expose to Ibismuh Studio (Vercel) with a free Cloudflare quick tunnel:
     cloudflared tunnel --url http://localhost:8931
 Then paste the printed https://...trycloudflare.com URL into
-TubeForge -> Settings -> AI Providers -> Voiceover -> "My Machine (self-hosted)"
+Ibismuh Studio -> Settings -> AI Providers -> Voiceover -> "My Machine (self-hosted)"
 as the Base URL, and the same --key value as the API key.
 """
 
@@ -283,7 +283,7 @@ def pick_device(flag: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="TubeForge self-hosted voice server")
+    parser = argparse.ArgumentParser(description="Ibismuh Studio self-hosted voice server")
     parser.add_argument("--port", type=int, default=int(os.environ.get("VOICE_PORT", "8931")))
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--key", default=os.environ.get("VOICE_KEY", ""), help="shared secret (X-Voice-Key)")
@@ -406,7 +406,7 @@ chmod 600 "$APP_DIR/voice.env"
 
 cat > /etc/systemd/system/tubeforge-voice.service <<EOF
 [Unit]
-Description=TubeForge voice server (Chatterbox, self-hosted)
+Description=Ibismuh Studio voice server (Chatterbox, self-hosted)
 After=network-online.target
 Wants=network-online.target
 
@@ -441,7 +441,7 @@ cat <<EOF
       IP Protocol:  TCP
       Destination port range:  $PORT
 
-  Then in TubeForge -> Settings -> AI Providers -> Voiceover:
+  Then in Ibismuh Studio -> Settings -> AI Providers -> Voiceover:
     Provider : My Machine (self-hosted)
     Base URL : http://$PUBLIC_IP:$PORT
     API key  : $KEY

@@ -24,7 +24,7 @@ import { PrismaClient } from "@prisma/client";
 const execFileP = promisify(execFile);
 const BASE = "http://localhost:3000";
 const RUN = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-const EMAIL = `s119-lane-${RUN}@tubeforge.test`;
+const EMAIL = `s119-lane-${RUN}@ibismuh.test`;
 const PASSWORD = "s119-lane-123";
 const prisma = new PrismaClient();
 
@@ -170,7 +170,7 @@ async function main() {
       `the render is WHITEBOARD ink — mean near-white ${(mean * 100).toFixed(1)}% (the broken kenburns output measured 0.3–1.8%)`);
 
     // ---- 7. the visible sample for the user ----
-    const dest = path.resolve("download", "tubeforge-whiteboard-sample.mp4");
+    const dest = path.resolve("download", "ibismuh-whiteboard-sample.mp4");
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.copyFileSync(finalPath, dest);
     check(fs.existsSync(dest) && fs.statSync(dest).size > 0, `sample copied for the user → ${dest} (${(fs.statSync(dest).size / 1024 / 1024).toFixed(1)} MB)`);

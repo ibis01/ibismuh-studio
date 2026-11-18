@@ -88,7 +88,7 @@ chmod 600 "$APP_DIR/voice.env"
 
 cat > /etc/systemd/system/tubeforge-voice.service <<EOF
 [Unit]
-Description=TubeForge voice server (Chatterbox, self-hosted)
+Description=Ibismuh Studio voice server (Chatterbox, self-hosted)
 After=network-online.target
 Wants=network-online.target
 
@@ -123,7 +123,7 @@ cat <<EOF
       IP Protocol:  TCP
       Destination port range:  $PORT
 
-  Then in TubeForge -> Settings -> AI Providers -> Voiceover:
+  Then in Ibismuh Studio -> Settings -> AI Providers -> Voiceover:
     Provider : My Machine (self-hosted)
     Base URL : http://$PUBLIC_IP:$PORT
     API key  : $KEY
@@ -141,7 +141,7 @@ assert delim not in voice, "delimiter collision!"
 
 header = (
     "#!/usr/bin/env bash\n"
-    "# TubeForge voice server - ALL-IN-ONE installer for ORACLE LINUX (also any RHEL-family).\n"
+    "# Ibismuh Studio voice server - ALL-IN-ONE installer for ORACLE LINUX (also any RHEL-family).\n"
     "# No dnf/apt needed: uv-managed Python 3.11 + static ffmpeg. ARM64 and x86_64.\n"
     "#\n"
     "# Usage (as root, e.g. via OCI Run command):\n"

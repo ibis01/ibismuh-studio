@@ -98,7 +98,7 @@ function clientManifest(rootDir: string): string {
 }
 const manifestDigest = (m: string): string => createHash("sha256").update(m).digest("hex");
 
-const work = join(tmpdir(), `tubeforge-clean-clone-${process.pid}`);
+const work = join(tmpdir(), `ibismuh-clean-clone-${process.pid}`);
 
 try {
   rmSync(work, { recursive: true, force: true });
