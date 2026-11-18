@@ -138,3 +138,46 @@ registry-gated revocable tokens, ALS tenant scope + query-level org isolation, D
 throttle), the cross-tenant boundary holds, and the real work is five small, receipt-backed
 patches (P0×2, P1×3) plus two operator decisions (P2). Nothing above has been implemented yet —
 this record is the evidence base the operator approves from.
+
+---
+
+## 7. Remediation execution record (2026-11, post-review pass)
+
+The operator's standing directive ("continue till you finish all pending tasks") authorized
+the plan above. Every patch preserves the architecture; battery pins ride each fix.
+
+- **P0-1 DONE** — `verifyToken` (`src/lib/ibismuh/auth-token.ts`) now wraps the signature
+  decode + HMAC verify in the same try/catch contract the body decode already had: any
+  malformed signature answers `null` (clean 401), never the `InvalidCharacterError` 500 the
+  runtime probe confirmed. Battery: malformed-signature → null.
+- **P0-2 DONE** — `GET /api/diag` calls `requireUser()` (instant revocation + the shared
+  per-IP limiter, exactly as the route's own header always claimed) and the migration/
+  table-name inventory is now SESSION-ONLY — a 90-day bearer still triages booleans/protocols
+  but never sees the schema names (the review's information-hygiene note).
+- **P1-1 DONE (agreement, not breakage)** — the ≥16 runtime floor STAYS (legacy `.env` files
+  keep authenticating); `getAuthSecret()` emits ONE loud per-process warning below the
+  documented 32-hex floor; `scripts/postinstall.mjs` now generates 64-hex (32-byte) secrets;
+  `SECURITY.md` states the real floor and the generated value. Battery: floor law + generator
+  config-truth.
+- **P1-2 DECIDED (option b, documented — no silent choice)** — email verification remains
+  tracked-but-non-gating; the rationale (self-hosted-first, optional mail, a stamp that can
+  never be earned must not gate) is recorded in `SECURITY.md`'s checklist and here. Revisit
+  (option a) only if a managed deployment with guaranteed mail ships.
+- **P1-3 DONE** — `PBKDF2_ITERS` 120k → 600k (OWASP recommendation for PBKDF2-HMAC-SHA256);
+  `passwordNeedsRehash()` + rehash-on-successful-login migrate every account transparently on
+  its next sign-in (best-effort: a failed re-hash never blocks the login). The stored-format
+  iteration-count law means zero lockouts. Battery: fresh mint at 600k, legacy 120k row still
+  verifies, rehash-detection truth table.
+- **P2-1 DONE (gate, not delete)** — `api/auth/setup` + `api/auth/lock` now enforce the same
+  session-only gate the token registry uses (`requireUser` + `sessionIdFromRequest` → 403 for
+  bearers). The gate half of `auth.ts` is untouched (preserve-functionality law); the
+  UI's only callers (security-card.tsx; a signed-in browser) are unaffected.
+- **P2-2 DONE (CI nightly leg)** — `npm run alert:probe` runs in the nightly battery job
+  against the freshly-pushed schema (proving the probe itself keeps matching the live Prisma
+  models) and the same run's ffmpeg step got the pinned static outage net (nightly run 1,
+  44286031917, had starved on azure — the step now matches ci.yml's hardened shape).
+  Production deployments still put the probe on a machine cron per `docs/production-readiness.md`.
+
+Honest scope note: P1-1's runtime floor was NOT raised to 32 (breakage); P1-3's Argon2id
+stays optional (native dep); P2-1 chose the gate over the delete (preserve-functionality
+law). Battery additions live in `scripts/test-unit.mts` under "security review P0/P1/P2".

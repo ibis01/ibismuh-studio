@@ -5,6 +5,7 @@
 // Stage 2: payloads carry uid (the user id); session tokens use jti = the
 // server-side Session row id so revocation is instant (see tenant.ts).
 // Rotating TUBEFORGE_AUTH_SECRET in .env invalidates every issued token.
+import { log } from "./log";
 
 export const SESSION_COOKIE = "ibismuh_session";
 /** Pre-rebrand cookie name — accepted for reading until live sessions expire (the controlled rebrand keeps existing logins working). */
@@ -30,6 +31,10 @@ export interface TokenPayload {
 
 const te = new TextEncoder();
 const td = new TextDecoder();
+
+// P1-1 — the weak-secret warning rides the repo's structured logger (the same
+// module middleware uses; zero-dependency, edge-safe).
+const tokenLog = log.child({ mod: "auth-token" });
 
 function toB64url(bytes: Uint8Array): string {
   let bin = "";
@@ -93,14 +98,24 @@ export async function verifyToken(
   if (typeof exp !== "number" || !Number.isSafeInteger(exp) || exp <= now) return null;
   if (payload?.s !== "session" && payload?.s !== "api" && payload?.s !== "state") return null;
   if (typeof payload.jti !== "string" || payload.jti.length < 6) return null;
-  const key = await hmacKey(secret);
-  const ok = await crypto.subtle.verify(
-    "HMAC",
-    key,
-    fromB64url(sig) as unknown as ArrayBuffer,
-    te.encode(body) as unknown as ArrayBuffer
-  );
-  return ok ? payload : null;
+  // P0-1 (external security review, runtime-confirmed) — the signature decode
+  // + HMAC verify sit in the SAME try/catch contract the body decode already
+  // has: a malformed SIGNATURE (invalid base64 → InvalidCharacterError) must
+  // answer null (a clean 401 at every caller), never an unhandled 500. The
+  // probe that confirmed the bug: garbage body → null; garbage signature →
+  // throw. Both callers await unguarded.
+  try {
+    const key = await hmacKey(secret);
+    const ok = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      fromB64url(sig) as unknown as ArrayBuffer,
+      te.encode(body) as unknown as ArrayBuffer
+    );
+    return ok ? payload : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Create a signed session/api/state token. extra.uid rides along; extra.jti overrides the random id. */
@@ -117,11 +132,28 @@ export async function createSignedToken(
   );
 }
 
+/** One-shot weak-secret warning (P1-1) — once per process, never spammy. */
+let warnedWeakAuthSecret = false;
+
 export function getAuthSecret(): string | undefined {
   // Dual-read (the controlled rebrand): IBISMUH_STUDIO_AUTH_SECRET is
   // authoritative; a deployment still carrying only the legacy
   // TUBEFORGE_AUTH_SECRET keeps working unchanged.
   const s =
     process.env.IBISMUH_STUDIO_AUTH_SECRET ?? process.env.TUBEFORGE_AUTH_SECRET;
-  return s && s.length >= 16 ? s : undefined;
+  if (!s || s.length < 16) return undefined;
+  // P1-1 (external security review) — the DOCUMENTED floor is 32+ hex chars
+  // (SECURITY.md) while the runtime accepted anything ≥16. The mismatch is
+  // closed by agreement, not breakage: the ≥16 floor STAYS (legacy .env files
+  // keep authenticating), `npm run setup` now generates 64-hex values, and a
+  // secret below the documented floor gets ONE loud warning per process.
+  if (s.length < 32 && !warnedWeakAuthSecret) {
+    warnedWeakAuthSecret = true;
+    tokenLog.warn(
+      "[ibismuh:auth-secret] IBISMUH_STUDIO_AUTH_SECRET is below the documented 32+ hex chars " +
+        "(SECURITY.md) — sessions still sign, but rotate it to 64 hex chars " +
+        "(what npm run setup generates) to meet the documented floor."
+    );
+  }
+  return s;
 }
