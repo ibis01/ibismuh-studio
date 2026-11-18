@@ -166,20 +166,17 @@ jobs:
           # instead of silently eating the step budget.
           timeout 60 sudo systemd-run --property="After=apt-daily.service apt-daily-upgrade.service" --wait /bin/true 2>/dev/null || true
           # Fail fast on a black-holing mirror: 10s per-request ceilings, one
-          # retry — the old 30s×3 let a dead mirror eat the step budget in
-          # silence (the exact shape of the db2241e/473db65 failures).
-          for ATTEMPT in 1 2; do
-            if sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1 update -qq && \
-               sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1 install -y -qq ffmpeg; then
-              ffmpeg -version | head -1
-              exit 0
-            fi
-            if [ "$ATTEMPT" -eq 1 ]; then
-              echo "apt attempt 1 failed — swapping to the canonical archive for attempt 2"
-              sudo sed -i "s|azure.archive.ubuntu.com|archive.ubuntu.com|g" /etc/apt/apt-mirrors.txt
-              sleep 45
-            fi
-          done
+          # retry, and a HARD 240s wall around each apt command — the 87599d3
+          # coverage run (134642862505) showed the third shape: a CRAWLING
+          # mirror that answers each request just under the ceiling, so apt
+          # never fails, never prints, and eats any number of minutes. The
+          # probe above already swapped the mirror; the static net below
+          # replaces the old second attempt entirely.
+          if timeout 240 sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1 update -qq && \
+             timeout 240 sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1 install -y -qq ffmpeg; then
+            ffmpeg -version | head -1
+            exit 0
+          fi
           echo "apt exhausted — installing the pinned static ffmpeg outage net"
           curl -fsSL --retry 2 --max-time 300 -o /tmp/ffmpeg-static.tar.xz "$FF_STATIC_URL"
           echo "$FF_STATIC_SHA256  /tmp/ffmpeg-static.tar.xz" | sha256sum -c --strict -
@@ -337,20 +334,17 @@ jobs:
           # instead of silently eating the step budget.
           timeout 60 sudo systemd-run --property="After=apt-daily.service apt-daily-upgrade.service" --wait /bin/true 2>/dev/null || true
           # Fail fast on a black-holing mirror: 10s per-request ceilings, one
-          # retry — the old 30s×3 let a dead mirror eat the step budget in
-          # silence (the exact shape of the db2241e/473db65 failures).
-          for ATTEMPT in 1 2; do
-            if sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1 update -qq && \
-               sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1 install -y -qq ffmpeg; then
-              ffmpeg -version | head -1
-              exit 0
-            fi
-            if [ "$ATTEMPT" -eq 1 ]; then
-              echo "apt attempt 1 failed — swapping to the canonical archive for attempt 2"
-              sudo sed -i "s|azure.archive.ubuntu.com|archive.ubuntu.com|g" /etc/apt/apt-mirrors.txt
-              sleep 45
-            fi
-          done
+          # retry, and a HARD 240s wall around each apt command — the 87599d3
+          # coverage run (134642862505) showed the third shape: a CRAWLING
+          # mirror that answers each request just under the ceiling, so apt
+          # never fails, never prints, and eats any number of minutes. The
+          # probe above already swapped the mirror; the static net below
+          # replaces the old second attempt entirely.
+          if timeout 240 sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1 update -qq && \
+             timeout 240 sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1 install -y -qq ffmpeg; then
+            ffmpeg -version | head -1
+            exit 0
+          fi
           echo "apt exhausted — installing the pinned static ffmpeg outage net"
           curl -fsSL --retry 2 --max-time 300 -o /tmp/ffmpeg-static.tar.xz "$FF_STATIC_URL"
           echo "$FF_STATIC_SHA256  /tmp/ffmpeg-static.tar.xz" | sha256sum -c --strict -
@@ -544,20 +538,17 @@ jobs:
           # instead of silently eating the step budget.
           timeout 60 sudo systemd-run --property="After=apt-daily.service apt-daily-upgrade.service" --wait /bin/true 2>/dev/null || true
           # Fail fast on a black-holing mirror: 10s per-request ceilings, one
-          # retry — the old 30s×3 let a dead mirror eat the step budget in
-          # silence (the exact shape of the db2241e/473db65 failures).
-          for ATTEMPT in 1 2; do
-            if sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1 update -qq && \
-               sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1 install -y -qq ffmpeg; then
-              ffmpeg -version | head -1
-              exit 0
-            fi
-            if [ "$ATTEMPT" -eq 1 ]; then
-              echo "apt attempt 1 failed — swapping to the canonical archive for attempt 2"
-              sudo sed -i "s|azure.archive.ubuntu.com|archive.ubuntu.com|g" /etc/apt/apt-mirrors.txt
-              sleep 45
-            fi
-          done
+          # retry, and a HARD 240s wall around each apt command — the 87599d3
+          # coverage run (134642862505) showed the third shape: a CRAWLING
+          # mirror that answers each request just under the ceiling, so apt
+          # never fails, never prints, and eats any number of minutes. The
+          # probe above already swapped the mirror; the static net below
+          # replaces the old second attempt entirely.
+          if timeout 240 sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1 update -qq && \
+             timeout 240 sudo apt-get -o DPkg::Lock::Timeout=120 -o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1 install -y -qq ffmpeg; then
+            ffmpeg -version | head -1
+            exit 0
+          fi
           echo "apt exhausted — installing the pinned static ffmpeg outage net"
           curl -fsSL --retry 2 --max-time 300 -o /tmp/ffmpeg-static.tar.xz "$FF_STATIC_URL"
           echo "$FF_STATIC_SHA256  /tmp/ffmpeg-static.tar.xz" | sha256sum -c --strict -
