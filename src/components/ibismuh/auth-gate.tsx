@@ -298,7 +298,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col items-center gap-3 mb-8 text-center">
           <IbismuhLogo size={64} />
           <h1 className="text-2xl font-bold tracking-tight">
-            Tube<span className="text-gradient">Forge</span>
+            Ibismuh <span className="text-gradient">Studio</span>
           </h1>
           <p className="text-sm text-muted-foreground max-w-xs">
             {flow === "recover"
