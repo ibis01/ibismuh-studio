@@ -1,0 +1,131 @@
+# receipt: b0 clean install (npm ci), 2026-11-17, node v24.22.3, exit 0 — truncated tail
+npm warn ERESOLVE overriding peer dependency
+npm warn While resolving: eslint-plugin-import@2.32.0
+npm warn Found: eslint@10.14.0
+npm warn node_modules/eslint
+npm warn   dev eslint@"^10" from the root project
+npm warn   10 more (@eslint-community/eslint-utils, ...)
+npm warn
+npm warn Could not resolve dependency:
+npm warn peer eslint@"^2 || ^3 || ^4 || ^5 || ^6 || ^7.2.0 || ^8 || ^9" from eslint-plugin-import@2.32.0
+npm warn node_modules/eslint-config-next/node_modules/eslint-plugin-import
+npm warn   eslint-plugin-import@"^2.32.0" from eslint-config-next@16.4.5
+npm warn   node_modules/eslint-config-next
+npm warn   1 more (eslint-import-resolver-typescript)
+npm warn
+npm warn Conflicting peer dependency: eslint@9.39.5
+npm warn node_modules/eslint
+npm warn   peer eslint@"^2 || ^3 || ^4 || ^5 || ^6 || ^7.2.0 || ^8 || ^9" from eslint-plugin-import@2.32.0
+npm warn   node_modules/eslint-config-next/node_modules/eslint-plugin-import
+npm warn     eslint-plugin-import@"^2.32.0" from eslint-config-next@16.4.5
+npm warn     node_modules/eslint-config-next
+npm warn     1 more (eslint-import-resolver-typescript)
+npm warn ERESOLVE overriding peer dependency
+npm warn While resolving: eslint-plugin-jsx-a11y@6.10.2
+npm warn Found: eslint@10.14.0
+npm warn node_modules/eslint
+npm warn   dev eslint@"^10" from the root project
+npm warn   10 more (@eslint-community/eslint-utils, ...)
+npm warn
+npm warn Could not resolve dependency:
+npm warn peer eslint@"^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9" from eslint-plugin-jsx-a11y@6.10.2
+npm warn node_modules/eslint-config-next/node_modules/eslint-plugin-jsx-a11y
+npm warn   eslint-plugin-jsx-a11y@"^6.10.0" from eslint-config-next@16.4.5
+npm warn   node_modules/eslint-config-next
+npm warn
+npm warn Conflicting peer dependency: eslint@9.39.5
+npm warn node_modules/eslint
+npm warn   peer eslint@"^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9" from eslint-plugin-jsx-a11y@6.10.2
+npm warn   node_modules/eslint-config-next/node_modules/eslint-plugin-jsx-a11y
+npm warn     eslint-plugin-jsx-a11y@"^6.10.0" from eslint-config-next@16.4.5
+npm warn     node_modules/eslint-config-next
+npm warn ERESOLVE overriding peer dependency
+npm warn While resolving: eslint-plugin-react@7.37.5
+npm warn Found: eslint@10.14.0
+npm warn node_modules/eslint
+npm warn   dev eslint@"^10" from the root project
+npm warn   10 more (@eslint-community/eslint-utils, ...)
+npm warn
+npm warn Could not resolve dependency:
+npm warn peer eslint@"^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9.7" from eslint-plugin-react@7.37.5
+npm warn node_modules/eslint-config-next/node_modules/eslint-plugin-react
+npm warn   eslint-plugin-react@"^7.37.0" from eslint-config-next@16.4.5
+npm warn   node_modules/eslint-config-next
+npm warn
+npm warn Conflicting peer dependency: eslint@9.39.5
+npm warn node_modules/eslint
+npm warn   peer eslint@"^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9.7" from eslint-plugin-react@7.37.5
+npm warn   node_modules/eslint-config-next/node_modules/eslint-plugin-react
+npm warn     eslint-plugin-react@"^7.37.0" from eslint-config-next@16.4.5
+npm warn     node_modules/eslint-config-next
+npm warn deprecated recharts@2.15.4: 1.x and 2.x branches are no longer active. Bump to Recharts v3 to receive latest features and bugfixes. See https://github.com/recharts/recharts/wiki/3.0-migration-guide
+
+> tubeforge@1.0.0 postinstall
+> node scripts/postinstall.mjs
+
+[postinstall] created next-env.d.ts (image import types for tsc)
+[postinstall] DATABASE_URL protocol: file: (SQLite)
+[postinstall] prisma generate --schema prisma/schema.sqlite.prisma
+Prisma schema loaded from prisma/schema.sqlite.prisma
+┌─────────────────────────────────────────────────────────┐
+│  Update available 6.19.3 -> 8.0.0-rc.34                 │
+│                                                         │
+│  This is a major update - please follow the guide at    │
+│  https://pris.ly/d/major-version-upgrade                │
+│                                                         │
+│  Run the following to update                            │
+│    npm i --save-dev prisma@latest                       │
+│    npm i @prisma/client@latest                          │
+└─────────────────────────────────────────────────────────┘
+
+✔ Generated Prisma Client (v6.19.3) to ./node_modules/@prisma/client in 343ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+Tip: Interested in query caching in just a few lines of code? Try Accelerate today! https://pris.ly/tip-3-accelerate
+
+[postinstall] prisma db push (sqlite) — creates db file if missing
+Prisma schema loaded from prisma/schema.sqlite.prisma
+Datasource "db": SQLite database "custom.db" at "file:/home/z/my-project/db/custom.db"
+
+🚀  Your database is now in sync with your Prisma schema. Done in 28ms
+
+[postinstall] running scripts/migrate-stage2.mjs (idempotent)
+[migrate-stage2] SQLite detected — stage 2 transition
+[migrate-stage2] phase 1: organizationId already present — skipping
+[migrate-stage2] phase 1: renaming Setting -> LegacySetting (data preserved)
+Script executed successfully.
+[migrate-stage2] phase 2: prisma db push (sqlite)
+Prisma schema loaded from prisma/schema.sqlite.prisma
+Datasource "db": SQLite database "custom.db" at "file:/home/z/my-project/db/custom.db"
+
+🚀  Your database is now in sync with your Prisma schema. Done in 26ms
+
+[migrate-stage2] phase 3: no legacy content under 'default' — bootstrap org not needed
+Script executed successfully.
+[migrate-stage2] phase 3: Membership_one_owner_per_org partial index ensured
+[postinstall] done
+
+added 697 packages, and audited 704 packages in 1m
+
+250 packages are looking for funding
+  run `npm fund` for details
+
+18 vulnerabilities (3 moderate, 15 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+npm warn install-scripts 6 packages have install scripts not yet covered by allowScripts:
+npm warn install-scripts   @parcel/watcher@2.6.0 (install: node scripts/build-from-source.js)
+npm warn install-scripts   @prisma/client@6.19.3 (postinstall: node scripts/postinstall.js)
+npm warn install-scripts   @prisma/engines@6.19.3 (postinstall: node scripts/postinstall.js)
+npm warn install-scripts   @swc/core@1.16.20 (postinstall: node postinstall.js)
+npm warn install-scripts   esbuild@0.28.2 (postinstall: node install.js)
+npm warn install-scripts   prisma@6.19.3 (preinstall: node scripts/preinstall-entry.js)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.

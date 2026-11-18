@@ -1,0 +1,61 @@
+# receipt: b0 battery (npm run test), 2026-11-17, 1003 passed / 0 failed, exit 0 — truncated tail
+  ✓ S165 (d) the golden-video harness — committed baselines + the tolerance metadata per engine
+  ✓ S165 (e) THE FRAME-TRUTH SCAN — the real tree is green, the planted nondeterminism fixture is CAUGHT
+
+◆ S167 — the cinematic finisher (the fBM shake, the CDL grade, the duck lanes, the 3D admission)
+  ✓ S167 fBM shake: zero at strength 0, bounded by ±strength/2, seeded (same seed → same shake), channels distinct
+  ✓ S167 cameraPoseAt: the exponential push-in rides S162's curve; the shake composes; absent fields are byte-identical
+  ✓ S167 grade: the SOP/CDL scalars compile to curves args; absent ⇒ the exact legacy arg stream
+  ✓ S167 duck lanes: attack 0.15 / release 0.4 / depth 0.25 — the keyframed envelope is pinned at its shape
+  ✓ S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuses without its segment, rides as an engine segment with one
+  ✓ s168: the decision domains are the closed nine from the roadmap ask
+  ✓ s168: the animation catalog DERIVES from the engines' own constants
+  ✓ s168: valid directives pass the validator
+  ✓ s168: invented commands are REJECTED, never coerced
+  ✓ s168: the per-target and per-param walls hold
+  ✓ s168: the batch gate is fail-closed and names the rejections
+  ✓ s168: serialization is JSON-stable (sorted keys, round-trip equal)
+  ✓ s168: the prohibitions ride as data (the never-list)
+  ✓ s169: the six modes are the closed kind set
+  ✓ s169: a valid scene passes strict validation
+  ✓ s169: the provenance closure refuses undeclared references
+  ✓ s169: the clock walls and the closed sets hold
+  ✓ s169: an invented directive invalidates the scene (the S168 gate rides)
+  ✓ s169: the timeline projection maps the six modes onto the S87 track kinds
+  ✓ s169: the projection reads the inbound transition from the PREVIOUS scene's boundary
+  ✓ s169: the project timeline sequences back-to-back, atSec wins when present
+  ✓ s169: project validation enforces uniqueness and the closed mode set
+  ✓ s169: serialization is JSON-stable (sorted keys, round-trip equal)
+  ✓ s170: the compiler walks the S169 project into typed engine operations
+  ✓ s170: narration slots carry the scene windows
+  ✓ s170: the ease wall and the boundary arithmetic are fail-closed
+  ✓ s170: THE acceptance — the import graph carries zero provider modules (the AI can be disconnected)
+  ✓ s171: the primitive set is the closed fourteen from the roadmap ask
+  ✓ s171: every primitive rides the ONE curve table (easing overrides must be table names)
+  ✓ s171: samples are normalized, clamped and pure
+  ✓ s171: the timing walls refuse loose clocks
+  ✓ s171: the stagger schedule is arithmetic, honest, bounded
+  ✓ s172: the capability matrix is closed, honest and house-implemented
+  ✓ s172: the resolver admits hosts and named borrowers, refuses the rest
+  ✓ s173: Kokoro is adopted in the registry (the lightweight local candidate)
+  ✓ s173: the local tier contract holds (zero-cost, registry-present)
+  ✓ s176: the router honors tier order and availability — never assumption
+  ✓ s176: principle 8 BY SIGNATURE — a paid fallback needs the acknowledgement flag
+  ✓ s176: the FREE mode routes to zero-cost ONLY — paid is a refusal, not a warning
+  ✓ s174: the quality profiles compile with Nigerian English first-class
+  ✓ s175: the chunker is deterministic sentence-boundary splitting
+  ✓ s175: the planner maps chunks onto slots with corrections; regeneration is selective
+  ✓ s177: the asset cost ladder is native < reuse < stock < generate
+  ✓ s178: the sound plan rides the EXISTING catalogs (moods, duck lanes, the -16 contract)
+  ✓ s179: the inspector finds the roadmap's named problems in the PLAN
+  ✓ s180: repairs are valid S168 directives, one scene each, approval-required
+  ✓ s181: edits are immutable ops that re-validate the whole project
+  ✓ s182: the beginner drives one preset; the advanced user drives knobs — all inside the walls
+  ✓ s183: the estimate rides the plan BEFORE generation; budgets gate; dedupe reuses
+  ✓ s184: the mode contracts hold — the free tier produces COMPLETE videos, never a cripple
+
+◆ S185 — the deployment readiness slice (part 1: the config-truth scan)
+  ✓ S185: the image's node base satisfies the lockfile's engines floor AND the CI-recorded runtime — the undici receipt enforced
+  ✓ S185: the fly worker VM carries the DEPLOYMENT §5.3 measured envelope — both configs, one number, parsed not asserted
+  ✓ S185: the scan is earned, not vacuous — planted drift is caught and NAMED, honest files ride clean
+1003 passed, 0 failed
