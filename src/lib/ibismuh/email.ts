@@ -1,6 +1,6 @@
 // Email delivery (Stage 3, T-3.9 — closes Stage 2 deviation 1).
 //
-// Modes (TUBEFORGE_EMAIL_MODE):
+// Modes (IBISMUH_STUDIO_EMAIL_MODE):
 //   console (default) — the link is logged AND returned in the API response.
 //                       Single-owner installs and sandboxes work with zero
 //                       configuration; NEVER ship this mode in production.
@@ -26,7 +26,7 @@ const mailLog = log.child({ mod: "email" });
 export type EmailMode = "console" | "smtp";
 
 export function emailMode(): EmailMode {
-  return process.env.TUBEFORGE_EMAIL_MODE === "smtp" ? "smtp" : "console";
+  return process.env.IBISMUH_STUDIO_EMAIL_MODE === "smtp" ? "smtp" : "console";
 }
 
 export interface SendMailInput {
@@ -57,13 +57,13 @@ export async function sendMail(input: SendMailInput): Promise<SendMailResult> {
     return { delivered: "console" };
   }
 
-  const host = process.env.TUBEFORGE_SMTP_HOST ?? "";
-  const port = Number(process.env.TUBEFORGE_SMTP_PORT ?? 587);
-  const user = process.env.TUBEFORGE_SMTP_USER ?? "";
-  const pass = process.env.TUBEFORGE_SMTP_PASS ?? "";
-  const from = process.env.TUBEFORGE_SMTP_FROM ?? user;
+  const host = process.env.IBISMUH_STUDIO_SMTP_HOST ?? "";
+  const port = Number(process.env.IBISMUH_STUDIO_SMTP_PORT ?? 587);
+  const user = process.env.IBISMUH_STUDIO_SMTP_USER ?? "";
+  const pass = process.env.IBISMUH_STUDIO_SMTP_PASS ?? "";
+  const from = process.env.IBISMUH_STUDIO_SMTP_FROM ?? user;
   if (!host || !from) {
-    throw new Error("smtp mode selected but TUBEFORGE_SMTP_HOST / TUBEFORGE_SMTP_FROM are unset");
+    throw new Error("smtp mode selected but IBISMUH_STUDIO_SMTP_HOST / IBISMUH_STUDIO_SMTP_FROM are unset");
   }
 
   const messageId = await smtpSession({ host, port, user, pass, from, input });
@@ -186,7 +186,7 @@ async function smtpSession(opts: SmtpOpts): Promise<string | null> {
     await expect(reader, socket, 220, "greeting");
 
     // 2) EHLO — announce + learn extensions
-    write(socket, `EHLO tubeforge.local`);
+    write(socket, `EHLO ibismuh.local`);
     const ehlo = await expect(reader, socket, 250, "EHLO");
     const exts = ehlo.join(" ").toUpperCase();
 
@@ -202,7 +202,7 @@ async function smtpSession(opts: SmtpOpts): Promise<string | null> {
         tlsSocket.once("secureConnect", resolve);
         tlsSocket.once("error", reject);
       });
-      write(tlsSocket, "EHLO tubeforge.local");
+      write(tlsSocket, "EHLO ibismuh.local");
       await expect(reader, tlsSocket, 250, "EHLO after STARTTLS");
       socket.removeAllListeners("data");
       // From here on the TLS socket IS the transport.
@@ -228,7 +228,7 @@ async function finishSession(socket: net.Socket, reader: LineReader, opts: SmtpO
     await expect(reader, socket, 235, "AUTH pass");
   }
 
-  const messageId = `<${Date.now()}-${Math.random().toString(36).slice(2)}@tubeforge>`;
+  const messageId = `<${Date.now()}-${Math.random().toString(36).slice(2)}@ibismuh>`;
   const headers = [
     `From: Ibismuh Studio <${from}>`,
     `To: ${input.to}`,

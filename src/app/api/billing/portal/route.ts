@@ -11,7 +11,7 @@
 //
 // Laws (mirroring the checkout route):
 //   * SESSION-ONLY — the S23 account law.
-//   * FAIL-CLOSED — 503 without TUBEFORGE_STRIPE_SECRET_KEY.
+//   * FAIL-CLOSED — 503 without IBISMUH_STUDIO_STRIPE_SECRET_KEY.
 //   * 409 when the account has no Stripe customer to manage — the portal
 //     manages an EXISTING billing relationship, checkout creates one.
 
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Stripe is not configured on this deployment — set TUBEFORGE_STRIPE_SECRET_KEY to open the customer portal.",
+          "Stripe is not configured on this deployment — set IBISMUH_STUDIO_STRIPE_SECRET_KEY to open the customer portal.",
       },
       { status: 503 }
     );
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
   const gate = stripeGate();
   if (!gate.secret)
     return NextResponse.json(
-      { error: "Stripe is not configured on this deployment — set TUBEFORGE_STRIPE_SECRET_KEY to manage subscriptions." },
+      { error: "Stripe is not configured on this deployment — set IBISMUH_STUDIO_STRIPE_SECRET_KEY to manage subscriptions." },
       { status: 503 }
     );
   const result = await stripeCreate(

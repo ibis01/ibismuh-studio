@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const secret = getAuthSecret();
     if (!secret)
       return NextResponse.json(
-        { error: "Auth secret missing — TUBEFORGE_AUTH_SECRET must be set in .env to enable the lock" },
+        { error: "Auth secret missing — IBISMUH_STUDIO_AUTH_SECRET must be set in .env to enable the lock" },
         { status: 500 }
       );
 

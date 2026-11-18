@@ -1,5 +1,5 @@
 // S3 driver (S106 / P1.2 extraction) — the zero-dependency SigV4 signer
-// behind storage.ts's s3 mode: config from TUBEFORGE_S3_* env, request
+// behind storage.ts's s3 mode: config from IBISMUH_STUDIO_S3_* env, request
 // signing, presigned GETs, and the fetch envelope. Works with AWS S3,
 // Cloudflare R2 and MinIO (path-style addressing). Pure crypto + fetch —
 // no storage/quota imports (the dependency arrow points one way: the
@@ -16,14 +16,14 @@ export interface S3Config {
 }
 
 export function s3Config(): S3Config | null {
-  const bucket = process.env.TUBEFORGE_S3_BUCKET;
-  const accessKeyId = process.env.TUBEFORGE_S3_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.TUBEFORGE_S3_SECRET_ACCESS_KEY;
+  const bucket = process.env.IBISMUH_STUDIO_S3_BUCKET;
+  const accessKeyId = process.env.IBISMUH_STUDIO_S3_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.IBISMUH_STUDIO_S3_SECRET_ACCESS_KEY;
   if (!bucket || !accessKeyId || !secretAccessKey) return null;
   return {
     bucket,
-    region: process.env.TUBEFORGE_S3_REGION ?? "auto",
-    endpoint: (process.env.TUBEFORGE_S3_ENDPOINT ?? `https://s3.${process.env.TUBEFORGE_S3_REGION ?? "auto"}.amazonaws.com`).replace(/\/+$/, ""),
+    region: process.env.IBISMUH_STUDIO_S3_REGION ?? "auto",
+    endpoint: (process.env.IBISMUH_STUDIO_S3_ENDPOINT ?? `https://s3.${process.env.IBISMUH_STUDIO_S3_REGION ?? "auto"}.amazonaws.com`).replace(/\/+$/, ""),
     accessKeyId,
     secretAccessKey,
   };

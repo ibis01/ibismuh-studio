@@ -13,7 +13,7 @@ import { log } from "./log";
 
 /** Per-organization quota ceiling. Default 10 GiB; 0 = unlimited. */
 export function storageQuotaBytes(): number {
-  const gb = Number(process.env.TUBEFORGE_STORAGE_QUOTA_GB ?? "");
+  const gb = Number(process.env.IBISMUH_STUDIO_STORAGE_QUOTA_GB ?? "");
   if (!Number.isFinite(gb) || gb <= 0) return 10 * 1024 ** 3;
   return Math.floor(gb * 1024 ** 3);
 }
@@ -64,7 +64,7 @@ export async function bumpUsage(orgId: string, delta: number): Promise<void> {
 // replaces) into the counter, atomically with the hold's removal.
 
 function reservationTtlMs(): number {
-  const v = Number(process.env.TUBEFORGE_STORAGE_RESERVATION_TTL_MS ?? "");
+  const v = Number(process.env.IBISMUH_STUDIO_STORAGE_RESERVATION_TTL_MS ?? "");
   return Number.isFinite(v) && v > 0 ? v : 60 * 60_000;
 }
 

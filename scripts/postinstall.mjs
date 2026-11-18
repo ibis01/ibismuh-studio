@@ -54,8 +54,8 @@ if (existsSync(envPath)) {
     let env = readFileSync(envPath, 'utf8');
     const rand = () => randomBytes(24).toString('base64url');
     for (const [key, note] of [
-      ['TUBEFORGE_AUTH_SECRET', 'signs session/api tokens'],
-      ['TUBEFORGE_ENCRYPTION_KEY', 'encrypts secrets at rest'],
+      ['IBISMUH_STUDIO_AUTH_SECRET', 'signs session/api tokens'],
+      ['IBISMUH_STUDIO_ENCRYPTION_KEY', 'encrypts secrets at rest'],
     ]) {
       if (!new RegExp(`^${key}=.*`, 'm').test(env)) {
         env += (env.endsWith('\n') || env === '' ? '' : '\n') + `${key}=${rand()}\n`;

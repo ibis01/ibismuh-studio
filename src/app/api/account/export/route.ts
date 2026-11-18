@@ -83,6 +83,6 @@ export async function GET(req: NextRequest) {
       },
       note: "Binary artifacts (renders, voiceovers, art) live under uploads/<videoId>/ on the server; contact the operator for a full archive.",
     },
-    { headers: { "Content-Disposition": 'attachment; filename="tubeforge-export.json"' } }
+    { headers: { "Content-Disposition": 'attachment; filename="ibismuh-export.json"' } }
   );
 }

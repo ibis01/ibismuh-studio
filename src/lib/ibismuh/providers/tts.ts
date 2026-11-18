@@ -598,7 +598,7 @@ export async function ttsSynthesize(
   // owning provider using its saved credentials. This lets a user clone
   // inline from the video dialog and immediately synthesize the voiceover,
   // without first flipping Settings → Voiceover. Self-hosted clones also
-  // fall back to the OPERATOR's shared voice server (TUBEFORGE_SHARED_VOICE_*)
+  // fall back to the OPERATOR's shared voice server (IBISMUH_STUDIO_SHARED_VOICE_*)
   // when the user hasn't configured their own.
   if (isClonedVoiceId(request.voice)) {
     const ownerProvider = await voiceProfileProvider(request.voice);
@@ -1245,7 +1245,7 @@ async function selfhostTts(
           speed: req.speed,
         }),
       },
-      // The tts capability timeout (180s default, TUBEFORGE_TIMEOUT_TTS
+      // The tts capability timeout (180s default, IBISMUH_STUDIO_TIMEOUT_TTS
       // override) — CPU-bound self-hosted synthesis legitimately runs long.
       { capability: "tts" },
     );

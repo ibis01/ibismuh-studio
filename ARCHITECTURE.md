@@ -69,7 +69,7 @@ exists anywhere in the repo.
   bearer tokens; email verification + password reset; GDPR export/delete.
 - **Gate model:** DEFAULT-DENY middleware with a public allow-list (the
   auth endpoints + `/api/youtube/callback`); a production fail-safe
-  refuses to serve when `TUBEFORGE_AUTH_SECRET` is missing.
+  refuses to serve when `IBISMUH_STUDIO_AUTH_SECRET` is missing.
 - **Login lockout (S46):** rolling 10-minute window, 5 in-window failures
   → lockout, backed by the `AuthAttempt` TABLE and verified through a
   second Prisma client — deployments and multi-instance rolls can no
@@ -319,7 +319,7 @@ The order follows the roadmap stages:
 5. **No local filesystem writes from API routes.** All artifacts go to object storage; all reads go through CDN or presigned URLs.
 6. **No in-memory security state.** Sessions, rate-limit buckets, login lockouts all live in Redis.
 7. **Every provider call goes through the provider abstraction.** No direct `fetch` to a provider URL from a route handler.
-8. **No `TUBEFORGE_ALLOW_PRIVATE_HOSTS=1` in production.** The opt-out is dev-only for self-hosted Ollama.
+8. **No `IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS=1` in production.** The opt-out is dev-only for self-hosted Ollama.
 9. **No endpoint is public unless explicitly listed in `PUBLIC_API`.** Default-deny; the auth gate is required.
 10. **Schema changes go through `prisma migrate dev`** with a reviewable migration file. No `prisma db push` against production.
 
@@ -412,7 +412,7 @@ Every existing content model (`Video`, `Channel`, `Character`, `Activity`, `Rese
 The global `Setting` table is removed in Stage 2. Its contents are migrated:
 
 - `auth.password` → `User.passwordHash` on the first claimed owner.
-- `auth.enabled` → env-only signal (`TUBEFORGE_REQUIRE_LOCK=1` becomes the default in production; the opt-out is `TUBEFORGE_REQUIRE_LOCK=0`).
+- `auth.enabled` → env-only signal (`IBISMUH_STUDIO_REQUIRE_LOCK=1` becomes the default in production; the opt-out is `IBISMUH_STUDIO_REQUIRE_LOCK=0`).
 - `ytClientId`, `ytClientSecret` → server-wide config in `.env` (the OAuth client is shared across users; only the per-user refresh token is in `YouTubeAccount`).
 - `ytRefreshToken`, `ytChannelTitle`, `ytChannelThumb`, `ytPrivacyStatus`, `ytCategoryId` → `YouTubeAccount`.
 - `tts.*`, `zai.*`, `stock.*`, capability provider config → `ProviderCredential` + `UserSetting` (for non-secret per-user preferences).
@@ -470,7 +470,7 @@ storage.list(videoId) → string[]
 
 Routes that stream media (`GET /api/videos/[id]/mp4`, `GET /api/videos/[id]/voiceover`, `GET /api/videos/[id]/thumbnail`, etc.) redirect to presigned URLs instead of `fs.createReadStream`. The client downloads directly from the CDN.
 
-The `db/auth.lock` flag file becomes a `Setting` row (`auth.enabled` already is) — the middleware's `lockFlagActive()` check switches to reading an env signal (`TUBEFORGE_REQUIRE_LOCK=1`) on serverless, or a Redis key on standalone.
+The `db/auth.lock` flag file becomes a `Setting` row (`auth.enabled` already is) — the middleware's `lockFlagActive()` check switches to reading an env signal (`IBISMUH_STUDIO_REQUIRE_LOCK=1`) on serverless, or a Redis key on standalone.
 
 ---
 
@@ -485,7 +485,7 @@ The `db/auth.lock` flag file becomes a `Setting` row (`auth.enabled` already is)
 - Pick one package manager; delete the other lockfile; align all scripts; update `SETUP.md`.
 - Add CI: `.github/workflows/ci.yml` running `typecheck`, `lint`, `test`.
 - Add `prisma migrate dev` workflow; create the first migration from the current schema.
-- Eliminate D-27 (first-come race on `/api/auth/setup`): add `TUBEFORGE_OWNER_TOKEN` env bootstrap so the first call must present it.
+- Eliminate D-27 (first-come race on `/api/auth/setup`): add `IBISMUH_STUDIO_OWNER_TOKEN` env bootstrap so the first call must present it.
 
 ### 6.2 Stage 2 — multi-tenant
 
@@ -495,7 +495,7 @@ The `db/auth.lock` flag file becomes a `Setting` row (`auth.enabled` already is)
 - Add automated cross-tenant isolation tests in CI: two test accounts; assert no access to each other's projects, files, jobs, credentials, generated content.
 - Move session state, rate-limit buckets, and login lockouts to Redis (survive restart).
 - Replace the in-memory `__tfBudget` pacing state with Redis-backed pacing (or accept that AI budget resets on restart as a degraded mode).
-- Encrypt `ProviderCredential.apiKey` and `YouTubeAccount.refreshToken` at rest with a `TUBEFORGE_ENCRYPTION_KEY` env var.
+- Encrypt `ProviderCredential.apiKey` and `YouTubeAccount.refreshToken` at rest with a `IBISMUH_STUDIO_ENCRYPTION_KEY` env var.
 
 ### 6.3 Default-deny auth model
 
@@ -503,8 +503,8 @@ Today the studio is opt-in (open by default). For a multi-user SaaS, the model f
 
 - Auth is required by default for every `/api/*` route.
 - The public allow-list shrinks to `/api/auth/{status,login,logout,register,verify-email,reset-password}`.
-- The production fail-safe refuses to serve any non-auth endpoint if `TUBEFORGE_AUTH_SECRET` is missing.
-- The `db/auth.lock` flag file is removed; the gate is always active when `TUBEFORGE_AUTH_SECRET` is set.
+- The production fail-safe refuses to serve any non-auth endpoint if `IBISMUH_STUDIO_AUTH_SECRET` is missing.
+- The `db/auth.lock` flag file is removed; the gate is always active when `IBISMUH_STUDIO_AUTH_SECRET` is set.
 
 The recovery path (`bun run auth:reset` / `npm run auth:reset`) becomes a CLI that resets a specific user's password by email, not a global lock toggle.
 

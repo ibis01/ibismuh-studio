@@ -9,13 +9,14 @@
 // DB). Session revocation is enforced by requireUser() at the route level,
 // which resolves the Session row the cookie's jti points at.
 //
-// Production fail-safe: without TUBEFORGE_AUTH_SECRET a production server
+// Production fail-safe: without IBISMUH_STUDIO_AUTH_SECRET a production server
 // refuses to serve any non-auth endpoint (503). Local development without a
 // secret warns once and stays open (npm run setup provisions one).
 
+import "./lib/ibismuh/compat-env";
 import { NextRequest, NextResponse } from "next/server";
 import {
-  SESSION_COOKIE,
+  pickSessionCookie,
   getAuthSecret,
   verifyToken,
 } from "@/lib/ibismuh/auth-token";
@@ -52,7 +53,7 @@ const PUBLIC_API = new Set<string>([
   "/api/youtube/callback",
   // Stage 7 (T-7.5) — Stripe webhook. Stripe POSTs server-to-server with no
   // session cookie; the `stripe-signature` HMAC (verified in the route
-  // against TUBEFORGE_STRIPE_WEBHOOK_SECRET) is the auth. The middleware's
+  // against IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET) is the auth. The middleware's
   // per-IP rate limit still applies (Stripe retries on 429 — fine).
   "/api/billing/webhook",
 ]);
@@ -67,7 +68,7 @@ function warnNoSecret(): void {
   if (warnedOpenGate) return;
   warnedOpenGate = true;
   mwLog.warn(
-    "TUBEFORGE_AUTH_SECRET is not set — every API answers 503 " +
+    "IBISMUH_STUDIO_AUTH_SECRET is not set — every API answers 503 " +
       "(add it to .env — see .env.example; npm run setup provisions one)."
   );
 }
@@ -145,10 +146,10 @@ export async function middleware(req: NextRequest) {
 
   // PRODUCTION FAIL-SAFE — no secret, no data.
   if (!secret) {
-    if (isProd || process.env.TUBEFORGE_REQUIRE_AUTH !== "0") {
+    if (isProd || process.env.IBISMUH_STUDIO_REQUIRE_AUTH !== "0") {
       warnNoSecret();
       return respond(
-        { error: "TUBEFORGE_AUTH_SECRET is not configured — sign-in is unavailable" },
+        { error: "IBISMUH_STUDIO_AUTH_SECRET is not configured — sign-in is unavailable" },
         503
       );
     }
@@ -156,7 +157,7 @@ export async function middleware(req: NextRequest) {
 
   const bearer = req.headers.get("authorization");
   const token =
-    bearer?.startsWith("Bearer ") ? bearer.slice(7).trim() : req.cookies.get(SESSION_COOKIE)?.value;
+    bearer?.startsWith("Bearer ") ? bearer.slice(7).trim() : pickSessionCookie((n) => req.cookies.get(n)?.value);
 
   const payload = await verifyToken(token, secret);
   if (!payload || payload.s === "state") {
@@ -168,7 +169,7 @@ export async function middleware(req: NextRequest) {
 
   // CSRF guard for cookie-authenticated mutations: if an Origin is present it
   // must match a trusted origin. Trust is decided by origin-trust.ts:
-  //   1. TUBEFORGE_ALLOWED_ORIGINS — explicit allow-list; SUFFIX entries
+  //   1. IBISMUH_STUDIO_ALLOWED_ORIGINS — explicit allow-list; SUFFIX entries
   //      (".space-z.ai" / "*.space-z.ai") cover the domain and every
   //      subdomain under it — the preview deployment's proxy rewrites the
   //      Host header, so the Stage-2 Host comparison alone rejected every
@@ -176,10 +177,10 @@ export async function middleware(req: NextRequest) {
   //      "AI Script + Metadata failed / Cross-origin request rejected").
   //   2. S38 BUILTIN PREVIEW TRUST — `preview-*.space-z.ai` (Z.ai chat-bot
   //      preview platform) is always trusted, no env config needed — the
-  //      chat-bot preview deployment cannot have TUBEFORGE_ALLOWED_ORIGINS
+  //      chat-bot preview deployment cannot have IBISMUH_STUDIO_ALLOWED_ORIGINS
   //      provisioned out-of-band, so without this default the z SDK wiring
   //      is unreachable from the deployed preview.
-  //   3. X-Forwarded-Host — only when TUBEFORGE_TRUST_FORWARDED_HOST=1 and
+  //   3. X-Forwarded-Host — only when IBISMUH_STUDIO_TRUST_FORWARDED_HOST=1 and
   //      the proxy provably overwrites the header.
   //   4. The request's own Host header (direct connections, no proxy).
   // A Bearer-token client (curl/scripts) sends no Origin and is allowed by
@@ -191,8 +192,8 @@ export async function middleware(req: NextRequest) {
         origin,
         host: req.headers.get("host"),
         forwardedHost: req.headers.get("x-forwarded-host"),
-        allowedOrigins: parseAllowedOrigins(process.env.TUBEFORGE_ALLOWED_ORIGINS),
-        trustForwardedHost: process.env.TUBEFORGE_TRUST_FORWARDED_HOST === "1",
+        allowedOrigins: parseAllowedOrigins(process.env.IBISMUH_STUDIO_ALLOWED_ORIGINS),
+        trustForwardedHost: process.env.IBISMUH_STUDIO_TRUST_FORWARDED_HOST === "1",
       });
       if (!decision.ok) {
         // The operator-facing diagnostic: everything needed to configure the
@@ -202,7 +203,7 @@ export async function middleware(req: NextRequest) {
           `CSRF guard rejected ${req.method} ${pathname}: ` +
             `origin=${origin} host=${req.headers.get("host") ?? "?"} ` +
             `x-forwarded-host=${req.headers.get("x-forwarded-host") ?? "?"} — ` +
-            `add the origin to TUBEFORGE_ALLOWED_ORIGINS (a suffix entry like ".space-z.ai" covers every subdomain).`
+            `add the origin to IBISMUH_STUDIO_ALLOWED_ORIGINS (a suffix entry like ".space-z.ai" covers every subdomain).`
         );
         return respond({ error: "Cross-origin request rejected" }, 403);
       }

@@ -14,7 +14,7 @@
 // uid + jti — S20 persists the jti in the ApiToken registry so they get the
 // same instant revocation; a revoked/unknown jti is dead on arrival. (The
 // stateless fallback died with the registry: deny-by-default is the posture.)
-// Rotating TUBEFORGE_AUTH_SECRET still kills everything at once.
+// Rotating IBISMUH_STUDIO_AUTH_SECRET still kills everything at once.
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { NextRequest } from "next/server";
@@ -24,6 +24,7 @@ import { trustedClientIp } from "./proxy-trust";
 import { enforceSharedRateLimit } from "./shared-rate-limit";
 import {
   API_TOKEN_MAX_AGE_SEC,
+  pickSessionCookie,
   SESSION_COOKIE,
   SESSION_MAX_AGE_SEC,
   createSignedToken,
@@ -238,7 +239,7 @@ export async function resolveRequestUser(req: NextRequest): Promise<TenantCtx | 
   const bearer = req.headers.get("authorization");
   const token = bearer?.startsWith("Bearer ")
     ? bearer.slice(7).trim()
-    : req.cookies.get(SESSION_COOKIE)?.value;
+    : pickSessionCookie((n) => req.cookies.get(n)?.value);
   const payload = await verifyToken(token, secret);
   if (!payload || payload.s === "state") return null;
   if (payload.s === "session") return resolveSessionCtx(payload.jti);
@@ -261,7 +262,7 @@ export async function sessionIdFromRequest(req: NextRequest): Promise<string | n
   const bearer = req.headers.get("authorization");
   const token = bearer?.startsWith("Bearer ")
     ? bearer.slice(7).trim()
-    : req.cookies.get(SESSION_COOKIE)?.value;
+    : pickSessionCookie((n) => req.cookies.get(n)?.value);
   const payload = await verifyToken(token, secret);
   return payload?.s === "session" ? payload.jti : null;
 }
@@ -284,13 +285,13 @@ export async function requireUser(req: NextRequest): Promise<AuthResult> {
     return {
       ok: false,
       status: 503,
-      error: "TUBEFORGE_AUTH_SECRET is not configured — sign-in is unavailable",
+      error: "IBISMUH_STUDIO_AUTH_SECRET is not configured — sign-in is unavailable",
     };
   }
   const bearer = req.headers.get("authorization");
   const token = bearer?.startsWith("Bearer ")
     ? bearer.slice(7).trim()
-    : req.cookies.get(SESSION_COOKIE)?.value;
+    : pickSessionCookie((n) => req.cookies.get(n)?.value);
 
   const payload = await verifyToken(token, secret);
   if (!payload) return { ok: false, status: 401, error: AUTH_REQUIRED };
@@ -412,10 +413,10 @@ export async function revokeApiToken(userId: string, id: string): Promise<boolea
 // S28 — the embedded-preview law (same as auth.ts's copy: the studio renders
 // inside cross-site preview iframes where Lax cookies are refused — a
 // successful sign-in bounced straight back to an empty form). Behind such a
-// proxy set TUBEFORGE_COOKIE_SAMESITE=none — the session ships
+// proxy set IBISMUH_STUDIO_COOKIE_SAMESITE=none — the session ships
 // SameSite=None; Secure (browsers reject None without Secure, so secure is
 // forced on). Direct deploys keep the Lax default.
-const EMBEDDED_COOKIES = process.env.TUBEFORGE_COOKIE_SAMESITE === "none";
+const EMBEDDED_COOKIES = process.env.IBISMUH_STUDIO_COOKIE_SAMESITE === "none";
 
 export function sessionCookie(token: string) {
   return {

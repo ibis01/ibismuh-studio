@@ -37,7 +37,7 @@ const TITLE_FONT_CANDIDATES = [
 ];
 
 export function resolveTitleFontFile(): string | null {
-  const env = process.env.TUBEFORGE_TITLE_FONT;
+  const env = process.env.IBISMUH_STUDIO_TITLE_FONT;
   if (env) {
     try {
       if (fs.existsSync(env)) return env;

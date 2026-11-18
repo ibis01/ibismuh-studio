@@ -136,7 +136,7 @@ cat <<EOF
 EOF
 '''
 
-delim = "TUBEFORGE_VOICE_PY_EOF_9x7"
+delim = "IBISMUH_STUDIO_VOICE_PY_EOF_9x7"
 assert delim not in voice, "delimiter collision!"
 
 header = (

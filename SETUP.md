@@ -102,10 +102,10 @@ cross-tenant isolation suite (`e2e/isolation.spec.ts`, runs in CI).
 
 | | Local dev (default) | Production |
 |---|---|---|
-| `TUBEFORGE_AUTH_SECRET` in `.env` | set (`npm run setup` provisions one) | set (32+ hex chars) — without it a production server refuses to serve any API (503) |
-| `TUBEFORGE_ENCRYPTION_KEY` in `.env` | set — encrypts provider keys + YouTube tokens at rest | set |
+| `IBISMUH_STUDIO_AUTH_SECRET` in `.env` | set (`npm run setup` provisions one) | set (32+ hex chars) — without it a production server refuses to serve any API (503) |
+| `IBISMUH_STUDIO_ENCRYPTION_KEY` in `.env` | set — encrypts provider keys + YouTube tokens at rest | set |
 | First visit | registration form (the FIRST account claims any pre-Stage-2 data — see below) | same |
-| Email verification / password reset | `TUBEFORGE_EMAIL_MODE=console` (default): links are logged + returned in the response | `TUBEFORGE_EMAIL_MODE=smtp` + `TUBEFORGE_SMTP_*` (see §7) — the response then omits the link |
+| Email verification / password reset | `IBISMUH_STUDIO_EMAIL_MODE=console` (default): links are logged + returned in the response | `IBISMUH_STUDIO_EMAIL_MODE=smtp` + `IBISMUH_STUDIO_SMTP_*` (see §7) — the response then omits the link |
 | Locked out? | `npm run auth:reset -- --email you@example.com` (prints a reset link; `--set NewPass123` sets it directly) | same |
 
 **Upgrading an existing single-user install** — the migration
@@ -117,8 +117,8 @@ global settings become their per-user settings (YouTube connection, provider
 keys, preferences). A stranger registering first cannot steal the data — the
 password proof blocks them.
 
-Rotating `TUBEFORGE_AUTH_SECRET` signs every session/token out instantly.
-Rotating `TUBEFORGE_ENCRYPTION_KEY` invalidates stored secrets (they must be
+Rotating `IBISMUH_STUDIO_AUTH_SECRET` signs every session/token out instantly.
+Rotating `IBISMUH_STUDIO_ENCRYPTION_KEY` invalidates stored secrets (they must be
 re-entered) — rotate one at a time, not both together.
 
 ---
@@ -217,8 +217,8 @@ and `fly.toml` pick the command per service:
 ### Option A — Docker Compose (one box)
 
 ```bash
-cp .env.example .env      # set POSTGRES_PASSWORD, TUBEFORGE_AUTH_SECRET,
-                           # TUBEFORGE_ENCRYPTION_KEY (required!)
+cp .env.example .env      # set POSTGRES_PASSWORD, IBISMUH_STUDIO_AUTH_SECRET,
+                           # IBISMUH_STUDIO_ENCRYPTION_KEY (required!)
 docker compose up -d --build
 docker compose up -d --scale worker=2   # more render capacity
 ```
@@ -231,9 +231,9 @@ Docker volume (`uploads`) — see storage below to move it off-box.
 
 ```bash
 fly launch --no-deploy --copy-config
-fly secrets set TUBEFORGE_AUTH_SECRET=... TUBEFORGE_ENCRYPTION_KEY=... \
+fly secrets set IBISMUH_STUDIO_AUTH_SECRET=... IBISMUH_STUDIO_ENCRYPTION_KEY=... \
   DATABASE_URL=postgres://... \
-  TUBEFORGE_STORAGE_DRIVER=s3 TUBEFORGE_S3_BUCKET=... TUBEFORGE_S3_ACCESS_KEY_ID=...
+  IBISMUH_STUDIO_STORAGE_DRIVER=s3 IBISMUH_STUDIO_S3_BUCKET=... IBISMUH_STUDIO_S3_ACCESS_KEY_ID=...
 fly deploy
 fly scale count worker=2
 ```
@@ -248,25 +248,25 @@ volume and mount it at `/app/uploads` (see the commented `[[mounts]]` in
 run ffmpeg renders or the queue loop — pair it with at least one worker
 container elsewhere (any VPS running the same image with
 `node --import tsx scripts/worker.mts`), pointing at the same Neon/Supabase
-Postgres. Set `TUBEFORGE_NO_CLAIM=1` on the web role so only the workers claim
+Postgres. Set `IBISMUH_STUDIO_NO_CLAIM=1` on the web role so only the workers claim
 jobs.
 
 ### Storage — local volume vs. S3/R2
 
-| | `TUBEFORGE_STORAGE_DRIVER=local` (default) | `TUBEFORGE_STORAGE_DRIVER=s3` |
+| | `IBISMUH_STUDIO_STORAGE_DRIVER=local` (default) | `IBISMUH_STUDIO_STORAGE_DRIVER=s3` |
 |---|---|---|
 | Media lives in | a shared volume at `/app/uploads` | any S3-compatible bucket (AWS S3, Cloudflare R2, MinIO) |
 | Video delivery | streamed by the app (Range requests, constant memory) | **302 → presigned URL** — bytes flow CDN → client, never through the app |
-| Quota | per-organization byte counter (`TUBEFORGE_STORAGE_QUOTA_GB`, default 10) | same |
-| Render scratch | same volume | local tmp on the worker (`TUBEFORGE_SCRATCH_ROOT`), artifacts upload on completion |
-| Env | — | `TUBEFORGE_S3_BUCKET`, `TUBEFORGE_S3_REGION` (`auto` for R2), `TUBEFORGE_S3_ENDPOINT`, `TUBEFORGE_S3_ACCESS_KEY_ID`, `TUBEFORGE_S3_SECRET_ACCESS_KEY` |
+| Quota | per-organization byte counter (`IBISMUH_STUDIO_STORAGE_QUOTA_GB`, default 10) | same |
+| Render scratch | same volume | local tmp on the worker (`IBISMUH_STUDIO_SCRATCH_ROOT`), artifacts upload on completion |
+| Env | — | `IBISMUH_STUDIO_S3_BUCKET`, `IBISMUH_STUDIO_S3_REGION` (`auto` for R2), `IBISMUH_STUDIO_S3_ENDPOINT`, `IBISMUH_STUDIO_S3_ACCESS_KEY_ID`, `IBISMUH_STUDIO_S3_SECRET_ACCESS_KEY` |
 
 ### Email — console vs. real SMTP
 
-`TUBEFORGE_EMAIL_MODE=smtp` activates the built-in zero-dependency SMTP client
-(STARTTLS on 25/587, implicit TLS on 465) with `TUBEFORGE_SMTP_HOST`,
-`TUBEFORGE_SMTP_PORT`, `TUBEFORGE_SMTP_USER`, `TUBEFORGE_SMTP_PASS`,
-`TUBEFORGE_SMTP_FROM`. Console mode (default) is fine for single-owner boxes
+`IBISMUH_STUDIO_EMAIL_MODE=smtp` activates the built-in zero-dependency SMTP client
+(STARTTLS on 25/587, implicit TLS on 465) with `IBISMUH_STUDIO_SMTP_HOST`,
+`IBISMUH_STUDIO_SMTP_PORT`, `IBISMUH_STUDIO_SMTP_USER`, `IBISMUH_STUDIO_SMTP_PASS`,
+`IBISMUH_STUDIO_SMTP_FROM`. Console mode (default) is fine for single-owner boxes
 ONLY — in production the verification/reset links must reach inboxes.
 
 ### Operations quick reference

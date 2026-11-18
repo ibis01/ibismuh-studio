@@ -5,7 +5,7 @@
 // claimer must prove the old studio password when one was configured), issues
 // a session cookie, and returns a verification link.
 //
-// Email delivery: TUBEFORGE_EMAIL_MODE=console (default) logs + returns the
+// Email delivery: IBISMUH_STUDIO_EMAIL_MODE=console (default) logs + returns the
 // link so single-owner installs and the sandbox work without SMTP; the SMTP
 // adapter lands in Stage 3 (see ROADMAP Stage 2 deviations).
 
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     const secret = getAuthSecret();
     if (!secret)
       return NextResponse.json(
-        { error: "TUBEFORGE_AUTH_SECRET is not configured — registration is unavailable" },
+        { error: "IBISMUH_STUDIO_AUTH_SECRET is not configured — registration is unavailable" },
         { status: 503 }
       );
 

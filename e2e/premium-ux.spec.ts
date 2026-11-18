@@ -25,7 +25,7 @@ async function register(request: APIRequestContext): Promise<string> {
   if (d.verification?.url) await request.get(d.verification.url);
   const setCookie = res.headers()["set-cookie"];
   const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(";")[0] ?? "";
-  expect(cookie.startsWith("tf_session=")).toBe(true);
+  expect(cookie.startsWith("ibismuh_session=")).toBe(true);
   return cookie;
 }
 
@@ -49,7 +49,7 @@ test.describe("Stage 4a premium UX", () => {
   test("⌘K palette: open, filter, navigate (T-4.1)", async ({ page }) => {
     const cookie = await register(page.request as unknown as APIRequestContext);
     await page.context().addCookies([
-      { name: "tf_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
+      { name: "ibismuh_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
     ]);
     await page.goto("/");
     await page.waitForSelector("nav[aria-label='Main navigation']");
@@ -68,7 +68,7 @@ test.describe("Stage 4a premium UX", () => {
   test("guided brief: steps gate and the draft survives a reload (T-4.3)", async ({ page }) => {
     const cookie = await register(page.request as unknown as APIRequestContext);
     await page.context().addCookies([
-      { name: "tf_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
+      { name: "ibismuh_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
     ]);
     await page.goto("/");
     await page.waitForSelector("nav[aria-label='Main navigation']");
@@ -114,7 +114,7 @@ test.describe("Stage 4a premium UX", () => {
   test("script tab: classic editor autosaves through PATCH (T-4.4)", async ({ page, request }) => {
     const cookie = await register(request);
     await page.context().addCookies([
-      { name: "tf_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
+      { name: "ibismuh_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
     ]);
 
     // Classic-format video with a custom script (synchronous, no AI calls).
@@ -167,7 +167,7 @@ test.describe("Stage 4b premium UX", () => {
   test("voice studio: catalog renders and pronunciations roundtrip (T-4.10/T-4.11)", async ({ page, request }) => {
     const cookie = await register(request);
     await page.context().addCookies([
-      { name: "tf_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
+      { name: "ibismuh_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
     ]);
     await page.goto("/");
     await page.waitForSelector("nav[aria-label='Main navigation']");
@@ -198,7 +198,7 @@ test.describe("Stage 4b premium UX", () => {
   test("cast: roster readiness + the Cast-in section (T-4.9)", async ({ page, request }) => {
     const cookie = await register(request);
     await page.context().addCookies([
-      { name: "tf_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
+      { name: "ibismuh_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
     ]);
 
     // A character with a complete persona but no art (deterministic — no AI).
@@ -235,7 +235,7 @@ test.describe("Stage 4b premium UX", () => {
   test("detail dialog: clone tab deep-links to the Voice Studio (T-4.10)", async ({ page, request }) => {
     const cookie = await register(request);
     await page.context().addCookies([
-      { name: "tf_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
+      { name: "ibismuh_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
     ]);
 
     const classic = await request.post("/api/videos", {
@@ -265,7 +265,7 @@ test.describe("Stage 4b premium UX", () => {
   test("research: scan rail and empty state render (T-4.8)", async ({ page, request }) => {
     const cookie = await register(request);
     await page.context().addCookies([
-      { name: "tf_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
+      { name: "ibismuh_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
     ]);
     await page.goto("/");
     await page.waitForSelector("nav[aria-label='Main navigation']");
@@ -290,7 +290,7 @@ test.describe("S98 settings provider row honesty", () => {
   test("artwork row: attributed factors, visible model hints, free-lane test hint", async ({ page, request }) => {
     const cookie = await register(request);
     await page.context().addCookies([
-      { name: "tf_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
+      { name: "ibismuh_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
     ]);
     await page.goto("/");
     await page.waitForSelector("nav[aria-label='Main navigation']");

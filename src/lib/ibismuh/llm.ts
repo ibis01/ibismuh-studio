@@ -171,7 +171,7 @@ async function openaiFetch(
   timeoutMs: number
 ): Promise<LLMCompletion> {
   // safeFetch: destination validated (public hosts unless
-  // TUBEFORGE_ALLOW_PRIVATE_HOSTS=1 for self-hosted servers), redirects
+  // IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS=1 for self-hosted servers), redirects
   // re-validated, 256 MB response cap, AbortSignal timeout kept.
   const res = await safeFetch(`${s.baseUrl}${path}`, {
     method: "POST",

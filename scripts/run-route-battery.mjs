@@ -8,7 +8,7 @@
 //   PHASE 1 (enforce) — standard daemon (the S40 ship gate ENFORCING, the
 //     deployment default): 16 probes, s5→s25 (minus the special-state and
 //     gateway-dependent ones — see the exclusion list below).
-//   PHASE 2 (report) — daemon rebooted with TUBEFORGE_QC_ENFORCEMENT=report
+//   PHASE 2 (report) — daemon rebooted with IBISMUH_STUDIO_QC_ENFORCEMENT=report
 //     (the documented operator advisory mode): s29, whose export contract
 //     predates the S40 gate — its "GET export streams a ZIP" law is the
 //     pre-gate packaging contract, honestly re-run in the mode that still
@@ -18,14 +18,14 @@
 // in-sandbox (gateway TTS) — see the exclusion list at PHASE1_PROBES.
 //
 // Out of scope, on demand only (each needs daemon-state dances documented
-// in its own header): s27 + s32 (TUBEFORGE_PRICING_VERIFIED + mid-suite
+// in its own header): s27 + s32 (IBISMUH_STUDIO_PRICING_VERIFIED + mid-suite
 // restarts), s28 + s30 (cookie-samesite / allowed-origins overrides).
 // Gateway-dependent (verified in the Z.ai sandbox, not on bare runners):
 // s8 + s11 — see the exclusion note at PHASE1_PROBES.
 //
 // Two shared-IP realities the runner neutralizes, both disclosed:
 //   * the middleware per-IP tiers are RAISED for the battery daemon
-//     (TUBEFORGE_RATE_WRITE=3000 / READ=9000): the probe train through one
+//     (IBISMUH_STUDIO_RATE_WRITE=3000 / READ=9000): the probe train through one
 //     IP would otherwise exhaust the 90/min human tier mid-battery (observed
 //     live: 429s from s20 onward). The tiers themselves are unit-proven.
 //   * the S46 login lockout is DB-backed and durable BY DESIGN; probes that
@@ -52,7 +52,7 @@ const db = new PrismaClient();
 //              first green nightly proved the split: every other check of
 //              both probes passed, only the synthesis calls 400/502'd).
 //              Both pass in-sandbox via the gateway (piecewise, 2026-11-08).
-//   s27, s32  — TUBEFORGE_PRICING_VERIFIED + mid-suite restarts.
+//   s27, s32  — IBISMUH_STUDIO_PRICING_VERIFIED + mid-suite restarts.
 //   s28, s30  — cookie-samesite / allowed-origins env overrides.
 const PHASE1_PROBES = [
   "s5", "s7", "s10", "s12", "s13", "s14",
@@ -97,8 +97,8 @@ function bootDaemon(extraEnv) {
   daemon = spawn("npm", ["run", "start"], {
     env: {
       ...process.env,
-      TUBEFORGE_RATE_WRITE: "3000",
-      TUBEFORGE_RATE_READ: "9000",
+      IBISMUH_STUDIO_RATE_WRITE: "3000",
+      IBISMUH_STUDIO_RATE_READ: "9000",
       ...extraEnv,
     },
     stdio: ["ignore", daemonLog, daemonLog],
@@ -293,7 +293,7 @@ if (LEG === "phase1" || LEG === "all") {
 
 if (LEG === "phase2" || LEG === "all") {
   await sweepResidue();
-  bootDaemon({ TUBEFORGE_QC_ENFORCEMENT: "report" });
+  bootDaemon({ IBISMUH_STUDIO_QC_ENFORCEMENT: "report" });
   if (!(await waitUntilUp())) {
     console.error("[battery] daemon did not come up (phase report) — aborting");
     killDaemon();

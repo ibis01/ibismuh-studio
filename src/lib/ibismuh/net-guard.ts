@@ -11,7 +11,7 @@
 //
 // Local-first escape hatch: when Ibismuh Studio is intentionally pointed at a
 // self-hosted AI server (Ollama, LM Studio, …) set
-//   TUBEFORGE_ALLOW_PRIVATE_HOSTS=1
+//   IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS=1
 // in .env to permit private addresses for PROVIDER calls only. Voice imports
 // and media downloads stay locked to public hosts regardless.
 //

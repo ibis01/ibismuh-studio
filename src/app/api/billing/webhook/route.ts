@@ -18,13 +18,13 @@
 //                                      (idempotent on the invoice id).
 //
 // Signature verification (Stage 7.1 fix #1 — FAIL-CLOSED):
-//   * TUBEFORGE_STRIPE_WEBHOOK_SECRET set  → the `stripe-signature` header
+//   * IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET set  → the `stripe-signature` header
 //     is REQUIRED and verified (HMAC SHA-256 + 300s replay window). A
 //     missing or invalid signature is a 401 — the request is never
 //     processed. This closes the old hole where a configured secret was
 //     silently skipped when the header was absent.
 //   * Secret NOT set → the endpoint refuses EVERYWHERE by default. Local
-//     development may opt in with TUBEFORGE_ALLOW_UNSIGNED_WEBHOOKS=1 —
+//     development may opt in with IBISMUH_STUDIO_ALLOW_UNSIGNED_WEBHOOKS=1 —
 //     an explicit, per-environment escape hatch that must never be set in
 //     production. In production (NODE_ENV=production) a missing secret is
 //     a 500 server misconfiguration; outside production it is a 401.
@@ -38,7 +38,7 @@ import { requestLog } from "@/lib/ibismuh/log";
 
 export async function POST(req: NextRequest) {
   const sig = req.headers.get("stripe-signature");
-  const secret = process.env.TUBEFORGE_STRIPE_WEBHOOK_SECRET?.trim() ?? "";
+  const secret = process.env.IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET?.trim() ?? "";
   const isProduction = process.env.NODE_ENV === "production";
   const raw = await req.clone().text();
 
@@ -54,16 +54,16 @@ export async function POST(req: NextRequest) {
     // only bypass is the explicit dev opt-in — refused outright in
     // production regardless (defence in depth against a copied .env).
     if (isProduction) {
-      requestLog(req, { mod: "billing:webhook" }).error("TUBEFORGE_STRIPE_WEBHOOK_SECRET missing in production — rejecting event");
+      requestLog(req, { mod: "billing:webhook" }).error("IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET missing in production — rejecting event");
       return NextResponse.json({ error: "Webhook misconfigured" }, { status: 500 });
     }
-    if (process.env.TUBEFORGE_ALLOW_UNSIGNED_WEBHOOKS !== "1") {
+    if (process.env.IBISMUH_STUDIO_ALLOW_UNSIGNED_WEBHOOKS !== "1") {
       return NextResponse.json(
-        { error: "Webhook not configured — set TUBEFORGE_STRIPE_WEBHOOK_SECRET (or TUBEFORGE_ALLOW_UNSIGNED_WEBHOOKS=1 in local dev)" },
+        { error: "Webhook not configured — set IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET (or IBISMUH_STUDIO_ALLOW_UNSIGNED_WEBHOOKS=1 in local dev)" },
         { status: 401 }
       );
     }
-    requestLog(req, { mod: "billing:webhook" }).warn("accepting UNSIGNED event — TUBEFORGE_ALLOW_UNSIGNED_WEBHOOKS=1 (DEV ONLY)");
+    requestLog(req, { mod: "billing:webhook" }).warn("accepting UNSIGNED event — IBISMUH_STUDIO_ALLOW_UNSIGNED_WEBHOOKS=1 (DEV ONLY)");
   } else {
     // Secret configured → the signature header is mandatory, no matter the
     // environment. Missing header and bad signature are both 401.

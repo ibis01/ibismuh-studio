@@ -47,12 +47,12 @@ const CLAIM_BATCH = 4;
  * Max concurrently EXECUTING jobs in this process. ffmpeg stages are also
  * gated per-org (below); this cap protects the process itself.
  */
-const MAX_ACTIVE_PER_PROCESS = Number(process.env.TUBEFORGE_MAX_ACTIVE_JOBS ?? 8);
+const MAX_ACTIVE_PER_PROCESS = Number(process.env.IBISMUH_STUDIO_MAX_ACTIVE_JOBS ?? 8);
 /** Heavy ffmpeg kinds subject to the per-organization cap. S67: whiteboard
  *  joins — chromium + ffmpeg is the same CPU/RAM class (design §3.2). */
 const HEAVY_KINDS: readonly JobKind[] = ["render", "short", "convert", "whiteboard"];
 /** Per-org concurrent heavy jobs (ffmpeg is CPU/RAM bound). */
-const MAX_HEAVY_PER_ORG = Number(process.env.TUBEFORGE_MAX_RENDER_CONCURRENCY ?? 2);
+const MAX_HEAVY_PER_ORG = Number(process.env.IBISMUH_STUDIO_MAX_RENDER_CONCURRENCY ?? 2);
 /** Retry backoff: 30s, 60s, 120s … capped at 10 min, +0–2s jitter. */
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_CAP_MS = 10 * 60_000;
@@ -87,7 +87,7 @@ const DEFAULT_MAX_ATTEMPTS = 2;
  * A missed renewal must NOT lose the lease — renewal sits strictly inside
  * the TTL with three chances before expiry at the default cadence.
  */
-export const LEASE_TTL_MS = Number(process.env.TUBEFORGE_LEASE_TTL_MS ?? 90_000);
+export const LEASE_TTL_MS = Number(process.env.IBISMUH_STUDIO_LEASE_TTL_MS ?? 90_000);
 export const LEASE_RENEW_MS = Math.max(5_000, Math.floor(LEASE_TTL_MS / 3));
 
 // ---------------------------------------------------------------------------
@@ -121,7 +121,7 @@ const state: QueueState = (g.__ibismuhQueue ??= {
   active: 0,
   workerId: "web:0:0",
   role: "web",
-  noClaim: process.env.TUBEFORGE_NO_CLAIM === "1",
+  noClaim: process.env.IBISMUH_STUDIO_NO_CLAIM === "1",
   cancelWatchers: new Map(),
 });
 
@@ -137,7 +137,7 @@ export function initQueue(role: "web" | "worker" = "web"): void {
 /**
  * Pause/resume claiming in THIS process (in-flight jobs still finish).
  * Test harnesses use it to hand the queue over to a spawned worker; a real
- * deployment achieves the same with TUBEFORGE_NO_CLAIM=1 at boot.
+ * deployment achieves the same with IBISMUH_STUDIO_NO_CLAIM=1 at boot.
  */
 export function setClaiming(enabled: boolean): void {
   state.noClaim = !enabled;

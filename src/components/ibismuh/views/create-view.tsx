@@ -154,7 +154,10 @@ const VIDEO_TYPES = [
 ] as const;
 
 /** localStorage key for the persisted brief draft (T-4.3). */
-const DRAFT_KEY = "tubeforge:create-draft";
+const DRAFT_KEY = "ibismuh:create-draft";
+// Pre-rebrand key — read as a fallback and cleared alongside the new one so
+// an in-flight draft survives the rebrand (the controlled-migration law).
+const LEGACY_DRAFT_KEY = "tubeforge:create-draft";
 
 const STAGE_DEFS: Record<
   Stage,
@@ -393,7 +396,7 @@ export function CreateView() {
       draftCheckedRef.current = true;
       if (useAppStore.getState().prefillTopic) return;
       try {
-        const raw = localStorage.getItem(DRAFT_KEY);
+        const raw = localStorage.getItem(DRAFT_KEY) ?? localStorage.getItem(LEGACY_DRAFT_KEY);
         if (!raw) return;
         const d = JSON.parse(raw);
         if (!d || typeof d !== "object") return;
@@ -572,6 +575,7 @@ export function CreateView() {
     if (!video) return;
     try {
       localStorage.removeItem(DRAFT_KEY);
+      localStorage.removeItem(LEGACY_DRAFT_KEY);
     } catch {
       /* ignore */
     }
@@ -580,6 +584,7 @@ export function CreateView() {
   const discardDraft = () => {
     try {
       localStorage.removeItem(DRAFT_KEY);
+      localStorage.removeItem(LEGACY_DRAFT_KEY);
     } catch {
       /* ignore */
     }

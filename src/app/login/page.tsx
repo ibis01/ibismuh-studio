@@ -1,6 +1,6 @@
 "use client";
 
-// /login — the unlock screen shown when the app lock (TUBEFORGE_ACCESS_TOKEN)
+// /login — the unlock screen shown when the app lock (IBISMUH_STUDIO_ACCESS_TOKEN)
 // is configured. Reads ?next=… so signing in returns the user to where the
 // middleware intercepted them.
 
@@ -150,7 +150,7 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-4 text-center text-[11px] text-muted-foreground leading-relaxed">
-          The code is the <code className="text-foreground">TUBEFORGE_ACCESS_TOKEN</code> value
+          The code is the <code className="text-foreground">IBISMUH_STUDIO_ACCESS_TOKEN</code> value
           in your <code className="text-foreground">.env</code> file.
         </p>
       </main>

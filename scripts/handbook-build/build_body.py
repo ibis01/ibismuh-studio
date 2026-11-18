@@ -602,7 +602,7 @@ body(story,
      'src/middleware.ts denies everything by default. The public allow-list is six '
      'auth endpoints plus /api/youtube/callback; every other route requires an '
      'authenticated session or token. A production fail-safe refuses to serve at all '
-     'when TUBEFORGE_AUTH_SECRET is missing - the failure mode is a down deployment, '
+     'when IBISMUH_STUDIO_AUTH_SECRET is missing - the failure mode is a down deployment, '
      'never an open one. Login lockout (S46) counts failures in a rolling ten-minute '
      'window per account, locks out after five, and persists through the AuthAttempt '
      'table; the check runs through a second Prisma client so a migration or a '
@@ -949,15 +949,15 @@ make_table(story,
         ['Object storage', 'Cloudflare R2 (S3-compatible) with presigned-URL delivery; local-disk mode for single-box dev.'],
         ['Previews', 'vercel.json - fluid-compute preview builds only; NOT production.'],
         ['Local development', 'docker-compose.yml: Postgres + web + worker.'],
-        ['Voice server (optional)', 'Self-hosted Chatterbox Turbo on a persistent box (Oracle free-tier ARM works); TUBEFORGE_SHARED_VOICE_URL/KEY.'],
+        ['Voice server (optional)', 'Self-hosted Chatterbox Turbo on a persistent box (Oracle free-tier ARM works); IBISMUH_STUDIO_SHARED_VOICE_URL/KEY.'],
     ],
     [0.26, 0.74],
     caption='Table 12 - The deployment topology of record (S33 decision).')
 h2(story, '10.2 Provisioning and migration procedure')
 body(story,
      'First deploy: create the Neon project and the R2 bucket, then fly launch '
-     '--no-deploy --copy-config, set the secrets (at minimum TUBEFORGE_AUTH_SECRET, '
-     'TUBEFORGE_ENCRYPTION_KEY, DATABASE_URL and the S3 block), and deploy. '
+     '--no-deploy --copy-config, set the secrets (at minimum IBISMUH_STUDIO_AUTH_SECRET, '
+     'IBISMUH_STUDIO_ENCRYPTION_KEY, DATABASE_URL and the S3 block), and deploy. '
      'Migrations run explicitly on first deploy - the postinstall script also '
      'baselines an unmanaged database automatically, but the explicit form is the '
      'procedure of record:')
@@ -1050,7 +1050,7 @@ make_table(story,
         ['S74 real motion measurement (Critical 1)', 'OPEN - the auto-resume loop (cron 521163) drives 8 paired renders + 16 blind scores.'],
         ['Timeline soak gate', '14+ days with zero v1-document renders before the legacy fallback retires.'],
         ['Z.ai gateway outages', 'One-probe resumption discipline; LLM whiteboard planner stays gated on it.'],
-        ['Production TUBEFORGE_ENCRYPTION_KEY on Vercel', 'Owner-side, unverified; Vercel carries no production data but the key audit is open.'],
+        ['Production IBISMUH_STUDIO_ENCRYPTION_KEY on Vercel', 'Owner-side, unverified; Vercel carries no production data but the key audit is open.'],
         ['Open dependency PRs', 'Majors tested individually, never batch-merged.'],
         ['Unpushed local commits', 'd03bed9 + backup commit await a TF_TOKEN-capable push.'],
     ],
@@ -1065,13 +1065,13 @@ h2(story, 'A.1 Environment variables')
 make_table(story,
     ['Variable', 'Purpose'],
     [
-        ['TUBEFORGE_AUTH_SECRET', 'Session signing. The production fail-safe refuses to serve without it.'],
-        ['TUBEFORGE_ENCRYPTION_KEY', 'AES-256-GCM key material for provider credentials and YouTube tokens (v1. format).'],
+        ['IBISMUH_STUDIO_AUTH_SECRET', 'Session signing. The production fail-safe refuses to serve without it.'],
+        ['IBISMUH_STUDIO_ENCRYPTION_KEY', 'AES-256-GCM key material for provider credentials and YouTube tokens (v1. format).'],
         ['DATABASE_URL', 'PostgreSQL connection string (Neon in production).'],
-        ['TUBEFORGE_STORAGE_DRIVER', 'local or s3 - S3/R2 mode is the default for any real deployment.'],
-        ['TUBEFORGE_S3_* (endpoint, bucket, keys)', 'The S3-compatible block; presigned-URL delivery is built and tested.'],
-        ['TUBEFORGE_SHARED_VOICE_URL / _KEY', 'The optional self-hosted voice server (Chatterbox Turbo).'],
-        ['TUBEFORGE_SPAWN_VOICE_SERVER', 'Supervisor-spawned voice server - single-box dev only.'],
+        ['IBISMUH_STUDIO_STORAGE_DRIVER', 'local or s3 - S3/R2 mode is the default for any real deployment.'],
+        ['IBISMUH_STUDIO_S3_* (endpoint, bucket, keys)', 'The S3-compatible block; presigned-URL delivery is built and tested.'],
+        ['IBISMUH_STUDIO_SHARED_VOICE_URL / _KEY', 'The optional self-hosted voice server (Chatterbox Turbo).'],
+        ['IBISMUH_STUDIO_SPAWN_VOICE_SERVER', 'Supervisor-spawned voice server - single-box dev only.'],
         ['WB_CHROMIUM_LAUNCH_ARGS', 'Chromium launch discipline: --no-sandbox --disable-dev-shm-usage.'],
         ['PLAYWRIGHT_BROWSERS_PATH', '/opt/ms-playwright in the production image.'],
     ],

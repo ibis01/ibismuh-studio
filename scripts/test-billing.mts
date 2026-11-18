@@ -165,7 +165,7 @@ const EVENT_BODY = JSON.stringify({
 EVENT_IDS.push(`evt_${MARK}_auth`);
 
 await test("secret set + signature header MISSING → 401, event not processed", async () => {
-  process.env.TUBEFORGE_STRIPE_WEBHOOK_SECRET = SECRET;
+  process.env.IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET = SECRET;
   const res = await postWebhook(EVENT_BODY); // no stripe-signature header
   eq(res.status, 401, "missing signature is unauthorized");
   eq(
@@ -197,8 +197,8 @@ await test("secret set + VALID signature → 200 and the event is processed", as
 });
 
 await test("secret MISSING + no dev opt-in → 401 (fail-closed even outside production)", async () => {
-  delete process.env.TUBEFORGE_STRIPE_WEBHOOK_SECRET;
-  delete process.env.TUBEFORGE_ALLOW_UNSIGNED_WEBHOOKS;
+  delete process.env.IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET;
+  delete process.env.IBISMUH_STUDIO_ALLOW_UNSIGNED_WEBHOOKS;
   const res = await postWebhook(EVENT_BODY);
   eq(res.status, 401, "unconfigured webhook accepts nothing by default");
 });
@@ -215,20 +215,20 @@ await test("secret MISSING + NODE_ENV=production → 500 misconfiguration", asyn
 });
 
 await test("secret MISSING + explicit dev opt-in → 200 (the ONLY unsigned path)", async () => {
-  process.env.TUBEFORGE_ALLOW_UNSIGNED_WEBHOOKS = "1";
+  process.env.IBISMUH_STUDIO_ALLOW_UNSIGNED_WEBHOOKS = "1";
   try {
     const res = await postWebhook(EVENT_BODY);
     eq(res.status, 200, "explicit dev bypass works");
   } finally {
-    delete process.env.TUBEFORGE_ALLOW_UNSIGNED_WEBHOOKS;
+    delete process.env.IBISMUH_STUDIO_ALLOW_UNSIGNED_WEBHOOKS;
   }
 });
 
 await test("malformed JSON → 400 regardless of auth state", async () => {
-  process.env.TUBEFORGE_STRIPE_WEBHOOK_SECRET = SECRET;
+  process.env.IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET = SECRET;
   const res = await postWebhook("{not json", { "stripe-signature": stripeSign(SECRET, "{not json") });
   eq(res.status, 400, "invalid JSON rejected");
-  delete process.env.TUBEFORGE_STRIPE_WEBHOOK_SECRET;
+  delete process.env.IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET;
 });
 
 // ===========================================================================
@@ -497,7 +497,7 @@ await test("checkout.session.completed via the SIGNED route → Subscription row
 
   // The checkout event, delivered through the REAL route with a REAL
   // signature — the exact path Stripe production traffic takes.
-  process.env.TUBEFORGE_STRIPE_WEBHOOK_SECRET = SECRET;
+  process.env.IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET = SECRET;
   const checkoutEventId = `evt_${MARK}_checkout`;
   EVENT_IDS.push(checkoutEventId);
   const body = JSON.stringify({

@@ -74,9 +74,9 @@ export default function loadScenario() {
   if (regBody.verification?.url) {
     http.get(regBody.verification.url);
   }
-  const cookie = register.cookies?.tf_session?.[0]?.value;
+  const cookie = register.cookies?.ibismuh_session?.[0]?.value;
   if (!cookie) return;
-  const authHeaders = { headers: { "Content-Type": "application/json", Cookie: `tf_session=${cookie}` } };
+  const authHeaders = { headers: { "Content-Type": "application/json", Cookie: `ibismuh_session=${cookie}` } };
 
   // 2. Create a custom-script video (synchronous, no AI calls).
   const create = http.post(

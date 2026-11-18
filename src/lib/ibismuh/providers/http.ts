@@ -13,8 +13,8 @@ const httpLog = log.child({ mod: "http" });
  * timeout the audit flagged (D-09): a YouTube metadata call should fail fast,
  * a CogVideoX generation may legitimately run 10 minutes.
  *
- * Every value is overridable via env: TUBEFORGE_TIMEOUT_<CAPABILITY> (ms),
- * e.g. TUBEFORGE_TIMEOUT_LLM=60000. Invalid env values fall back to the
+ * Every value is overridable via env: IBISMUH_STUDIO_TIMEOUT_<CAPABILITY> (ms),
+ * e.g. IBISMUH_STUDIO_TIMEOUT_LLM=60000. Invalid env values fall back to the
  * default and warn once.
  */
 export type ProviderCapability =
@@ -50,7 +50,7 @@ export function timeoutFor(capability: ProviderCapability = "generic"): number {
   // Only valid env overrides are cached; defaults recompute so tests can
   // flip env vars without a stale cache.
   if (capability in overrides) return overrides[capability];
-  const raw = process.env[`TUBEFORGE_TIMEOUT_${capability.toUpperCase().replace(/-/g, "_")}`];
+  const raw = process.env[`IBISMUH_STUDIO_TIMEOUT_${capability.toUpperCase().replace(/-/g, "_")}`];
   const parsed = raw ? Number(raw) : NaN;
   if (Number.isFinite(parsed) && parsed >= 1_000) {
     overrides[capability] = parsed;
@@ -58,7 +58,7 @@ export function timeoutFor(capability: ProviderCapability = "generic"): number {
   }
   if (raw && !warned.has(capability)) {
     warned.add(capability);
-    httpLog.warn("ignoring invalid TUBEFORGE_TIMEOUT (need >= 1000 ms)", { capability, raw });
+    httpLog.warn("ignoring invalid IBISMUH_STUDIO_TIMEOUT (need >= 1000 ms)", { capability, raw });
   }
   return DEFAULT_TIMEOUT_MS[capability];
 }
@@ -113,11 +113,11 @@ export function joinUrl(baseUrl: string, ...path: string[]): string {
 /**
  * Local-first escape hatch (mirrors net-guard.ts): when Ibismuh Studio is
  * intentionally pointed at a self-hosted AI server (Ollama, LM Studio, …)
- * set TUBEFORGE_ALLOW_PRIVATE_HOSTS=1 in .env. Applies to PROVIDER calls
+ * set IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS=1 in .env. Applies to PROVIDER calls
  * only — voice imports and media downloads stay locked to public hosts.
  */
 export function allowPrivateProviderHosts(): boolean {
-  return process.env.TUBEFORGE_ALLOW_PRIVATE_HOSTS === "1";
+  return process.env.IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS === "1";
 }
 
 /**

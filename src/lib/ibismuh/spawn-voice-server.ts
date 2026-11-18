@@ -1,14 +1,14 @@
 // Supervisor for the operator's shared voice server (self-hosted Ibismuh Studio).
 //
-// When the app boots with TUBEFORGE_SPAWN_VOICE_SERVER=1, this module makes
+// When the app boots with IBISMUH_STUDIO_SPAWN_VOICE_SERVER=1, this module makes
 // sure the Chatterbox voice server (voice-server/voice_server.py) is running
-// on the TUBEFORGE_SHARED_VOICE_URL endpoint: if its /health already answers,
+// on the IBISMUH_STUDIO_SHARED_VOICE_URL endpoint: if its /health already answers,
 // nothing happens (an external supervisor or a surviving process owns it);
 // otherwise it is spawned detached, with logs appended to voice-server/server.log.
 //
 // Constraints honored:
 //   * Only LOCAL (loopback) shared servers are spawned — a remote
-//     TUBEFORGE_SHARED_VOICE_URL is somebody else's process.
+//     IBISMUH_STUDIO_SHARED_VOICE_URL is somebody else's process.
 //   * Never blocks the boot: spawn() is fire-and-forget; the model loads in
 //     the background (~10-60 s) and callers poll /health or retry on 503.
 //   * Never throws — instrumentation.register() must stay non-fatal.
@@ -36,16 +36,16 @@ async function voiceServerUp(baseUrl: string): Promise<boolean> {
 
 /** Bring the shared voice server up if needed. NEVER throws. */
 export async function spawnSharedVoiceServer(): Promise<SpawnResult> {
-  const url = process.env.TUBEFORGE_SHARED_VOICE_URL?.trim();
-  if (!url) return { spawned: false, detail: "TUBEFORGE_SHARED_VOICE_URL not set" };
-  if (process.env.TUBEFORGE_SPAWN_VOICE_SERVER !== "1")
-    return { spawned: false, detail: "spawn disabled (TUBEFORGE_SPAWN_VOICE_SERVER != 1)" };
+  const url = process.env.IBISMUH_STUDIO_SHARED_VOICE_URL?.trim();
+  if (!url) return { spawned: false, detail: "IBISMUH_STUDIO_SHARED_VOICE_URL not set" };
+  if (process.env.IBISMUH_STUDIO_SPAWN_VOICE_SERVER !== "1")
+    return { spawned: false, detail: "spawn disabled (IBISMUH_STUDIO_SPAWN_VOICE_SERVER != 1)" };
 
   let target: URL;
   try {
     target = new URL(url);
   } catch {
-    return { spawned: false, detail: `invalid TUBEFORGE_SHARED_VOICE_URL: ${url}` };
+    return { spawned: false, detail: `invalid IBISMUH_STUDIO_SHARED_VOICE_URL: ${url}` };
   }
   const host = target.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   const isLoopback = host === "127.0.0.1" || host === "localhost" || host === "::1";
@@ -58,7 +58,7 @@ export async function spawnSharedVoiceServer(): Promise<SpawnResult> {
   // Locate voice-server/ — explicit env wins; standalone server's cwd is
   // .next/standalone, so fall back to the project root beside it.
   const candidates = [
-    process.env.TUBEFORGE_VOICE_SERVER_DIR?.trim(),
+    process.env.IBISMUH_STUDIO_VOICE_SERVER_DIR?.trim(),
     path.join(process.cwd(), "voice-server"),
     path.resolve(process.cwd(), "..", "voice-server"),
   ].filter(Boolean) as string[];
@@ -73,8 +73,8 @@ export async function spawnSharedVoiceServer(): Promise<SpawnResult> {
     };
 
   const port = target.port || "8931";
-  const key = process.env.TUBEFORGE_SHARED_VOICE_KEY?.trim() || "";
-  const model = process.env.TUBEFORGE_VOICE_SERVER_MODEL?.trim() || "chatterbox-turbo";
+  const key = process.env.IBISMUH_STUDIO_SHARED_VOICE_KEY?.trim() || "";
+  const model = process.env.IBISMUH_STUDIO_VOICE_SERVER_MODEL?.trim() || "chatterbox-turbo";
   const logFile = path.join(dir, "server.log");
 
   try {

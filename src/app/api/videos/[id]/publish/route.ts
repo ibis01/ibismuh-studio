@@ -96,7 +96,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   // finding (or no standing report) holds the upload until fixed or
   // explicitly accepted (POST /api/videos/[id]/export with a note — the
   // override is shared, not per-surface: one acceptance unlocks both ships
-  // for exactly this report). TUBEFORGE_QC_ENFORCEMENT=report turns this
+  // for exactly this report). IBISMUH_STUDIO_QC_ENFORCEMENT=report turns this
   // advisory for operators who want the pre-S40 behavior.
   const qcReport = parseQcReport(video.qcReport);
   const gate = applyQcPolicy(qcReport, { mode: qcEnforcementMode() });

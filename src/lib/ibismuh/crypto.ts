@@ -27,10 +27,11 @@ const KEY_CACHE = (globalThis as typeof globalThis & { __ibismuhEncKey?: Buffer 
 function requireKey(): Buffer {
   const g = globalThis as typeof globalThis & { __ibismuhEncKey?: Buffer };
   if (g.__ibismuhEncKey) return g.__ibismuhEncKey;
-  const raw = process.env.TUBEFORGE_ENCRYPTION_KEY ?? "";
+  const raw =
+    process.env.IBISMUH_STUDIO_ENCRYPTION_KEY ?? process.env.TUBEFORGE_ENCRYPTION_KEY ?? "";
   if (raw.length < 16) {
     throw new Error(
-      "TUBEFORGE_ENCRYPTION_KEY is missing or too short (<16 chars) — secrets cannot be encrypted. Set it in .env (see .env.example); rotating it invalidates stored secrets."
+      "IBISMUH_STUDIO_ENCRYPTION_KEY (or legacy TUBEFORGE_ENCRYPTION_KEY) is missing or too short (<16 chars) — secrets cannot be encrypted. Set it in .env (see .env.example); rotating it invalidates stored secrets."
     );
   }
   const key = scryptSync(raw, SCRYPT_SALT, 32);

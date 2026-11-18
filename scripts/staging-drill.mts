@@ -66,7 +66,7 @@ function record(suite: string, outcome: Outcome, note: string): void {
   console.log(`[${outcome}] ${suite}: ${note}`);
 }
 
-// --- a tiny cookie jar (register/login hand out tf_session) ---------------
+// --- a tiny cookie jar (register/login hand out ibismuh_session) ---------------
 
 const jar = new Map<string, string>();
 function absorb(res: Response): void {
@@ -205,7 +205,7 @@ async function suiteBilling(): Promise<void> {
     record(
       "billing",
       "SKIP",
-      "Stripe not configured (TUBEFORGE_STRIPE_SECRET_KEY + the tier price envs) — runbook §3, then re-run",
+      "Stripe not configured (IBISMUH_STUDIO_STRIPE_SECRET_KEY + the tier price envs) — runbook §3, then re-run",
     );
     return;
   }

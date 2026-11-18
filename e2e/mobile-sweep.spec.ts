@@ -62,7 +62,7 @@ test.describe("Stage 7 — mobile responsiveness (390px sweep)", () => {
   test("app shell at 390px — no horizontal overflow + mobile nav", async ({ page, request }) => {
     const cookie = await register(request);
     await page.context().addCookies([
-      { name: "tf_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
+      { name: "ibismuh_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
     ]);
     await page.goto("/");
     await page.waitForLoadState("networkidle");
@@ -75,7 +75,7 @@ test.describe("Stage 7 — mobile responsiveness (390px sweep)", () => {
   test("detail dialog at 390px — Editing Studio card fits in the viewport", async ({ page, request }) => {
     const cookie = await register(request);
     await page.context().addCookies([
-      { name: "tf_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
+      { name: "ibismuh_session", value: cookie.split("=")[1], url: "http://localhost:3000" },
     ]);
 
     // Create a script-format video (synchronous — no AI calls).

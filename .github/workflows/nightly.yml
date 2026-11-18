@@ -58,8 +58,8 @@ jobs:
         # .env — so the signing + encryption secrets must come from here.
         # Fresh per run (sessions/credentials never survive the runner).
         run: |
-          echo "TUBEFORGE_AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
-          echo "TUBEFORGE_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "IBISMUH_STUDIO_AUTH_SECRET=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          echo "IBISMUH_STUDIO_ENCRYPTION_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v7
         with:

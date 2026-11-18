@@ -42,8 +42,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(openssl rand -hex 16)}"
-export TUBEFORGE_AUTH_SECRET="${TUBEFORGE_AUTH_SECRET:-$(openssl rand -hex 32)}"
-export TUBEFORGE_ENCRYPTION_KEY="${TUBEFORGE_ENCRYPTION_KEY:-$(openssl rand -hex 32)}"
+export IBISMUH_STUDIO_AUTH_SECRET="${IBISMUH_STUDIO_AUTH_SECRET:-$(openssl rand -hex 32)}"
+export IBISMUH_STUDIO_ENCRYPTION_KEY="${IBISMUH_STUDIO_ENCRYPTION_KEY:-$(openssl rand -hex 32)}"
 export MINIO_ROOT_USER="${MINIO_ROOT_USER:-tubeforge}"
 export MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$(openssl rand -hex 16)}"
 

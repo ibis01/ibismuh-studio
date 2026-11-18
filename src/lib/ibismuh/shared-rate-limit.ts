@@ -37,8 +37,8 @@ function envInt(name: string, dflt: number): number {
 }
 
 /** Shared per-IP tiers — mirror the middleware's coarse tiers. 0 disables. */
-export const SHARED_READ_LIMIT = envInt("TUBEFORGE_RATE_READ", 600);
-export const SHARED_WRITE_LIMIT = envInt("TUBEFORGE_RATE_WRITE", 90);
+export const SHARED_READ_LIMIT = envInt("IBISMUH_STUDIO_RATE_READ", 600);
+export const SHARED_WRITE_LIMIT = envInt("IBISMUH_STUDIO_RATE_WRITE", 90);
 
 // Once-per-process fail-open announcements (auth-throttle's posture).
 const g = globalThis as typeof globalThis & { __ibismuhSharedRateWarned?: boolean };

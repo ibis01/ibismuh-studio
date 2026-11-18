@@ -11,7 +11,7 @@
 // This module centralizes the trust decision so the middleware stays thin
 // and the rules are probe-able. Trust is decided in this order:
 //
-//   1. TUBEFORGE_ALLOWED_ORIGINS — explicit allow-list, one entry per
+//   1. IBISMUH_STUDIO_ALLOWED_ORIGINS — explicit allow-list, one entry per
 //      comma-separated value. Entries may be:
 //        · a bare host ("preview-abc.space-z.ai:3000")       — exact match
 //        · a full origin ("https://preview-abc.space-z.ai")  — host match
@@ -23,7 +23,7 @@
 //      preview deployment pattern `preview-*.space-z.ai` is always trusted
 //      WITHOUT operator env config, because (a) it is OUR infrastructure
 //      (Z.ai's own preview platform), (b) chat-bot preview deployments
-//      cannot have TUBEFORGE_ALLOWED_ORIGINS provisioned out-of-band, and
+//      cannot have IBISMUH_STUDIO_ALLOWED_ORIGINS provisioned out-of-band, and
 //      (c) without this default the entire Auto-Pilot pipeline is
 //      unreachable from the preview — Step 1 (AI Script + Metadata) dies
 //      at the CSRF door before the z SDK is ever reached. The pattern is
@@ -31,7 +31,7 @@
 //      `space-z.ai` suffix) so an unrelated Z.ai subdomain or a lookalike
 //      can never ride it. Cookie SameSite is the first CSRF line of
 //      defense; this is the second, scoped to the operator's own platform.
-//   3. X-Forwarded-Host — ONLY when TUBEFORGE_TRUST_FORWARDED_HOST=1, for
+//   3. X-Forwarded-Host — ONLY when IBISMUH_STUDIO_TRUST_FORWARDED_HOST=1, for
 //      deployments whose proxy provably overwrites the header (a client-
 //      spoofable X-Forwarded-Host must never be trusted blind). The first
 //      chain entry is the original Host the proxy received.
@@ -63,9 +63,9 @@ export interface OriginTrustInput {
   host: string | null;
   /** Raw X-Forwarded-Host value (null when absent). */
   forwardedHost?: string | null;
-  /** Parsed TUBEFORGE_ALLOWED_ORIGINS entries (see parseAllowedOrigins). */
+  /** Parsed IBISMUH_STUDIO_ALLOWED_ORIGINS entries (see parseAllowedOrigins). */
   allowedOrigins: string[];
-  /** TUBEFORGE_TRUST_FORWARDED_HOST === "1". Default false. */
+  /** IBISMUH_STUDIO_TRUST_FORWARDED_HOST === "1". Default false. */
   trustForwardedHost?: boolean;
 }
 
@@ -98,7 +98,7 @@ function matchesSuffix(host: string, entry: string): boolean {
 /**
  * Built-in preview-deployment trust (S38, 2026-11-06 UTC) — the Z.ai chat-bot
  * preview platform serves every deployment at `preview-<id>.space-z.ai`, and
- * chat-bot preview deployments cannot have TUBEFORGE_ALLOWED_ORIGINS
+ * chat-bot preview deployments cannot have IBISMUH_STUDIO_ALLOWED_ORIGINS
  * provisioned out-of-band. Without an unconditional trust here, every
  * cookie-authenticated mutation from the signed-in preview browser dies at
  * the CSRF door — the proxy rewrites Host on the way in, so the request-host

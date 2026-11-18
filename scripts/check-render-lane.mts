@@ -39,7 +39,7 @@ async function call(method: string, p: string, body?: unknown) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const setCookie = res.headers.get("set-cookie");
-  if (setCookie?.startsWith("tf_session=")) cookie = setCookie.split(";")[0];
+  if (setCookie?.startsWith("ibismuh_session=")) cookie = setCookie.split(";")[0];
   const json = (await res.json().catch(() => null)) as unknown;
   return { status: res.status, json };
 }

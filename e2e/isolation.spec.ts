@@ -42,7 +42,7 @@ async function register(
   const setCookie = res.headers()["set-cookie"];
   expect(setCookie, "registration must set a session cookie").toBeTruthy();
   const cookie = (Array.isArray(setCookie) ? setCookie[0] : setCookie)?.split(";")[0] ?? "";
-  expect(cookie.startsWith("tf_session=")).toBe(true);
+  expect(cookie.startsWith("ibismuh_session=")).toBe(true);
   return { cookie, verificationUrl: d.verification?.url };
 }
 

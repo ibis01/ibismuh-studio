@@ -292,7 +292,7 @@ export function PlanCard() {
           )}
           {data.stripe.configured && data.stripe.checkoutTiers.length === 0 && (
             <p className="text-[10px] text-muted-foreground">
-              Checkout needs a Stripe price id per tier (TUBEFORGE_STRIPE_PRICE_CREATOR / _STUDIO).
+              Checkout needs a Stripe price id per tier (IBISMUH_STUDIO_STRIPE_PRICE_CREATOR / _STUDIO).
             </p>
           )}
 

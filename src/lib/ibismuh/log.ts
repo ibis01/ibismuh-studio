@@ -29,7 +29,7 @@ const LEVELS: Record<LogLevel, number> = { debug: 20, info: 30, warn: 40, error:
  * serialization). No caching so tests and runtime reconfiguration work.
  */
 function threshold(): number {
-  const raw = (process.env.TUBEFORGE_LOG_LEVEL ?? "").toLowerCase();
+  const raw = (process.env.IBISMUH_STUDIO_LOG_LEVEL ?? "").toLowerCase();
   if (raw in LEVELS) return LEVELS[raw as LogLevel];
   return LEVELS.info; // default
 }
@@ -133,7 +133,7 @@ export function createLogger(bindings: Record<string, unknown> = {}): Logger {
  * Root logger. Library modules call `log.child({ mod: "queue" })` at module
  * scope; route handlers bind request ids if they need them.
  */
-export const log = createLogger({ app: "tubeforge" });
+export const log = createLogger({ app: "ibismuh-studio" });
 
 /**
  * S57/T-57.1 — the request correlation header. middleware.ts stamps a fresh

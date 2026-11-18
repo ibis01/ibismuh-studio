@@ -15,7 +15,7 @@
 //   * SESSION-ONLY (the S23 account law): money moves on a signed-in
 //     browser, never on a bearer — a leaked API token must not be one POST
 //     away from spending.
-//   * FAIL-CLOSED (the driver law): without TUBEFORGE_STRIPE_SECRET_KEY +
+//   * FAIL-CLOSED (the driver law): without IBISMUH_STUDIO_STRIPE_SECRET_KEY +
 //     the tier's price env the route answers 503 — never a fake success.
 //   * POST body: unknown fields are stripped, not rejected (house law).
 
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Stripe is not configured on this deployment — set TUBEFORGE_STRIPE_SECRET_KEY and the tier's price env to open the checkout.",
+          "Stripe is not configured on this deployment — set IBISMUH_STUDIO_STRIPE_SECRET_KEY and the tier's price env to open the checkout.",
       },
       { status: 503 }
     );
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
   const priceId = gate.prices[tier];
   if (!priceId)
     return NextResponse.json(
-      { error: `Stripe is not configured on this deployment — set TUBEFORGE_STRIPE_SECRET_KEY and the tier's price env to open the checkout.` },
+      { error: `Stripe is not configured on this deployment — set IBISMUH_STUDIO_STRIPE_SECRET_KEY and the tier's price env to open the checkout.` },
       { status: 503 }
     );
   const result = await stripeCreate(

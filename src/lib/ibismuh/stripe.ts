@@ -8,11 +8,11 @@
 //
 // Activation is purely env-driven (the Stage 3 driver pattern — SMTP, S3,
 // the shared voice server):
-//   TUBEFORGE_STRIPE_SECRET_KEY       — the API key; WITHOUT it both routes
+//   IBISMUH_STUDIO_STRIPE_SECRET_KEY       — the API key; WITHOUT it both routes
 //                                       fail closed (503), never a fake
 //                                       success.
-//   TUBEFORGE_STRIPE_PRICE_CREATOR    — the Stripe Price id for the Creator
-//   TUBEFORGE_STRIPE_PRICE_STUDIO     — and Studio plans (mode=subscription
+//   IBISMUH_STUDIO_STRIPE_PRICE_CREATOR    — the Stripe Price id for the Creator
+//   IBISMUH_STUDIO_STRIPE_PRICE_STUDIO     — and Studio plans (mode=subscription
 //                                       needs a recurring Price id).
 //
 // MASTER_PLAN's pricing law is honored by construction: this module never
@@ -35,8 +35,8 @@ export function isCheckoutTier(tier: string): tier is CheckoutTier {
 function priceEnvFor(tier: CheckoutTier): string | null {
   const raw =
     tier === "creator"
-      ? process.env.TUBEFORGE_STRIPE_PRICE_CREATOR
-      : process.env.TUBEFORGE_STRIPE_PRICE_STUDIO;
+      ? process.env.IBISMUH_STUDIO_STRIPE_PRICE_CREATOR
+      : process.env.IBISMUH_STUDIO_STRIPE_PRICE_STUDIO;
   const id = (raw ?? "").trim();
   return id || null;
 }
@@ -50,7 +50,7 @@ export interface StripeGate {
  *  wiring — booleans reach the plan card so it can disable its buttons with
  *  an honest hint instead of dead ends. */
 export function stripeGate(): StripeGate {
-  const secret = (process.env.TUBEFORGE_STRIPE_SECRET_KEY ?? "").trim() || null;
+  const secret = (process.env.IBISMUH_STUDIO_STRIPE_SECRET_KEY ?? "").trim() || null;
   const prices: Partial<Record<CheckoutTier, string>> = {};
   if (secret) {
     for (const tier of CHECKOUT_TIERS) {

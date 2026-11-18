@@ -112,7 +112,7 @@ export function AccountDataCard() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "tubeforge-export.json";
+      a.download = "ibismuh-export.json";
       a.click();
       URL.revokeObjectURL(url);
       toast({ title: "Your data, packed and downloaded" });

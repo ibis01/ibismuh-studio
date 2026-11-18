@@ -22,7 +22,7 @@ import { clsx } from "clsx";
  *  `cloneStatus` carries the inline-clone setup state: "ready" the clone can
  *  synthesize immediately, "needs-setup" the clone will be saved but synthesis
  *  needs a server URL+key (shown inline), "zhipu-ready" a zhipu key is set. */
-export const VOICES_CHANGED_EVENT = "tubeforge:voices-changed";
+export const VOICES_CHANGED_EVENT = "ibismuh:voices-changed";
 
 export type CloneStatus = "ready" | "needs-setup" | "zhipu-ready" | "unknown";
 

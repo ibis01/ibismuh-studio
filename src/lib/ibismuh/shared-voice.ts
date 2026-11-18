@@ -6,8 +6,8 @@
 // OPERATOR can additionally run ONE voice server next to the app and expose
 // it to every user via two env vars:
 //
-//   TUBEFORGE_SHARED_VOICE_URL=http://127.0.0.1:8931
-//   TUBEFORGE_SHARED_VOICE_KEY=<the --key the server was started with>
+//   IBISMUH_STUDIO_SHARED_VOICE_URL=http://127.0.0.1:8931
+//   IBISMUH_STUDIO_SHARED_VOICE_KEY=<the --key the server was started with>
 //
 // Precedence everywhere: the user's OWN saved self-hosted credentials always
 // win; the shared server is only a fallback for users who haven't configured
@@ -26,11 +26,11 @@ export interface VoiceEndpoint {
 
 /** The operator-configured shared voice server, or null when unset. */
 export function sharedVoiceServer(): { baseUrl: string; apiKey: string } | null {
-  const baseUrl = process.env.TUBEFORGE_SHARED_VOICE_URL?.trim();
+  const baseUrl = process.env.IBISMUH_STUDIO_SHARED_VOICE_URL?.trim();
   if (!baseUrl) return null;
   return {
     baseUrl,
-    apiKey: process.env.TUBEFORGE_SHARED_VOICE_KEY?.trim() || "",
+    apiKey: process.env.IBISMUH_STUDIO_SHARED_VOICE_KEY?.trim() || "",
   };
 }
 

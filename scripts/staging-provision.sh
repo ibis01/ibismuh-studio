@@ -5,7 +5,7 @@
 # docs/runbooks/staging.md §1-2). What it does, in order:
 #   0. sources .env.staging (gitignored) if present, then preflights:
 #      flyctl installed + authenticated, every required variable in hand.
-#   1. generates FRESH TUBEFORGE_AUTH_SECRET / TUBEFORGE_ENCRYPTION_KEY
+#   1. generates FRESH IBISMUH_STUDIO_AUTH_SECRET / IBISMUH_STUDIO_ENCRYPTION_KEY
 #      (staging never shares production secrets — the §3 law).
 #   2. registers the app if it does not exist (fly launch --no-deploy
 #      --copy-config), then sets every secret on it.
@@ -19,18 +19,18 @@
 #   bash scripts/staging-provision.sh --dry-run   # print the plan, execute nothing
 #
 # Required inputs (environment or .env.staging):
-#   TUBEFORGE_STAGING_DB_URL                  Neon BRANCH connection string
-#   TUBEFORGE_STAGING_S3_ENDPOINT             https://<account>.r2.cloudflarestorage.com
-#   TUBEFORGE_STAGING_S3_BUCKET               the staging bucket
-#   TUBEFORGE_STAGING_S3_ACCESS_KEY_ID        R2 S3 API token
-#   TUBEFORGE_STAGING_S3_SECRET_ACCESS_KEY    R2 S3 API token
-#   TUBEFORGE_STAGING_STRIPE_SECRET_KEY       TEST mode (sk_test_...)
-#   TUBEFORGE_STAGING_STRIPE_PRICE_CREATOR    test-mode price id
-#   TUBEFORGE_STAGING_STRIPE_PRICE_STUDIO     test-mode price id
+#   IBISMUH_STUDIO_STAGING_DB_URL                  Neon BRANCH connection string
+#   IBISMUH_STUDIO_STAGING_S3_ENDPOINT             https://<account>.r2.cloudflarestorage.com
+#   IBISMUH_STUDIO_STAGING_S3_BUCKET               the staging bucket
+#   IBISMUH_STUDIO_STAGING_S3_ACCESS_KEY_ID        R2 S3 API token
+#   IBISMUH_STUDIO_STAGING_S3_SECRET_ACCESS_KEY    R2 S3 API token
+#   IBISMUH_STUDIO_STAGING_STRIPE_SECRET_KEY       TEST mode (sk_test_...)
+#   IBISMUH_STUDIO_STAGING_STRIPE_PRICE_CREATOR    test-mode price id
+#   IBISMUH_STUDIO_STAGING_STRIPE_PRICE_STUDIO     test-mode price id
 # Optional:
-#   TUBEFORGE_STAGING_YT_CLIENT_ID/_SECRET    YouTube test OAuth client
-#   TUBEFORGE_STAGING_ZAI_KEY                 provider key for the pipeline drill
-#   TUBEFORGE_STAGING_APP (default tubeforge-staging)
+#   IBISMUH_STUDIO_STAGING_YT_CLIENT_ID/_SECRET    YouTube test OAuth client
+#   IBISMUH_STUDIO_STAGING_ZAI_KEY                 provider key for the pipeline drill
+#   IBISMUH_STUDIO_STAGING_APP (default tubeforge-staging)
 
 set -euo pipefail
 
@@ -40,7 +40,7 @@ cd "$ROOT"
 DRY_RUN=0
 [ "${1:-}" = "--dry-run" ] && DRY_RUN=1
 
-APP="${TUBEFORGE_STAGING_APP:-tubeforge-staging}"
+APP="${IBISMUH_STUDIO_STAGING_APP:-tubeforge-staging}"
 URL="https://${APP}.fly.dev"
 
 # --- 0. inputs --------------------------------------------------------------
@@ -51,14 +51,14 @@ if [ -f .env.staging ]; then
 fi
 
 REQUIRED=(
-  TUBEFORGE_STAGING_DB_URL
-  TUBEFORGE_STAGING_S3_ENDPOINT
-  TUBEFORGE_STAGING_S3_BUCKET
-  TUBEFORGE_STAGING_S3_ACCESS_KEY_ID
-  TUBEFORGE_STAGING_S3_SECRET_ACCESS_KEY
-  TUBEFORGE_STAGING_STRIPE_SECRET_KEY
-  TUBEFORGE_STAGING_STRIPE_PRICE_CREATOR
-  TUBEFORGE_STAGING_STRIPE_PRICE_STUDIO
+  IBISMUH_STUDIO_STAGING_DB_URL
+  IBISMUH_STUDIO_STAGING_S3_ENDPOINT
+  IBISMUH_STUDIO_STAGING_S3_BUCKET
+  IBISMUH_STUDIO_STAGING_S3_ACCESS_KEY_ID
+  IBISMUH_STUDIO_STAGING_S3_SECRET_ACCESS_KEY
+  IBISMUH_STUDIO_STAGING_STRIPE_SECRET_KEY
+  IBISMUH_STUDIO_STAGING_STRIPE_PRICE_CREATOR
+  IBISMUH_STUDIO_STAGING_STRIPE_PRICE_STUDIO
 )
 MISSING=0
 for v in "${REQUIRED[@]}"; do
@@ -105,28 +105,28 @@ fi
 # Optional secrets ride along only when set (fly rejects empty values; the
 # webhook secret arrives AFTER the endpoint is registered — see step 5).
 OPT_SECRETS=()
-[ -n "${TUBEFORGE_STAGING_STRIPE_WEBHOOK_SECRET:-}" ] &&
-  OPT_SECRETS+=("TUBEFORGE_STRIPE_WEBHOOK_SECRET=$TUBEFORGE_STAGING_STRIPE_WEBHOOK_SECRET")
-[ -n "${TUBEFORGE_STAGING_YT_CLIENT_ID:-}" ] &&
-  OPT_SECRETS+=("TUBEFORGE_YT_CLIENT_ID=$TUBEFORGE_STAGING_YT_CLIENT_ID")
-[ -n "${TUBEFORGE_STAGING_YT_CLIENT_SECRET:-}" ] &&
-  OPT_SECRETS+=("TUBEFORGE_YT_CLIENT_SECRET=$TUBEFORGE_STAGING_YT_CLIENT_SECRET")
-[ -n "${TUBEFORGE_STAGING_ZAI_KEY:-}" ] &&
-  OPT_SECRETS+=("TUBEFORGE_ZAI_API_KEY=$TUBEFORGE_STAGING_ZAI_KEY")
+[ -n "${IBISMUH_STUDIO_STAGING_STRIPE_WEBHOOK_SECRET:-}" ] &&
+  OPT_SECRETS+=("IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET=$IBISMUH_STUDIO_STAGING_STRIPE_WEBHOOK_SECRET")
+[ -n "${IBISMUH_STUDIO_STAGING_YT_CLIENT_ID:-}" ] &&
+  OPT_SECRETS+=("IBISMUH_STUDIO_YT_CLIENT_ID=$IBISMUH_STUDIO_STAGING_YT_CLIENT_ID")
+[ -n "${IBISMUH_STUDIO_STAGING_YT_CLIENT_SECRET:-}" ] &&
+  OPT_SECRETS+=("IBISMUH_STUDIO_YT_CLIENT_SECRET=$IBISMUH_STUDIO_STAGING_YT_CLIENT_SECRET")
+[ -n "${IBISMUH_STUDIO_STAGING_ZAI_KEY:-}" ] &&
+  OPT_SECRETS+=("IBISMUH_STUDIO_ZAI_API_KEY=$IBISMUH_STUDIO_STAGING_ZAI_KEY")
 
 run fly secrets set -a "$APP" \
-  DATABASE_URL="$TUBEFORGE_STAGING_DB_URL" \
-  TUBEFORGE_AUTH_SECRET="$AUTH_SECRET" \
-  TUBEFORGE_ENCRYPTION_KEY="$ENCRYPTION_KEY" \
-  TUBEFORGE_STORAGE_DRIVER=s3 \
-  TUBEFORGE_S3_ENDPOINT="$TUBEFORGE_STAGING_S3_ENDPOINT" \
-  TUBEFORGE_S3_BUCKET="$TUBEFORGE_STAGING_S3_BUCKET" \
-  TUBEFORGE_S3_ACCESS_KEY_ID="$TUBEFORGE_STAGING_S3_ACCESS_KEY_ID" \
-  TUBEFORGE_S3_SECRET_ACCESS_KEY="$TUBEFORGE_STAGING_S3_SECRET_ACCESS_KEY" \
-  TUBEFORGE_S3_REGION=auto \
-  TUBEFORGE_STRIPE_SECRET_KEY="$TUBEFORGE_STAGING_STRIPE_SECRET_KEY" \
-  TUBEFORGE_STRIPE_PRICE_CREATOR="$TUBEFORGE_STAGING_STRIPE_PRICE_CREATOR" \
-  TUBEFORGE_STRIPE_PRICE_STUDIO="$TUBEFORGE_STAGING_STRIPE_PRICE_STUDIO" \
+  DATABASE_URL="$IBISMUH_STUDIO_STAGING_DB_URL" \
+  IBISMUH_STUDIO_AUTH_SECRET="$AUTH_SECRET" \
+  IBISMUH_STUDIO_ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+  IBISMUH_STUDIO_STORAGE_DRIVER=s3 \
+  IBISMUH_STUDIO_S3_ENDPOINT="$IBISMUH_STUDIO_STAGING_S3_ENDPOINT" \
+  IBISMUH_STUDIO_S3_BUCKET="$IBISMUH_STUDIO_STAGING_S3_BUCKET" \
+  IBISMUH_STUDIO_S3_ACCESS_KEY_ID="$IBISMUH_STUDIO_STAGING_S3_ACCESS_KEY_ID" \
+  IBISMUH_STUDIO_S3_SECRET_ACCESS_KEY="$IBISMUH_STUDIO_STAGING_S3_SECRET_ACCESS_KEY" \
+  IBISMUH_STUDIO_S3_REGION=auto \
+  IBISMUH_STUDIO_STRIPE_SECRET_KEY="$IBISMUH_STUDIO_STAGING_STRIPE_SECRET_KEY" \
+  IBISMUH_STUDIO_STRIPE_PRICE_CREATOR="$IBISMUH_STUDIO_STAGING_STRIPE_PRICE_CREATOR" \
+  IBISMUH_STUDIO_STRIPE_PRICE_STUDIO="$IBISMUH_STUDIO_STAGING_STRIPE_PRICE_STUDIO" \
   ${OPT_SECRETS:+${OPT_SECRETS[*]}}
 
 run fly deploy -a "$APP" --config fly.staging.toml
@@ -161,15 +161,15 @@ Manual steps that finish the wiring (runbook §3):
   1. Stripe test-mode webhook → register an endpoint for
        $URL/api/billing/webhook
      in the Stripe dashboard (test mode), then put its signing secret in
-     .env.staging as TUBEFORGE_STAGING_STRIPE_WEBHOOK_SECRET and re-run
+     .env.staging as IBISMUH_STUDIO_STAGING_STRIPE_WEBHOOK_SECRET and re-run
      this script (secrets-only pass) or:
-       fly secrets set -a $APP TUBEFORGE_STRIPE_WEBHOOK_SECRET=whsec_...
+       fly secrets set -a $APP IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET=whsec_...
   2. Provider key for the pipeline drill (one Z.ai key is enough):
      sign in at $URL → Settings → AI Providers → paste + Test.
   3. Then run the drills:
        STAGING_URL=$URL bash scripts/staging-drills.sh
 
 Reset to a clean slate any time (runbook §5):
-  fly secrets set -a $APP TUBEFORGE_AUTH_SECRET="\$(openssl rand -hex 32)" \\
-    TUBEFORGE_ENCRYPTION_KEY="\$(openssl rand -hex 32)"  # + a fresh Neon branch
+  fly secrets set -a $APP IBISMUH_STUDIO_AUTH_SECRET="\$(openssl rand -hex 32)" \\
+    IBISMUH_STUDIO_ENCRYPTION_KEY="\$(openssl rand -hex 32)"  # + a fresh Neon branch
 EOF

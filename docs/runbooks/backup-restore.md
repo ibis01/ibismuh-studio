@@ -72,11 +72,11 @@ into the drill log in §4.
 4. **Boot the app against the scratch database** (never production secrets):
    ```bash
    DATABASE_URL="$SCRATCH_URL" \
-   TUBEFORGE_AUTH_SECRET=$(openssl rand -hex 32) \
-   TUBEFORGE_ENCRYPTION_KEY=<the PRODUCTION encryption key — needed to read stored credentials> \
+   IBISMUH_STUDIO_AUTH_SECRET=$(openssl rand -hex 32) \
+   IBISMUH_STUDIO_ENCRYPTION_KEY=<the PRODUCTION encryption key — needed to read stored credentials> \
    npm run dev
    ```
-   Note: with the production `TUBEFORGE_AUTH_SECRET`, restored sessions and
+   Note: with the production `IBISMUH_STUDIO_AUTH_SECRET`, restored sessions and
    API tokens are valid — for a drill, a fresh random secret is safer
    (restored sessions simply fail, which is fine for the checks below).
    The **encryption key must be the production one** if you want to verify
@@ -115,7 +115,7 @@ proves the backup machinery never rots between drills.
 monitor from §5's "alert on absence" note: DB reachability, column reality
 (the S60 P2022 class), pending-backlog age, stale-lease count (S100),
 migration-chain stuckness, fail-closed secrets, disk headroom, and — opt-in
-via `TUBEFORGE_ALERT_BACKUPS_DIR` — backup artifact freshness. Every failure
+via `IBISMUH_STUDIO_ALERT_BACKUPS_DIR` — backup artifact freshness. Every failure
 prints one actionable `[ALERT] <check> — <what to do>` line and the final
 `HEALTH <n> failed` is machine-scrapable; exit code 1 wakes the monitor.
 Point a cron/uptime monitor at it in production.

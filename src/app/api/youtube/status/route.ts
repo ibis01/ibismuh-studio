@@ -19,8 +19,8 @@ export async function GET(req: NextRequest) {
 
   // OAuth client resolution mirrors the youtube lib: server-wide env vars
   // first, the user's stored credentials (legacy claim) as the fallback.
-  const envId = process.env.TUBEFORGE_YT_CLIENT_ID?.trim() || "";
-  const envSecret = process.env.TUBEFORGE_YT_CLIENT_SECRET?.trim() || "";
+  const envId = process.env.IBISMUH_STUDIO_YT_CLIENT_ID?.trim() || "";
+  const envSecret = process.env.IBISMUH_STUDIO_YT_CLIENT_SECRET?.trim() || "";
   const stored = await getUserSettings(["yt.clientId", "yt.clientSecret"]);
   const storedId = stored.get("yt.clientId")?.trim() || "";
   const storedSecret = stored.get("yt.clientSecret")?.trim() || "";

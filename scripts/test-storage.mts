@@ -52,7 +52,7 @@ async function main(): Promise<void> {
   const { withCtx } = await import("../src/lib/ibismuh/tenant");
 
   // A 1 GiB ceiling for the battery (storageQuotaBytes reads env per call).
-  process.env.TUBEFORGE_STORAGE_QUOTA_GB = "1";
+  process.env.IBISMUH_STUDIO_STORAGE_QUOTA_GB = "1";
   ok(storageQuotaBytes() === GiB, "the ceiling override reads 1 GiB");
 
   const run = `st${Date.now().toString(36)}`;
@@ -148,7 +148,7 @@ async function main(): Promise<void> {
     // cleanup — probe files on the local driver + probe rows (org cascades)
     await fs.rm("uploads/probe", { recursive: true, force: true }).catch(() => {});
   } finally {
-    delete process.env.TUBEFORGE_STORAGE_QUOTA_GB;
+    delete process.env.IBISMUH_STUDIO_STORAGE_QUOTA_GB;
     await db.organization.delete({ where: { id: org.id } }).catch(() => {});
     await db.$disconnect();
   }

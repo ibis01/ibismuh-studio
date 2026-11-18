@@ -180,7 +180,7 @@ async function actB(): Promise<void> {
     env: {
       ...process.env,
       NODE_ENV: "production", // quiet the Prisma query log in worker output
-      TUBEFORGE_LOG_LEVEL: process.env.TUBEFORGE_LOG_LEVEL ?? "info",
+      IBISMUH_STUDIO_LOG_LEVEL: process.env.IBISMUH_STUDIO_LOG_LEVEL ?? "info",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });

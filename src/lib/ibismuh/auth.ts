@@ -40,12 +40,12 @@ function writeLockFlag(on: boolean): void {
 /** Is password protection currently active? (opt-in via Settings, needs a secret to sign sessions) */
 export async function isAuthEnabled(): Promise<boolean> {
   if (!getAuthSecret()) return false;
-  // Serverless (Vercel & co.) activates the gate via TUBEFORGE_LOCK=1 — the
+  // Serverless (Vercel & co.) activates the gate via IBISMUH_STUDIO_LOCK=1 — the
   // flag file is unwritable there, so the env signal substitutes for it.
   // Must mirror src/middleware.ts exactly, or the AuthGate reports "disabled"
   // while the middleware is already enforcing (app shell renders, every API
   // 401s, and the setup screen never appears).
-  if (process.env.TUBEFORGE_LOCK === "1") return true;
+  if (process.env.IBISMUH_STUDIO_LOCK === "1") return true;
   const row = await db.setting.findUnique({ where: { key: ENABLED_KEY } }).catch(() => null);
   const on = row?.value === "true";
   // self-heal the flag mirror if it ever drifts from the Setting row
@@ -56,7 +56,7 @@ export async function isAuthEnabled(): Promise<boolean> {
 /** Toggle password protection. Enabling requires a password to exist (or creates one upstream). */
 export async function setAuthEnabled(on: boolean): Promise<void> {
   if (on && !getAuthSecret())
-    throw new Error("Cannot enable the lock: TUBEFORGE_AUTH_SECRET is missing from .env");
+    throw new Error("Cannot enable the lock: IBISMUH_STUDIO_AUTH_SECRET is missing from .env");
   await db.setting.upsert({
     where: { key: ENABLED_KEY },
     update: { value: on ? "true" : "false" },
@@ -167,10 +167,10 @@ export async function createApiToken(): Promise<string | null> {
 // refuse SameSite=Lax cookies in third-party contexts: a sign-in that
 // SUCCEEDED server-side bounced straight back to an empty form because the
 // session cookie never came back. Behind such a proxy set
-// TUBEFORGE_COOKIE_SAMESITE=none — the session ships SameSite=None; Secure
+// IBISMUH_STUDIO_COOKIE_SAMESITE=none — the session ships SameSite=None; Secure
 // (browsers reject None without Secure, so secure is forced on). Direct
 // deploys keep the Lax default.
-const EMBEDDED_COOKIES = process.env.TUBEFORGE_COOKIE_SAMESITE === "none";
+const EMBEDDED_COOKIES = process.env.IBISMUH_STUDIO_COOKIE_SAMESITE === "none";
 
 export function sessionCookie(token: string) {
   return {

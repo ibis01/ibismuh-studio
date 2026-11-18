@@ -15,10 +15,11 @@
 // Deploy topology (SETUP.md §Production):
 //   single box   — web only (loop runs in-process); this worker is optional
 //                  extra capacity for the heavy AI stages
-//   split        — web with TUBEFORGE_NO_CLAIM=1 (enqueue-only) + N workers
+//   split        — web with IBISMUH_STUDIO_NO_CLAIM=1 (enqueue-only) + N workers
 //                  (share the DB; same host so claim-liveness checks work)
 
 async function main(): Promise<void> {
+  await import("@/lib/ibismuh/compat-env");
   const { registerDefaultHandlers } = await import("@/lib/ibismuh/queue-handlers");
   const { initQueue, queueWorkerId } = await import("@/lib/ibismuh/queue");
   const { ensureRecovered } = await import("@/lib/ibismuh/jobs");

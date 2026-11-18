@@ -726,7 +726,7 @@ export async function settleCreditHold(opts: {
 const STALE_HOLD_DEFAULT_MS = 2 * 60 * 60 * 1000;
 
 function staleHoldMaxAgeMs(): number {
-  const raw = Number(process.env.TUBEFORGE_STALE_HOLD_MS ?? 0);
+  const raw = Number(process.env.IBISMUH_STUDIO_STALE_HOLD_MS ?? 0);
   return raw > 0 ? raw : STALE_HOLD_DEFAULT_MS;
 }
 
@@ -779,13 +779,13 @@ let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Boot-time sweeper (web via instrumentation, worker via worker.mts).
  *  One sweep shortly after boot, then every
- *  TUBEFORGE_STALE_HOLD_SWEEP_MS (default 30 min; 0 disables). The timer
+ *  IBISMUH_STUDIO_STALE_HOLD_SWEEP_MS (default 30 min; 0 disables). The timer
  *  is unref'd so it never holds a process open, and every failure is
  *  logged, never thrown — the sweeper must not endanger a boot. */
 export function startStaleHoldSweeper(): void {
   if (sweepTimer) return;
   const intervalMs =
-    Number(process.env.TUBEFORGE_STALE_HOLD_SWEEP_MS ?? 0) || 30 * 60 * 1000;
+    Number(process.env.IBISMUH_STUDIO_STALE_HOLD_SWEEP_MS ?? 0) || 30 * 60 * 1000;
   if (intervalMs <= 0) return;
   const run = async (): Promise<void> => {
     try {

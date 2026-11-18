@@ -36,9 +36,9 @@ function envInt(name: string, dflt: number): number {
 }
 
 /** Requests per minute per IP — GET/HEAD tier. 0 disables the tier. */
-export const READ_LIMIT = envInt("TUBEFORGE_RATE_READ", 600);
+export const READ_LIMIT = envInt("IBISMUH_STUDIO_RATE_READ", 600);
 /** Requests per minute per IP — POST/PUT/PATCH/DELETE tier. 0 disables it. */
-export const WRITE_LIMIT = envInt("TUBEFORGE_RATE_WRITE", 90);
+export const WRITE_LIMIT = envInt("IBISMUH_STUDIO_RATE_WRITE", 90);
 
 const WINDOW_MS = 60_000;
 

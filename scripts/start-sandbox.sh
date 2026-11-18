@@ -16,13 +16,13 @@ cd "$(dirname "$0")/.."
 if curl -sf --max-time 3 http://127.0.0.1:8931/health > /dev/null 2>&1; then
   echo "[start-sandbox] voice server already up"
 else
-  VKEY="$(grep -oP '^TUBEFORGE_SHARED_VOICE_KEY=\K.*' .env || true)"
+  VKEY="$(grep -oP '^IBISMUH_STUDIO_SHARED_VOICE_KEY=\K.*' .env || true)"
   if [ -n "$VKEY" ] && [ -x voice-server/.venv/bin/python ]; then
     echo "[start-sandbox] starting voice server (chatterbox-turbo)…"
     python3 scripts/daemonize.py voice-server/server.log bash -c \
       "cd '$PWD/voice-server' && export HF_HOME='$PWD/voice-server/hf-cache' VOICE_THREADS=1 && exec .venv/bin/python voice_server.py --model chatterbox-turbo --host 127.0.0.1 --port 8931 --key '$VKEY'"
   else
-    echo "[start-sandbox] voice server not configured (TUBEFORGE_SHARED_VOICE_KEY or venv missing) — skipping"
+    echo "[start-sandbox] voice server not configured (IBISMUH_STUDIO_SHARED_VOICE_KEY or venv missing) — skipping"
   fi
 fi
 

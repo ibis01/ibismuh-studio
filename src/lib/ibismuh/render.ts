@@ -838,7 +838,7 @@ async function buildSegment(opts: {
     // no usable title font (the ladder answered null). Visible in the log,
     // never a failed segment.
     renderLog.warn(
-      "title overlay skipped — no usable title font on this host (set TUBEFORGE_TITLE_FONT)",
+      "title overlay skipped — no usable title font on this host (set IBISMUH_STUDIO_TITLE_FONT)",
       { scene: scene.index }
     );
   }

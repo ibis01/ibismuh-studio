@@ -30,8 +30,8 @@ export async function GET() {
       databaseUrl: process.env.DATABASE_URL
         ? { present: true, protocol: process.env.DATABASE_URL.split("://")[0] ?? "?" }
         : { present: false },
-      authSecret: (process.env.TUBEFORGE_AUTH_SECRET ?? "").length >= 16,
-      encryptionKey: (process.env.TUBEFORGE_ENCRYPTION_KEY ?? "").length >= 16,
+      authSecret: (process.env.IBISMUH_STUDIO_AUTH_SECRET ?? "").length >= 16,
+      encryptionKey: (process.env.IBISMUH_STUDIO_ENCRYPTION_KEY ?? "").length >= 16,
     },
   };
 

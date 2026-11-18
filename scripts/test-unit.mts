@@ -865,8 +865,8 @@ await test("describeVoiceHealth: /health payloads render as one readable line", 
 });
 
 await test("shared-voice: endpoint precedence — user server > shared env > nothing", () => {
-  const URL_KEY = "TUBEFORGE_SHARED_VOICE_URL";
-  const KEY_KEY = "TUBEFORGE_SHARED_VOICE_KEY";
+  const URL_KEY = "IBISMUH_STUDIO_SHARED_VOICE_URL";
+  const KEY_KEY = "IBISMUH_STUDIO_SHARED_VOICE_KEY";
   const savedUrl = process.env[URL_KEY];
   const savedKey = process.env[KEY_KEY];
   try {
@@ -1897,7 +1897,7 @@ await test("imageHash: real ffmpeg roundtrip + directory scan", async () => {
 
 // ---------- stage 2: at-rest encryption (crypto.ts) ----------
 
-process.env.TUBEFORGE_ENCRYPTION_KEY ||= "unit-test-key-0123456789abcdef";
+process.env.IBISMUH_STUDIO_ENCRYPTION_KEY ||= "unit-test-key-0123456789abcdef";
 
 await test("crypto: AES-256-GCM roundtrip + distinct IVs", async () => {
   const { encryptSecret, decryptSecret, isEncryptedSecret } = await import(
@@ -1953,14 +1953,14 @@ await test("timeoutFor: defaults per capability; env overrides apply; invalid en
   eq(http.timeoutFor("youtube-upload"), 3_600_000, "resumable upload gets an hour");
   ok(http.timeoutFor("video-gen") > http.timeoutFor("llm"), "video-gen outlives llm");
 
-  process.env.TUBEFORGE_TIMEOUT_YOUTUBE_API = "12345";
+  process.env.IBISMUH_STUDIO_TIMEOUT_YOUTUBE_API = "12345";
   http.resetTimeoutOverrides();
   eq(http.timeoutFor("youtube-api"), 12_345, "env override wins after reset");
 
-  process.env.TUBEFORGE_TIMEOUT_YOUTUBE_API = "50"; // below the 1s floor
+  process.env.IBISMUH_STUDIO_TIMEOUT_YOUTUBE_API = "50"; // below the 1s floor
   http.resetTimeoutOverrides();
   eq(http.timeoutFor("youtube-api"), 30_000, "invalid env falls back to default");
-  delete process.env.TUBEFORGE_TIMEOUT_YOUTUBE_API;
+  delete process.env.IBISMUH_STUDIO_TIMEOUT_YOUTUBE_API;
   http.resetTimeoutOverrides();
   eq(http.timeoutFor("youtube-api"), 30_000, "clean env keeps the default");
 });
@@ -1988,7 +1988,7 @@ await test("claimIsStale: null claim, own claim, dead pid, live foreign pid, pri
   // been imported yet (module init reads it); setClaiming(false) covers the
   // case where an EARLIER test (e.g. the captions suite, whose import chain
   // captions → story → jobs → queue) already initialized the module.
-  process.env.TUBEFORGE_NO_CLAIM = "1";
+  process.env.IBISMUH_STUDIO_NO_CLAIM = "1";
   const queue = await import("../src/lib/ibismuh/queue.ts");
   queue.setClaiming(false);
   queue.initQueue("web");
@@ -2009,7 +2009,7 @@ await test("claimIsStale: null claim, own claim, dead pid, live foreign pid, pri
   const priorIncarnation = `${role}:${pid}:olderboot`;
   ok(queue.claimIsStale(priorIncarnation), "same pid + older boot = previous incarnation, stale");
 
-  delete process.env.TUBEFORGE_NO_CLAIM;
+  delete process.env.IBISMUH_STUDIO_NO_CLAIM;
 });
 
 suiteStart("Stage 3 — streaming ZIP (D-24)");
@@ -2100,7 +2100,7 @@ await test("log: pino-format JSON lines, level filtering, child bindings, redact
   const captured: string[] = [];
   const origOut = process.stdout.write.bind(process.stdout);
   const origErr = process.stderr.write.bind(process.stderr);
-  const origLevel = process.env.TUBEFORGE_LOG_LEVEL;
+  const origLevel = process.env.IBISMUH_STUDIO_LOG_LEVEL;
   const collect = (chunk: unknown) => {
     if (typeof chunk === "string") captured.push(chunk);
     return true;
@@ -2108,7 +2108,7 @@ await test("log: pino-format JSON lines, level filtering, child bindings, redact
   (process.stdout as { write: unknown }).write = collect;
   (process.stderr as { write: unknown }).write = collect;
   try {
-    process.env.TUBEFORGE_LOG_LEVEL = "debug";
+    process.env.IBISMUH_STUDIO_LOG_LEVEL = "debug";
     const mod = await import("../src/lib/ibismuh/log.ts");
     const logger = mod.createLogger({ mod: "probe" }).child({ job: "j1" });
 
@@ -2129,7 +2129,7 @@ await test("log: pino-format JSON lines, level filtering, child bindings, redact
 
     // Level threshold: warn suppresses info/debug (threshold is dynamic).
     captured.length = 0;
-    process.env.TUBEFORGE_LOG_LEVEL = "warn";
+    process.env.IBISMUH_STUDIO_LOG_LEVEL = "warn";
     const quiet = await import("../src/lib/ibismuh/log.ts");
     const l2 = quiet.createLogger({});
     l2.info("hidden");
@@ -2139,8 +2139,8 @@ await test("log: pino-format JSON lines, level filtering, child bindings, redact
   } finally {
     (process.stdout as { write: unknown }).write = origOut;
     (process.stderr as { write: unknown }).write = origErr;
-    if (origLevel === undefined) delete process.env.TUBEFORGE_LOG_LEVEL;
-    else process.env.TUBEFORGE_LOG_LEVEL = origLevel;
+    if (origLevel === undefined) delete process.env.IBISMUH_STUDIO_LOG_LEVEL;
+    else process.env.IBISMUH_STUDIO_LOG_LEVEL = origLevel;
   }
 });
 
@@ -2162,8 +2162,8 @@ await test("storage: normalizeKey rejects traversal and absolute paths, passes c
 
 await test("storage: local driver roundtrip — put / get / stat / exists / remove", async () => {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "tf-storage-"));
-  process.env.TUBEFORGE_UPLOAD_ROOT = dir;
-  delete process.env.TUBEFORGE_STORAGE_DRIVER;
+  process.env.IBISMUH_STUDIO_UPLOAD_ROOT = dir;
+  delete process.env.IBISMUH_STUDIO_STORAGE_DRIVER;
   const mod = await import("../src/lib/ibismuh/storage.ts");
   const key = "v1/artifact.bin";
   const payload = crypto.randomBytes(2048);
@@ -2177,14 +2177,14 @@ await test("storage: local driver roundtrip — put / get / stat / exists / remo
   ok(!(await mod.exists(key)), "gone after remove");
   const missing = await mod.stat("v1/never-was.bin");
   eq(missing, null, "missing stat is null");
-  delete process.env.TUBEFORGE_UPLOAD_ROOT;
+  delete process.env.IBISMUH_STUDIO_UPLOAD_ROOT;
   await fsp.rm(dir, { recursive: true, force: true });
 });
 
 await test("storage: putFromPath same-path no-op + cross-dir move works", async () => {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "tf-storage2-"));
-  process.env.TUBEFORGE_UPLOAD_ROOT = path.join(dir, "root");
-  delete process.env.TUBEFORGE_STORAGE_DRIVER;
+  process.env.IBISMUH_STUDIO_UPLOAD_ROOT = path.join(dir, "root");
+  delete process.env.IBISMUH_STUDIO_STORAGE_DRIVER;
   const mod = await import("../src/lib/ibismuh/storage.ts");
   // direct write into the uploads layout, then register it (the render.ts pattern)
   const file = path.join(dir, "root", "vid", "final.mp4");
@@ -2199,14 +2199,14 @@ await test("storage: putFromPath same-path no-op + cross-dir move works", async 
   await mod.putFromPath("vid/thumb.png", scratch);
   ok(await mod.exists("vid/thumb.png"), "cross-dir move landed");
   ok(!fs.existsSync(scratch), "scratch source consumed");
-  delete process.env.TUBEFORGE_UPLOAD_ROOT;
+  delete process.env.IBISMUH_STUDIO_UPLOAD_ROOT;
   await fsp.rm(dir, { recursive: true, force: true });
 });
 
 await test("storage: removePrefix wipes a whole video folder", async () => {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "tf-storage3-"));
-  process.env.TUBEFORGE_UPLOAD_ROOT = dir;
-  delete process.env.TUBEFORGE_STORAGE_DRIVER;
+  process.env.IBISMUH_STUDIO_UPLOAD_ROOT = dir;
+  delete process.env.IBISMUH_STUDIO_STORAGE_DRIVER;
   const mod = await import("../src/lib/ibismuh/storage.ts");
   for (const f of ["scene-01.png", "scene-02.png", "voiceover.wav", "final.mp4"]) {
     await mod.put(`vid9/${f}`, Buffer.from(`data-${f}`));
@@ -2216,37 +2216,37 @@ await test("storage: removePrefix wipes a whole video folder", async () => {
     ok(!(await mod.exists(`vid9/${f}`)), `vid9/${f} wiped`);
   }
   ok(!fs.existsSync(path.join(dir, "vid9")), "directory itself removed");
-  delete process.env.TUBEFORGE_UPLOAD_ROOT;
+  delete process.env.IBISMUH_STUDIO_UPLOAD_ROOT;
   await fsp.rm(dir, { recursive: true, force: true });
 });
 
 await test("storage: driver kind + info respond to env without restarts", async () => {
   const mod = await import("../src/lib/ibismuh/storage.ts");
   eq(mod.storageDriverKind(), "local", "default driver is local");
-  process.env.TUBEFORGE_STORAGE_DRIVER = "s3";
+  process.env.IBISMUH_STUDIO_STORAGE_DRIVER = "s3";
   eq(mod.storageDriverKind(), "s3", "env flips the driver");
   const info = mod.storageInfo();
   ok(typeof info.quotaBytes === "number" && info.quotaBytes > 0, "quota default is positive");
-  delete process.env.TUBEFORGE_STORAGE_DRIVER;
+  delete process.env.IBISMUH_STUDIO_STORAGE_DRIVER;
 });
 
 await test("storage: scratchDir tracks the driver (uploads locally, tmp under s3)", async () => {
   const mod = await import("../src/lib/ibismuh/storage.ts");
-  delete process.env.TUBEFORGE_STORAGE_DRIVER;
+  delete process.env.IBISMUH_STUDIO_STORAGE_DRIVER;
   const localDir = mod.scratchDir("vidA");
   ok(localDir.startsWith(process.cwd()), "local scratch lives under the app (uploads layout)");
-  process.env.TUBEFORGE_STORAGE_DRIVER = "s3";
-  process.env.TUBEFORGE_SCRATCH_ROOT = path.join(os.tmpdir(), "tf-scratch-probe");
+  process.env.IBISMUH_STUDIO_STORAGE_DRIVER = "s3";
+  process.env.IBISMUH_STUDIO_SCRATCH_ROOT = path.join(os.tmpdir(), "tf-scratch-probe");
   const s3Dir = mod.scratchDir("vidA");
   ok(!s3Dir.startsWith(process.cwd()), "s3 scratch redirects away from the app tree");
   ok(fs.existsSync(s3Dir), "scratch dir created on demand");
-  delete process.env.TUBEFORGE_STORAGE_DRIVER;
-  delete process.env.TUBEFORGE_SCRATCH_ROOT;
+  delete process.env.IBISMUH_STUDIO_STORAGE_DRIVER;
+  delete process.env.IBISMUH_STUDIO_SCRATCH_ROOT;
 });
 
 await test("storage: list() enumerates a prefix and tolerates absence (T-4.0)", async () => {
   const mod = await import("../src/lib/ibismuh/storage.ts");
-  delete process.env.TUBEFORGE_STORAGE_DRIVER;
+  delete process.env.IBISMUH_STUDIO_STORAGE_DRIVER;
   const probe = `tf-list-probe-${Date.now()}`;
   // Two nested objects + one sibling prefix that must NOT leak in.
   await mod.put(`${probe}/scene-01.png`, Buffer.from([1, 2, 3]));
@@ -2287,7 +2287,7 @@ await test("S42 sceneArtVersion: URL-safe token that rotates with mtime AND size
 await test("S42 serializeScenes: the art URL carries ?v= and rotates when art is replaced", async () => {
   const storage = await import("../src/lib/ibismuh/storage.ts");
   const { parseScenes, serializeScenes } = await import("../src/lib/ibismuh/story.ts");
-  delete process.env.TUBEFORGE_STORAGE_DRIVER; // local driver — real bytes on disk
+  delete process.env.IBISMUH_STUDIO_STORAGE_DRIVER; // local driver — real bytes on disk
   const probe = `s42-art-probe-${Date.now()}`;
   const scenes = parseScenes(
     JSON.stringify([
@@ -2362,7 +2362,7 @@ await test("S43 sniffImageFormat: HEIC brands pass, non-HEIC ftyp boxes do not",
 
 await test("S43 replaceSceneImage: a real HEIC decodes, cover-crops and lands as scene art", async () => {
   const { replaceSceneImage } = await import("../src/lib/ibismuh/story.ts");
-  delete process.env.TUBEFORGE_STORAGE_DRIVER; // local driver — real bytes on disk
+  delete process.env.IBISMUH_STUDIO_STORAGE_DRIVER; // local driver — real bytes on disk
   const probe = `s43-heic-probe-${Date.now()}`;
   const fixture = fs.readFileSync(path.join(import.meta.dirname, "fixtures", "scene-upload.heic"));
   ok(fixture.length > 1000, "fixture is a real file");
@@ -2441,8 +2441,8 @@ await test("S43 assembleTimeline: doc captions seed ONLY from user-edited rows",
 // ---------------------------------------------------------------------------
 
 await test("email: console mode logs and reports delivered=console, link stays in responses", async () => {
-  const orig = process.env.TUBEFORGE_EMAIL_MODE;
-  delete process.env.TUBEFORGE_EMAIL_MODE;
+  const orig = process.env.IBISMUH_STUDIO_EMAIL_MODE;
+  delete process.env.IBISMUH_STUDIO_EMAIL_MODE;
   const mod = await import("../src/lib/ibismuh/email.ts");
   const lines: string[] = [];
   const origLog = console.log;
@@ -2460,15 +2460,15 @@ await test("email: console mode logs and reports delivered=console, link stays i
     ok(logged && logged.includes("https://app.example.com/verify?token=abc"), "action link logged for dev");
   } finally {
     console.log = origLog;
-    if (orig === undefined) delete process.env.TUBEFORGE_EMAIL_MODE;
-    else process.env.TUBEFORGE_EMAIL_MODE = orig;
+    if (orig === undefined) delete process.env.IBISMUH_STUDIO_EMAIL_MODE;
+    else process.env.IBISMUH_STUDIO_EMAIL_MODE = orig;
   }
 });
 
 await test("email: smtp mode hides the link from responses and refuses empty config", async () => {
-  const orig = { mode: process.env.TUBEFORGE_EMAIL_MODE, host: process.env.TUBEFORGE_SMTP_HOST };
-  process.env.TUBEFORGE_EMAIL_MODE = "smtp";
-  delete process.env.TUBEFORGE_SMTP_HOST;
+  const orig = { mode: process.env.IBISMUH_STUDIO_EMAIL_MODE, host: process.env.IBISMUH_STUDIO_SMTP_HOST };
+  process.env.IBISMUH_STUDIO_EMAIL_MODE = "smtp";
+  delete process.env.IBISMUH_STUDIO_SMTP_HOST;
   const mod = await import("../src/lib/ibismuh/email.ts");
   eq(mod.emailMode(), "smtp", "mode picked up");
   eq(mod.linkInResponse(), false, "smtp responses never echo the link");
@@ -2477,12 +2477,12 @@ await test("email: smtp mode hides the link from responses and refuses empty con
     await mod.sendMail({ to: "x@example.com", subject: "s", text: "https://a.b/c" });
   } catch (err) {
     threw = true;
-    ok(/TUBEFORGE_SMTP_HOST/.test(err instanceof Error ? err.message : ""), "actionable config error");
+    ok(/IBISMUH_STUDIO_SMTP_HOST/.test(err instanceof Error ? err.message : ""), "actionable config error");
   }
   ok(threw, "smtp without host fails loudly");
-  process.env.TUBEFORGE_EMAIL_MODE = orig.mode;
-  if (orig.host) process.env.TUBEFORGE_SMTP_HOST = orig.host;
-  else delete process.env.TUBEFORGE_SMTP_HOST;
+  process.env.IBISMUH_STUDIO_EMAIL_MODE = orig.mode;
+  if (orig.host) process.env.IBISMUH_STUDIO_SMTP_HOST = orig.host;
+  else delete process.env.IBISMUH_STUDIO_SMTP_HOST;
 });
 
 // ---------------------------------------------------------------------------
@@ -5129,24 +5129,24 @@ await test("S36 single-scene expectation: any detected cut is a genuine continui
 
 await test("S36-audit: spendOverrides reports the operator escape hatches; a clean env stays silent", async () => {
   const { spendOverrides } = await import("../src/lib/ibismuh/spend.ts");
-  const savedGate = process.env.TUBEFORGE_SPEND_GATE;
-  const savedPricing = process.env.TUBEFORGE_PRICING_VERIFIED;
-  delete process.env.TUBEFORGE_SPEND_GATE;
-  delete process.env.TUBEFORGE_PRICING_VERIFIED;
+  const savedGate = process.env.IBISMUH_STUDIO_SPEND_GATE;
+  const savedPricing = process.env.IBISMUH_STUDIO_PRICING_VERIFIED;
+  delete process.env.IBISMUH_STUDIO_SPEND_GATE;
+  delete process.env.IBISMUH_STUDIO_PRICING_VERIFIED;
   try {
     const clean = spendOverrides();
-    ok(!clean.gateLifted, "no TUBEFORGE_SPEND_GATE → gate not lifted");
-    ok(!clean.pricingForcedVerified, "no TUBEFORGE_PRICING_VERIFIED → pricing not forced");
-    process.env.TUBEFORGE_SPEND_GATE = "0";
-    process.env.TUBEFORGE_PRICING_VERIFIED = "1";
+    ok(!clean.gateLifted, "no IBISMUH_STUDIO_SPEND_GATE → gate not lifted");
+    ok(!clean.pricingForcedVerified, "no IBISMUH_STUDIO_PRICING_VERIFIED → pricing not forced");
+    process.env.IBISMUH_STUDIO_SPEND_GATE = "0";
+    process.env.IBISMUH_STUDIO_PRICING_VERIFIED = "1";
     const lifted = spendOverrides();
-    ok(lifted.gateLifted, "TUBEFORGE_SPEND_GATE=0 → gateLifted");
-    ok(lifted.pricingForcedVerified, "TUBEFORGE_PRICING_VERIFIED=1 → pricingForcedVerified");
+    ok(lifted.gateLifted, "IBISMUH_STUDIO_SPEND_GATE=0 → gateLifted");
+    ok(lifted.pricingForcedVerified, "IBISMUH_STUDIO_PRICING_VERIFIED=1 → pricingForcedVerified");
   } finally {
-    if (savedGate === undefined) delete process.env.TUBEFORGE_SPEND_GATE;
-    else process.env.TUBEFORGE_SPEND_GATE = savedGate;
-    if (savedPricing === undefined) delete process.env.TUBEFORGE_PRICING_VERIFIED;
-    else process.env.TUBEFORGE_PRICING_VERIFIED = savedPricing;
+    if (savedGate === undefined) delete process.env.IBISMUH_STUDIO_SPEND_GATE;
+    else process.env.IBISMUH_STUDIO_SPEND_GATE = savedGate;
+    if (savedPricing === undefined) delete process.env.IBISMUH_STUDIO_PRICING_VERIFIED;
+    else process.env.IBISMUH_STUDIO_PRICING_VERIFIED = savedPricing;
   }
   const restored = spendOverrides();
   ok(!restored.gateLifted && !restored.pricingForcedVerified, "env fully restored after the test");
@@ -5441,9 +5441,9 @@ await test("S40 override: the human accepted THIS report or nobody", () => {
 });
 
 await test("S40 report mode: the gate never blocks, findings stay visible", () => {
-  const prev = process.env.TUBEFORGE_QC_ENFORCEMENT;
+  const prev = process.env.IBISMUH_STUDIO_QC_ENFORCEMENT;
   try {
-    process.env.TUBEFORGE_QC_ENFORCEMENT = "report";
+    process.env.IBISMUH_STUDIO_QC_ENFORCEMENT = "report";
     eq(qcEnforcementMode(), "report", "exact 'report' switches the mode");
     const held = applyQcPolicy(
       s40Report(S40_EMITTED_IDS.map((id) => s40Check(id, id === "stutter" ? "fail" : "pass"))),
@@ -5452,17 +5452,17 @@ await test("S40 report mode: the gate never blocks, findings stay visible", () =
     eq(held.blocked, false, "report mode never blocks");
     eq(held.blockers.length, 1, "the would-block finding stays visible");
 
-    process.env.TUBEFORGE_QC_ENFORCEMENT = "enforce";
+    process.env.IBISMUH_STUDIO_QC_ENFORCEMENT = "enforce";
     eq(qcEnforcementMode(), "enforce", "explicit enforce");
-    process.env.TUBEFORGE_QC_ENFORCEMENT = "junk-value";
+    process.env.IBISMUH_STUDIO_QC_ENFORCEMENT = "junk-value";
     eq(qcEnforcementMode(), "enforce", "junk fails CLOSED to enforce");
-    process.env.TUBEFORGE_QC_ENFORCEMENT = "";
+    process.env.IBISMUH_STUDIO_QC_ENFORCEMENT = "";
     eq(qcEnforcementMode(), "enforce", "empty fails closed");
-    process.env.TUBEFORGE_QC_ENFORCEMENT = "REPORT";
+    process.env.IBISMUH_STUDIO_QC_ENFORCEMENT = "REPORT";
     eq(qcEnforcementMode(), "enforce", "case-sensitive — 'REPORT' is junk, not the switch");
   } finally {
-    if (prev === undefined) delete process.env.TUBEFORGE_QC_ENFORCEMENT;
-    else process.env.TUBEFORGE_QC_ENFORCEMENT = prev;
+    if (prev === undefined) delete process.env.IBISMUH_STUDIO_QC_ENFORCEMENT;
+    else process.env.IBISMUH_STUDIO_QC_ENFORCEMENT = prev;
   }
   // And the null-report case still routes through the mode:
   eq(applyQcPolicy(null, { mode: "report" }).blocked, false, "report mode releases even a missing report");
@@ -5745,7 +5745,7 @@ await test("S45 previewQcPatch: preview evidence persists ONLY while no full ren
 await test("S45 qcForPreview: scoped battery on a real preview.mp4 — no narration-sync, no captions, scope stamped", async () => {
   const storage = await import("../src/lib/ibismuh/storage.ts");
   const { qcForPreview } = await import("../src/lib/ibismuh/qc.ts");
-  delete process.env.TUBEFORGE_STORAGE_DRIVER; // local driver — real bytes on disk
+  delete process.env.IBISMUH_STUDIO_STORAGE_DRIVER; // local driver — real bytes on disk
   const probe = `s45-preview-probe-${Date.now()}`;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tf-s45-"));
   const tmpPreview = path.join(dir, "s45-preview.mp4");
@@ -7297,7 +7297,7 @@ await test("log: requestLog binds the middleware-stamped request id", async () =
   const captured: string[] = [];
   const origOut = process.stdout.write.bind(process.stdout);
   const origErr = process.stderr.write.bind(process.stderr);
-  const origLevel = process.env.TUBEFORGE_LOG_LEVEL;
+  const origLevel = process.env.IBISMUH_STUDIO_LOG_LEVEL;
   const collect = (chunk: unknown) => {
     if (typeof chunk === "string") captured.push(chunk);
     return true;
@@ -7305,7 +7305,7 @@ await test("log: requestLog binds the middleware-stamped request id", async () =
   (process.stdout as { write: unknown }).write = collect;
   (process.stderr as { write: unknown }).write = collect;
   try {
-    process.env.TUBEFORGE_LOG_LEVEL = "debug";
+    process.env.IBISMUH_STUDIO_LOG_LEVEL = "debug";
     const mod = await import("../src/lib/ibismuh/log.ts");
     eq(mod.REQUEST_ID_HEADER, "x-request-id", "the header name is the contract");
 
@@ -7342,8 +7342,8 @@ await test("log: requestLog binds the middleware-stamped request id", async () =
   } finally {
     (process.stdout as { write: unknown }).write = origOut;
     (process.stderr as { write: unknown }).write = origErr;
-    if (origLevel === undefined) delete process.env.TUBEFORGE_LOG_LEVEL;
-    else process.env.TUBEFORGE_LOG_LEVEL = origLevel;
+    if (origLevel === undefined) delete process.env.IBISMUH_STUDIO_LOG_LEVEL;
+    else process.env.IBISMUH_STUDIO_LOG_LEVEL = origLevel;
   }
 });
 
@@ -7353,11 +7353,11 @@ await test("log: the portable sink falls back to console when process streams ar
   const origErr = console.error;
   const outDesc = Object.getOwnPropertyDescriptor(process, "stdout");
   const errDesc = Object.getOwnPropertyDescriptor(process, "stderr");
-  const origLevel = process.env.TUBEFORGE_LOG_LEVEL;
+  const origLevel = process.env.IBISMUH_STUDIO_LOG_LEVEL;
   (console as { log: unknown }).log = (t: string) => captured.push(t);
   (console as { error: unknown }).error = (t: string) => captured.push(t);
   try {
-    process.env.TUBEFORGE_LOG_LEVEL = "debug";
+    process.env.IBISMUH_STUDIO_LOG_LEVEL = "debug";
     // Simulate an edge/browser bundle: process exists but has no std streams.
     Object.defineProperty(process, "stdout", { value: {}, configurable: true });
     Object.defineProperty(process, "stderr", { value: {}, configurable: true });
@@ -7376,8 +7376,8 @@ await test("log: the portable sink falls back to console when process streams ar
     if (errDesc) Object.defineProperty(process, "stderr", errDesc);
     (console as { log: unknown }).log = origLog;
     (console as { error: unknown }).error = origErr;
-    if (origLevel === undefined) delete process.env.TUBEFORGE_LOG_LEVEL;
-    else process.env.TUBEFORGE_LOG_LEVEL = origLevel;
+    if (origLevel === undefined) delete process.env.IBISMUH_STUDIO_LOG_LEVEL;
+    else process.env.IBISMUH_STUDIO_LOG_LEVEL = origLevel;
   }
 });
 
@@ -12511,7 +12511,7 @@ await test("S99 fresh-clone hygiene law: .gitignore buries every runtime artifac
     "postinstall references BOTH dialect schemas",
   );
   ok(
-    post.includes("TUBEFORGE_AUTH_SECRET") && post.includes("TUBEFORGE_ENCRYPTION_KEY"),
+    post.includes("IBISMUH_STUDIO_AUTH_SECRET") && post.includes("IBISMUH_STUDIO_ENCRYPTION_KEY"),
     "postinstall provisions the auth + encryption secrets (the middleware fails closed without them)",
   );
   ok(post.includes("next-env.d.ts"), "postinstall creates next-env.d.ts (tsc needs it before the first build)");
@@ -22807,7 +22807,7 @@ await test("S156 the title font is a RUNTIME ladder — a slim image degrades th
   // build (Turbopack's browser chunking refuses node:fs externals).
   const src = await fsp.readFile("src/lib/ibismuh/title-font.ts", "utf8");
   ok(src.includes("export function resolveTitleFontFile"), "the ladder is exported (the render consumes it)");
-  ok(src.includes("TUBEFORGE_TITLE_FONT"), "the operator's explicit override wins first");
+  ok(src.includes("IBISMUH_STUDIO_TITLE_FONT"), "the operator's explicit override wins first");
   ok(src.includes("LiberationSans-Regular.ttf") && src.includes("DejaVuSans.ttf"), "the shipped faces are candidates");
   ok(!src.includes('?? "/usr/share/fonts/truetype/chinese/NotoSansSC-Regular.ttf"'), "the hardcoded missing-font default is gone");
   const eng = await fsp.readFile("src/lib/ibismuh/render.ts", "utf8");
@@ -25144,6 +25144,73 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
     eq(docMeasuredWorkerGb("size the worker at some other shape"), null, "a missing doc sentence reads as UNPARSED, never as clean");
   });
 }
+
+
+// ---------------------------------------------------------------------------
+// Rebrand compatibility (the controlled 2026-11-17 migration): the legacy
+// TUBEFORGE_* world must keep working while IBISMUH_STUDIO_* is
+// authoritative. These suites pin the compat seams — mirror, dual-reads,
+// cookie names — so no future cleanup can silently strand deployments.
+
+await test("rebrand: compat-env mirrors legacy TUBEFORGE_* into IBISMUH_STUDIO_* and the new name always wins", async () => {
+  const { mirrorLegacyEnv } = await import("../src/lib/ibismuh/compat-env.ts");
+  const legacy = "TUBEFORGE_REBRAND_PROBE_VAR";
+  const next = "IBISMUH_STUDIO_REBRAND_PROBE_VAR";
+  try {
+    process.env[legacy] = "from-legacy";
+    delete process.env[next];
+    mirrorLegacyEnv();
+    eq(process.env[next], "from-legacy", "an unset new name inherits the legacy value");
+    process.env[next] = "from-new";
+    mirrorLegacyEnv();
+    eq(process.env[next], "from-new", "a set new name is authoritative — the mirror never overwrites");
+  } finally {
+    delete process.env[legacy];
+    delete process.env[next];
+  }
+});
+
+await test("rebrand: the auth secret dual-reads — legacy-only deployments keep signing", async () => {
+  const { getAuthSecret } = await import("../src/lib/ibismuh/auth-token.ts");
+  try {
+    delete process.env.IBISMUH_STUDIO_AUTH_SECRET;
+    process.env.TUBEFORGE_AUTH_SECRET = "a".repeat(32);
+    eq(getAuthSecret(), "a".repeat(32), "a legacy-only env still yields the secret");
+    process.env.IBISMUH_STUDIO_AUTH_SECRET = "b".repeat(32);
+    eq(getAuthSecret(), "b".repeat(32), "the new name is authoritative when both are set");
+    delete process.env.TUBEFORGE_AUTH_SECRET;
+    delete process.env.IBISMUH_STUDIO_AUTH_SECRET;
+    eq(getAuthSecret(), undefined, "neither name set — no secret, the middleware fail-safe applies");
+  } finally {
+    delete process.env.TUBEFORGE_AUTH_SECRET;
+    delete process.env.IBISMUH_STUDIO_AUTH_SECRET;
+  }
+});
+
+await test("rebrand: the session cookie reads BOTH names, new first — live sessions survive the flip", async () => {
+  const { SESSION_COOKIE, LEGACY_SESSION_COOKIE, pickSessionCookie } = await import("../src/lib/ibismuh/auth-token.ts");
+  eq(SESSION_COOKIE, "ibismuh_session", "the new cookie name is pinned");
+  eq(LEGACY_SESSION_COOKIE, "tf_session", "the legacy cookie name is pinned — dropping it would strand logins");
+  eq(pickSessionCookie((n) => (n === SESSION_COOKIE ? "new-token" : undefined)), "new-token", "a new-name cookie wins");
+  eq(pickSessionCookie((n) => (n === LEGACY_SESSION_COOKIE ? "old-token" : undefined)), "old-token", "a legacy-name cookie still authenticates");
+  eq(pickSessionCookie(() => undefined), undefined, "no cookie — nothing is invented");
+});
+
+await test("rebrand: the encryption key reader dual-reads both names (config-truth: the reader is process-cached, so the source line is the contract)", async () => {
+  const src = fs.readFileSync("src/lib/ibismuh/crypto.ts", "utf8");
+  ok(
+    src.includes("process.env.IBISMUH_STUDIO_ENCRYPTION_KEY ?? process.env.TUBEFORGE_ENCRYPTION_KEY"),
+    "requireKey() falls back to the legacy TUBEFORGE_ENCRYPTION_KEY when the new name is unset"
+  );
+  ok(src.includes('const SCRYPT_SALT = "tubeforge-at-rest-v1"'), "the KDF salt is UNTOUCHED — renaming it would orphan every stored provider secret");
+});
+
+await test("rebrand: the data-coupled seeds and paths stay preserved — only identity moved, not behavior", async () => {
+  const sceneSrc = fs.readFileSync("src/lib/ibismuh/scene3d.ts", "utf8");
+  ok(sceneSrc.includes('hash32(topic || "tubeforge")'), "the scene3d determinism seed is UNTOUCHED — renaming it would shift every generated scene");
+  const storageSrc = fs.readFileSync("src/lib/ibismuh/storage.ts", "utf8");
+  ok(storageSrc.includes("/tmp/tubeforge-uploads"), "default storage paths are UNTOUCHED — renaming them would orphan existing deployments' uploads");
+});
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 for (const f of failures) console.log(`  ✗ ${f}`);

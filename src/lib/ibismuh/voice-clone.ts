@@ -123,7 +123,7 @@ export function parseCloneConsent(
  *   1. selfhost — the user's OWN server (saved URL): free Chatterbox, no
  *      network call at clone time (the sample is stored on the row).
  *   2. zhipu   — if it has a saved bigmodel.cn key (the clone API needs it).
- *   3. the operator's shared voice server (TUBEFORGE_SHARED_VOICE_URL) —
+ *   3. the operator's shared voice server (IBISMUH_STUDIO_SHARED_VOICE_URL) —
  *      self-hosted deployments and sandboxes can run ONE Chatterbox server
  *      for all their users; cloning and synthesis work with zero per-user
  *      setup.

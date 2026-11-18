@@ -4,12 +4,12 @@
 // uploads/ layout 1:1 ("<videoId>/final.mp4", "_music/track-128.mp3",
 // "_voicepreviews/<hash>.wav"). The LocalDisk driver maps key →
 // <root>/<key>, so existing installs keep working with ZERO data migration;
-// flipping TUBEFORGE_STORAGE_DRIVER=s3 switches delivery to object storage
+// flipping IBISMUH_STUDIO_STORAGE_DRIVER=s3 switches delivery to object storage
 // without touching call sites again.
 //
 // Drivers:
-//   local (default) — root = TUBEFORGE_UPLOAD_ROOT || <cwd>/uploads
-//   s3              — TUBEFORGE_S3_* env; ZERO-DEPENDENCY SigV4 signer over
+//   local (default) — root = IBISMUH_STUDIO_UPLOAD_ROOT || <cwd>/uploads
+//   s3              — IBISMUH_STUDIO_S3_* env; ZERO-DEPENDENCY SigV4 signer over
 //                     fetch(). Works with AWS S3, Cloudflare R2 and MinIO
 //                     (path-style addressing). presign() returns a signed GET
 //                     URL so the client downloads straight from the CDN/edge,
@@ -58,7 +58,7 @@ import { log } from "./log";
 export type StorageDriverKind = "local" | "s3";
 
 export function storageDriverKind(): StorageDriverKind {
-  return process.env.TUBEFORGE_STORAGE_DRIVER === "s3" ? "s3" : "local";
+  return process.env.IBISMUH_STUDIO_STORAGE_DRIVER === "s3" ? "s3" : "local";
 }
 
 /** True on Vercel (serverless functions and builds) — the deployed filesystem
@@ -77,11 +77,11 @@ export function isVercelRuntime(): boolean {
  *  voiceover job, it spoke every scene, merged the WAV, and THEN crashed at
  *  the merged voiceover.wav publish. Defaulting the root to /tmp (writable,
  *  the same tree ai.ts's videoDir scratch already uses) makes the local
- *  driver work on Vercel out of the box; an explicit TUBEFORGE_UPLOAD_ROOT
+ *  driver work on Vercel out of the box; an explicit IBISMUH_STUDIO_UPLOAD_ROOT
  *  always wins, and durable-artifact-grade deployments on serverless are
  *  still the s3 driver (see scratchDir's note). */
-export const UPLOAD_ROOT = process.env.TUBEFORGE_UPLOAD_ROOT
-  ? path.resolve(process.env.TUBEFORGE_UPLOAD_ROOT)
+export const UPLOAD_ROOT = process.env.IBISMUH_STUDIO_UPLOAD_ROOT
+  ? path.resolve(process.env.IBISMUH_STUDIO_UPLOAD_ROOT)
   : isVercelRuntime()
     ? "/tmp/tubeforge-uploads"
     : path.join(process.cwd(), "uploads");
@@ -122,8 +122,8 @@ async function ensureDirFor(file: string): Promise<void> {
 }
 
 
-const S3_CACHE = process.env.TUBEFORGE_S3_CACHE_DIR
-  ? path.resolve(process.env.TUBEFORGE_S3_CACHE_DIR)
+const S3_CACHE = process.env.IBISMUH_STUDIO_S3_CACHE_DIR
+  ? path.resolve(process.env.IBISMUH_STUDIO_S3_CACHE_DIR)
   : path.join(os.tmpdir(), "tubeforge-s3-cache");
 
 function cacheFileFor(key: string, etag: string): string {
@@ -139,7 +139,7 @@ export async function materialize(key: string): Promise<string> {
   if (storageDriverKind() === "local") return localPathForKey(k);
 
   const cfg = s3Config();
-  if (!cfg) throw new Error("storage: s3 driver selected but TUBEFORGE_S3_* env is incomplete");
+  if (!cfg) throw new Error("storage: s3 driver selected but IBISMUH_STUDIO_S3_* env is incomplete");
 
   const head = await s3Fetch("HEAD", k, cfg);
   if (head.status === 404) throw new Error(`storage: missing object "${k}"`);
@@ -190,7 +190,7 @@ export async function put(key: string, data: Buffer | Uint8Array, opts: PutOptio
   try {
     if (kind === "s3") {
       const cfg = s3Config();
-      if (!cfg) throw new Error("storage: s3 driver selected but TUBEFORGE_S3_* env is incomplete");
+      if (!cfg) throw new Error("storage: s3 driver selected but IBISMUH_STUDIO_S3_* env is incomplete");
       const res = await s3Fetch("PUT", k, cfg, buf);
       if (!res.ok) throw new Error(`storage: PUT "${k}" → ${res.status} ${await res.text().catch(() => "")}`);
     } else {
@@ -229,14 +229,14 @@ export async function putFromPath(key: string, localFile: string, opts: PutOptio
   try {
     if (storageDriverKind() === "s3") {
       const cfg = s3Config();
-      if (!cfg) throw new Error("storage: s3 driver selected but TUBEFORGE_S3_* env is incomplete");
+      if (!cfg) throw new Error("storage: s3 driver selected but IBISMUH_STUDIO_S3_* env is incomplete");
       const buf = await fsp.readFile(localFile);
       const res = await s3Fetch("PUT", k, cfg, buf);
       if (!res.ok) throw new Error(`storage: PUT "${k}" → ${res.status}`);
       // The scratch copy STAYS: downstream pipeline steps (QC probe, Short
       // cutting, ffmpeg re-reads) hit the local cache instead of re-fetching
       // from the bucket. Scratch lifetime is a deployment concern (tmp cleaner
-      // or TUBEFORGE_SCRATCH_ROOT on a scratch volume).
+      // or IBISMUH_STUDIO_SCRATCH_ROOT on a scratch volume).
     } else {
       const dest = localPathForKey(k);
       if (path.resolve(localFile) === path.resolve(dest)) {
@@ -264,7 +264,7 @@ export async function get(key: string): Promise<Buffer> {
   const k = normalizeKey(key);
   if (storageDriverKind() === "s3") {
     const cfg = s3Config();
-    if (!cfg) throw new Error("storage: s3 driver selected but TUBEFORGE_S3_* env is incomplete");
+    if (!cfg) throw new Error("storage: s3 driver selected but IBISMUH_STUDIO_S3_* env is incomplete");
     const res = await s3Fetch("GET", k, cfg);
     if (res.status === 404) throw new Error(`storage: missing object "${k}"`);
     if (!res.ok) throw new Error(`storage: GET "${k}" → ${res.status}`);
@@ -278,7 +278,7 @@ export async function readStream(key: string, range?: { start: number; end: numb
   const k = normalizeKey(key);
   if (storageDriverKind() === "s3") {
     const cfg = s3Config();
-    if (!cfg) throw new Error("storage: s3 driver selected but TUBEFORGE_S3_* env is incomplete");
+    if (!cfg) throw new Error("storage: s3 driver selected but IBISMUH_STUDIO_S3_* env is incomplete");
     const res = await (range
       ? fetch(s3Presign(cfg, k, 300), { headers: { Range: `bytes=${range.start}-${range.end}` } })
       : fetch(s3Presign(cfg, k, 300)));
@@ -341,7 +341,7 @@ export async function list(prefix: string): Promise<string[]> {
   }
 
   const cfg = s3Config();
-  if (!cfg) throw new Error("storage: s3 driver selected but TUBEFORGE_S3_* env is incomplete");
+  if (!cfg) throw new Error("storage: s3 driver selected but IBISMUH_STUDIO_S3_* env is incomplete");
   const keys: string[] = [];
   let token: string | null = null;
   for (;;) {
@@ -363,7 +363,7 @@ export async function remove(key: string): Promise<void> {
   const prior = await stat(k);
   if (storageDriverKind() === "s3") {
     const cfg = s3Config();
-    if (!cfg) throw new Error("storage: s3 driver selected but TUBEFORGE_S3_* env is incomplete");
+    if (!cfg) throw new Error("storage: s3 driver selected but IBISMUH_STUDIO_S3_* env is incomplete");
     const res = await s3Fetch("DELETE", k, cfg);
     if (!res.ok && res.status !== 404) throw new Error(`storage: DELETE "${k}" → ${res.status}`);
   } else {
@@ -394,7 +394,7 @@ export async function removePrefix(prefix: string): Promise<number> {
 
   // s3 — delete-by-prefix. Continuation-token listing via ListObjectsV2.
   const cfg = s3Config();
-  if (!cfg) throw new Error("storage: s3 driver selected but TUBEFORGE_S3_* env is incomplete");
+  if (!cfg) throw new Error("storage: s3 driver selected but IBISMUH_STUDIO_S3_* env is incomplete");
   let removed = 0;
   for (;;) {
     const listRes = await fetch(
@@ -437,8 +437,8 @@ export async function presign(key: string, ttlSeconds = 900): Promise<string | n
 export function scratchDir(name: string): string {
   const root =
     storageDriverKind() === "s3"
-      ? process.env.TUBEFORGE_SCRATCH_ROOT
-        ? path.resolve(process.env.TUBEFORGE_SCRATCH_ROOT)
+      ? process.env.IBISMUH_STUDIO_SCRATCH_ROOT
+        ? path.resolve(process.env.IBISMUH_STUDIO_SCRATCH_ROOT)
         : path.join(os.tmpdir(), "tubeforge-scratch")
       : UPLOAD_ROOT;
   const dir = path.join(root, ...normalizeKey(name).split("/"));

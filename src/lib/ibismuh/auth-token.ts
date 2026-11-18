@@ -6,9 +6,20 @@
 // server-side Session row id so revocation is instant (see tenant.ts).
 // Rotating TUBEFORGE_AUTH_SECRET in .env invalidates every issued token.
 
-export const SESSION_COOKIE = "tf_session";
+export const SESSION_COOKIE = "ibismuh_session";
+/** Pre-rebrand cookie name — accepted for reading until live sessions expire (the controlled rebrand keeps existing logins working). */
+export const LEGACY_SESSION_COOKIE = "tf_session";
 export const SESSION_MAX_AGE_SEC = 7 * 24 * 60 * 60; // 7 days
 export const API_TOKEN_MAX_AGE_SEC = 90 * 24 * 60 * 60; // 90 days
+
+/** Session-cookie dual-read: the new name wins; the legacy name keeps existing
+ *  deployments and live sessions authenticated through their natural expiry.
+ *  Pure-function so the battery can pin the law without a browser. */
+export function pickSessionCookie(
+  get: (name: string) => string | undefined
+): string | undefined {
+  return get(SESSION_COOKIE) ?? get(LEGACY_SESSION_COOKIE);
+}
 
 export interface TokenPayload {
   s: "session" | "api" | "state"; // "state" = one-shot OAuth markers (youtube.ts), never a credential
@@ -107,6 +118,10 @@ export async function createSignedToken(
 }
 
 export function getAuthSecret(): string | undefined {
-  const s = process.env.TUBEFORGE_AUTH_SECRET;
+  // Dual-read (the controlled rebrand): IBISMUH_STUDIO_AUTH_SECRET is
+  // authoritative; a deployment still carrying only the legacy
+  // TUBEFORGE_AUTH_SECRET keeps working unchanged.
+  const s =
+    process.env.IBISMUH_STUDIO_AUTH_SECRET ?? process.env.TUBEFORGE_AUTH_SECRET;
   return s && s.length >= 16 ? s : undefined;
 }

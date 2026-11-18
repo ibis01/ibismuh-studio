@@ -23,7 +23,7 @@ import * as storage from "@/lib/ibismuh/storage";
  * report goes through the enforcement matrix (qc-policy.ts). Blocking
  * findings (or no report at all) hold the export with 409 — the two ways
  * through are fixing the finding (re-run QC / re-render) or POSTing an
- * audited override below. TUBEFORGE_QC_ENFORCEMENT=report turns the gate
+ * audited override below. IBISMUH_STUDIO_QC_ENFORCEMENT=report turns the gate
  * advisory for operators who want the pre-S40 behavior. */
 export async function GET(req: NextRequest, ctx: Ctx) {
   const auth = await requireUser(req);

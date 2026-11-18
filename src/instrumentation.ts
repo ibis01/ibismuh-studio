@@ -15,6 +15,8 @@
 // that must degrade the background jobs, not the entire app. The outcome is
 // recorded on globalThis so /api/diag can report it remotely.
 
+import "./lib/ibismuh/compat-env";
+
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
@@ -27,7 +29,7 @@ export async function register(): Promise<void> {
     const { initQueue } = await import("./lib/ibismuh/queue");
 
     registerDefaultHandlers();
-    initQueue("web"); // starts the claim loop (TUBEFORGE_NO_CLAIM=1 → enqueue-only)
+    initQueue("web"); // starts the claim loop (IBISMUH_STUDIO_NO_CLAIM=1 → enqueue-only)
 
     // Release holds orphaned by dead processes (best-effort, never throws,
     // timer is unref'd — see startStaleHoldSweeper).
@@ -37,15 +39,15 @@ export async function register(): Promise<void> {
     const { log } = await import("./lib/ibismuh/log");
     log.info("queue initialized", {
       role: "web",
-      noClaim: process.env.TUBEFORGE_NO_CLAIM === "1",
+      noClaim: process.env.IBISMUH_STUDIO_NO_CLAIM === "1",
       pid: process.pid,
     });
 
     // Operator's shared voice server (self-hosted/sandbox): make sure the
-    // Chatterbox server behind TUBEFORGE_SHARED_VOICE_URL is up. Fire-and-
+    // Chatterbox server behind IBISMUH_STUDIO_SHARED_VOICE_URL is up. Fire-and-
     // forget + never fatal — a missing voice server only degrades cloning.
     // The watchdog restarts it if the OOM killer takes it down later.
-    if (process.env.TUBEFORGE_SPAWN_VOICE_SERVER === "1") {
+    if (process.env.IBISMUH_STUDIO_SPAWN_VOICE_SERVER === "1") {
       try {
         const { spawnSharedVoiceServer, startVoiceServerWatchdog } = await import(
           "./lib/ibismuh/spawn-voice-server"
@@ -64,7 +66,7 @@ export async function register(): Promise<void> {
     g.__ibismuhInstrumentation = { ok: true, at: new Date().toISOString() };
 
     // S61 — the encryption-key watchlight (the S60 record's owner-side
-    // finding #1: the Vercel deployment ran without TUBEFORGE_ENCRYPTION_KEY,
+    // finding #1: the Vercel deployment ran without IBISMUH_STUDIO_ENCRYPTION_KEY,
     // so provider-credential encryption and the security card fail closed at
     // USE time — invisible until something tries to store or read a secret).
     // Boot is the one guaranteed-loud moment: say it once, per process, with
@@ -72,11 +74,11 @@ export async function register(): Promise<void> {
     // law.
     if (
       process.env.NODE_ENV === "production" &&
-      (process.env.TUBEFORGE_ENCRYPTION_KEY ?? "").length < 16
+      (process.env.IBISMUH_STUDIO_ENCRYPTION_KEY ?? "").length < 16
     ) {
       const encLog = (await import("./lib/ibismuh/log").catch(() => ({ log: null as null }))).log;
       const message =
-        "TUBEFORGE_ENCRYPTION_KEY is missing or too short (<16 chars) — provider " +
+        "IBISMUH_STUDIO_ENCRYPTION_KEY is missing or too short (<16 chars) — provider " +
         "credentials cannot be encrypted or read (they fail closed). Fix: set a " +
         "securely generated 32+ char key in the deployment's environment settings, " +
         "then re-store any saved provider credentials.";

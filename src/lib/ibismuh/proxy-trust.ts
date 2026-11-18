@@ -17,7 +17,7 @@ const LOOPBACK = new Set(["127.0.0.1", "::1", "0.0.0.0", "::"]);
 
 /** Configured extra trusted proxies (CIDRs / exact IPs), read per call so tests can flip it. */
 function extraTrusted(): string[] {
-  return (process.env.TUBEFORGE_TRUSTED_PROXIES ?? "")
+  return (process.env.IBISMUH_STUDIO_TRUSTED_PROXIES ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);

@@ -31,7 +31,7 @@ box. Therefore:
   the postinstall baselines an unmanaged database automatically on first
   deploy.
 - **Cloudflare R2** (or any S3-compatible store) holds media:
-  `TUBEFORGE_STORAGE_DRIVER=s3` plus the `TUBEFORGE_S3_*` secrets. Zero
+  `IBISMUH_STUDIO_STORAGE_DRIVER=s3` plus the `IBISMUH_STUDIO_S3_*` secrets. Zero
   egress fees; the presigned-URL delivery path is already built and tested
   (the mp4 route). Fly machines have ephemeral disks — S3 mode is the
   default for any real deployment; a persistent volume for local-storage
@@ -39,8 +39,8 @@ box. Therefore:
 - **Voice server** (optional): the self-hosted Chatterbox Turbo server runs
   on its own persistent box (an Oracle free-tier ARM machine works — see
   `voice-server/oracle/`), pointed at by
-  `TUBEFORGE_SHARED_VOICE_URL`/`TUBEFORGE_SHARED_VOICE_KEY`. The app
-  supervisor spawn (`TUBEFORGE_SPAWN_VOICE_SERVER=1`) is for single-box
+  `IBISMUH_STUDIO_SHARED_VOICE_URL`/`IBISMUH_STUDIO_SHARED_VOICE_KEY`. The app
+  supervisor spawn (`IBISMUH_STUDIO_SPAWN_VOICE_SERVER=1`) is for single-box
   dev/preview only.
 
 **Why not Vercel for the app:** no place to run the worker; ephemeral
@@ -60,14 +60,14 @@ no data.
 fly launch --no-deploy --copy-config          # picks up fly.toml
 fly secrets set \
   DATABASE_URL="postgresql://…" \
-  TUBEFORGE_AUTH_SECRET="$(openssl rand -hex 32)" \
-  TUBEFORGE_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
-  TUBEFORGE_STORAGE_DRIVER=s3 \
-  TUBEFORGE_S3_ENDPOINT="https://<account>.r2.cloudflarestorage.com" \
-  TUBEFORGE_S3_BUCKET="<bucket>" \
-  TUBEFORGE_S3_ACCESS_KEY_ID="<key>" \
-  TUBEFORGE_S3_SECRET_ACCESS_KEY="<secret>" \
-  TUBEFORGE_S3_REGION=auto
+  IBISMUH_STUDIO_AUTH_SECRET="$(openssl rand -hex 32)" \
+  IBISMUH_STUDIO_ENCRYPTION_KEY="$(openssl rand -hex 32)" \
+  IBISMUH_STUDIO_STORAGE_DRIVER=s3 \
+  IBISMUH_STUDIO_S3_ENDPOINT="https://<account>.r2.cloudflarestorage.com" \
+  IBISMUH_STUDIO_S3_BUCKET="<bucket>" \
+  IBISMUH_STUDIO_S3_ACCESS_KEY_ID="<key>" \
+  IBISMUH_STUDIO_S3_SECRET_ACCESS_KEY="<secret>" \
+  IBISMUH_STUDIO_S3_REGION=auto
 
 # 2. schema (postinstall also baselines, but be explicit on first deploy)
 fly ssh console -a tubeforge --command 'npx prisma migrate deploy --schema prisma/schema.prisma'
@@ -81,12 +81,12 @@ curl -f https://tubeforge.fly.dev/api/auth/status
 
 Then the operational layer (tracked in the S33+ backlog in `TASKS.md`):
 
-- **Billing:** `TUBEFORGE_STRIPE_SECRET_KEY`, `TUBEFORGE_STRIPE_WEBHOOK_SECRET`,
-  `TUBEFORGE_STRIPE_PRICE_CREATOR`, `TUBEFORGE_STRIPE_PRICE_STUDIO` — and a
+- **Billing:** `IBISMUH_STUDIO_STRIPE_SECRET_KEY`, `IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET`,
+  `IBISMUH_STUDIO_STRIPE_PRICE_CREATOR`, `IBISMUH_STUDIO_STRIPE_PRICE_STUDIO` — and a
   Stripe webhook endpoint pointed at `https://<host>/api/billing/webhook`.
-- **Email:** `TUBEFORGE_EMAIL_MODE=smtp` + the `TUBEFORGE_SMTP_*` set (or the
+- **Email:** `IBISMUH_STUDIO_EMAIL_MODE=smtp` + the `IBISMUH_STUDIO_SMTP_*` set (or the
   console mode for single-owner installs).
-- **YouTube:** `TUBEFORGE_YT_CLIENT_ID` / `TUBEFORGE_YT_CLIENT_SECRET`
+- **YouTube:** `IBISMUH_STUDIO_YT_CLIENT_ID` / `IBISMUH_STUDIO_YT_CLIENT_SECRET`
   (server-wide OAuth client; users connect their own channels).
 - **Backups:** the nightly cron + the quarterly restore drill —
   `docs/runbooks/backup-restore.md`.
@@ -105,7 +105,7 @@ staging environment, not the dev sandbox:
 | Database | A Neon **branch** of the production project (resettable, free) |
 | Object storage | A separate R2 bucket (or a subfolder + lifecycle rule) |
 | Stripe | **Test mode** keys + test-mode webhook endpoint |
-| Email | `TUBEFORGE_EMAIL_MODE=console` (links land in the logs — fine for drills) |
+| Email | `IBISMUH_STUDIO_EMAIL_MODE=console` (links land in the logs — fine for drills) |
 | Secrets | Fresh `AUTH_SECRET`/`ENCRYPTION_KEY` — staging never shares production secrets |
 
 The staging environment is the target for: the k6 load run

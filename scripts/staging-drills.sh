@@ -18,7 +18,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 URL="${STAGING_URL:-https://tubeforge-staging.fly.dev}"
-APP="${TUBEFORGE_STAGING_APP:-tubeforge-staging}"
+APP="${IBISMUH_STUDIO_STAGING_APP:-tubeforge-staging}"
 
 DRILL_ARGS=(--url "$URL")
 if [ "${1:-}" = "--suite" ] && [ -n "${2:-}" ]; then
@@ -68,7 +68,7 @@ Stripe webhook rehearsal (§4.3, needs the Stripe CLI):
   → the billing plan on the drill user's account must upgrade.
 
 backup/restore (§4.6 — the Postgres edition of the CI drill):
-  TUBEFORGE_DB_URL=<the Neon branch URL> npm run db:backup:pg
+  IBISMUH_STUDIO_DB_URL=<the Neon branch URL> npm run db:backup:pg
   → restore the dump into a scratch Neon branch, verify row counts.
 EOF
 

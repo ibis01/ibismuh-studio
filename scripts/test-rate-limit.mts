@@ -7,7 +7,7 @@
 //      X-Forwarded-For RIGHT to LEFT, skipping trusted proxies: a spoofed
 //      leftmost value is ignored whenever a real proxy appended a public
 //      IP; private/loopback entries never impersonate a client; the
-//      all-trusted chain falls back to its leftmost entry; TUBEFORGE_
+//      all-trusted chain falls back to its leftmost entry; IBISMUH_STUDIO_
 //      TRUSTED_PROXIES extends the trusted set (CIDR support).
 //   2. THE SHARED LAW (DB) — the fixed-window counter is durable shared
 //      state: N concurrent racers on one key admit exactly `limit` of
@@ -71,10 +71,10 @@ async function main(): Promise<void> {
   ok(isTrustedProxyIp("172.20.3.4") && isTrustedProxyIp("100.100.1.2") && isTrustedProxyIp("fe80::1"),
     "private/CGNAT/link-local ranges are trusted proxies by default");
   ok(!isTrustedProxyIp("203.0.113.9") && !isTrustedProxyIp("2001:db8::9"), "public IPs are never trusted proxies");
-  process.env.TUBEFORGE_TRUSTED_PROXIES = "100.64.0.0/10, 198.18.0.1";
-  ok(isTrustedProxyIp("100.64.5.5") && isTrustedProxyIp("198.18.0.1"), "TUBEFORGE_TRUSTED_PROXIES extends the trusted set (CIDR + exact)");
+  process.env.IBISMUH_STUDIO_TRUSTED_PROXIES = "100.64.0.0/10, 198.18.0.1";
+  ok(isTrustedProxyIp("100.64.5.5") && isTrustedProxyIp("198.18.0.1"), "IBISMUH_STUDIO_TRUSTED_PROXIES extends the trusted set (CIDR + exact)");
   ok(!isTrustedProxyIp("100.128.0.1"), "the CIDR honors its mask (100.128/10 is OUTSIDE 100.64/10)");
-  delete process.env.TUBEFORGE_TRUSTED_PROXIES;
+  delete process.env.IBISMUH_STUDIO_TRUSTED_PROXIES;
 
   // ---- 2. THE SHARED LAW (DB) ----------------------------------------------
   const run = `rl${Date.now().toString(36)}`;

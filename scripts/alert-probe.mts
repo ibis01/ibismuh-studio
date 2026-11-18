@@ -20,17 +20,17 @@
  *                   worker without a live reaper
  *   migrations    — Postgres only: every migration dir has a finished row in
  *                   _prisma_migrations (a stuck chain)
- *   secrets       — TUBEFORGE_AUTH_SECRET + TUBEFORGE_ENCRYPTION_KEY present
+ *   secrets       — IBISMUH_STUDIO_AUTH_SECRET + IBISMUH_STUDIO_ENCRYPTION_KEY present
  *                   (env or .env — the middleware fails closed without them)
  *   disk          — free bytes on the upload root
- *   backups       — opt-in (TUBEFORGE_ALERT_BACKUPS_DIR): the newest backup
+ *   backups       — opt-in (IBISMUH_STUDIO_ALERT_BACKUPS_DIR): the newest backup
  *                   artifact's age — the runbook's "nightly dump missing"
  *                   failure mode, detected instead of assumed
  *
- * Thresholds: TUBEFORGE_ALERT_PENDING_MAX_MS (default 15 min),
- * TUBEFORGE_ALERT_STALE_LEASES_MAX (default 5),
- * TUBEFORGE_ALERT_DISK_MIN_MB (default 500),
- * TUBEFORGE_ALERT_BACKUP_MAX_AGE_H (default 26).
+ * Thresholds: IBISMUH_STUDIO_ALERT_PENDING_MAX_MS (default 15 min),
+ * IBISMUH_STUDIO_ALERT_STALE_LEASES_MAX (default 5),
+ * IBISMUH_STUDIO_ALERT_DISK_MIN_MB (default 500),
+ * IBISMUH_STUDIO_ALERT_BACKUP_MAX_AGE_H (default 26).
  */
 
 import { existsSync, readFileSync, statfsSync } from "node:fs";
@@ -44,10 +44,10 @@ function num(name: string, fallback: number): number {
   const v = Number(process.env[name] ?? "");
   return Number.isFinite(v) && v > 0 ? v : fallback;
 }
-const PENDING_MAX_MS = num("TUBEFORGE_ALERT_PENDING_MAX_MS", 15 * 60_000);
-const STALE_LEASES_MAX = num("TUBEFORGE_ALERT_STALE_LEASES_MAX", 5);
-const DISK_MIN_MB = num("TUBEFORGE_ALERT_DISK_MIN_MB", 500);
-const BACKUP_MAX_AGE_H = num("TUBEFORGE_ALERT_BACKUP_MAX_AGE_H", 26);
+const PENDING_MAX_MS = num("IBISMUH_STUDIO_ALERT_PENDING_MAX_MS", 15 * 60_000);
+const STALE_LEASES_MAX = num("IBISMUH_STUDIO_ALERT_STALE_LEASES_MAX", 5);
+const DISK_MIN_MB = num("IBISMUH_STUDIO_ALERT_DISK_MIN_MB", 500);
+const BACKUP_MAX_AGE_H = num("IBISMUH_STUDIO_ALERT_BACKUP_MAX_AGE_H", 26);
 
 const alerts: string[] = [];
 function alert(check: string, detail: string): void {
@@ -153,13 +153,13 @@ async function main(): Promise<void> {
     }
 
     // 6. the fail-closed secrets exist.
-    for (const key of ["TUBEFORGE_AUTH_SECRET", "TUBEFORGE_ENCRYPTION_KEY"]) {
+    for (const key of ["IBISMUH_STUDIO_AUTH_SECRET", "IBISMUH_STUDIO_ENCRYPTION_KEY"]) {
       if (!secret(key)) alert("secrets", `${key} missing — the middleware fails closed; provision it before restart`);
     }
 
     // 7. disk headroom on the upload root.
     try {
-      const uploadRoot = process.env.TUBEFORGE_UPLOAD_ROOT ?? path.join(ROOT, "uploads");
+      const uploadRoot = process.env.IBISMUH_STUDIO_UPLOAD_ROOT ?? path.join(ROOT, "uploads");
       if (existsSync(uploadRoot)) {
         const fs = statfsSync(uploadRoot);
         const freeMb = (Number(fs.bavail) * Number(fs.bsize)) / (1024 * 1024);
@@ -173,7 +173,7 @@ async function main(): Promise<void> {
 
     // 8. backup freshness — opt-in (the operator points the probe at the
     //    backup dir; the runbook's "nightly dump missing" failure mode).
-    const backupsDir = process.env.TUBEFORGE_ALERT_BACKUPS_DIR ?? "";
+    const backupsDir = process.env.IBISMUH_STUDIO_ALERT_BACKUPS_DIR ?? "";
     if (backupsDir && existsSync(backupsDir)) {
       const { readdirSync, statSync } = await import("node:fs");
       const newest = readdirSync(backupsDir)

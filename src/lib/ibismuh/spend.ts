@@ -84,20 +84,20 @@ const spendLog = log.child({ mod: "spend" });
 /** Admit line: recorded + outstanding + estimate must stay ≤ this. Default
  *  $4.50 per the review's allocation (stop well under the $5 ceiling). */
 const STOP_MICRO_USD = (() => {
-  const raw = Number(process.env.TUBEFORGE_SPEND_STOP_USD);
+  const raw = Number(process.env.IBISMUH_STUDIO_SPEND_STOP_USD);
   if (!Number.isFinite(raw) || raw <= 0) return 4_500_000; // $4.50
   return Math.min(Math.round(raw * 1_000_000), 1_000_000_000);
 })();
 
-/** Operator escape hatch: TUBEFORGE_SPEND_GATE=0 lifts the gate (the
+/** Operator escape hatch: IBISMUH_STUDIO_SPEND_GATE=0 lifts the gate (the
  *  metering and pricing keep running — only the block is lifted). */
-const GATE_ENABLED = process.env.TUBEFORGE_SPEND_GATE !== "0";
+const GATE_ENABLED = process.env.IBISMUH_STUDIO_SPEND_GATE !== "0";
 
 /** External-audit response — the two operator escape hatches, made
  *  observable. Both are documented, deliberate tools (probes; a
  *  pre-activation sanity check), but an override that leaves no trace is
- *  the dangerous kind: TUBEFORGE_SPEND_GATE=0 lifts the $5 stop line and
- *  TUBEFORGE_PRICING_VERIFIED=1 admits dispatches on provisional prices.
+ *  the dangerous kind: IBISMUH_STUDIO_SPEND_GATE=0 lifts the $5 stop line and
+ *  IBISMUH_STUDIO_PRICING_VERIFIED=1 admits dispatches on provisional prices.
  *  spendOverrides() reports which are active in this process, and
  *  admitDispatch announces them ONCE per process on stderr — a degraded
  *  protection state can never again be silent. */
@@ -106,8 +106,8 @@ export function spendOverrides(): {
   pricingForcedVerified: boolean;
 } {
   return {
-    gateLifted: process.env.TUBEFORGE_SPEND_GATE === "0",
-    pricingForcedVerified: process.env.TUBEFORGE_PRICING_VERIFIED === "1",
+    gateLifted: process.env.IBISMUH_STUDIO_SPEND_GATE === "0",
+    pricingForcedVerified: process.env.IBISMUH_STUDIO_PRICING_VERIFIED === "1",
   };
 }
 
@@ -120,11 +120,11 @@ function announceOverridesOnce(): void {
   const parts: string[] = [];
   if (o.gateLifted)
     parts.push(
-      "TUBEFORGE_SPEND_GATE=0 — the $5.00 stop line is LIFTED in this process",
+      "IBISMUH_STUDIO_SPEND_GATE=0 — the $5.00 stop line is LIFTED in this process",
     );
   if (o.pricingForcedVerified)
     parts.push(
-      "TUBEFORGE_PRICING_VERIFIED=1 — provisional pricing is being treated as verified",
+      "IBISMUH_STUDIO_PRICING_VERIFIED=1 — provisional pricing is being treated as verified",
     );
   spendLog.warn(
     "OVERRIDE ACTIVE — paid-dispatch protections are degraded by environment, not by source",
@@ -253,14 +253,14 @@ export const PRICING_SOURCES = [
  *  SpendPricingUnverifiedError when false — paid dispatches cannot run on
  *  unverified prices.
  *
- *  Operator override: set `TUBEFORGE_PRICING_VERIFIED=1` in the environment
+ *  Operator override: set `IBISMUH_STUDIO_PRICING_VERIFIED=1` in the environment
  *  after reconciling every MODEL_PRICES row against its PRICING_SOURCES
  *  entry. The constant stays "provisional" in the source until a real
  *  reconciliation commit flips it; the env override lets probes (and a
  *  pre-activation operator sanity-check) exercise the gate without
  *  editing source. */
 export function pricingVerified(): boolean {
-  if (process.env.TUBEFORGE_PRICING_VERIFIED === "1") return true;
+  if (process.env.IBISMUH_STUDIO_PRICING_VERIFIED === "1") return true;
   return PRICING_STATUS === "verified";
 }
 
@@ -673,7 +673,7 @@ export class SpendBlockedError extends Error {
         stopMicro / 1e6
       ).toFixed(
         2,
-      )} stop line (the $5.00 experiment ceiling). The operator must raise TUBEFORGE_SPEND_STOP_USD to continue.`,
+      )} stop line (the $5.00 experiment ceiling). The operator must raise IBISMUH_STUDIO_SPEND_STOP_USD to continue.`,
     );
     this.name = "SpendBlockedError";
     this.recordedMicro = recordedMicro;
@@ -694,7 +694,7 @@ export class SpendPricingUnverifiedError extends Error {
         "Reconcile every MODEL_PRICES row against its cited source " +
         '(PRICING_SOURCES), then flip PRICING_STATUS to "verified" in ' +
         "src/lib/ibismuh/spend.ts before authorizing paid dispatches. " +
-        "(The TUBEFORGE_PRICING_VERIFIED=1 environment override exists for " +
+        "(The IBISMUH_STUDIO_PRICING_VERIFIED=1 environment override exists for " +
         "probes and pre-activation checks only; it is announced on stderr " +
         "when active.)",
     );

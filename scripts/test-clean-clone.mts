@@ -22,7 +22,7 @@
  *      / playwright-report / .vercel) and db/ carries only .gitkeep;
  *   2. boot proof — `npm ci` with NO injected DATABASE_URL bootstraps SQLite
  *      end-to-end: .env (file:../db/custom.db), provisioned
- *      TUBEFORGE_AUTH_SECRET + TUBEFORGE_ENCRYPTION_KEY, next-env.d.ts,
+ *      IBISMUH_STUDIO_AUTH_SECRET + IBISMUH_STUDIO_ENCRYPTION_KEY, next-env.d.ts,
  *      the generated client, and the pushed db/custom.db;
  *   3. boot probe — the generated SQLITE client queries the pushed Stage-2
  *      schema (organization.count() against db/custom.db);
@@ -140,8 +140,8 @@ try {
 
   const envText = readFileSync(join(work, ".env"), "utf8");
   check(".env was created with the SQLite DATABASE_URL", /DATABASE_URL=file:\.\.\/db\/custom\.db/.test(envText), "file:../db/custom.db");
-  check("TUBEFORGE_AUTH_SECRET was provisioned", /^TUBEFORGE_AUTH_SECRET=.+/m.test(envText));
-  check("TUBEFORGE_ENCRYPTION_KEY was provisioned", /^TUBEFORGE_ENCRYPTION_KEY=.+/m.test(envText));
+  check("IBISMUH_STUDIO_AUTH_SECRET was provisioned", /^IBISMUH_STUDIO_AUTH_SECRET=.+/m.test(envText));
+  check("IBISMUH_STUDIO_ENCRYPTION_KEY was provisioned", /^IBISMUH_STUDIO_ENCRYPTION_KEY=.+/m.test(envText));
   check("next-env.d.ts was created", existsSync(join(work, "next-env.d.ts")));
   check("db/custom.db was pushed", existsSync(join(work, "db", "custom.db")));
 

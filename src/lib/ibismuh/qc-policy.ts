@@ -25,7 +25,7 @@
 //      severity deliberately, never inherit "advisory" by silence.
 //   4. No standing report on a rendered video blocks (fail-closed; the fix is
 //      one "Re-run QC" click).
-//   5. Junk TUBEFORGE_QC_ENFORCEMENT values fall back to enforce.
+//   5. Junk IBISMUH_STUDIO_QC_ENFORCEMENT values fall back to enforce.
 //
 // The human escape hatch is the OVERRIDE: a stamped, noted acceptance of
 // exactly ONE report's findings (POST /api/videos/[id]/export with a note).
@@ -148,14 +148,14 @@ export const QC_BLOCKING_COUNT = Object.values(QC_ENFORCEMENT_MATRIX).filter(
 export type QcEnforcementMode = "enforce" | "report";
 
 /**
- * Read TUBEFORGE_QC_ENFORCEMENT. "report" (exact, case-sensitive) turns the
+ * Read IBISMUH_STUDIO_QC_ENFORCEMENT. "report" (exact, case-sensitive) turns the
  * gate advisory — the S33-era behavior. UNSET, empty or junk values fail
  * CLOSED to enforce: an operator who typos the switch keeps the protection.
  */
 export function qcEnforcementMode(
-  env: NodeJS.ProcessEnv | { TUBEFORGE_QC_ENFORCEMENT?: string | undefined } = process.env
+  env: NodeJS.ProcessEnv | { IBISMUH_STUDIO_QC_ENFORCEMENT?: string | undefined } = process.env
 ): QcEnforcementMode {
-  return env.TUBEFORGE_QC_ENFORCEMENT === "report" ? "report" : "enforce";
+  return env.IBISMUH_STUDIO_QC_ENFORCEMENT === "report" ? "report" : "enforce";
 }
 
 // ---------------------------------------------------------------------------

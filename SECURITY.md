@@ -25,13 +25,13 @@ evidence ledger); every item below is re-proven by CI on every push to `main`.
 | Area | Protection |
 | --- | --- |
 | Accounts & tenancy | Multi-user accounts with per-user organizations; cross-tenant isolation pinned by the Playwright suites and the per-stage route probes; 90-day API tokens; email verification; password recovery; GDPR export/delete. |
-| Sessions | HMAC-SHA256-signed tokens (`TUBEFORGE_AUTH_SECRET`), HttpOnly cookies, 7-day expiry. Rotating the secret revokes everything instantly. |
+| Sessions | HMAC-SHA256-signed tokens (`IBISMUH_STUDIO_AUTH_SECRET`), HttpOnly cookies, 7-day expiry. Rotating the secret revokes everything instantly. |
 | Brute force | Login lockout is DB-backed (S46) — survives restarts and is shared across instances. |
 | Rate limiting | SHARED and DB-backed (`RateLimitCounter`, S102), enforced at `requireUser`; the client IP is resolved by the trusted-proxy right-to-left walk (`proxy-trust.ts`) — `X-Forwarded-For` spoofing is dead (pinned by `test:rate`). |
 | CSP | Nonce-based (S104): production drops `unsafe-inline` and `unsafe-eval` from `script-src`; `style-src 'unsafe-inline'` is the one documented exception; SVG ingestion sanitizes before storage and rasterizes before trust (attack fixtures pinned). |
 | Queue integrity | Renewable leases + monotonic fencing tokens + conditional terminal writes (S100) — a stale worker cannot corrupt a job the reaper reclaimed (token bumped on recovery, proven in-container by the Docker smoke). |
 | Storage quota | Admission is ATOMIC (S101): durable reservations, expiry sweep, release-on-failure — concurrent uploads cannot exceed quota. |
-| Secrets | Provider API keys encrypted at rest (`TUBEFORGE_ENCRYPTION_KEY`) and masked in every settings GET; YouTube tokens never leave the server. |
+| Secrets | Provider API keys encrypted at rest (`IBISMUH_STUDIO_ENCRYPTION_KEY`) and masked in every settings GET; YouTube tokens never leave the server. |
 | SSRF | User-supplied audio URLs: http(s) only, private/loopback/link-local/CGNAT/metadata hosts blocked, DNS answers re-checked, redirects manually followed with each hop re-validated, size + type caps. |
 | CSRF | Cookie-authenticated mutations with a mismatching `Origin` are rejected (plus `SameSite=Lax`). |
 | Backups & recovery | `npm run backup` (SQLite `VACUUM INTO` hot copy / Postgres `pg_dump`) + `scripts/backup-postgres.sh`; the restore drill runs in CI with a MEASURED RTO (~55 ms at S108); the alert probe (8 checks, exit 1 + one actionable line per failure) watches queue depth, stale leases, disk, and backup age. |
@@ -53,7 +53,7 @@ evidence ledger); every item below is re-proven by CI on every push to `main`.
 
 ## Daily-use security checklist
 
-- Keep `TUBEFORGE_AUTH_SECRET` and `TUBEFORGE_ENCRYPTION_KEY` set (32+ hex chars each)
+- Keep `IBISMUH_STUDIO_AUTH_SECRET` and `IBISMUH_STUDIO_ENCRYPTION_KEY` set (32+ hex chars each)
   and never commit `.env` — the secret signs sessions; the key encrypts provider
   credentials at rest.
 - Exposing the studio beyond your machine? Run it behind a reverse proxy with TLS and
@@ -64,7 +64,7 @@ evidence ledger); every item below is re-proven by CI on every push to `main`.
   session of that user).
 - Before uploading to YouTube, review the track license record in Settings → Background Music.
 - Run `npm run backup` on a schedule and keep at least one copy off-machine; the alert
-  probe's backup-age check (opt-in via `TUBEFORGE_ALERT_BACKUPS_DIR`) is the reminder net.
+  probe's backup-age check (opt-in via `IBISMUH_STUDIO_ALERT_BACKUPS_DIR`) is the reminder net.
 
 ## Backups
 
@@ -92,7 +92,7 @@ trail of what shipped then. The current posture is the table above.
 | Lock screen | Appears only while protection is ON: first visit to `/` shows a password setup (first run) or sign-in. Passwords: PBKDF2-SHA256, 120k iterations, salted, constant-time compare. |
 | Brute force | 5 failed logins per IP per 10 minutes → 10-minute lockout (in-memory then; DB-backed since S46). |
 | CSRF | Cookie-authenticated mutations with a mismatching `Origin` are rejected (plus `SameSite=Lax`). |
-| Sessions | HMAC-SHA256-signed tokens (`TUBEFORGE_AUTH_SECRET` in `.env`), HttpOnly cookies, 7-day expiry. Rotating the secret revokes everything instantly. |
+| Sessions | HMAC-SHA256-signed tokens (`IBISMUH_STUDIO_AUTH_SECRET` in `.env`), HttpOnly cookies, 7-day expiry. Rotating the secret revokes everything instantly. |
 | API tokens | `POST /api/auth/token` (signed in) mints a 90-day Bearer token for scripts/CLI. |
 | SSRF | User-supplied audio URLs: http(s) only, private/loopback/link-local/CGNAT/metadata hosts blocked, DNS answers re-checked, redirects manually followed with each hop re-validated, size + type caps. |
 | Secrets in responses | Provider API keys are masked in every settings GET; YouTube tokens never leave the server. |
@@ -108,7 +108,7 @@ Findings:
 - **3 CRITICAL risks** (all multi-tenant blockers; addressed in Stage 2):
   - No `userId`/`tenantId` on any Prisma model — every endpoint assumes one user.
   - `Setting` table is a singleton per key — one owner password, one YouTube OAuth grant, one set of provider keys per install.
-  - First-come race on `POST /api/auth/setup` (mitigated in Stage 1 by the new `TUBEFORGE_OWNER_TOKEN` env var).
+  - First-come race on `POST /api/auth/setup` (mitigated in Stage 1 by the new `IBISMUH_STUDIO_OWNER_TOKEN` env var).
 - **28 HIGH findings** (mostly Stage 1 and Stage 3): synchronous heavy work in-request (`POST /api/videos`, `/api/research`, `/api/research/[id]/greenlight`, `/api/characters/bible`), dead scaffolding for the YouTube publish stage (`uploadToYouTube` is implemented but never called), missing timeout/retry on YouTube fetch calls, zero `zod` use across 110 endpoints, no `prisma/migrations/` directory, no CI, no security headers.
 - **15 MEDIUM findings**: orphan cleanup gap on `DELETE /api/videos/[id]`, in-memory security state (login lockouts and rate-limit buckets reset on restart), memory-bound media streaming, side-effecting `GET /api/music`, cross-platform `/proc/<pid>/stat` watchdog.
 - **7 LOW findings**: cosmetic schema comment drift, dead Tailwind v3 config file, `reactStrictMode: false`, Playwright installed but unwired.
@@ -125,7 +125,7 @@ The single most important security recommendation from the audit: **add automate
 
 ## Stage 1 execution (2026-11-01)
 
-The Stage 1 backlog was executed the same day: `TUBEFORGE_OWNER_TOKEN` now gates
+The Stage 1 backlog was executed the same day: `IBISMUH_STUDIO_OWNER_TOKEN` now gates
 the first-run setup claim (close-out of the CRITICAL setup race), security
 headers are served by `next.config.ts`, CI runs typecheck + lint + tests, the
 test suite moved to npm/Node (bun no longer required), the multi-minute script

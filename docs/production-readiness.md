@@ -237,7 +237,7 @@ reconciliation's §11 law.
 3. **Boot proof** — `npm ci` with NO injected `DATABASE_URL`; postinstall must
    select SQLite by URL protocol, create `.env`
    (`DATABASE_URL=file:../db/custom.db`), provision
-   `TUBEFORGE_AUTH_SECRET` + `TUBEFORGE_ENCRYPTION_KEY`, create
+   `IBISMUH_STUDIO_AUTH_SECRET` + `IBISMUH_STUDIO_ENCRYPTION_KEY`, create
    `next-env.d.ts`, generate the client, `db push` the SQLite database, and
    run the stage-2 migration.
 4. **Boot probe** — the generated client queries the pushed Stage-2 schema

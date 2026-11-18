@@ -31,7 +31,7 @@ The kit: `fly.staging.toml` (same topology as production) ·
 cp .env.staging.example .env.staging   # gitignored — fill in §1's values
 ```
 
-`TUBEFORGE_AUTH_SECRET` / `TUBEFORGE_ENCRYPTION_KEY` are NOT in the file:
+`IBISMUH_STUDIO_AUTH_SECRET` / `IBISMUH_STUDIO_ENCRYPTION_KEY` are NOT in the file:
 the provisioner generates them FRESH on every run — staging never shares
 production secrets (the §3 law).
 
@@ -47,8 +47,8 @@ Then the two manual steps the script cannot do:
 1. **Stripe webhook** — in the Stripe dashboard (test mode) register an
    endpoint for `https://tubeforge-staging.fly.dev/api/billing/webhook`,
    copy the signing secret into `.env.staging`
-   (`TUBEFORGE_STAGING_STRIPE_WEBHOOK_SECRET`) and re-run the provisioner
-   (or `fly secrets set -a tubeforge-staging TUBEFORGE_STRIPE_WEBHOOK_SECRET=whsec_…`).
+   (`IBISMUH_STUDIO_STAGING_STRIPE_WEBHOOK_SECRET`) and re-run the provisioner
+   (or `fly secrets set -a tubeforge-staging IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET=whsec_…`).
 2. **Provider key for the pipeline drill** — sign in at the staging URL →
    Settings → AI Providers → paste the Z.ai key → Test. (One key powers
    every Z.ai task; the drill's render itself is $0 — the whiteboard
@@ -116,7 +116,7 @@ it lands (unlisted) on the test channel → delete it.
 ### 4.6 Backup + restore (Postgres edition of the CI drill)
 
 ```bash
-TUBEFORGE_DB_URL="<the Neon branch URL>" npm run db:backup:pg
+IBISMUH_STUDIO_DB_URL="<the Neon branch URL>" npm run db:backup:pg
 # restore the dump into a SCRATCH Neon branch (never the live one):
 createdb "$SCRATCH_URL" && psql "$SCRATCH_URL" -f backups/tubeforge-<stamp>/database.sql
 ```
@@ -130,8 +130,8 @@ step proves the Postgres path against the real provider.
 ```bash
 # a fresh Neon branch (dashboard or neon CLI), then point staging at it:
 fly secrets set -a tubeforge-staging DATABASE_URL="<new branch URL>" \
-  TUBEFORGE_AUTH_SECRET="$(openssl rand -hex 32)" \
-  TUBEFORGE_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+  IBISMUH_STUDIO_AUTH_SECRET="$(openssl rand -hex 32)" \
+  IBISMUH_STUDIO_ENCRYPTION_KEY="$(openssl rand -hex 32)"
 fly deploy -a tubeforge-staging --config fly.staging.toml
 ```
 

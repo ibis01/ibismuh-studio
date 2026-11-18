@@ -19,7 +19,7 @@ try {
     userAgent: "preview-wire-cli",
   });
   const token = await tenant.createSessionToken(user.id, session.id);
-  if (!token) throw new Error("token mint failed — is TUBEFORGE_AUTH_SECRET set?");
+  if (!token) throw new Error("token mint failed — is IBISMUH_STUDIO_AUTH_SECRET set?");
   fs.writeFileSync("/tmp/tf-session.txt", token, { mode: 0o600 });
   console.log("session minted:", session.id.slice(0, 8) + "…", "token → /tmp/tf-session.txt");
 } finally {

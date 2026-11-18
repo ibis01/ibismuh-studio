@@ -9,7 +9,7 @@
 // is exactly what ships.
 //
 //   node scripts/test-coverage.mjs                # measure + report (text)
-//   TUBEFORGE_COV_FLOOR_LINES=80 node …           # + enforce a lines floor
+//   IBISMUH_STUDIO_COV_FLOOR_LINES=80 node …           # + enforce a lines floor
 //   npm run test:coverage                         # same, floor baked in
 //
 // The FLOOR was set from the first full measurement (2026-11-08,
@@ -25,13 +25,13 @@ import fs from "node:fs";
 import path from "node:path";
 
 const ROOT = path.join(path.dirname(new URL(import.meta.url).pathname), "..");
-const COV_DIR = process.env.TUBEFORGE_COV_DIR ?? "/tmp/tf-cov";
+const COV_DIR = process.env.IBISMUH_STUDIO_COV_DIR ?? "/tmp/tf-cov";
 // Floor for --check-coverage (aggregate lines % across the money paths).
 // Default 50: first full measurement (2026-11-08) read 53.63% — the margin
 // absorbs normal churn, while losing any one suite's grip drops the
-// aggregate by 5-13pp and trips it. Set TUBEFORGE_COV_FLOOR_LINES=0 to
+// aggregate by 5-13pp and trips it. Set IBISMUH_STUDIO_COV_FLOOR_LINES=0 to
 // measure without enforcing.
-const FLOOR_LINES = Number(process.env.TUBEFORGE_COV_FLOOR_LINES ?? 50);
+const FLOOR_LINES = Number(process.env.IBISMUH_STUDIO_COV_FLOOR_LINES ?? 50);
 
 // The money paths (P1-5's "billing / spend / render" + the ship gate and
 // job machinery that carry them). These are --include patterns for c8.

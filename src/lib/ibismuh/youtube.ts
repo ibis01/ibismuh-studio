@@ -7,8 +7,8 @@
 //   -> exchanges the code for a refresh token
 //   -> fetches the channel id/title/thumb -> upserts YouTubeAccount
 //
-// The OAuth client id/secret are server-wide: env TUBEFORGE_YT_CLIENT_ID /
-// TUBEFORGE_YT_CLIENT_SECRET first; the claiming owner's legacy rows
+// The OAuth client id/secret are server-wide: env IBISMUH_STUDIO_YT_CLIENT_ID /
+// IBISMUH_STUDIO_YT_CLIENT_SECRET first; the claiming owner's legacy rows
 // (UserSetting yt.clientId / yt.clientSecret, migrated from the old Setting
 // table) serve as the fallback — see the register claim flow.
 //
@@ -58,8 +58,8 @@ async function ytFetch(
 // ---------- OAuth client (server-wide) ----------
 
 async function getYtOAuthClient(): Promise<{ clientId: string; clientSecret: string }> {
-  const envId = process.env.TUBEFORGE_YT_CLIENT_ID?.trim() || "";
-  const envSecret = process.env.TUBEFORGE_YT_CLIENT_SECRET?.trim() || "";
+  const envId = process.env.IBISMUH_STUDIO_YT_CLIENT_ID?.trim() || "";
+  const envSecret = process.env.IBISMUH_STUDIO_YT_CLIENT_SECRET?.trim() || "";
   if (envId && envSecret) return { clientId: envId, clientSecret: envSecret };
 
   // Legacy fallback: the claiming owner's migrated rows (same exposure model
@@ -94,7 +94,7 @@ export async function buildAuthUrl(origin: string): Promise<string> {
   const ctx = requireCtx();
 
   const secret = getAuthSecret();
-  if (!secret) throw new Error("TUBEFORGE_AUTH_SECRET is not configured");
+  if (!secret) throw new Error("IBISMUH_STUDIO_AUTH_SECRET is not configured");
   const state = await createSignedToken("state", 600, secret, { uid: ctx.userId });
   if (!state) throw new Error("Could not sign the OAuth state");
 

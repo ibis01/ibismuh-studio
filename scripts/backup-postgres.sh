@@ -30,7 +30,7 @@
 #                             the .env file, same parse as backup.sh)
 #   BACKUP_S3_URI           — optional; enables the upload step
 #   BACKUP_RETENTION_DAYS   — optional; local pruning window (default 14)
-#   TUBEFORGE_BACKUP_DIR    — optional; overrides backups/pg
+#   IBISMUH_STUDIO_BACKUP_DIR    — optional; overrides backups/pg
 
 set -euo pipefail
 
@@ -38,7 +38,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 RETENTION_DAYS="${BACKUP_RETENTION_DAYS:-14}"
-BACKUP_DIR="${TUBEFORGE_BACKUP_DIR:-$ROOT/backups/pg}"
+BACKUP_DIR="${IBISMUH_STUDIO_BACKUP_DIR:-$ROOT/backups/pg}"
 STAMP="$(date +%Y-%m-%d_%H%M%S)"
 DUMP="$BACKUP_DIR/tubeforge-$STAMP.dump"
 

@@ -18,7 +18,7 @@ if not voice.endswith("\n"):
 setup_lines = (root / "oracle/setup-oracle.sh").read_text().splitlines()
 body = "\n".join(setup_lines[1:]).rstrip("\n")
 
-delim = "TUBEFORGE_VOICE_PY_EOF_9x7"
+delim = "IBISMUH_STUDIO_VOICE_PY_EOF_9x7"
 assert delim not in voice, "delimiter collision!"
 
 header = (

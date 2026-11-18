@@ -7,7 +7,7 @@
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 echo "==> unpacking embedded voice_server.py into $DIR"
-cat > "$DIR/voice_server.py" <<'TUBEFORGE_VOICE_PY_EOF_9x7'
+cat > "$DIR/voice_server.py" <<'IBISMUH_STUDIO_VOICE_PY_EOF_9x7'
 #!/usr/bin/env python3
 """
 TubeForge voice server — self-hosted voice cloning on YOUR machine.
@@ -332,7 +332,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-TUBEFORGE_VOICE_PY_EOF_9x7
+IBISMUH_STUDIO_VOICE_PY_EOF_9x7
 set -euo pipefail
 export HOME="${HOME:-/root}"
 export PATH="/usr/local/bin:$PATH"

@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
   const token = await createApiToken(gate.auth.ctx.userId, parsed.data.name);
   if (!token)
     return NextResponse.json(
-      { error: "Auth is disabled: set TUBEFORGE_AUTH_SECRET in .env first" },
+      { error: "Auth is disabled: set IBISMUH_STUDIO_AUTH_SECRET in .env first" },
       { status: 500 }
     );
 
