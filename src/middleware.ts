@@ -161,7 +161,7 @@ export async function middleware(req: NextRequest) {
   const payload = await verifyToken(token, secret);
   if (!payload || payload.s === "state") {
     return respond(
-      { error: "Authentication required — sign in to use TubeForge" },
+      { error: "Authentication required — sign in to use Ibismuh Studio" },
       401
     );
   }

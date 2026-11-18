@@ -444,7 +444,7 @@ async function downloadSample(url: string): Promise<{ buffer: Buffer; filename: 
   const res = await safeFetch(url, {
     timeoutMs: 120_000,
     maxBytes: 200 * 1024 * 1024,
-    headers: { "User-Agent": "TubeForge/1.0 (+voice-clone)" },
+    headers: { "User-Agent": "IbismuhStudio/1.0 (+voice-clone)" },
   });
   if (!res.ok)
     throw new Error(`The site answered ${res.status} ${res.statusText} — check the link`);

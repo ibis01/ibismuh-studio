@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAppStore, type ViewId } from "@/lib/store";
-import { TubeForgeLogo, TubeForgeWordmark } from "@/components/tubeforge/logo";
+import { IbismuhLogo, IbismuhWordmark } from "@/components/tubeforge/logo";
 import {
   LayoutDashboard,
   TrendingUp,
@@ -85,8 +85,8 @@ export function AppSidebar() {
     <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-white/5 bg-sidebar sticky top-0 h-screen">
       {/* Logo */}
       <div className="flex items-center gap-2.5 px-5 h-16 border-b border-white/5">
-        <TubeForgeLogo size={38} />
-        <TubeForgeWordmark />
+        <IbismuhLogo size={38} />
+        <IbismuhWordmark />
       </div>
 
       {/* Nav */}

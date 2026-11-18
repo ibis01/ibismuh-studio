@@ -1,6 +1,6 @@
-# TubeForge — Run It on Your Own PC
+# Ibismuh Studio — Run It on Your Own PC
 
-TubeForge is a YouTube-automation studio: it researches topics, writes scripts with
+Ibismuh Studio is a YouTube-automation studio: it researches topics, writes scripts with
 GLM, splits them into scene storyboards, paints AI images, generates voiceovers,
 renders the final MP4 (with Shorts), and can even upload to YouTube.
 
@@ -94,7 +94,7 @@ To let other devices on your Wi-Fi reach it: `npm run dev:lan`.
 
 ## 3. Accounts & access (Stage 2 — multi-user)
 
-TubeForge is now a multi-user application: every visitor **registers** an
+Ibismuh Studio is now a multi-user application: every visitor **registers** an
 account (email + password, min 8 chars) and gets their own isolated studio —
 own videos, channels, characters, settings, API keys and YouTube connection.
 No data is shared between accounts; this is verified by the automated

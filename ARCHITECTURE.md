@@ -1,4 +1,4 @@
-# TubeForge — Architecture
+# Ibismuh Studio — Architecture
 
 **Status:** reconciled against the live source at S75 (2026-11-10 UTC).
 **Last updated:** 2026-11-10 (S75 reconciliation; §2–§8 remain the S47-era target designs)
@@ -312,7 +312,7 @@ The order follows the roadmap stages:
 
 ### 2.3 Architectural rules
 
-1. **Each stage saves its outputs independently.** If scene 14 fails, TubeForge should not regenerate scenes 1–13.
+1. **Each stage saves its outputs independently.** If scene 14 fails, Ibismuh Studio should not regenerate scenes 1–13.
 2. **Every endpoint validates input with `zod`.** No hand-rolled string slicing on mutating routes.
 3. **Every endpoint is tenant-scoped.** `requireUser()` returns the caller's `userId` and `tenantId`; every Prisma query includes the tenant filter; cross-tenant access tests run in CI.
 4. **No synchronous heavy work in a request handler.** Anything that can take more than 1 second goes through the queue.

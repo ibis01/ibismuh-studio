@@ -11,7 +11,7 @@ test.describe("studio shell", () => {
     // The studio is a single-page app — the sidebar shell or the account
     // gate must mount; both indicate the app booted.
     await expect(page.locator("body")).toBeVisible();
-    await expect(page).toHaveTitle(/TubeForge/i);
+    await expect(page).toHaveTitle(/Ibismuh Studio/i);
   });
 
   test("default-deny: /api refuses unauthenticated callers (Stage 2)", async ({ request }) => {

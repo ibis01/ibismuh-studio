@@ -107,7 +107,7 @@ async function downloadAudio(url: string): Promise<{ buffer: Buffer; filename: s
   const res = await safeFetch(url, {
     timeoutMs: 120_000,
     maxBytes: MAX_AUDIO_BYTES,
-    headers: { "User-Agent": "TubeForge/1.0 (+voice import)" },
+    headers: { "User-Agent": "IbismuhStudio/1.0 (+voice import)" },
   });
 
   if (!res.ok)

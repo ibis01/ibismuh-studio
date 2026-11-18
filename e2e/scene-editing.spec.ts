@@ -93,7 +93,7 @@ test.describe("S118 — the scene trust layer's route contract", () => {
   });
 
   test("a classic-script video gets the honest format guard on every scene route", async ({ request }) => {
-    const cookie = await register(request, `s118-classic-${RUN}@tubeforge.test`);
+    const cookie = await register(request, `s118-classic-${RUN}@ibismuh.test`);
     const videoId = await createVideo(request, cookie, {
       format: "script",
       script: "A short probe script for the trust-layer contract.",
@@ -118,7 +118,7 @@ test.describe("S118 — the scene trust layer's route contract", () => {
   });
 
   test("a sceneless story video gets the honest scene-404s and the render guard", async ({ request }) => {
-    const cookie = await register(request, `s118-story-${RUN}@tubeforge.test`);
+    const cookie = await register(request, `s118-story-${RUN}@ibismuh.test`);
     // Story format without a script: the create enqueues the AI scene-split
     // (which 401s/fails without a provider credential in this environment),
     // leaving an honest sceneless story row — exactly the half-built state

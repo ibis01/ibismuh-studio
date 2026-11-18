@@ -1,4 +1,4 @@
-# TubeForge nightly battery (S56/T-56.5 — the S33+ backlog's P1-2).
+# Ibismuh Studio nightly battery (S56/T-56.5 — the S33+ backlog's P1-2).
 #
 # What runs every night (02:30 UTC, ahead of Monday's Dependabot wave so a
 # bad bump's failure is visible the same day it lands) and on demand:

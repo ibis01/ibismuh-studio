@@ -67,7 +67,7 @@ test.describe("Stage 7 — full production pipeline (deterministic subset)", () 
 
   test("auth → create → patch → Stage 6 surfaces → export → GDPR → logout", async ({ request }) => {
     // 1. Authentication + email verification
-    const email = `s7-${RUN}@tubeforge.test`;
+    const email = `s7-${RUN}@ibismuh.test`;
     const { cookie, verificationUrl } = await register(request, email);
     if (verificationUrl) {
       const v = await request.get(verificationUrl);
@@ -180,7 +180,7 @@ test.describe("Stage 7 — full production pipeline (deterministic subset)", () 
   });
 
   test("login rejects wrong password + unverified-email reset flow is reachable", async ({ request }) => {
-    const email = `s7-bad-${RUN}@tubeforge.test`;
+    const email = `s7-bad-${RUN}@ibismuh.test`;
     const { cookie, verificationUrl } = await register(request, email);
     expect(cookie).toBeTruthy();
     if (verificationUrl) await request.get(verificationUrl);
@@ -205,7 +205,7 @@ test.describe("Stage 7 — full production pipeline (deterministic subset)", () 
 
   test("cross-tenant: account B cannot read account A's video via the new Stage 6 routes", async ({ request }) => {
     // Register A, create a video.
-    const emailA = `s7-iso-a-${RUN}@tubeforge.test`;
+    const emailA = `s7-iso-a-${RUN}@ibismuh.test`;
     const { cookie: cookieA, verificationUrl: vA } = await register(request, emailA);
     if (vA) await request.get(vA);
 
@@ -217,7 +217,7 @@ test.describe("Stage 7 — full production pipeline (deterministic subset)", () 
     const videoIdA = createABody.video.id;
 
     // Register B.
-    const emailB = `s7-iso-b-${RUN}@tubeforge.test`;
+    const emailB = `s7-iso-b-${RUN}@ibismuh.test`;
     const { cookie: cookieB, verificationUrl: vB } = await register(request, emailB);
     if (vB) await request.get(vB);
 

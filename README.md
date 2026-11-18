@@ -1,6 +1,6 @@
-# TubeForge
+# Ibismuh Studio
 
-TubeForge is an AI video production studio for YouTube creators. One idea goes
+Ibismuh Studio is an AI video production studio for YouTube creators. One idea goes
 in; a finished video comes out: it researches the topic, writes the script,
 plans the shots with an AI Director, paints the scene art, records the
 voiceover (stock, cloned, or self-hosted voices), lays the music and sound,
@@ -166,7 +166,7 @@ the YouTube test-channel smoke, and the Stripe lifecycle rehearsal.
 
 ## License
 
-TubeForge is proprietary software.
+Ibismuh Studio is proprietary software.
 
 Copyright (c) 2026 Ismail Ibrahim.
 All rights reserved.

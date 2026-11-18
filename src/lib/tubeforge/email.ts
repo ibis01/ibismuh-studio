@@ -230,7 +230,7 @@ async function finishSession(socket: net.Socket, reader: LineReader, opts: SmtpO
 
   const messageId = `<${Date.now()}-${Math.random().toString(36).slice(2)}@tubeforge>`;
   const headers = [
-    `From: TubeForge <${from}>`,
+    `From: Ibismuh Studio <${from}>`,
     `To: ${input.to}`,
     `Subject: ${sanitizeHeader(input.subject)}`,
     `Message-ID: ${messageId}`,

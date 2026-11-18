@@ -1,4 +1,4 @@
-# TubeForge — Security & Release Notes
+# Ibismuh Studio — Security & Release Notes
 
 Last updated: 2026-11-15 (S136 — the Stabilisation Gate posture addendum: the gitleaks by-commit baseline policy and the standing PAT-revocation reminder are now recorded here; the audit trail lives in docs/audits/s128-ext-ci-dispatch-record.md)
 

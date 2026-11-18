@@ -1,4 +1,4 @@
-# TubeForge — Deployment
+# Ibismuh Studio — Deployment
 
 **Decision (S33, improvement roadmap §4.4, 2026-11-05):** one topology wins.
 Four deployment artifacts had accumulated — `fly.toml`, `Dockerfile`,

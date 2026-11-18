@@ -15,7 +15,7 @@ const accounts: string[] = []; // every email this suite creates — cleaned in 
 
 async function register(request: APIRequestContext): Promise<string> {
   seq += 1;
-  const email = `ux-${RUN}-${seq}@tubeforge.test`;
+  const email = `ux-${RUN}-${seq}@ibismuh.test`;
   accounts.push(email);
   const res = await request.post("/api/auth/register", {
     data: { name: "UX Probe", email, password: PASSWORD },

@@ -374,7 +374,7 @@ export async function magicHourVideo(
         Authorization: `Bearer ${key}`,
       },
       body: JSON.stringify({
-        name: "TubeForge scene",
+        name: "Ibismuh Studio scene",
         end_seconds: endSeconds,
         model,
         resolution: "480p",

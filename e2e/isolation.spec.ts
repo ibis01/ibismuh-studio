@@ -13,8 +13,8 @@ import { expect, test, type APIRequestContext } from "@playwright/test";
 // NOT closed.
 
 const RUN = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-const EMAIL_A = `iso-a-${RUN}@tubeforge.test`;
-const EMAIL_B = `iso-b-${RUN}@tubeforge.test`;
+const EMAIL_A = `iso-a-${RUN}@ibismuh.test`;
+const EMAIL_B = `iso-b-${RUN}@ibismuh.test`;
 const PASSWORD = "isolated-pairs-123";
 const accounts: string[] = []; // every email this suite creates — cleaned in afterAll
 
@@ -206,7 +206,7 @@ test.describe("cross-tenant isolation — previously-unscoped models (T-4.14)", 
     // A POSTs a scan — the shell row exists immediately (202) even though the
     // LLM job may fail without keys; the row persists with an error, so the
     // listing is a real cross-tenant probe.
-    const a = await register(request, `iso-r-a-${RUN}@tubeforge.test`);
+    const a = await register(request, `iso-r-a-${RUN}@ibismuh.test`);
     const post = await request.post("/api/research", {
       headers: { cookie: a.cookie },
       data: { niche: "Motivation", query: "" },
@@ -218,7 +218,7 @@ test.describe("cross-tenant isolation — previously-unscoped models (T-4.14)", 
     expect(ownBody.sessions?.length, "A sees their own shell row").toBeGreaterThanOrEqual(1);
 
     // B (a different fresh account) must never see A's session row.
-    const b = await register(request, `iso-r-b-${RUN}@tubeforge.test`);
+    const b = await register(request, `iso-r-b-${RUN}@ibismuh.test`);
     const list = await request.get("/api/research?limit=25", { headers: { cookie: b.cookie } });
     expect(list.status()).toBe(200);
     const body = (await list.json()) as { sessions?: unknown[] };

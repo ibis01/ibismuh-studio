@@ -24,7 +24,7 @@ const PASSWORD = "stage7-mobile-123";
 const accounts: string[] = []; // every email this suite creates — cleaned in afterAll
 
 async function register(request: APIRequestContext): Promise<string> {
-  const email = `s7m-${RUN}-${Math.random().toString(36).slice(2, 6)}@tubeforge.test`;
+  const email = `s7m-${RUN}-${Math.random().toString(36).slice(2, 6)}@ibismuh.test`;
   accounts.push(email);
   const res = await request.post("/api/auth/register", {
     data: { name: "Stage 7 Mobile", email, password: PASSWORD },

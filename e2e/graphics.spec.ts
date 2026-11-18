@@ -107,7 +107,7 @@ test.describe("S123 — motion graphics end-to-end", () => {
   });
 
   test("auth → graphics doc workflow → labelled draft → real full render", async ({ request }) => {
-    const email = `s123-${RUN}@tubeforge.test`;
+    const email = `s123-${RUN}@ibismuh.test`;
     const { cookie, verificationUrl } = await register(request, email);
     if (verificationUrl) {
       const v = await request.get(verificationUrl);

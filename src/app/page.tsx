@@ -18,7 +18,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Loader2, Menu, Plus, Search } from "lucide-react";
-import { TubeForgeLogo, TubeForgeWordmark } from "@/components/tubeforge/logo";
+import { IbismuhLogo, IbismuhWordmark } from "@/components/tubeforge/logo";
 import { CommandPalette } from "@/components/tubeforge/command-palette";
 
 // Code splitting (boot-payload fix, 2026-11): statically importing all 11
@@ -274,7 +274,7 @@ export default function Home() {
           <footer className="mt-auto border-t border-white/5 px-4 sm:px-6 py-4">
             <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
               <p>
-                <span className="text-gradient font-semibold">TubeForge</span> ·
+                <span className="text-gradient font-semibold">Ibismuh Studio</span> ·
                 Automated faceless YouTube content engine
               </p>
               <p>Script · Voice · Thumbnail · Render</p>
@@ -296,8 +296,8 @@ function MobileNavContent({
   return (
     <nav aria-label="Main navigation" className="p-3">
       <div className="flex items-center gap-2.5 px-3 py-4">
-        <TubeForgeLogo size={38} />
-        <TubeForgeWordmark />
+        <IbismuhLogo size={38} />
+        <IbismuhWordmark />
       </div>
       <ul className="space-y-1">
         {MOBILE_NAV_ITEMS.map((item) => (

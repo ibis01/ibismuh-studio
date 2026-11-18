@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   const done = (ok: boolean, message: string) =>
     new NextResponse(
       `<!doctype html>
-<html><head><meta charset="utf-8"><title>TubeForge — YouTube connect</title>
+<html><head><meta charset="utf-8"><title>Ibismuh Studio — YouTube connect</title>
 <style>
   body{background:#0a0a0b;color:#e4e4e7;font-family:system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
   .card{max-width:420px;padding:32px;border-radius:16px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);text-align:center}
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
 <body><div class="card">
 <h1>${ok ? "Channel connected" : "Connection failed"}</h1>
 <p>${message}</p>
-<a href="/?view=settings">Back to TubeForge</a>
+<a href="/?view=settings">Back to Ibismuh Studio</a>
 </div></body></html>`,
       { status: ok ? 200 : 400, headers: { "Content-Type": "text/html; charset=utf-8" } }
     );

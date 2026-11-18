@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { TubeForgeLogo } from "@/components/tubeforge/logo";
+import { IbismuhLogo } from "@/components/tubeforge/logo";
 import { Loader2, ShieldCheck, Eye, EyeOff, UserPlus, KeyRound, ArrowLeft, MailCheck } from "lucide-react";
 type GateState = "checking" | "signedOut" | "register" | "open" | "error";
 
@@ -272,7 +272,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4 animate-pulse">
-          <TubeForgeLogo size={56} />
+          <IbismuhLogo size={56} />
           <p className="text-sm text-muted-foreground">Warming up the forge…</p>
         </div>
       </div>
@@ -296,7 +296,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex items-center justify-center bg-background bg-grid px-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-3 mb-8 text-center">
-          <TubeForgeLogo size={64} />
+          <IbismuhLogo size={64} />
           <h1 className="text-2xl font-bold tracking-tight">
             Tube<span className="text-gradient">Forge</span>
           </h1>

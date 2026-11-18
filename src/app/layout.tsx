@@ -31,7 +31,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TubeForge — Automated YouTube Content Engine",
+  title: "Ibismuh Studio — Automated YouTube Content Engine",
   description:
     "Fully-automated faceless YouTube platform: AI scripts, voiceovers, thumbnails and packaging on auto-pilot.",
   keywords: [
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
     "faceless channel",
     "AI script writer",
     "auto-pilot content",
-    "TubeForge",
+    "Ibismuh Studio",
   ],
   // S25 — the installable app. The manifest + icons + service worker have
   // sat in public/ since day one; this is the wiring that makes the browser
@@ -52,9 +52,9 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "TubeForge",
+    title: "Ibismuh Studio",
   },
-  // Favicon comes from src/app/icon.svg (the red-orange TubeForge mark).
+  // Favicon comes from src/app/icon.svg (the red-orange Ibismuh Studio mark).
 };
 
 // theme_color / background_color for the installed shell (Next 16 moves

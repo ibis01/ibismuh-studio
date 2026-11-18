@@ -583,7 +583,7 @@ export function seedMusicLibrary(
           filePath: made.filePath,
           fileSizeBytes: made.bytes,
           isOriginal: true,
-          licenseType: "TubeForge Original (synthesized)",
+          licenseType: "Ibismuh Studio Original (synthesized)",
           commercialUse: true,
           attributionRequired: false,
           licenseEvidence: "Generated in-app from pure sine synthesis — no third-party samples or recordings.",

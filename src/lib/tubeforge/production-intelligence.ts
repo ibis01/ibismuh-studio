@@ -176,7 +176,7 @@ export function repairScopeGuard(proposal: RepairProposal, projectSceneIds: read
     return { ok: false, reason: `the repair targets "${proposal.affectedSceneId}", which is not in the project — a repair may never invent a scene` };
   }
   if (proposal.requiresApproval !== true) {
-    return { ok: false, reason: "a repair without requiresApproval is not a repair — the user approves, then TubeForge regenerates only the affected scene" };
+    return { ok: false, reason: "a repair without requiresApproval is not a repair — the user approves, then Ibismuh Studio regenerates only the affected scene" };
   }
   return { ok: true, reason: "the repair is scoped to one declared scene and requires approval" };
 }

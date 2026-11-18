@@ -89,7 +89,7 @@ test.describe("S68 — whiteboard studio end-to-end", () => {
   });
 
   test("auth → whiteboard doc workflow → real scene-preview render", async ({ request }) => {
-    const email = `s68-${RUN}@tubeforge.test`;
+    const email = `s68-${RUN}@ibismuh.test`;
     const { cookie, verificationUrl } = await register(request, email);
     if (verificationUrl) {
       const v = await request.get(verificationUrl);
@@ -264,7 +264,7 @@ test.describe("S68 — whiteboard studio end-to-end", () => {
   });
 
   test("S69 — upload gates → palette merge → render with the uploaded asset → delete", async ({ request }) => {
-    const email = `s69-${RUN}@tubeforge.test`;
+    const email = `s69-${RUN}@ibismuh.test`;
     const { cookie, verificationUrl } = await register(request, email);
     if (verificationUrl) {
       const v = await request.get(verificationUrl);
@@ -427,7 +427,7 @@ function eq_(actual: unknown, expected: unknown, msg: string): void {
 // any planner choice, and an unknown planner value is the native default.
 test.describe("S73 — the LLM scaffold planner (CI-lane contracts)", () => {
   test("the planner flag never bypasses the honest gates", async ({ request }) => {
-    const email = `s73-${RUN}@tubeforge.test`;
+    const email = `s73-${RUN}@ibismuh.test`;
     const { cookie, verificationUrl } = await register(request, email);
     if (verificationUrl) {
       const v = await request.get(verificationUrl);

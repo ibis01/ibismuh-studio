@@ -273,7 +273,7 @@ export type AuthResult =
   | { ok: true; ctx: TenantCtx; enter: () => void }
   | { ok: false; status: number; error: string };
 
-const AUTH_REQUIRED = "Authentication required — sign in to use TubeForge";
+const AUTH_REQUIRED = "Authentication required — sign in to use Ibismuh Studio";
 
 /** S102 — the shared limiter's write tier covers every state-changing method. */
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);

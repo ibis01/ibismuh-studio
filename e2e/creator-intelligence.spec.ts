@@ -51,7 +51,7 @@ test.describe("S70 — creator intelligence (CI-lane contracts)", () => {
   });
 
   test("CI-1 score mode + CI-2 pairing lint — pure halves, heuristic-labeled", async ({ request }) => {
-    const email = `s70-${RUN}@tubeforge.test`;
+    const email = `s70-${RUN}@ibismuh.test`;
     const { cookie, verificationUrl } = await register(request, email);
     if (verificationUrl) {
       const v = await request.get(verificationUrl);

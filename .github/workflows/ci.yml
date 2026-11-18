@@ -1,4 +1,4 @@
-# TubeForge CI (T-1.5, restored; e2e-on-main + gitleaks since S33)
+# Ibismuh Studio CI (T-1.5, restored; e2e-on-main + gitleaks since S33)
 #
 # Contract:
 #   secrets — gitleaks scans every push/PR for leaked credentials (roadmap §4.1)
