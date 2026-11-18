@@ -210,6 +210,22 @@ table, or column semantics changed (the schema-comment edits are comments; the u
    the contract) + the KDF salt pinned UNTOUCHED.
 5. Data contracts pinned: scene3d seed, storage defaults, KDF salt.
 
+### CI closure (2026-11-18)
+
+- `d9eb9be` (stage E): CI 7/8 — the **Docker production smoke** failed on a REAL
+  seam the compat suites had anticipated but not closed: `docker compose exec`
+  launches the smoke walk as a FRESH process outside the Next server, so the
+  legacy-env mirror never loaded there while `docker-compose.smoke.yml` still
+  declared legacy env keys. Fixed in `827af17`: the smoke compose declares
+  `IBISMUH_STUDIO_*` keys, and the walk itself imports `compat-env.ts` first.
+- `827af17`: **CI 8/8, run conclusion success** — including Docker production
+  smoke, E2E, and the S185 config-truth scans.
+- Two infra flakes en route (both the workflow's own documented azure-mirror
+  ffmpeg-step timeouts, zero code failures): Money-path coverage timed out 3×
+  and went green on rerun; E2E logged one timing flake (36/37 with the PATCH
+  autosave race) and went green on rerun. Every red check-run's log was pulled
+  and attributed before rerunning.
+
 **Rebrand complete:** Ibismuh Studio is the product identity across docs, UI, metadata,
 source, env surface, cookies, and operational artifacts — with git history, migration
 history, user data, external identifiers, and every historical record preserved, and the
