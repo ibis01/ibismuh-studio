@@ -177,4 +177,7 @@ Implemented 2026-11 (single pass). Receipts per §7:
    dialog-fit check became the workspace-at-390px overflow check (scrollWidth 390).
 9. **Browser re-inspection**: 1440px + 390px walks (walk.sh receipts); no layout
    regressions, no horizontal overflow, area strip scrolls horizontally at 390px.
-10. **CI**: pending push — recorded at close.
+10. **CI**: 8/8 green on 76df60e (run #27). The full battery of CI checks rode the
+    workspace change without a single infra escape: Production build, Typecheck ·
+    Lint · Unit (1013), Secret scan, Docker production smoke, PostgreSQL
+    integration, Clean-clone bootstrap, Money-path coverage, E2E (Playwright).
