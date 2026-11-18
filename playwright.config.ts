@@ -38,8 +38,14 @@ export default defineConfig({
     // production defaults are untouched.
     env: {
       ...process.env,
-      TUBEFORGE_RATE_WRITE: "10000",
-      TUBEFORGE_RATE_READ: "100000",
+      // B4 — the stage-B rebrand renamed these env keys and the old names
+      // went dead at BOTH limiter layers (rate-limit.ts + shared-rate-limit.ts
+      // read the new names only) — the S68 ceilings silently stopped applying
+      // and every full-suite run re-manifested the alternating-victim 429
+      // flake. The harness speaks the CURRENT names (and a battery pin keeps
+      // the harness env and the limiter env from drifting apart again).
+      IBISMUH_STUDIO_RATE_WRITE: "10000",
+      IBISMUH_STUDIO_RATE_READ: "100000",
     },
   },
 });
