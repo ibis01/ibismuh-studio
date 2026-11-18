@@ -68,7 +68,7 @@ evidence ledger); every item below is re-proven by CI on every push to `main`.
 
 ## Backups
 
-`npm run backup` → `backups/tubeforge-<timestamp>/` with a hot copy of the database
+`npm run backup` → `backups/ibismuh-<timestamp>/` with a hot copy of the database
 (SQLite `VACUUM INTO`, safe while the app runs; Postgres `pg_dump`) and a manifest of
 `uploads/`. Postgres deployments also have `scripts/backup-postgres.sh`. The restore
 path is not aspirational: `scripts/restore-drill.mts` (`npm run drill`) round-trips a

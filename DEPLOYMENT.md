@@ -142,7 +142,7 @@ the deployment requirement, measured not assumed (the S75 E10 benchmark
 and the E12 live queue drill, 2026-11-10).
 
 **5.1 — Install the browser (the image gap).** In the runner stage, as
-root, before `USER tubeforge`:
+root, before `USER ibismuh`:
 
 ```dockerfile
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
@@ -150,15 +150,15 @@ RUN npx playwright install --with-deps chromium
 ```
 
 `--with-deps` apt-installs Chromium's OS libraries; the env var keeps the
-browser out of the (wiped) home cache and readable by the `tubeforge`
+browser out of the (wiped) home cache and readable by the `ibismuh`
 user at runtime.
 
 **Status (2026-11-11): the lines have landed in the `Dockerfile` runner
 stage** — the `ENV` sits in the base env block, and the install `RUN`
 sits after the `node_modules` `COPY` (so `npx` resolves the pinned
 playwright from the image's own `node_modules`: 1.57.0 → browser build
-chromium-1200) and before `USER tubeforge`, with
-`chown -R tubeforge:tubeforge /opt/ms-playwright` appended. Static
+chromium-1200) and before `USER ibismuh`, with
+`chown -R ibismuh:ibismuh /opt/ms-playwright` appended. Static
 verification on record: `npx playwright install-deps --dry-run
 chromium` enumerates the closure mechanism (X11/GBM/NSS/ALSA libraries
 plus CJK/emoji fallback fonts — `fonts-wqy-zenhei`, `fonts-ipafont-

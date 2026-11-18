@@ -15013,7 +15013,7 @@ await test("S purity: the substrate imports no fs, no clock, no randomness", asy
     const src = fs.readFileSync(f, "utf8");
     ok(!/from\s+["'](fs|node:fs|path|node:path|os|node:os)["']/.test(src), `${f} touches no filesystem`);
     ok(!/Date\.now|performance\.now|setTimeout|Math\.random/.test(src), `${f} reads no clock and rolls no dice`);
-    ok(!src.includes("tubeforge/whiteboard"), `${f} imports no whiteboard module (the substrate is engine-neutral)`);
+    ok(!src.includes("ibismuh/whiteboard"), `${f} imports no whiteboard module (the substrate is engine-neutral)`);
   }
 });
 

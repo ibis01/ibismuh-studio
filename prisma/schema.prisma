@@ -131,7 +131,7 @@ model Session {
 // S20 — the API token registry. Bearer tokens used to be purely stateless
 // (HMAC payload, uid + exp + random jti): nothing listed them, nothing
 // revoked them — a leaked token was live for 90 days and the only defense
-// was rotating TUBEFORGE_AUTH_SECRET (which kills every session too).
+// was rotating IBISMUH_STUDIO_AUTH_SECRET (which kills every session too).
 // Sessions got the DB treatment in Stage 2 (jti = Session row id, instant
 // revoke); tokens now get the same: every mint persists a row keyed by the
 // token's jti, resolveApiCtx refuses revoked/unknown jtis, and the security
@@ -180,7 +180,7 @@ model UserSetting {
 }
 
 // Per-user YouTube connection. Secrets (refresh/access tokens) are stored
-// AES-256-GCM encrypted with TUBEFORGE_ENCRYPTION_KEY (src/lib/ibismuh/crypto.ts).
+// AES-256-GCM encrypted with IBISMUH_STUDIO_ENCRYPTION_KEY (src/lib/ibismuh/crypto.ts).
 model YouTubeAccount {
   id             String    @id @default(cuid())
   userId         String
@@ -799,7 +799,7 @@ model VoiceProfile {
 
 // Background-music library — every track carries its license record so a
 // published video can always answer "is this safe to monetize?". The
-// TubeForge-original beds are synthesized in-app (zero third-party samples);
+// Ibismuh Studio-original beds are synthesized in-app (zero third-party samples);
 // users can upload their OWN licensed tracks with full attribution metadata.
 model MusicTrack {
   id             String  @id @default(cuid())
@@ -812,7 +812,7 @@ model MusicTrack {
   durationSec    Float   @default(0)
   filePath       String // relative path under uploads/, e.g. "_music/uplifting-aurora.wav"
   fileSizeBytes  Int     @default(0)
-  isOriginal     Boolean @default(false) // synthesized by TubeForge — no third-party audio
+  isOriginal     Boolean @default(false) // synthesized by Ibismuh Studio — no third-party audio
 
   // --- Copyright / license record (kept for every track, shown in UI) ---
   licenseType         String   @default("TubeForge Original") // e.g. "YouTube Audio Library", "CC BY 4.0", "Commercial license"
@@ -969,7 +969,7 @@ model StorageReservation {
   key            String // object key the hold protects (audit trail)
   bytes          BigInt // reserved size estimate
   createdAt      DateTime     @default(now())
-  expiresAt      DateTime // sweep deadline (TUBEFORGE_STORAGE_RESERVATION_TTL_MS)
+  expiresAt      DateTime // sweep deadline (IBISMUH_STUDIO_STORAGE_RESERVATION_TTL_MS)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId]) // the admission's in-flight SUM scan

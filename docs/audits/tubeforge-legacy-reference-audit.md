@@ -144,3 +144,73 @@ literals: 15 files (7 e2e specs, 8 scripts) beside the constant.
 4. **External identifiers** — Fly app names and compose PG values are classified
    PRESERVE precisely because renaming them is the one class of change that can
    strand real deployments; they are documented, not touched.
+
+---
+
+## 5. Execution record (stages A–E, 2026-11-17)
+
+| Stage | Commit | Gate receipts |
+| --- | --- | --- |
+| 0 — audit + plan | `612341e` | read-only inventory, 5-class classification |
+| A — identity surface | `aa0f165` | typecheck 0 · lint 0 · battery **1003/1003** |
+| B — internal identifiers | `f38a859` | typecheck 0 · lint 0 · battery **1003/1003** · production build exit 0 |
+| C — env + cookie compat | `7e67e84` | typecheck 0 · lint 0 · battery **1008/1008** (5 new compat suites) · build exit 0 |
+| D — operational artifacts | `8422631` | battery **1008/1008** · build exit 0 |
+| E — final sweep + fixes | this commit | battery **1008/1008** · build exit 0 |
+
+### What changed (summary)
+
+- **Product identity:** living docs (README/SETUP/ARCHITECTURE/DEPLOYMENT/SECURITY/LICENSE),
+  CI workflow titles, layout metadata, logo/wordmark components, OAuth callback page,
+  email From/name/message-id/SMTP EHLO, User-Agent strings, auth-required error copy,
+  PWA strings, export filename, log app label, handbook generator identity.
+- **Internal identifiers:** `src/lib/tubeforge` → `src/lib/ibismuh` and
+  `src/components/tubeforge` → `src/components/ibismuh` (git-tracked renames), all 800+
+  `@/lib/tubeforge` imports + relative-form imports, `__tf*` globals → `__ibismuh*`,
+  `x-tf-csp-nonce` → `x-ibismuh-csp-nonce`, package name + lockfile, Dockerfile OS user,
+  CI Postgres service, icon gradient ids, `tf-push.sh` → `ibismuh-push.sh` retargeted to
+  `ibis01/ibismuh-studio`.
+- **Env surface:** ~60 `TUBEFORGE_*` variables → `IBISMUH_STUDIO_*` across src, scripts
+  (living set), CI, compose (dual entries: new name + legacy passthrough), `.env.example`
+  (with a legacy-compat note), fly configs (literal env + secret-name instructions).
+  Compatibility: `compat-env.ts` mirrors every legacy name at server entries (middleware,
+  instrumentation, worker); `getAuthSecret`/`requireKey` dual-read both names directly.
+- **Cookie:** `tf_session` → `ibismuh_session` with `pickSessionCookie` dual-read in
+  middleware + all three tenant resolvers; 15 hardcoded literals updated in living
+  scripts/e2e; the battery pins BOTH names.
+- **Storage keys:** `tubeforge:create-draft` → `ibismuh:create-draft` (legacy read
+  fallback + legacy cleanup), `tubeforge:voices-changed` event renamed.
+- **Battery:** 5 new rebrand suites pin the mirror, both dual-reads, the cookie names,
+  and the PRESERVED data contracts.
+
+### Final sweep — the remainder is exactly the PRESERVE allow-list
+
+| Class | Remainder (all accounted) |
+| --- | --- |
+| src (19) | compat-env module text + dual-read fallback lines (compat by design); KDF salt `tubeforge-at-rest-v1` (renaming orphans every stored secret); scene3d determinism seed (renaming shifts generated scenes); storage/clone/import tmpdir defaults (renaming orphans existing deployments' data); `LEGACY_DRAFT_KEY`; `ai.ts` comment documenting a preserved path |
+| scripts (167) | 32 historical S-probe scripts (records; runnable via the compat seams); installer scripts' provisioned `/opt/tubeforge-voice` + `tubeforge-voice.service` names (external machine state — prose updated, paths preserved); staging app-name defaults (`tubeforge-staging`, `tubeforge-staging.fly.dev`); the purge tool's legacy-email pattern (its purpose is pre-rebrand residue); historical `tf_s66/s67/s73` gate scripts + `tf-ci-poll.mjs` filename (exec'd by historical records); backup-prune legacy pattern (kept so old `tubeforge-*.dump` files still age out); test-unit config-truth pins of the preserved constants |
+| e2e (1) | the premium-ux draft assertion now reads the new key with the legacy key as fallback — mirroring the app's own dual-read |
+| docs (480) | historical audit/baseline records, historical root docs (MASTER_PLAN/ROADMAP/TASKS/RISK_REGISTER/FOUNDATION_AUDIT/WHITEBOARD_*/worklog), historical design roadmaps, roadmap-ledger entry text; SECURITY.md's verbatim 2025-10-28 section and S136 addendum artifact names |
+| prisma (16 → now fewer) | schema comments updated to new env names + identity prose; the `licenseType` **default** string `TubeForge Original` deliberately PRESERVED (zero-migration law; every real writer sets the field explicitly) |
+| infra | fly app names (`tubeforge`, `tubeforge-staging`), volume `tubeforge_uploads`, compose PG user/db, `tubeforge.fly.dev` URLs — external provisioned state, operator-gated rename documented |
+| git history | untouched, per mandate |
+
+### Zero-migration receipt
+
+`prisma/migrations/**` untouched; this rebrand required **no new migration** — no model,
+table, or column semantics changed (the schema-comment edits are comments; the unchanged
+`licenseType` default avoids even a column-default ALTER).
+
+### Verified seams (the battery's rebrand suites)
+
+1. `mirrorLegacyEnv()` — legacy names fill unset new names; new names always win.
+2. `getAuthSecret()` — legacy-only envs keep signing; new name authoritative.
+3. `pickSessionCookie()` — new cookie name wins; legacy cookie keeps authenticating.
+4. crypto dual-read pinned by config-truth (the key is process-cached; the source line is
+   the contract) + the KDF salt pinned UNTOUCHED.
+5. Data contracts pinned: scene3d seed, storage defaults, KDF salt.
+
+**Rebrand complete:** Ibismuh Studio is the product identity across docs, UI, metadata,
+source, env surface, cookies, and operational artifacts — with git history, migration
+history, user data, external identifiers, and every historical record preserved, and the
+full battery + production build green at every stage.

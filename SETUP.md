@@ -42,7 +42,7 @@ The app ships with **two database modes** — pick one at setup time:
 
 ```bash
 # 1. unzip the package, then:
-cd tubeforge
+cd ibismuh-studio
 
 # 2. install dependencies (this also runs `prisma generate` automatically)
 npm install
@@ -146,7 +146,7 @@ on scripting videos / library cards.
 ## 5. What ships in this package
 
 ```
-tubeforge/
+ibismuh-studio/
 ├── src/               # full app source (Next.js 16 + React 19 + Tailwind 4)
 ├── prisma/            # database schemas + migration chain (schema.prisma =
 │                      #  PostgreSQL deploy default, schema.sqlite.prisma =

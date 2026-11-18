@@ -10,9 +10,9 @@
 # Provision:     bash scripts/staging-provision.sh   (runbook: docs/runbooks/staging.md)
 #
 # Secrets (set by the provisioner from .env.staging / environment — NEVER
-# commit them): DATABASE_URL (a Neon branch), TUBEFORGE_S3_* (a separate R2
-# bucket), TUBEFORGE_STRIPE_* (TEST mode), TUBEFORGE_AUTH_SECRET +
-# TUBEFORGE_ENCRYPTION_KEY (fresh), optional TUBEFORGE_YT_* (test client)
+# commit them): DATABASE_URL (a Neon branch), IBISMUH_STUDIO_S3_* (a separate R2
+# bucket), IBISMUH_STUDIO_STRIPE_* (TEST mode), IBISMUH_STUDIO_AUTH_SECRET +
+# IBISMUH_STUDIO_ENCRYPTION_KEY (fresh), optional IBISMUH_STUDIO_YT_* (test client)
 # and a provider key for the pipeline drill.
 
 app = "tubeforge-staging"
@@ -25,7 +25,7 @@ primary_region = "iad"
   PORT = "3000"
   NODE_ENV = "production"
   # Drill links (email verification, password reset) print to the logs.
-  TUBEFORGE_EMAIL_MODE = "console"
+  IBISMUH_STUDIO_EMAIL_MODE = "console"
 
 # web process group -----------------------------------------------------
 [processes]
