@@ -7151,3 +7151,42 @@ order, narration alignment — is the operator's next human step.
 - HONEST BOUNDARY: machine evidence for the machine gates; the S162
   human gate and the live deployments stay with the humans. Nothing was
   fabricated, no gate closed on machine evidence alone.
+
+## s3 hotfix: the signed-LIST gap + the greenlight 403 (2026-11-18, external field report)
+
+A production field report surfaced `storage: HEAD "<videoId>/brand-logo.png" → 403`
+dying the whole greenlight. The chain: POST /api/research/[id]/greenlight →
+serializeVideo → `brandHasLogo: isStory && (await hasBrandLogo(v.id))` →
+storage.exists → stat() → signed HEAD. Three truths fell out of the autopsy:
+
+- **The unsigned-LIST gap (the real bug).** `list()` and `removePrefix()` issued
+  RAW `fetch(url)` ListObjectsV2 calls — no Authorization header at all. AWS S3
+  and Cloudflare R2 both 403 anonymous LISTs, so character pose-sheet listing,
+  render invalidation passes and video DELETE cleanup were silently broken under
+  the s3 driver. New `s3List(cfg, prefix)` in storage-s3.ts: signed
+  bucket-level ListObjectsV2 (the signer's canonical URI now handles the EMPTY
+  key — bare `/<bucket>`, no trailing slash, which would have broken the
+  signature), continuation tokens drained internally, keys URL-decoded exactly
+  per the facade's list() contract, and failures surface the bucket's XML
+  error code so misconfigurations diagnose themselves.
+- **The greenlight blocker (the UX law).** The brand-logo probe is cosmetic;
+  a storage outage must degrade to "no logo", never block greenlighting —
+  serialize.ts now catches hasBrandLogo → false. Real writes still fail loudly
+  downstream (put/putFromPath keep their honest throws).
+- **The HEAD-403 hint (the operator's checklist).** HEAD has no body, so the
+  bucket's XML code (SignatureDoesNotMatch / InvalidAccessKeyId /
+  RequestTimeTooSkewed) is unreadable — stat()/materialize() now attach the
+  checklist (access key/secret, token bucket scope + Object Read & Write,
+  endpoint host, server clock) to the one status that always means "the bucket
+  rejected the request itself", never "the object is missing" (404 is).
+
+Verification: scripts/test-s3-signer.mts — a fake S3 that performs SERVER-SIDE
+SigV4 verification the way AWS/R2 actually validate (rebuilds the canonical
+request from the received bytes, compares signatures): the empty-key LIST and
+the object GET both verify; no trailing slash; query sorted as signed;
+presign + object paths byte-identical to pre-patch behavior; s3List does the
+2-page token round with decoded keys; a 403 surfaces the provider's code.
+`npm run test:s3-signer`. HONEST BOUNDARY: the field report's own 403 root
+cause lives in the deployment's IBISMUH_STUDIO_S3_* secrets (token/key,
+bucket scope, endpoint host, clock) — the code fixes make the failure mode
+survivable and self-diagnosing, they cannot mint valid credentials.
