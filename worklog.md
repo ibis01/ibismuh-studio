@@ -7084,3 +7084,70 @@ order, narration alignment — is the operator's next human step.
   animators, motion paths — each named in the audit with an owner slice.
   The S162 blind human gate and the S125 identity VCE row stay with the
   humans, as always.
+
+## Release validation: the three gates (2026-11-18)
+
+- THE CONTEXT: the external review verified B1–B3 + B4 on live main
+  (`1e546a2`, CI run #30, 8/8 after the gitleaks fix) and redirected the
+  roadmap: "move to product validation, not another feature sprint" —
+  three gates (visual quality / AI production / release readiness), with
+  the standing law: do not restart the design, do not rewrite B1–B3.
+- GATE 1 — S162 RE-BASED ON THE CURRENT HEAD
+  (docs/audits/s162-visual-acceptance-record.md §4b-r): the round-2
+  session of record was generated on the S162 head; six commits landed
+  since. The kit was re-run TWICE on `1e546a2` — 14/14 both runs, and the
+  runs are byte-identical to each other (full SHAs pinned: arm B
+  `f2b4e9f0…`, arm A `99db6371…`), but BOTH arms moved against the 11-17
+  session (arm A rides the additive-absent-frozen path yet moved too ⇒
+  the drift is below the doc level: sandbox toolchain drift, honest and
+  unresolved — the old bytes are not here to diff). Consequences applied:
+  the new session is the round-2 session of record; the distribution
+  zips were rebuilt from it and leak-checked (no key, no manifest, and
+  NO session README in the scorer packs — it names arm semantics and
+  would break the blind); the pack README carries the round-1 lesson as
+  protocol (biggest screen available — phone viewing flattened the
+  signal). Scores remain PENDING — the human gate is untouched.
+- GATE 2 — LIVE-PROVIDER VALIDATION
+  (scripts/live-provider-production-test.mts + docs/audits/
+  live-provider-validation.md): the harness drives the COMPLETE
+  script→video money path with the AI stages live (brief → LLM script →
+  LLM analysis → TTS voiceover → render → QC → export), gated so CI
+  never spends by surprise (IBISMUH_STUDIO_LIVE_AI=0, unreachable-server
+  skip, honest FAIL exit 1 with the provider guide). THE RUN OF RECORD:
+  chat lane LIVE (script 24.9 s — 364 words, 14 scenes scaffolded by the
+  create route's own LLM job; analysis 3.3 s); TTS accepted (202) but
+  never landed — root-caused with direct capability probes: the gateway
+  hard-throttles TTS and image with 429s (twice, 90 s apart, ~115 ms
+  failures) while chat stays open. The app's behavior through the storm
+  is CORRECT (patient aiCall retries, the render gate's honest 409) and
+  the storm exposed two improvement findings, each with an owner slice:
+  F-1 the TTS/image quota circuit breaker (an infra-wide 429 storm turns
+  a 2-minute VO into a potential hours-long silent grind — 6 attempts ×
+  8 s base × chunks × scenes), F-2 per-attempt progress honesty (the Job
+  row's updatedAt froze for minutes mid-storm). The $0 alternatives are
+  verified in the registry (Kokoro local `requiresKey: false`,
+  VoiceStudio, Chatterbox self-host, HeyGen free tier); a full PASS
+  receipt needs gateway quota or one $0 lane running.
+- GATE 3 — RELEASE-READINESS AUDIT (docs/audits/
+  release-readiness-2026-11-18.md): eight areas verified with evidence —
+  auth (PBKDF2 600k + transparent login rehash, cookie posture, the
+  security pass's P0s), tenant isolation (the Prisma extension's
+  transparent organizationId filter + create-stamp + mismatch throw),
+  rate limiting (two layers, the B4 flake's config-truth fix), deployment
+  (Dockerfile + both compose stacks + the CI Docker smoke), storage (one
+  seam, local+s3, quotas — and the music-path composition bug the
+  production test caught as the seam's proof), billing (Stripe webhook
+  Web Crypto sig verification, the $5 stop line, the loud gate-lift
+  hatch), recovery (the always-on drill on every push, RTO 58 ms), secrets
+  (gitleaks BY-COMMIT law, the S61 encryption-key watchlight). NINE
+  numbered gaps, none silent: #1 the quarterly MANUAL Postgres drill has
+  never run (the drill log's first row is "first quarterly drill
+  pending" — release-blocking for PG deployments, the cheapest to close);
+  #2 S162 human gate open; #3 full live-provider PASS pending; #6 live
+  Stripe end-to-end unevidenced; #7/#8 the B4 audit's post-release
+  slices (advanced 3D character editing, per-scene voice/advanced audio
+  editing); #9 live S3 smoke at provisioning time. Plus the operator's
+  six-step release checklist.
+- HONEST BOUNDARY: machine evidence for the machine gates; the S162
+  human gate and the live deployments stay with the humans. Nothing was
+  fabricated, no gate closed on machine evidence alone.

@@ -193,6 +193,62 @@ clips, no key) and per-scorer packs `s162-round2-scorer-{1,2,3}-pack.zip`
 - [ ] Round 2 composites: arm A ______ / 5, arm B ______ / 5, delta ______.
       Fill in §5's template when the sheets come back.
 
+### §4b-r — the re-basing receipt (2026-11-18, scores still PENDING)
+
+The round-2 session of record was generated on the S162 head (`e07fbb0`,
+2026-11-17). Six commits have landed on `main` since (B3 `76df60e`, the
+security pass `adc2281`, B4 `af15635`, the production test `5f4d30a`, the
+gitleaks fix `1e546a2`, CI 8/8 on all). The kit was therefore re-run on
+the current head BEFORE the scorers are handed anything — the recorded
+verdict rule (arm B > arm A) compares BYTES, and bytes must be the bytes
+`main` actually renders, not the bytes a six-commits-old head rendered.
+
+**Two independent runs on `1e546a2` (this sandbox), both 14/14:**
+
+| Run | Session | Artifacts (shuffled) |
+|---|---|---|
+| 1 | `validation/s162-blind-kit-2026-11-18T14-25-20-735Z` | TFR-f2b4e9f0, TFR-99db6371 |
+| 2 | `validation/s162-blind-kit-2026-11-18T14-27-27-991Z` | TFR-f2b4e9f0, TFR-99db6371 |
+
+**The determinism datapoint of record (round 2, current head):** both
+runs produced byte-identical arms — full SHAs match exactly: arm B =
+`f2b4e9f0469449ac…` (`TFR-f2b4e9f0`), arm A =
+`99db63719513742d…` (`TFR-99db6371`); only the shuffle order differs.
+Same-fixture-through-same-engine reproducibility holds on this head.
+
+**The drift datapoint of record (honest, unresolved by this re-run):**
+BOTH arms moved byte-wise against the 2026-11-17 session of record
+(`TFR-aaef4199` / `TFR-52e3fb3a`). Arm A rides the additive-absent-frozen
+legacy path — its bytes were identical from round 1 through the 11-17
+kit — yet its bytes moved too. That pins the drift BELOW the doc/schema
+level: an environment/toolchain change (sandbox chromium or ffmpeg build
+drift — this sandbox carries ffmpeg 7.1.5), not a design-path change.
+The kit's own checks agree: layout identity element-for-element, the
+S162/S163 delta still reaches the pixels (arms differ from each other),
+durations identical (15.54 s each). Root cause cannot be established
+from this sandbox — the 11-17 session's bytes are not here to diff.
+
+**Consequences, applied:**
+
+1. The session of record for round-2 scoring is now
+   `validation/s162-blind-kit-2026-11-18T14-27-27-991Z` (run 2, on
+   `1e546a2`, CI 8/8). The 2026-11-17 session and any zips cut from it
+   are SUPERSEDED — scorers must not receive artifacts from the old
+   session; its codenames (`TFR-aaef4199`, `TFR-52e3fb3a`) are void for
+   scoring purposes.
+2. The distribution zips were rebuilt from the new session and
+   leak-checked: `s162-round2-kit.zip` (sheets + manifest + clips, no
+   key) and `s162-round2-scorer-{1,2,3}-pack.zip` (READ-ME-FIRST + own
+   sheet + both codename clips — no key, no manifest, no session README,
+   because the session README names arm semantics and would break the
+   blind). The pack README adds the round-1 lesson as protocol: watch
+   on the biggest screen available, phone viewing has previously
+   flattened exactly the measured signal.
+3. The verdict rule is UNCHANGED: ≥ 3 scorers, arm B (`TFR-f2b4e9f0`)
+   ≥ 4/5, and arm B > arm A (`TFR-99db6371`) — a second tie is a second
+   FAIL-AND-ROUTE-BACK. Scores remain PENDING; nothing in this receipt
+   substitutes for the human gate.
+
 ## 5. Regenerating the session
 
 ```bash
