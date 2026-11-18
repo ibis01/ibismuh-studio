@@ -221,3 +221,14 @@ Implemented 2026-11 (single pass). Receipts per §7:
    harness env and the limiter env from drifting apart again.
 8. **CI** — push pending (this session's commits ride together; the operator's push gate
    runs the 8/8 check suite).
+9. **The three-project production test** (§8) — **13/13 checks, 0 failed**
+   (`docs/audits/b4-three-project-production-test.md`). P2 delivered a COMPLETE offline
+   production: hand-authored doc → real chromium+ffmpeg render → QC ALL-PASS
+   (loudness −17.3 LUFS on the synthesized bed + the B4-4 whoosh cue; dead-air none).
+   The test CAUGHT a latent main-branch bug: `e78702b` (2026-11-01) had switched the
+   music storage key to a MUSIC_DIR-relative bare name while `trackAbsolutePath`
+   composes `UPLOAD_ROOT + key` — every fresh-seeded (and every uploaded) bed then
+   resolved to a missing file and failed every bed-mixed assembly at the encode gate.
+   Fixed in both the seed and the upload-ingestion shapes, pinned in the battery
+   (1026/1026). P1's honest gates held (the render gate's 400 with no art/voice);
+   P3's K1 rig smoke rendered real, pixel-verified animation offline.

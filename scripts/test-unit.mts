@@ -25482,6 +25482,13 @@ await test("B4 — the e2e harness rate ceilings speak the CURRENT env names (co
   ok(limiter.includes("IBISMUH_STUDIO_RATE_WRITE") && shed.includes("IBISMUH_STUDIO_RATE_WRITE"), "both limiter layers read the same env names the harness sets");
 });
 
+await test("B4 production test — the music storage key resolves at render time (the e78702b regression pin)", () => {
+  const src = fs.readFileSync("src/lib/ibismuh/music.ts", "utf8");
+  ok(src.includes("filePath: `_music/${def.slug}.flac`"), "the seed stores the UPLOAD_ROOT-relative key (_music/<slug>.flac) — trackAbsolutePath's law");
+  ok(!src.includes("path.relative(MUSIC_DIR, outPath)"), "the MUSIC_DIR-relative shape is gone (a bare name resolved to uploads/<slug>.flac — missing — and failed every bed-mixed assembly)");
+  ok(src.includes("export function trackAbsolutePath"), "the resolver stays the single seam (UPLOAD_ROOT + the stored key)");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 
 for (const f of failures) console.log(`  ✗ ${f}`);
