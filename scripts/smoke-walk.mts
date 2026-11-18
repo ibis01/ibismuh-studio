@@ -25,6 +25,11 @@
  * Exit 0 = the phase held. Any failure exits 1 (the smoke is the gate).
  */
 
+// The smoke walk runs via `docker compose exec` — a FRESH process outside the
+// Next server, so the env mirror must load here too (the rebrand seam: legacy
+// TUBEFORGE_* container env still resolves).
+import "../src/lib/ibismuh/compat-env.ts";
+
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
