@@ -23,8 +23,8 @@
 //      the probe leaves no litter.
 // Run: node --import tsx scripts/s11-route-e2e.mjs
 import { PrismaClient } from "@prisma/client";
-import { assembleTimeline, serializeTimeline } from "../src/lib/tubeforge/timeline";
-import { parseScenes } from "../src/lib/tubeforge/story";
+import { assembleTimeline, serializeTimeline } from "../src/lib/ibismuh/timeline";
+import { parseScenes } from "../src/lib/ibismuh/story";
 import fs from "node:fs";
 import path from "node:path";
 

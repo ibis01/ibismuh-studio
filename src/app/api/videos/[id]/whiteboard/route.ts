@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { videoDir } from "@/lib/tubeforge/ai";
-import { sceneWavFile } from "@/lib/tubeforge/story";
-import { wavDurationSec } from "@/lib/tubeforge/wav";
-import { validateWhiteboardProject, WB_BUDGETS } from "@/lib/tubeforge/whiteboard/storyboard";
-import { WB_PATH_COMMAND_BUDGET } from "@/lib/tubeforge/whiteboard/assets";
-import { WB_RENDER_FRAME_BUDGET } from "@/lib/tubeforge/whiteboard/timing";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { videoDir } from "@/lib/ibismuh/ai";
+import { sceneWavFile } from "@/lib/ibismuh/story";
+import { wavDurationSec } from "@/lib/ibismuh/wav";
+import { validateWhiteboardProject, WB_BUDGETS } from "@/lib/ibismuh/whiteboard/storyboard";
+import { WB_PATH_COMMAND_BUDGET } from "@/lib/ibismuh/whiteboard/assets";
+import { WB_RENDER_FRAME_BUDGET } from "@/lib/ibismuh/whiteboard/timing";
 import {
   parseWhiteboardDoc,
   serializeWhiteboardDoc,
-} from "@/lib/tubeforge/whiteboard/whiteboard-planner";
-import { invalidateRenderedArtifacts } from "@/lib/tubeforge/render";
-import { loadVideoLibrary } from "@/lib/tubeforge/whiteboard/asset-store";
+} from "@/lib/ibismuh/whiteboard/whiteboard-planner";
+import { invalidateRenderedArtifacts } from "@/lib/ibismuh/render";
+import { loadVideoLibrary } from "@/lib/ibismuh/whiteboard/asset-store";
 
 type Ctx = { params: Promise<{ id: string }> };
 

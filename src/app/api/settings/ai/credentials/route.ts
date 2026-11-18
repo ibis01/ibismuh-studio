@@ -10,11 +10,11 @@
 // Empty apiKey = keep existing key (caller is masked).
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { upsertProviderCredential } from "@/lib/tubeforge/settings";
-import { getProviderCredential } from "@/lib/tubeforge/providers/settings";
-import { PROVIDERS_BY_CAPABILITY, type CapabilityId } from "@/lib/tubeforge/providers/registry";
-import { errorText } from "@/lib/tubeforge/redact";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { upsertProviderCredential } from "@/lib/ibismuh/settings";
+import { getProviderCredential } from "@/lib/ibismuh/providers/settings";
+import { PROVIDERS_BY_CAPABILITY, type CapabilityId } from "@/lib/ibismuh/providers/registry";
+import { errorText } from "@/lib/ibismuh/redact";
 
 export async function PUT(req: NextRequest) {
   const auth = await requireUser(req);

@@ -33,8 +33,8 @@ interface AppState {
 
   /** Stage 5 (module A) — research sources riding the topic prefill (the
    * radar idea's web grounding follows it into the created video). */
-  prefillSources: import("./tubeforge/types").ResearchSource[] | null;
-  setPrefillSources: (s: import("./tubeforge/types").ResearchSource[] | null) => void;
+  prefillSources: import("./ibismuh/types").ResearchSource[] | null;
+  setPrefillSources: (s: import("./ibismuh/types").ResearchSource[] | null) => void;
 
   /** Slot date prefill when jumping into Calendar */
   prefillSlotDate: string | null;

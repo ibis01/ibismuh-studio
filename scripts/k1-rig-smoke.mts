@@ -35,13 +35,13 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 
-import { renderRigScene, ensureRigClip, rigClipHash } from "../src/lib/tubeforge/characters/rig-render";
-import { poseAt, mouthSchedule, wordSpansFromEstimate, mouthBeatsFromSpans, POSE_TWEEN_MS } from "../src/lib/tubeforge/characters/rig-frame";
-import { planRigTimeline } from "../src/lib/tubeforge/characters/rig-director";
-import { assertRigBudget, rigBudgetReport } from "../src/lib/tubeforge/characters/preflight";
-import { characterTracks } from "../src/lib/tubeforge/characters/tracks";
-import { validateRigDoc, validateRigParts, scaffoldRigDoc, RIG_VERSION, type RigMouthSlot, type RigPartArt } from "../src/lib/tubeforge/characters/rig2d";
-import { planFromTracks } from "../src/lib/tubeforge/composition-plan";
+import { renderRigScene, ensureRigClip, rigClipHash } from "../src/lib/ibismuh/characters/rig-render";
+import { poseAt, mouthSchedule, wordSpansFromEstimate, mouthBeatsFromSpans, POSE_TWEEN_MS } from "../src/lib/ibismuh/characters/rig-frame";
+import { planRigTimeline } from "../src/lib/ibismuh/characters/rig-director";
+import { assertRigBudget, rigBudgetReport } from "../src/lib/ibismuh/characters/preflight";
+import { characterTracks } from "../src/lib/ibismuh/characters/tracks";
+import { validateRigDoc, validateRigParts, scaffoldRigDoc, RIG_VERSION, type RigMouthSlot, type RigPartArt } from "../src/lib/ibismuh/characters/rig2d";
+import { planFromTracks } from "../src/lib/ibismuh/composition-plan";
 
 const execFileP = promisify(execFile);
 

@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes, serializeScenes } from "@/lib/tubeforge/story";
-import { CAMERAS, sanitizeSceneStyle } from "@/lib/tubeforge/types";
-import { parseTimeline, serializeTimeline, guardTimelineOverwrite } from "@/lib/tubeforge/timeline";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes, serializeScenes } from "@/lib/ibismuh/story";
+import { CAMERAS, sanitizeSceneStyle } from "@/lib/ibismuh/types";
+import { parseTimeline, serializeTimeline, guardTimelineOverwrite } from "@/lib/ibismuh/timeline";
 import {
   commitSceneChanges,
   checkExpectedVersion,
   headRevision,
   headSummary,
   RevisionConflict,
-} from "@/lib/tubeforge/scene-revisions";
-import { planSceneInvalidation, sweepInvalidArtifacts } from "@/lib/tubeforge/scene-deps";
+} from "@/lib/ibismuh/scene-revisions";
+import { planSceneInvalidation, sweepInvalidArtifacts } from "@/lib/ibismuh/scene-deps";
 
 type Ctx = { params: Promise<{ id: string }> };
 

@@ -18,19 +18,19 @@ import {
   SESSION_COOKIE,
   getAuthSecret,
   verifyToken,
-} from "@/lib/tubeforge/auth-token";
+} from "@/lib/ibismuh/auth-token";
 import {
   READ_LIMIT,
   WRITE_LIMIT,
   clientIpFrom,
   hitBucket,
-} from "@/lib/tubeforge/rate-limit";
+} from "@/lib/ibismuh/rate-limit";
 import {
   originHostTrusted,
   parseAllowedOrigins,
-} from "@/lib/tubeforge/origin-trust";
-import { REQUEST_ID_HEADER, log } from "@/lib/tubeforge/log";
-import { buildCsp } from "@/lib/tubeforge/csp";
+} from "@/lib/ibismuh/origin-trust";
+import { REQUEST_ID_HEADER, log } from "@/lib/ibismuh/log";
+import { buildCsp } from "@/lib/ibismuh/csp";
 
 // Reachable without a token. /api/auth/token is deliberately NOT here —
 // minting an API token requires an authenticated session. /api/auth/status
@@ -90,7 +90,7 @@ export async function middleware(req: NextRequest) {
     const nonce = crypto.randomUUID();
     const csp = buildCsp(nonce, { dev: !isProd });
     const docHeaders = new Headers(req.headers);
-    docHeaders.set("x-tf-csp-nonce", nonce);
+    docHeaders.set("x-ibismuh-csp-nonce", nonce);
     docHeaders.set("Content-Security-Policy", csp);
     const res = NextResponse.next({ request: { headers: docHeaders } });
     res.headers.set("Content-Security-Policy", csp);

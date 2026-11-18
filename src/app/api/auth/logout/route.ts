@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   clearedSessionCookie,
   revokeSessionById,
-} from "@/lib/tubeforge/tenant";
-import { SESSION_COOKIE, getAuthSecret, verifyToken } from "@/lib/tubeforge/auth-token";
+} from "@/lib/ibismuh/tenant";
+import { SESSION_COOKIE, getAuthSecret, verifyToken } from "@/lib/ibismuh/auth-token";
 
 /**
  * POST — sign out: revokes the server-side Session row (a stolen cookie dies

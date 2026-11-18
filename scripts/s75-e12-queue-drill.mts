@@ -43,7 +43,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
-import { scaffoldWhiteboardProject } from "../src/lib/tubeforge/whiteboard/whiteboard-planner";
+import { scaffoldWhiteboardProject } from "../src/lib/ibismuh/whiteboard/whiteboard-planner";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const db = new PrismaClient();
@@ -124,7 +124,7 @@ async function seedWhiteboardVideo(orgId: string, topic: string, doc: string) {
 async function actA(): Promise<void> {
   console.log("◆ Act A — registry truth: cancellable kinds == resumable kinds");
 
-  const { resumableKinds } = await import("../src/lib/tubeforge/queue-handlers");
+  const { resumableKinds } = await import("../src/lib/ibismuh/queue-handlers");
   const registry = resumableKinds();
 
   ok(
@@ -230,7 +230,7 @@ async function actB(): Promise<void> {
     ok(!v?.error, `the video row carries no error ("${v?.error ?? "null"}")`);
 
     // The artifact exists on the local storage driver.
-    const { videoDir } = await import("../src/lib/tubeforge/ai");
+    const { videoDir } = await import("../src/lib/ibismuh/ai");
     const finalPath = path.join(videoDir(video.id), "final.mp4");
     ok(fs.existsSync(finalPath), `final.mp4 exists on the storage driver (${finalPath})`);
 
@@ -264,11 +264,11 @@ async function actC(): Promise<void> {
     projectDoc(70) // ~30s estimated scene — many frame-batch checkpoints
   );
 
-  const { registerDefaultHandlers } = await import("../src/lib/tubeforge/queue-handlers");
-  const { initQueue } = await import("../src/lib/tubeforge/queue");
-  const { startJob, requestJobCancel } = await import("../src/lib/tubeforge/jobs");
-  const { runWhiteboardJob } = await import("../src/lib/tubeforge/video-jobs");
-  const { withCtx } = await import("../src/lib/tubeforge/tenant");
+  const { registerDefaultHandlers } = await import("../src/lib/ibismuh/queue-handlers");
+  const { initQueue } = await import("../src/lib/ibismuh/queue");
+  const { startJob, requestJobCancel } = await import("../src/lib/ibismuh/jobs");
+  const { runWhiteboardJob } = await import("../src/lib/ibismuh/video-jobs");
+  const { withCtx } = await import("../src/lib/ibismuh/tenant");
 
   registerDefaultHandlers();
   initQueue("web"); // this process plays the web role: enqueue + local claim
@@ -369,7 +369,7 @@ async function main(): Promise<void> {
       });
       for (const v of vids) {
         try {
-          const { videoDir } = await import("../src/lib/tubeforge/ai");
+          const { videoDir } = await import("../src/lib/ibismuh/ai");
           fs.rmSync(videoDir(v.id), { recursive: true, force: true });
         } catch {
           /* best-effort */

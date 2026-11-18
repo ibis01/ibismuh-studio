@@ -20,13 +20,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "util";
 
-import { loadLibrary } from "../src/lib/tubeforge/whiteboard/assets";
-import { validateWhiteboardProject } from "../src/lib/tubeforge/whiteboard/storyboard";
-import { renderWhiteboard, probeDurationSec } from "../src/lib/tubeforge/whiteboard/render";
-import { aiCall } from "../src/lib/tubeforge/budget";
-import { ttsSynthesize } from "../src/lib/tubeforge/providers/tts";
-import { getCapability } from "../src/lib/tubeforge/providers/settings";
-import { runQcReport } from "../src/lib/tubeforge/qc";
+import { loadLibrary } from "../src/lib/ibismuh/whiteboard/assets";
+import { validateWhiteboardProject } from "../src/lib/ibismuh/whiteboard/storyboard";
+import { renderWhiteboard, probeDurationSec } from "../src/lib/ibismuh/whiteboard/render";
+import { aiCall } from "../src/lib/ibismuh/budget";
+import { ttsSynthesize } from "../src/lib/ibismuh/providers/tts";
+import { getCapability } from "../src/lib/ibismuh/providers/settings";
+import { runQcReport } from "../src/lib/ibismuh/qc";
 
 const execFileP = promisify(execFile);
 const OUT_DIR = "validation/s76/tts-smoke";

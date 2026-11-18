@@ -3,7 +3,7 @@
 // through encodeSceneForVlm, and prints the before/after byte sizes so we
 // can confirm the VLM request body shrinks well under typical 413 caps.
 import sharp from "sharp";
-import { encodeSceneForVlm } from "../src/lib/tubeforge/visual-consistency";
+import { encodeSceneForVlm } from "../src/lib/ibismuh/visual-consistency";
 
 async function main() {
   // Synthesize a 1280x720 PNG filled with a gradient (close to a real

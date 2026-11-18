@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { invalidateRenderedArtifacts } from "@/lib/tubeforge/render";
-import { brandLogoKey, sanitizeBrandAccent } from "@/lib/tubeforge/slides";
-import * as storage from "@/lib/tubeforge/storage";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { invalidateRenderedArtifacts } from "@/lib/ibismuh/render";
+import { brandLogoKey, sanitizeBrandAccent } from "@/lib/ibismuh/slides";
+import * as storage from "@/lib/ibismuh/storage";
 
 type Ctx = { params: Promise<{ id: string }> };
 

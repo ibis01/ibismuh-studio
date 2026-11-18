@@ -43,13 +43,13 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "util";
 
-import { loadLibrary } from "../src/lib/tubeforge/whiteboard/assets";
-import { estimateNarrationMs } from "../src/lib/tubeforge/whiteboard/timing";
-import { validateWhiteboardProject } from "../src/lib/tubeforge/whiteboard/storyboard";
-import { renderWhiteboard, probeDurationSec } from "../src/lib/tubeforge/whiteboard/render";
-import { bedExpression, ORIGINAL_LIBRARY } from "../src/lib/tubeforge/music";
-import { runQcReport } from "../src/lib/tubeforge/qc";
-import { MIX_TARGETS } from "../src/lib/tubeforge/audiomix";
+import { loadLibrary } from "../src/lib/ibismuh/whiteboard/assets";
+import { estimateNarrationMs } from "../src/lib/ibismuh/whiteboard/timing";
+import { validateWhiteboardProject } from "../src/lib/ibismuh/whiteboard/storyboard";
+import { renderWhiteboard, probeDurationSec } from "../src/lib/ibismuh/whiteboard/render";
+import { bedExpression, ORIGINAL_LIBRARY } from "../src/lib/ibismuh/music";
+import { runQcReport } from "../src/lib/ibismuh/qc";
+import { MIX_TARGETS } from "../src/lib/ibismuh/audiomix";
 
 /**
  * The engine's documented scene-tail law (timing.ts, the VO branch of the
@@ -457,7 +457,7 @@ async function renderOneFormat(fmt: FormatKey): Promise<void> {
     canvas: { width, height, aspect: fmt },
     transform: fmt === "16x9" ? "as-authored (the S64 P0 project)" : "deterministic scale-and-recenter (k=min(W/1920,H/1080))",
     narration: "synthetic VO slots through the REAL voFiles path (gateway-free; real TTS rides gateway recovery)",
-    engine: "src/lib/tubeforge/whiteboard",
+    engine: "src/lib/ibismuh/whiteboard",
     renderMs,
     peakRssBytes: peakRss,
     peakRssMB: Math.round(peakRss / 1048576),

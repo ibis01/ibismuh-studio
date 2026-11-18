@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { isJobRunning, startJob } from "@/lib/tubeforge/jobs";
-import { runWhiteboardJob } from "@/lib/tubeforge/video-jobs";
-import { validateWhiteboardProject, validWhiteboardId } from "@/lib/tubeforge/whiteboard/storyboard";
-import { parseWhiteboardDoc } from "@/lib/tubeforge/whiteboard/whiteboard-planner";
-import { loadVideoLibrary } from "@/lib/tubeforge/whiteboard/asset-store";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { isJobRunning, startJob } from "@/lib/ibismuh/jobs";
+import { runWhiteboardJob } from "@/lib/ibismuh/video-jobs";
+import { validateWhiteboardProject, validWhiteboardId } from "@/lib/ibismuh/whiteboard/storyboard";
+import { parseWhiteboardDoc } from "@/lib/ibismuh/whiteboard/whiteboard-planner";
+import { loadVideoLibrary } from "@/lib/ibismuh/whiteboard/asset-store";
 
 type Ctx = { params: Promise<{ id: string }> };
 

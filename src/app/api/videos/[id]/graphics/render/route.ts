@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { isJobRunning, startJob } from "@/lib/tubeforge/jobs";
-import { runGraphicsJob } from "@/lib/tubeforge/video-jobs";
-import { videoDir } from "@/lib/tubeforge/ai";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { isJobRunning, startJob } from "@/lib/ibismuh/jobs";
+import { runGraphicsJob } from "@/lib/ibismuh/video-jobs";
+import { videoDir } from "@/lib/ibismuh/ai";
 import {
   parseGraphicsDoc,
   validGraphicsId,
-} from "@/lib/tubeforge/graphics/types";
-import { assertGraphicsBudget } from "@/lib/tubeforge/graphics/preflight";
-import { measureGraphicsVoMs } from "@/lib/tubeforge/graphics/vo-ms";
-import { graphicsDraftPlan } from "@/lib/tubeforge/graphics/draft";
+} from "@/lib/ibismuh/graphics/types";
+import { assertGraphicsBudget } from "@/lib/ibismuh/graphics/preflight";
+import { measureGraphicsVoMs } from "@/lib/ibismuh/graphics/vo-ms";
+import { graphicsDraftPlan } from "@/lib/ibismuh/graphics/draft";
 
 type Ctx = { params: Promise<{ id: string }> };
 

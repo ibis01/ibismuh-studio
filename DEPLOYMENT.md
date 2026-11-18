@@ -197,7 +197,7 @@ node, or an image bump that leaves the CI-recorded runtime behind.
 
 **5.2 — The launch args are mandatory.** Chromium must launch with
 `--no-sandbox --disable-dev-shm-usage` — encoded as
-`WB_CHROMIUM_LAUNCH_ARGS` in `src/lib/tubeforge/whiteboard/render.ts`
+`WB_CHROMIUM_LAUNCH_ARGS` in `src/lib/ibismuh/whiteboard/render.ts`
 and used at BOTH launch sites; the slides engine carries the same args.
 Measured why: on a 4 GB worker with the default 64 MB `/dev/shm`, a bare
 `chromium.launch({ headless: true })` is SIGKILLed mid-scene by the OOM

@@ -17,14 +17,14 @@
 // time. No implicit publishing on render completion.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { isJobRunning, lastJobError, jobProgress, startJob } from "@/lib/tubeforge/jobs";
-import { runUploadJob, type PublishJobOptions } from "@/lib/tubeforge/video-jobs";
-import { isConnected, getPublishDefaults } from "@/lib/tubeforge/youtube";
-import { parseJson, publishSchema, ApiValidationError } from "@/lib/tubeforge/validation";
-import { applyQcPolicy, parseQcReport, qcEnforcementMode, qcOverrideValid } from "@/lib/tubeforge/qc-policy";
-import { renderStaleness } from "@/lib/tubeforge/render-assembly";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { isJobRunning, lastJobError, jobProgress, startJob } from "@/lib/ibismuh/jobs";
+import { runUploadJob, type PublishJobOptions } from "@/lib/ibismuh/video-jobs";
+import { isConnected, getPublishDefaults } from "@/lib/ibismuh/youtube";
+import { parseJson, publishSchema, ApiValidationError } from "@/lib/ibismuh/validation";
+import { applyQcPolicy, parseQcReport, qcEnforcementMode, qcOverrideValid } from "@/lib/ibismuh/qc-policy";
+import { renderStaleness } from "@/lib/ibismuh/render-assembly";
 
 type Ctx = { params: Promise<{ id: string }> };
 

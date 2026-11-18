@@ -23,7 +23,7 @@
 //   3. s40/s49 columns     — "Video"."qcOverrideAt" + "Video"."contentPolicy"
 //                            exist (their absence P2022'd every full-select
 //                            Video query → the production 500s)
-//   4. usage sparkline SQL — the REAL shared function (src/lib/tubeforge/
+//   4. usage sparkline SQL — the REAL shared function (src/lib/ibismuh/
 //                            usage-sql.ts) runs on Postgres: quoted
 //                            identifiers (42703 guard) + NOT "ok" boolean
 //                            (42883 guard), verified with seeded rows
@@ -35,7 +35,7 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { dailyUsageSparkline } from "../src/lib/tubeforge/usage-sql";
+import { dailyUsageSparkline } from "../src/lib/ibismuh/usage-sql";
 
 const db = new PrismaClient();
 let failures = 0;

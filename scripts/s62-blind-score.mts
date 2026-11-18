@@ -23,8 +23,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { llmVision } from "../src/lib/tubeforge/llm";
-import { parseJsonLoose } from "../src/lib/tubeforge/ai";
+import { llmVision } from "../src/lib/ibismuh/llm";
+import { parseJsonLoose } from "../src/lib/ibismuh/ai";
 
 const OUT_DIR = path.join(process.cwd(), "validation", "s62");
 const MANIFEST = path.join(OUT_DIR, "manifest.json");

@@ -1,4 +1,4 @@
-"""End-to-end preview test — exercises every endpoint of the TubeForge voice-clone API."""
+"""End-to-end preview test — exercises every endpoint of the Ibismuh Studio voice-clone API."""
 
 import json
 import sys
@@ -77,7 +77,7 @@ def check(label, status, body, expect=None):
 
 # --------------------------------------------------------------------------- #
 print("=" * 60)
-print("TubeForge Voice-Clone API — End-to-End Preview")
+print("Ibismuh Studio Voice-Clone API — End-to-End Preview")
 print("=" * 60)
 auth = {"X-API-Key": API_KEY}
 
@@ -130,7 +130,7 @@ check("list voices after clone", status, body)
 # 7. Synthesize real text — should return job_id
 print("\n--- 7. POST /synthesize (submit TTS job)")
 status, body = req("POST", "/synthesize", headers=auth, data={
-    "text": "Welcome to TubeForge. Today we are looking at five surprising facts about the deep ocean.",
+    "text": "Welcome to Ibismuh Studio. Today we are looking at five surprising facts about the deep ocean.",
     "voice": "demo_voice",
     "language": "en",
     "speed": 1.0,

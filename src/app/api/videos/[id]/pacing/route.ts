@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes, sceneWavFile } from "@/lib/tubeforge/story";
-import { getApprovedAudioMap } from "@/lib/tubeforge/director-plan";
-import { wavDurationSec } from "@/lib/tubeforge/wav";
-import * as storage from "@/lib/tubeforge/storage";
-import { pacingReport, WPM_BANDS, type PacingHint } from "@/lib/tubeforge/pacing";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes, sceneWavFile } from "@/lib/ibismuh/story";
+import { getApprovedAudioMap } from "@/lib/ibismuh/director-plan";
+import { wavDurationSec } from "@/lib/ibismuh/wav";
+import * as storage from "@/lib/ibismuh/storage";
+import { pacingReport, WPM_BANDS, type PacingHint } from "@/lib/ibismuh/pacing";
 
 /**
  * S92 (ROADMAP #11) — the measured narration pacing report.

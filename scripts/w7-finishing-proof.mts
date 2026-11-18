@@ -33,7 +33,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { loadLibrary, handAssetIdFor } from "../src/lib/tubeforge/whiteboard/assets";
+import { loadLibrary, handAssetIdFor } from "../src/lib/ibismuh/whiteboard/assets";
 import {
   buildGeometry,
   estimateProjectFrames,
@@ -41,14 +41,14 @@ import {
   handAt,
   resolveCarriedInk,
   type AssetGeometry,
-} from "../src/lib/tubeforge/whiteboard/timing";
-import { beatSceneEvents } from "../src/lib/tubeforge/whiteboard/beat-plan";
-import { composeScene } from "../src/lib/tubeforge/whiteboard/wb-page";
-import { whiteboardSfxCues } from "../src/lib/tubeforge/whiteboard/sfx-plan";
-import { framePlanClock } from "../src/lib/tubeforge/whiteboard/tracks";
-import { renderWhiteboard } from "../src/lib/tubeforge/whiteboard/render";
-import { runQcReport } from "../src/lib/tubeforge/qc";
-import type { WhiteboardProject, WhiteboardScene } from "../src/lib/tubeforge/whiteboard/storyboard";
+} from "../src/lib/ibismuh/whiteboard/timing";
+import { beatSceneEvents } from "../src/lib/ibismuh/whiteboard/beat-plan";
+import { composeScene } from "../src/lib/ibismuh/whiteboard/wb-page";
+import { whiteboardSfxCues } from "../src/lib/ibismuh/whiteboard/sfx-plan";
+import { framePlanClock } from "../src/lib/ibismuh/whiteboard/tracks";
+import { renderWhiteboard } from "../src/lib/ibismuh/whiteboard/render";
+import { runQcReport } from "../src/lib/ibismuh/qc";
+import type { WhiteboardProject, WhiteboardScene } from "../src/lib/ibismuh/whiteboard/storyboard";
 
 const execFileP = promisify(execFile);
 

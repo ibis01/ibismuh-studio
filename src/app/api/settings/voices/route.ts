@@ -9,16 +9,16 @@
 // Stage 2: the active provider config is per-user (UserSetting + credential).
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { getCapability, getProviderCredential } from "@/lib/tubeforge/providers/settings";
-import { voiceCatalog, listCartesiaVoices } from "@/lib/tubeforge/providers/tts";
-import { providerMeta } from "@/lib/tubeforge/providers/registry";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { getCapability, getProviderCredential } from "@/lib/ibismuh/providers/settings";
+import { voiceCatalog, listCartesiaVoices } from "@/lib/ibismuh/providers/tts";
+import { providerMeta } from "@/lib/ibismuh/providers/registry";
 import {
   CLONE_PROVIDERS,
   isCloneProvider,
   listVoiceProfiles,
-} from "@/lib/tubeforge/voice-clone";
-import { sharedVoiceServer } from "@/lib/tubeforge/shared-voice";
+} from "@/lib/ibismuh/voice-clone";
+import { sharedVoiceServer } from "@/lib/ibismuh/shared-voice";
 
 export async function GET(req: NextRequest) {
   const auth = await requireUser(req);
@@ -45,14 +45,14 @@ export async function GET(req: NextRequest) {
       voices = [...live, ...voices.filter((v) => !liveIds.has(v.id))];
     }
   } else if (config.provider === "elevenlabs") {
-    const { listElevenlabsVoices } = await import("@/lib/tubeforge/providers/tts");
+    const { listElevenlabsVoices } = await import("@/lib/ibismuh/providers/tts");
     const live = await listElevenlabsVoices(config);
     if (live.length) {
       const liveIds = new Set(live.map((v) => v.id));
       voices = [...live, ...voices.filter((v) => !liveIds.has(v.id))];
     }
   } else if (config.provider === "playht") {
-    const { listPlayhtVoices } = await import("@/lib/tubeforge/providers/tts");
+    const { listPlayhtVoices } = await import("@/lib/ibismuh/providers/tts");
     const live = await listPlayhtVoices(config);
     if (live.length) {
       const liveIds = new Set(live.map((v) => v.id));

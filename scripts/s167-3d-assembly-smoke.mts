@@ -99,8 +99,8 @@ async function main() {
   const receiptPath = "docs/audits/s167-3d-assembly-smoke.json";
   try {
     // ---------- 1. the S167 finisher doc renders for REAL ----------
-    const { parseScene3D, serializeScene3D } = await import("../src/lib/tubeforge/scene3d.ts");
-    const { renderScene3D } = await import("../src/lib/tubeforge/render3d.ts");
+    const { parseScene3D, serializeScene3D } = await import("../src/lib/ibismuh/scene3d.ts");
+    const { renderScene3D } = await import("../src/lib/ibismuh/render3d.ts");
     // 640x360, 2s @ 24 fps — 48 frames; the finisher fields SHIP (the fBM
     // shake rides the camera, the exponential push-in dollies in).
     const docJson = JSON.stringify({
@@ -159,7 +159,7 @@ async function main() {
 
     // ---------- 2. the plan reads the 3d kind; the admission law runs ----------
     const { planFromTracks, engineSegmentVerdict, validatePlanKinds } =
-      await import("../src/lib/tubeforge/composition-plan.ts");
+      await import("../src/lib/ibismuh/composition-plan.ts");
     const tracksDoc = {
       tracks: [
         {
@@ -183,7 +183,7 @@ async function main() {
     ok(!verdictMissing.ok && verdictMissing.missing.length === 1 && verdictMissing.missing[0].kind === "3d", "fail-closed: the verdict refuses the 3d scene with no engine segment");
 
     // ---------- 3. the compositor's STAGING pass (the real S143 args) ----------
-    const { engineSegmentTranscodeArgs } = await import("../src/lib/tubeforge/render.ts");
+    const { engineSegmentTranscodeArgs } = await import("../src/lib/ibismuh/render.ts");
     const seg1 = path.join(work, "seg-01.mp4");
     const seg2 = path.join(work, "seg-02.mp4");
     const stage = (src: string, out: string): string[] =>

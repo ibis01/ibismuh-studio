@@ -7,10 +7,10 @@
 //   ?days=N   — window in days (1..90, default 30)
 
 import { NextRequest, NextResponse } from "next/server";
-import { rawDatabase as rawDb } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { usageBytes, storageQuotaBytes, storageDriverKind } from "@/lib/tubeforge/storage";
-import { dailyUsageSparkline } from "@/lib/tubeforge/usage-sql";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { usageBytes, storageQuotaBytes, storageDriverKind } from "@/lib/ibismuh/storage";
+import { dailyUsageSparkline } from "@/lib/ibismuh/usage-sql";
 
 export async function GET(req: NextRequest) {
   const auth = await requireUser(req);

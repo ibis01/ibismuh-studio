@@ -20,10 +20,10 @@ import path from "path";
 import { promisify } from "util";
 import { execFile } from "child_process";
 
-import { loadLibrary, type WhiteboardAsset } from "../src/lib/tubeforge/whiteboard/assets";
-import { validateWhiteboardProject } from "../src/lib/tubeforge/whiteboard/storyboard";
-import { renderWhiteboard, probeDurationSec } from "../src/lib/tubeforge/whiteboard/render";
-import { withSketchPasses } from "../src/lib/tubeforge/whiteboard/sketch";
+import { loadLibrary, type WhiteboardAsset } from "../src/lib/ibismuh/whiteboard/assets";
+import { validateWhiteboardProject } from "../src/lib/ibismuh/whiteboard/storyboard";
+import { renderWhiteboard, probeDurationSec } from "../src/lib/ibismuh/whiteboard/render";
+import { withSketchPasses } from "../src/lib/ibismuh/whiteboard/sketch";
 
 const execFileP = promisify(execFile);
 const OUT_DIR = path.join(os.tmpdir(), `s164-proof-${process.pid}`);

@@ -13,7 +13,7 @@
 //      the PATCH gate) and expose the POST/GET handlers the client calls.
 // Run: node --import tsx scripts/s17-unit-probe.mts
 
-import { publishSchema } from "../src/lib/tubeforge/validation";
+import { publishSchema } from "../src/lib/ibismuh/validation";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail?: unknown) => {

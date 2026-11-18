@@ -12,9 +12,9 @@
 // studio pacing control's audition.
 
 import { NextRequest, NextResponse } from "next/server";
-import { getVoicePreview, resolvePreviewVoice } from "@/lib/tubeforge/voice-preview";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { errorText } from "@/lib/tubeforge/redact";
+import { getVoicePreview, resolvePreviewVoice } from "@/lib/ibismuh/voice-preview";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { errorText } from "@/lib/ibismuh/redact";
 
 export async function POST(req: NextRequest) {
   const auth = await requireUser(req);

@@ -17,10 +17,10 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { scaffoldWhiteboardProject } from "../src/lib/tubeforge/whiteboard/whiteboard-planner";
-import { validateWhiteboardProject } from "../src/lib/tubeforge/whiteboard/storyboard";
-import { loadLibrary } from "../src/lib/tubeforge/whiteboard/assets";
-import { renderWhiteboard, probeDurationSec } from "../src/lib/tubeforge/whiteboard/render";
+import { scaffoldWhiteboardProject } from "../src/lib/ibismuh/whiteboard/whiteboard-planner";
+import { validateWhiteboardProject } from "../src/lib/ibismuh/whiteboard/storyboard";
+import { loadLibrary } from "../src/lib/ibismuh/whiteboard/assets";
+import { renderWhiteboard, probeDurationSec } from "../src/lib/ibismuh/whiteboard/render";
 
 const execFileP = promisify(execFile);
 const OUT = path.resolve("scratch/s67-e9a-proof");

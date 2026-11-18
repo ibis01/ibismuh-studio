@@ -25,21 +25,21 @@ process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { PrismaClient } from "@prisma/client";
 import fs from "node:fs";
-import { withCtx, hashPassword } from "../src/lib/tubeforge/tenant";
+import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
 import {
   runDirectorPass,
   setDirectorState,
   parsePlan,
-} from "../src/lib/tubeforge/director";
+} from "../src/lib/ibismuh/director";
 import {
   generateSceneScriptPackage,
   generateSceneImage,
   parseScenes,
   sceneImageFile,
-} from "../src/lib/tubeforge/story";
-import { scanRestrictedSubjects } from "../src/lib/tubeforge/restricted-subjects";
-import * as storage from "../src/lib/tubeforge/storage";
-import type { DirectorPlan } from "../src/lib/tubeforge/director";
+} from "../src/lib/ibismuh/story";
+import { scanRestrictedSubjects } from "../src/lib/ibismuh/restricted-subjects";
+import * as storage from "../src/lib/ibismuh/storage";
+import type { DirectorPlan } from "../src/lib/ibismuh/director";
 
 const prisma = new PrismaClient();
 const SUFFIX = `${Date.now().toString(36)}-${process.pid.toString(36)}`;
@@ -158,7 +158,7 @@ try {
     );
 
     // Camera vocabulary: every verb is v2 (engine-verbatim) or a legacy snap.
-    const { CAMERA_MOVES, LEGACY_CAMERA_MOVES } = await import("../src/lib/tubeforge/director-plan");
+    const { CAMERA_MOVES, LEGACY_CAMERA_MOVES } = await import("../src/lib/ibismuh/director-plan");
     const cameraOk = plan.scenes.every((s) =>
       s.shots.every((sh) => (CAMERA_MOVES as readonly string[]).includes(sh.camera) || (LEGACY_CAMERA_MOVES as readonly string[]).includes(sh.camera))
     );

@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes, sceneImageFile } from "@/lib/tubeforge/story";
-import { jobSnapshot, lastJobError } from "@/lib/tubeforge/jobs";
-import * as storage from "@/lib/tubeforge/storage";
-import { criticReportKey } from "@/lib/tubeforge/video-critic";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes, sceneImageFile } from "@/lib/ibismuh/story";
+import { jobSnapshot, lastJobError } from "@/lib/ibismuh/jobs";
+import * as storage from "@/lib/ibismuh/storage";
+import { criticReportKey } from "@/lib/ibismuh/video-critic";
 import {
   deriveBoardStages,
   deriveCheckpoints,
   type BoardInput,
-} from "@/lib/tubeforge/production-board";
-import { videoSpendMicroUsd } from "@/lib/tubeforge/cost-guard";
+} from "@/lib/ibismuh/production-board";
+import { videoSpendMicroUsd } from "@/lib/ibismuh/cost-guard";
 
 /**
  * S91 (ROADMAP #10) — the living production board, I/O half. One composed

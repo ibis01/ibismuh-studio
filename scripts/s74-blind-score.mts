@@ -25,8 +25,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { llmVision } from "../src/lib/tubeforge/llm";
-import { parseJsonLoose } from "../src/lib/tubeforge/ai";
+import { llmVision } from "../src/lib/ibismuh/llm";
+import { parseJsonLoose } from "../src/lib/ibismuh/ai";
 
 const OUT_DIR = path.join(process.cwd(), "validation", "s74");
 const S62_SCORES = path.join(process.cwd(), "validation", "s62", "scores.json");

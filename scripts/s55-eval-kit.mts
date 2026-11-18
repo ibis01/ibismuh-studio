@@ -33,12 +33,12 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "util";
 import { PrismaClient } from "@prisma/client";
-import { withCtx, hashPassword } from "../src/lib/tubeforge/tenant";
-import { runDirectorPass, setDirectorState, parsePlan } from "../src/lib/tubeforge/director";
-import { runStoryboardJob, runRenderJob } from "../src/lib/tubeforge/video-jobs";
-import { parseQcReport } from "../src/lib/tubeforge/qc-policy";
-import { PRODUCTION_PROFILES } from "../src/lib/tubeforge/production-profiles";
-import { CAMERA_MOVES, FRAMINGS, PROFILE_IDS } from "../src/lib/tubeforge/director-plan";
+import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
+import { runDirectorPass, setDirectorState, parsePlan } from "../src/lib/ibismuh/director";
+import { runStoryboardJob, runRenderJob } from "../src/lib/ibismuh/video-jobs";
+import { parseQcReport } from "../src/lib/ibismuh/qc-policy";
+import { PRODUCTION_PROFILES } from "../src/lib/ibismuh/production-profiles";
+import { CAMERA_MOVES, FRAMINGS, PROFILE_IDS } from "../src/lib/ibismuh/director-plan";
 import { startStandinGateway } from "./s55-standin-gateway.mts";
 
 const execFileAsync = promisify(execFile);

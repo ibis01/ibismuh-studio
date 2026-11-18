@@ -18,16 +18,16 @@ import {
   isVoiceSwapStale,
   applyRevoiceToDoc,
   sceneSegmentSec,
-} from "../src/lib/tubeforge/clip-ops";
-import { paceChangeSchema } from "../src/lib/tubeforge/validation";
+} from "../src/lib/ibismuh/clip-ops";
+import { paceChangeSchema } from "../src/lib/ibismuh/validation";
 import {
   assembleTimeline,
   serializeTimeline,
   estimateNarrationSec,
   type AssembledTimeline,
-} from "../src/lib/tubeforge/timeline";
-import { parseScenes } from "../src/lib/tubeforge/story";
-import { LEAD_SEC, TAIL_SEC, MIN_SEG_SEC } from "../src/lib/tubeforge/render";
+} from "../src/lib/ibismuh/timeline";
+import { parseScenes } from "../src/lib/ibismuh/story";
+import { LEAD_SEC, TAIL_SEC, MIN_SEG_SEC } from "../src/lib/ibismuh/render";
 import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 
@@ -287,7 +287,7 @@ const expectRefusal = async (
   needle: string
 ) => {
   try {
-    const { performPaceChange } = await import("../src/lib/tubeforge/clip-ops");
+    const { performPaceChange } = await import("../src/lib/ibismuh/clip-ops");
     await performPaceChange(video as never, speed);
     check(name, false, "the pace change PROCEEDED — guard missing");
   } catch (err) {

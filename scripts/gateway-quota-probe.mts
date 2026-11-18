@@ -13,8 +13,8 @@
  *
  *   node --import tsx scripts/gateway-quota-probe.mts
  */
-const { aiCall } = await import("../src/lib/tubeforge/budget");
-const { chatComplete } = await import("../src/lib/tubeforge/providers/chat");
+const { aiCall } = await import("../src/lib/ibismuh/budget");
+const { chatComplete } = await import("../src/lib/ibismuh/providers/chat");
 
 const t0 = Date.now();
 try {

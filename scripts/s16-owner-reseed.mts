@@ -11,7 +11,7 @@
 //   · the login is then proven live against the daemon (the caller does
 //     this — the script only writes rows).
 // Run: node --import tsx scripts/s16-owner-reseed.mts [password]
-import { hashPassword } from "../src/lib/tubeforge/tenant";
+import { hashPassword } from "../src/lib/ibismuh/tenant";
 import { PrismaClient } from "@prisma/client";
 
 const EMAIL = "ibis01abc@gmail.com";

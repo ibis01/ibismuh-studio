@@ -17,10 +17,10 @@
 // browser doesn't try to render it as HTML.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { materialize } from "@/lib/tubeforge/storage";
-import { srtToVtt, looksLikeSrt } from "@/lib/tubeforge/subtitle-export";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { materialize } from "@/lib/ibismuh/storage";
+import { srtToVtt, looksLikeSrt } from "@/lib/ibismuh/subtitle-export";
 import { readFile } from "fs/promises";
 
 type Ctx = { params: Promise<{ id: string }> };

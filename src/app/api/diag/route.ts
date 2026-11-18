@@ -19,12 +19,12 @@ const redact = (s: string) =>
 
 export async function GET() {
   const g = globalThis as typeof globalThis & {
-    __tfInstrumentation?: { ok: boolean; error?: string; at: string };
+    __ibismuhInstrumentation?: { ok: boolean; error?: string; at: string };
   };
   const out: Record<string, unknown> = {
     node: process.version,
     nodeEnv: process.env.NODE_ENV ?? null,
-    instrumentation: g.__tfInstrumentation ?? "not-run",
+    instrumentation: g.__ibismuhInstrumentation ?? "not-run",
     env: {
       // booleans + protocol only — never the values
       databaseUrl: process.env.DATABASE_URL

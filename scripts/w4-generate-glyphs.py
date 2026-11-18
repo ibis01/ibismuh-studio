@@ -6,7 +6,7 @@
 #
 # The law: ONE handwriting face (Caveat, OFL — the single-face route; no
 # font picker), converted ONCE to SVG path outlines by THIS script, committed
-# as `src/lib/tubeforge/whiteboard/glyphs.ts`. The runtime (text-draw.ts)
+# as `src/lib/ibismuh/whiteboard/glyphs.ts`. The runtime (text-draw.ts)
 # never parses fonts — it reads the committed table, so every render on every
 # machine draws byte-identical glyph geometry (the determinism pin). The
 # generator is the only place fontTools exists; it is not an npm dependency.
@@ -38,7 +38,7 @@ WEIGHT = 500.0
 # ASCII printable — the table's coverage contract (space carries advance only).
 CHARSET = [chr(c) for c in range(0x20, 0x7F)]
 PRECISION = 2
-OUT_REL = "src/lib/tubeforge/whiteboard/glyphs.ts"
+OUT_REL = "src/lib/ibismuh/whiteboard/glyphs.ts"
 RECEIPT_REL = "docs/baselines/w4-glyph-table-receipt.json"
 FONT_ID = "caveat-w500"
 

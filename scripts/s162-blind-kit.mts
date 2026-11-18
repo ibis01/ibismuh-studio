@@ -47,7 +47,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-import type { GraphicsDoc } from "../src/lib/tubeforge/graphics/types";
+import type { GraphicsDoc } from "../src/lib/ibismuh/graphics/types";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -115,9 +115,9 @@ function rewindEntersToPreS162(doc: GraphicsDoc): GraphicsDoc {
 async function main(): Promise<void> {
   console.log("S162 — the blind A/B kit (measured easing + choreography)");
 
-  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
-  const { renderGraphics } = await import("../src/lib/tubeforge/graphics/render");
-  const { runProcess } = await import("../src/lib/tubeforge/proc");
+  const { scaffoldGraphicsDoc } = await import("../src/lib/ibismuh/graphics/planner");
+  const { renderGraphics } = await import("../src/lib/ibismuh/graphics/render");
+  const { runProcess } = await import("../src/lib/ibismuh/proc");
 
   // The fixture — three scenes hitting the three motion-heavy archetypes:
   // the opener (headline measured entrance), the stat (counter expo-out

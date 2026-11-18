@@ -36,15 +36,15 @@ const FLOOR_LINES = Number(process.env.TUBEFORGE_COV_FLOOR_LINES ?? 50);
 // The money paths (P1-5's "billing / spend / render" + the ship gate and
 // job machinery that carry them). These are --include patterns for c8.
 const MONEY_PATHS = [
-  "src/lib/tubeforge/billing.ts",
-  "src/lib/tubeforge/spend.ts",
-  "src/lib/tubeforge/render.ts",
-  "src/lib/tubeforge/video-jobs.ts",
-  "src/lib/tubeforge/qc.ts",
-  "src/lib/tubeforge/qc-policy.ts",
-  "src/lib/tubeforge/audiomix.ts",
-  "src/lib/tubeforge/jobs.ts",
-  "src/lib/tubeforge/queue.ts",
+  "src/lib/ibismuh/billing.ts",
+  "src/lib/ibismuh/spend.ts",
+  "src/lib/ibismuh/render.ts",
+  "src/lib/ibismuh/video-jobs.ts",
+  "src/lib/ibismuh/qc.ts",
+  "src/lib/ibismuh/qc-policy.ts",
+  "src/lib/ibismuh/audiomix.ts",
+  "src/lib/ibismuh/jobs.ts",
+  "src/lib/ibismuh/queue.ts",
 ];
 
 const SUITES = [

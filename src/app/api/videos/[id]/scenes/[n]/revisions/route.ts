@@ -12,16 +12,16 @@
 // empty chain + head null — the client offers history from the first edit.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes } from "@/lib/tubeforge/story";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes } from "@/lib/ibismuh/story";
 import {
   headRevision,
   approvedRevision,
   listRevisions,
   headSummary,
   parseRevisionContent,
-} from "@/lib/tubeforge/scene-revisions";
+} from "@/lib/ibismuh/scene-revisions";
 
 type Ctx = { params: Promise<{ id: string; n: string }> };
 

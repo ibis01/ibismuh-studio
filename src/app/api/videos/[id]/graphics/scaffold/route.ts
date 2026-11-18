@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { invalidateRenderedArtifacts } from "@/lib/tubeforge/render";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { invalidateRenderedArtifacts } from "@/lib/ibismuh/render";
 import {
   GRAPHICS_BUDGETS,
   parseGraphicsDoc,
   validateGraphicsDoc,
   writeGraphicsDoc,
-} from "@/lib/tubeforge/graphics/types";
-import { scaffoldGraphicsDoc } from "@/lib/tubeforge/graphics/planner";
+} from "@/lib/ibismuh/graphics/types";
+import { scaffoldGraphicsDoc } from "@/lib/ibismuh/graphics/planner";
 import {
   scaffoldGraphicsDocLlm,
   type GraphicsLlmPlannerReport,
-} from "@/lib/tubeforge/graphics/llm-planner";
+} from "@/lib/ibismuh/graphics/llm-planner";
 
 type Ctx = { params: Promise<{ id: string }> };
 

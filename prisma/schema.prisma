@@ -16,7 +16,7 @@ datasource db {
 // ---------------------------------------------------------------------------
 // Stage 2 — multi-tenant identity. Every content model below carries
 // organizationId and cascades from its Organization. The tenant guard lives in
-// src/lib/tubeforge/tenant-db.ts (a Prisma client extension that injects
+// src/lib/ibismuh/tenant-db.ts (a Prisma client extension that injects
 // organizationId into every query for these models from the request's tenant
 // context) — raw db access in routes is forbidden by the ESLint rule
 // tf/no-raw-db-in-api (deep libs may use it only outside request scopes).
@@ -26,7 +26,7 @@ model User {
   id           String  @id @default(cuid())
   email        String  @unique
   // pbkdf2$<iters>$<saltB64>$<hashB64> — same format the single-user lock used
-  // (src/lib/tubeforge/auth.ts), so a legacy auth.password row migrates as-is.
+  // (src/lib/ibismuh/auth.ts), so a legacy auth.password row migrates as-is.
   passwordHash String
   name         String?
   avatarUrl    String?
@@ -180,7 +180,7 @@ model UserSetting {
 }
 
 // Per-user YouTube connection. Secrets (refresh/access tokens) are stored
-// AES-256-GCM encrypted with TUBEFORGE_ENCRYPTION_KEY (src/lib/tubeforge/crypto.ts).
+// AES-256-GCM encrypted with TUBEFORGE_ENCRYPTION_KEY (src/lib/ibismuh/crypto.ts).
 model YouTubeAccount {
   id             String    @id @default(cuid())
   userId         String
@@ -225,7 +225,7 @@ model ProviderCredential {
 // now UNMANAGED: Prisma neither creates nor drops it. Lifecycle:
 //   * unclaimed legacy install: migrate-stage2.mjs RENAMEd Setting →
 //     LegacySetting (raw SQL); the rows wait there for the owner's claim.
-//   * claim (src/lib/tubeforge/claim.ts): every row migrates per-user, then
+//   * claim (src/lib/ibismuh/claim.ts): every row migrates per-user, then
 //     the table is DROPped — nothing legacy survives the transition.
 //   * fresh installs: the table never exists; claim's raw reads tolerate that.
 
@@ -345,14 +345,14 @@ model Video {
 
   // Smart Motion (Ken Burns) per-video overrides; null = built-in defaults
   // (smart scene-aware mode, 12% zoom intensity, smooth easing, direction
-  // variation on — see src/lib/tubeforge/motion.ts)
+  // variation on — see src/lib/ibismuh/motion.ts)
   motionMode      String? // smart | zoom | pan | off
   motionIntensity Int? // 0..30 (% zoom amplitude)
   motionCurve     String? // smooth | linear
   motionVary      Boolean?
 
   // Scene transitions (per-video overrides; null = built-in default fade).
-  // style ids live in src/lib/tubeforge/transitions.ts (fade, fadeblack, …,
+  // style ids live in src/lib/ibismuh/transitions.ts (fade, fadeblack, …,
   // "cut" = hard cuts); duration is the blend length in seconds.
   transitionStyle    String? // fade | cut | … (transitions.ts catalog)
   transitionDuration Float? // blend length, 0.2..1.5 s
@@ -1154,7 +1154,7 @@ model ProcessedWebhookEvent {
 // independent rows, so concurrent failures cannot lose counts (the old
 // counter could race); the (key, at) index serves the window count. Rows
 // are pruned opportunistically once older than the 10-minute window —
-// see src/lib/tubeforge/auth-throttle.ts for the law.
+// see src/lib/ibismuh/auth-throttle.ts for the law.
 model AuthAttempt {
   id  Int      @id @default(autoincrement())
   key String // throttle key: the caller's IP (login + change-password share it — a wrong current password IS a login attempt)

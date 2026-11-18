@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { jobHistory } from "@/lib/tubeforge/jobs";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { jobHistory } from "@/lib/ibismuh/jobs";
 
 /** GET — recent background jobs (drives the Settings "Background Jobs" panel). */
 export async function GET(req: NextRequest) {

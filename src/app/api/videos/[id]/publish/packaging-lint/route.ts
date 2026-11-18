@@ -14,11 +14,11 @@
 // the human; the publish gate is untouched. Every score is a heuristic.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { lintPackaging } from "@/lib/tubeforge/packaging-lint";
-import { readMedia } from "@/lib/tubeforge/ai";
-import { errorText } from "@/lib/tubeforge/redact";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { lintPackaging } from "@/lib/ibismuh/packaging-lint";
+import { readMedia } from "@/lib/ibismuh/ai";
+import { errorText } from "@/lib/ibismuh/redact";
 
 type Ctx = { params: Promise<{ id: string }> };
 

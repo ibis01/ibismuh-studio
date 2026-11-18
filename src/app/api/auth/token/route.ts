@@ -7,8 +7,8 @@ import {
   requireUser,
   revokeApiToken,
   sessionIdFromRequest,
-} from "@/lib/tubeforge/tenant";
-import { API_TOKEN_MAX_AGE_SEC } from "@/lib/tubeforge/auth-token";
+} from "@/lib/ibismuh/tenant";
+import { API_TOKEN_MAX_AGE_SEC } from "@/lib/ibismuh/auth-token";
 
 /**
  * The API token registry's surface (S20). POST has existed since Stage 2 as

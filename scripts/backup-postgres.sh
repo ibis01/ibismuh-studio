@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TubeForge — production Postgres backup (S33, roadmap §4.6).
+# Ibismuh Studio — production Postgres backup (S33, roadmap §4.6).
 #
 # `npm run backup` (scripts/backup.sh) covers SQLite, the development
 # database. This script covers PRODUCTION Postgres: a nightly logical dump

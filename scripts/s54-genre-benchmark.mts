@@ -51,30 +51,30 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "path";
 import { promisify } from "util";
-import { withCtx, hashPassword } from "../src/lib/tubeforge/tenant";
+import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
 import {
   runDirectorPass,
   setDirectorState,
   parsePlan,
   resolveProfile,
-} from "../src/lib/tubeforge/director";
+} from "../src/lib/ibismuh/director";
 import {
   generateSceneImage,
   parseScenes,
   sceneImageFile,
   sceneWavFile,
-} from "../src/lib/tubeforge/story";
-import { renderVideo } from "../src/lib/tubeforge/render";
-import { runPortraitJob } from "../src/lib/tubeforge/character-jobs";
-import { readPortrait } from "../src/lib/tubeforge/characters";
-import { runQcReport } from "../src/lib/tubeforge/qc";
+} from "../src/lib/ibismuh/story";
+import { renderVideo } from "../src/lib/ibismuh/render";
+import { runPortraitJob } from "../src/lib/ibismuh/character-jobs";
+import { readPortrait } from "../src/lib/ibismuh/characters";
+import { runQcReport } from "../src/lib/ibismuh/qc";
 import {
   runSubjectContinuityScan,
   runTextArtifactScan,
   SUBJECT_CONSISTENCY_FLOOR,
-} from "../src/lib/tubeforge/visual-qc";
-import { saveCapability } from "../src/lib/tubeforge/providers/settings";
-import * as storage from "../src/lib/tubeforge/storage";
+} from "../src/lib/ibismuh/visual-qc";
+import { saveCapability } from "../src/lib/ibismuh/providers/settings";
+import * as storage from "../src/lib/ibismuh/storage";
 
 const execFileAsync = promisify(execFile);
 const prisma = new PrismaClient();

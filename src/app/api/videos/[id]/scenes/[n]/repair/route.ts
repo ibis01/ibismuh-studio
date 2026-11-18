@@ -26,16 +26,16 @@
 // GET — the scene's repair feed (newest first): the approval inbox.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes } from "@/lib/tubeforge/story";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes } from "@/lib/ibismuh/story";
 import {
   proposeSceneRepair,
   approveSceneRepair,
   rejectSceneRepair,
   listSceneRepairs,
-} from "@/lib/tubeforge/scene-repairs";
-import { CostCeilingExceededError } from "@/lib/tubeforge/cost-guard";
+} from "@/lib/ibismuh/scene-repairs";
+import { CostCeilingExceededError } from "@/lib/ibismuh/cost-guard";
 
 type Ctx = { params: Promise<{ id: string; n: string }> };
 

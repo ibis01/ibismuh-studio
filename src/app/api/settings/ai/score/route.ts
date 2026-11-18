@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { getUserSettings, setUserSetting } from "@/lib/tubeforge/settings";
-import { getCapability } from "@/lib/tubeforge/providers/settings";
-import type { CapabilityId } from "@/lib/tubeforge/providers/registry";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { getUserSettings, setUserSetting } from "@/lib/ibismuh/settings";
+import { getCapability } from "@/lib/ibismuh/providers/settings";
+import type { CapabilityId } from "@/lib/ibismuh/providers/registry";
 import {
   parseScoreWeights,
   scoreProviders,
   type ProviderObservation,
   type ScoredProvider,
   type ScoreWeights,
-} from "@/lib/tubeforge/provider-score";
-import { errorText } from "@/lib/tubeforge/redact";
+} from "@/lib/ibismuh/provider-score";
+import { errorText } from "@/lib/ibismuh/redact";
 
 /**
  * S90 (ROADMAP #9) — the provider selection intelligence surface.

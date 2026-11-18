@@ -1,6 +1,6 @@
-import { makeReferenceHandlers } from "@/lib/tubeforge/reference-routes";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { CHARACTER_REFERENCE_CAP } from "@/lib/tubeforge/references";
+import { makeReferenceHandlers } from "@/lib/ibismuh/reference-routes";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { CHARACTER_REFERENCE_CAP } from "@/lib/ibismuh/references";
 
 /** S51 — serve one cast reference PNG (`ref-<n>.png`). */
 const handlers = makeReferenceHandlers({

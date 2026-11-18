@@ -11,11 +11,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { rawDatabase as rawDb } from "@/lib/tubeforge/tenant-db";
-import { MIN_PASSWORD_LEN, hashPassword } from "@/lib/tubeforge/tenant";
-import { randomToken, sha256Hex } from "@/lib/tubeforge/crypto";
-import { requestLog } from "@/lib/tubeforge/log";
-import { sendMail, linkInResponse } from "@/lib/tubeforge/email";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { MIN_PASSWORD_LEN, hashPassword } from "@/lib/ibismuh/tenant";
+import { randomToken, sha256Hex } from "@/lib/ibismuh/crypto";
+import { requestLog } from "@/lib/ibismuh/log";
+import { sendMail, linkInResponse } from "@/lib/ibismuh/email";
 
 const RESET_TTL_H = 24;
 
@@ -77,9 +77,9 @@ export async function POST(req: NextRequest) {
       try {
         await sendMail({
           to: user.email,
-          subject: "Reset your TubeForge password",
+          subject: "Reset your Ibismuh Studio password",
           text: [
-            "A password reset was requested for your TubeForge account.",
+            "A password reset was requested for your Ibismuh Studio account.",
             "",
             "Set a new password:",
             url.toString(),

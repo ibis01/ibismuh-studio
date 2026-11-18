@@ -10,11 +10,11 @@
 // scene-preview variant) for ready previews.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { headRevision } from "@/lib/tubeforge/scene-revisions";
-import { sceneArtifactsOf, artifactStaleness } from "@/lib/tubeforge/scene-artifacts";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { headRevision } from "@/lib/ibismuh/scene-revisions";
+import { sceneArtifactsOf, artifactStaleness } from "@/lib/ibismuh/scene-artifacts";
 
 type Ctx = { params: Promise<{ id: string; n: string }> };
 

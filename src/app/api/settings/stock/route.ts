@@ -5,9 +5,9 @@ import {
   maskStockKey,
   searchAll,
   KEY_URLS,
-} from "@/lib/tubeforge/stock";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { errorText } from "@/lib/tubeforge/redact";
+} from "@/lib/ibismuh/stock";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { errorText } from "@/lib/ibismuh/redact";
 
 /** GET — masked key state (the raw keys never leave the server). */
 export async function GET(req: NextRequest) {

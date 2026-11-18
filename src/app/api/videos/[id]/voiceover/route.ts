@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { readMedia } from "@/lib/tubeforge/ai";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { MAX_AUDIO_BYTES, isValidAudioUrl } from "@/lib/tubeforge/voice";
-import { startJob, isJobRunning } from "@/lib/tubeforge/jobs";
-import { serializeVideo } from "@/lib/tubeforge/serialize";
-import { put, remove } from "@/lib/tubeforge/storage";
-import { runVoiceoverJob, type VoiceoverJobSource } from "@/lib/tubeforge/video-jobs";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { readMedia } from "@/lib/ibismuh/ai";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { MAX_AUDIO_BYTES, isValidAudioUrl } from "@/lib/ibismuh/voice";
+import { startJob, isJobRunning } from "@/lib/ibismuh/jobs";
+import { serializeVideo } from "@/lib/ibismuh/serialize";
+import { put, remove } from "@/lib/ibismuh/storage";
+import { runVoiceoverJob, type VoiceoverJobSource } from "@/lib/ibismuh/video-jobs";
 
 type Ctx = { params: Promise<{ id: string }> };
 

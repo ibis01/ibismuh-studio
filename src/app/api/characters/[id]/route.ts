@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
 import {
   serializeCharacter,
   recentVideosFor,
   buildAnchorFallback,
   deleteCharacterFiles,
-} from "@/lib/tubeforge/characters";
+} from "@/lib/ibismuh/characters";
 
 type Ctx = { params: Promise<{ id: string }> };
 

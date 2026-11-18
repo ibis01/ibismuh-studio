@@ -31,14 +31,14 @@
 // create form's prefill) shows the new pace.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseJson, paceChangeSchema, ApiValidationError } from "@/lib/tubeforge/validation";
-import { performPaceChange, sceneWavDurations } from "@/lib/tubeforge/clip-ops";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { parseTimeline, serializeTimeline, guardTimelineOverwrite, TIMELINE_OVERWRITE_ERROR } from "@/lib/tubeforge/timeline";
-import { commitSceneChanges } from "@/lib/tubeforge/scene-revisions";
-import { videoDir } from "@/lib/tubeforge/ai";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseJson, paceChangeSchema, ApiValidationError } from "@/lib/ibismuh/validation";
+import { performPaceChange, sceneWavDurations } from "@/lib/ibismuh/clip-ops";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { parseTimeline, serializeTimeline, guardTimelineOverwrite, TIMELINE_OVERWRITE_ERROR } from "@/lib/ibismuh/timeline";
+import { commitSceneChanges } from "@/lib/ibismuh/scene-revisions";
+import { videoDir } from "@/lib/ibismuh/ai";
 
 type Ctx = { params: Promise<{ id: string }> };
 

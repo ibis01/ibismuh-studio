@@ -3,7 +3,7 @@
 // the register route writes: pbkdf2$120000$salt$hash) and writes it to the
 // owner row, plus consumes any stale reset/verify tokens so nothing dangles.
 // Run: node --import tsx scripts/s13-owner-password-reset.mts <newPassword>
-import { hashPassword } from "../src/lib/tubeforge/tenant";
+import { hashPassword } from "../src/lib/ibismuh/tenant";
 import { PrismaClient } from "@prisma/client";
 
 const EMAIL = "ibis01abc@gmail.com";

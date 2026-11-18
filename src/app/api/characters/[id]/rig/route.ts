@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { validateRigDoc, validateRigParts, writeRigDoc, writeRigParts } from "@/lib/tubeforge/characters/rig2d";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { validateRigDoc, validateRigParts, writeRigDoc, writeRigParts } from "@/lib/ibismuh/characters/rig2d";
 
 type Ctx = { params: Promise<{ id: string }> };
 

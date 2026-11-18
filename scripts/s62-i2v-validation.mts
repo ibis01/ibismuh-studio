@@ -33,32 +33,32 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "util";
 
-import { parsePlan, type DirectorPlan } from "../src/lib/tubeforge/director-plan";
+import { parsePlan, type DirectorPlan } from "../src/lib/ibismuh/director-plan";
 import {
   DIRECTOR_MODEL_HINT,
   buildDirectorUserPrompt,
   directorSystemPrompt,
-} from "../src/lib/tubeforge/director";
+} from "../src/lib/ibismuh/director";
 import {
   planProfileNotes,
   resolveProfile,
-} from "../src/lib/tubeforge/production-profiles";
-import { aiCall } from "../src/lib/tubeforge/budget";
-import { aiCallJson } from "../src/lib/tubeforge/ai";
-import { llmChat } from "../src/lib/tubeforge/llm";
+} from "../src/lib/ibismuh/production-profiles";
+import { aiCall } from "../src/lib/ibismuh/budget";
+import { aiCallJson } from "../src/lib/ibismuh/ai";
+import { llmChat } from "../src/lib/ibismuh/llm";
 import {
   resolveContentPolicy,
   sanitizePromptForPolicy,
-} from "../src/lib/tubeforge/restricted-subjects";
-import { imageGenerate } from "../src/lib/tubeforge/providers/image";
+} from "../src/lib/ibismuh/restricted-subjects";
+import { imageGenerate } from "../src/lib/ibismuh/providers/image";
 import {
   VIDEO_DEFAULT_MODEL,
   getCapability,
-} from "../src/lib/tubeforge/providers/settings";
-import { zaiClientFor } from "../src/lib/tubeforge/zai-client";
-import { zaiVideoViaClient } from "../src/lib/tubeforge/providers/zai-video-core";
-import { i2vMotionPrompt } from "../src/lib/tubeforge/liveliness";
-import { runQcReport } from "../src/lib/tubeforge/qc";
+} from "../src/lib/ibismuh/providers/settings";
+import { zaiClientFor } from "../src/lib/ibismuh/zai-client";
+import { zaiVideoViaClient } from "../src/lib/ibismuh/providers/zai-video-core";
+import { i2vMotionPrompt } from "../src/lib/ibismuh/liveliness";
+import { runQcReport } from "../src/lib/ibismuh/qc";
 import { BRIEFS, type ProfileBrief } from "./s-profile-briefs.mts";
 
 const execFileP = promisify(execFile);

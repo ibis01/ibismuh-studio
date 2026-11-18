@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
 import {
   serializeTrack,
   seedMusicLibrary,
   ingestUploadedTrack,
   getMusicSettings,
   MAX_TRACK_BYTES,
-} from "@/lib/tubeforge/music";
-import { errorText } from "@/lib/tubeforge/redact";
+} from "@/lib/ibismuh/music";
+import { errorText } from "@/lib/ibismuh/redact";
 
 /**
  * GET — the music library + settings. Pure read: no side effects.
  *
- * Stage 1 (task T-1.14): the old GET auto-seeded the TubeForge-original beds
+ * Stage 1 (task T-1.14): the old GET auto-seeded the Ibismuh Studio-original beds
  * on first open (an ffmpeg-synthesis write hidden inside a read). Seeding is
  * now explicit: the client checks `needsSeed` and calls POST /api/music with
  * {action:"seed"} (Settings → Background Music also has a manual re-seed).

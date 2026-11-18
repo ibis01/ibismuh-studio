@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { validateWhiteboardProject, WB_BUDGETS } from "@/lib/tubeforge/whiteboard/storyboard";
-import { scaffoldWhiteboardProject } from "@/lib/tubeforge/whiteboard/whiteboard-planner";
-import { parseWhiteboardDoc, serializeWhiteboardDoc } from "@/lib/tubeforge/whiteboard/whiteboard-planner";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { validateWhiteboardProject, WB_BUDGETS } from "@/lib/ibismuh/whiteboard/storyboard";
+import { scaffoldWhiteboardProject } from "@/lib/ibismuh/whiteboard/whiteboard-planner";
+import { parseWhiteboardDoc, serializeWhiteboardDoc } from "@/lib/ibismuh/whiteboard/whiteboard-planner";
 import {
   buildPlannerCatalog,
   scaffoldWhiteboardProjectLlm,
   type WhiteboardLlmPlannerReport,
-} from "@/lib/tubeforge/whiteboard/llm-planner";
-import { invalidateRenderedArtifacts } from "@/lib/tubeforge/render";
-import { loadVideoLibrary, replaceVideoUpload } from "@/lib/tubeforge/whiteboard/asset-store";
-import { buildGeneratedCards } from "@/lib/tubeforge/whiteboard/whiteboard-planner";
+} from "@/lib/ibismuh/whiteboard/llm-planner";
+import { invalidateRenderedArtifacts } from "@/lib/ibismuh/render";
+import { loadVideoLibrary, replaceVideoUpload } from "@/lib/ibismuh/whiteboard/asset-store";
+import { buildGeneratedCards } from "@/lib/ibismuh/whiteboard/whiteboard-planner";
 
 type Ctx = { params: Promise<{ id: string }> };
 

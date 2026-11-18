@@ -1,30 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { latestStatsFor } from "@/lib/tubeforge/analytics";
-import { jobSnapshot } from "@/lib/tubeforge/jobs";
-import { serializeVideo } from "@/lib/tubeforge/serialize";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { latestStatsFor } from "@/lib/ibismuh/analytics";
+import { jobSnapshot } from "@/lib/ibismuh/jobs";
+import { serializeVideo } from "@/lib/ibismuh/serialize";
 import {
   RENDER_MODES,
   THUMB_STYLES,
   RENDER_ASPECT_IDS,
   RENDER_FPS,
-} from "@/lib/tubeforge/types";
+} from "@/lib/ibismuh/types";
 import {
   TRANSITION_IDS,
   TRANSITION_DURATION_MIN,
   TRANSITION_DURATION_MAX,
-} from "@/lib/tubeforge/transitions";
+} from "@/lib/ibismuh/transitions";
 import {
   MOTION_MODE_IDS,
   MOTION_CURVE_IDS,
   MOTION_INTENSITY_MIN,
   MOTION_INTENSITY_MAX,
-} from "@/lib/tubeforge/motion";
-import { isDuckIntensity } from "@/lib/tubeforge/audiomix";
-import { isMusicMoodId } from "@/lib/tubeforge/music";
-import { CONTENT_POLICY_IDS } from "@/lib/tubeforge/restricted-subjects";
-import * as storage from "@/lib/tubeforge/storage";
+} from "@/lib/ibismuh/motion";
+import { isDuckIntensity } from "@/lib/ibismuh/audiomix";
+import { isMusicMoodId } from "@/lib/ibismuh/music";
+import { CONTENT_POLICY_IDS } from "@/lib/ibismuh/restricted-subjects";
+import * as storage from "@/lib/ibismuh/storage";
 
 /** Every artifact keyed off the voice/narration — used when the SCRIPT or
  *  the VOICE/SPEED changes, i.e. when EVERY scene's read is stale. (A

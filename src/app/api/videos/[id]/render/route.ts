@@ -1,29 +1,29 @@
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { isJobRunning, lastJobError, jobProgress, startJob, jobFleetStatus } from "@/lib/tubeforge/jobs";
-import { assertWithinVideoCeiling, CostCeilingExceededError } from "@/lib/tubeforge/cost-guard";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { isJobRunning, lastJobError, jobProgress, startJob, jobFleetStatus } from "@/lib/ibismuh/jobs";
+import { assertWithinVideoCeiling, CostCeilingExceededError } from "@/lib/ibismuh/cost-guard";
 
 const digestOf = (input: string) =>
   createHash("sha256").update(input, "utf8").digest("hex").slice(0, 16);
-import { runRenderJob, runWhiteboardJob, runGraphicsJob, type RenderJobOptions } from "@/lib/tubeforge/video-jobs";
-import { renderStaleness, parseRenderManifest } from "@/lib/tubeforge/render-assembly";
-import { resolveMusicForVideo, isMusicEnabledForVideo, musicBedActive } from "@/lib/tubeforge/music";
-import { docMusicPick, resolveDeliveryQuality, resolveBurnSubtitles } from "@/lib/tubeforge/studio-doc";
-import { parseTimeline } from "@/lib/tubeforge/timeline";
-import { getApprovedAudioMap } from "@/lib/tubeforge/director-plan";
-import { sanitizeTransition } from "@/lib/tubeforge/transitions";
-import { resolveUserPlan, hasCredits, RENDER_ESTIMATE_MICRO, planSupportsResolution, microToCredits } from "@/lib/tubeforge/billing";
-import { parseWhiteboardDoc } from "@/lib/tubeforge/whiteboard/whiteboard-planner";
-import { validateWhiteboardProject } from "@/lib/tubeforge/whiteboard/storyboard";
-import { loadVideoLibrary } from "@/lib/tubeforge/whiteboard/asset-store";
-import { parseGraphicsDoc } from "@/lib/tubeforge/graphics/types";
-import { assertGraphicsBudget } from "@/lib/tubeforge/graphics/preflight";
-import { measureGraphicsVoMs } from "@/lib/tubeforge/graphics/vo-ms";
-import { videoDir } from "@/lib/tubeforge/ai";
-import { resolveRenderLane } from "@/lib/tubeforge/render-lane";
+import { runRenderJob, runWhiteboardJob, runGraphicsJob, type RenderJobOptions } from "@/lib/ibismuh/video-jobs";
+import { renderStaleness, parseRenderManifest } from "@/lib/ibismuh/render-assembly";
+import { resolveMusicForVideo, isMusicEnabledForVideo, musicBedActive } from "@/lib/ibismuh/music";
+import { docMusicPick, resolveDeliveryQuality, resolveBurnSubtitles } from "@/lib/ibismuh/studio-doc";
+import { parseTimeline } from "@/lib/ibismuh/timeline";
+import { getApprovedAudioMap } from "@/lib/ibismuh/director-plan";
+import { sanitizeTransition } from "@/lib/ibismuh/transitions";
+import { resolveUserPlan, hasCredits, RENDER_ESTIMATE_MICRO, planSupportsResolution, microToCredits } from "@/lib/ibismuh/billing";
+import { parseWhiteboardDoc } from "@/lib/ibismuh/whiteboard/whiteboard-planner";
+import { validateWhiteboardProject } from "@/lib/ibismuh/whiteboard/storyboard";
+import { loadVideoLibrary } from "@/lib/ibismuh/whiteboard/asset-store";
+import { parseGraphicsDoc } from "@/lib/ibismuh/graphics/types";
+import { assertGraphicsBudget } from "@/lib/ibismuh/graphics/preflight";
+import { measureGraphicsVoMs } from "@/lib/ibismuh/graphics/vo-ms";
+import { videoDir } from "@/lib/ibismuh/ai";
+import { resolveRenderLane } from "@/lib/ibismuh/render-lane";
 
 type Ctx = { params: Promise<{ id: string }> };
 

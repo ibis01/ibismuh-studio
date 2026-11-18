@@ -23,9 +23,9 @@
  * Pure — no DB, no ffmpeg, no AI, no network. Safe to run anywhere.
  */
 
-import { parsePlan } from "../src/lib/tubeforge/director-plan.ts";
-import { selectChannels, i2vMotionPrompt, type LivelinessDecision } from "../src/lib/tubeforge/liveliness.ts";
-import type { Scene } from "../src/lib/tubeforge/types.ts";
+import { parsePlan } from "../src/lib/ibismuh/director-plan.ts";
+import { selectChannels, i2vMotionPrompt, type LivelinessDecision } from "../src/lib/ibismuh/liveliness.ts";
+import type { Scene } from "../src/lib/ibismuh/types.ts";
 
 let passed = 0;
 let failed = 0;

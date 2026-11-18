@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { trackAbsolutePath } from "@/lib/tubeforge/music";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { trackAbsolutePath } from "@/lib/ibismuh/music";
 
 type Ctx = { params: Promise<{ id: string }> };
 

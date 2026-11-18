@@ -75,11 +75,11 @@ function runNode(script: string, label: string): void {
 // ---------------------------------------------------------------------------
 
 async function renderRestArm(sessionDir: string): Promise<string> {
-  const { renderRigScene } = await import("../src/lib/tubeforge/characters/rig-render");
+  const { renderRigScene } = await import("../src/lib/ibismuh/characters/rig-render");
   const { validateRigDoc, validateRigParts, scaffoldRigDoc, RIG_VERSION } = await import(
-    "../src/lib/tubeforge/characters/rig2d"
+    "../src/lib/ibismuh/characters/rig2d"
   );
-  const { planRigTimeline } = await import("../src/lib/tubeforge/characters/rig-director");
+  const { planRigTimeline } = await import("../src/lib/ibismuh/characters/rig-director");
   const { K1_SMOKE_FIXTURE } = await import("./k1-rig-smoke.mts");
 
   const f = K1_SMOKE_FIXTURE;

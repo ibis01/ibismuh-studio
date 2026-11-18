@@ -3,10 +3,10 @@
 // chat and TTS, under the preview user's tenant context. No secrets printed.
 import { PrismaClient } from "@prisma/client";
 
-const { withCtx } = await import("../src/lib/tubeforge/tenant");
-const { aiCall } = await import("../src/lib/tubeforge/budget");
-const { llmChat } = await import("../src/lib/tubeforge/llm");
-const { ttsSynthesize } = await import("../src/lib/tubeforge/providers/tts");
+const { withCtx } = await import("../src/lib/ibismuh/tenant");
+const { aiCall } = await import("../src/lib/ibismuh/budget");
+const { llmChat } = await import("../src/lib/ibismuh/llm");
+const { ttsSynthesize } = await import("../src/lib/ibismuh/providers/tts");
 
 const db = new PrismaClient();
 try {

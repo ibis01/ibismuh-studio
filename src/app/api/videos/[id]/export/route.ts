@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import { Readable } from "stream";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { safeZipName, streamZip, zipMethodFor, type StreamZipEntry } from "@/lib/tubeforge/zip";
-import { listVariants } from "@/lib/tubeforge/ai";
-import { parseScenes, sceneImageFile } from "@/lib/tubeforge/story";
-import { LENGTHS, TONES, VOICES } from "@/lib/tubeforge/types";
-import { resolveMusicForVideo, isMusicEnabledForVideo, musicBedActive } from "@/lib/tubeforge/music";
-import { docMusicPick } from "@/lib/tubeforge/studio-doc";
-import { parseTimeline } from "@/lib/tubeforge/timeline";
-import { getApprovedAudioMap } from "@/lib/tubeforge/director-plan";
-import { applyQcPolicy, overrideNoteText, parseQcReport, qcEnforcementMode, qcOverrideEvidenceValid, stampOverrideNote } from "@/lib/tubeforge/qc-policy";
-import { renderStaleness } from "@/lib/tubeforge/render-assembly";
-import * as storage from "@/lib/tubeforge/storage";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { safeZipName, streamZip, zipMethodFor, type StreamZipEntry } from "@/lib/ibismuh/zip";
+import { listVariants } from "@/lib/ibismuh/ai";
+import { parseScenes, sceneImageFile } from "@/lib/ibismuh/story";
+import { LENGTHS, TONES, VOICES } from "@/lib/ibismuh/types";
+import { resolveMusicForVideo, isMusicEnabledForVideo, musicBedActive } from "@/lib/ibismuh/music";
+import { docMusicPick } from "@/lib/ibismuh/studio-doc";
+import { parseTimeline } from "@/lib/ibismuh/timeline";
+import { getApprovedAudioMap } from "@/lib/ibismuh/director-plan";
+import { applyQcPolicy, overrideNoteText, parseQcReport, qcEnforcementMode, qcOverrideEvidenceValid, stampOverrideNote } from "@/lib/ibismuh/qc-policy";
+import { renderStaleness } from "@/lib/ibismuh/render-assembly";
+import * as storage from "@/lib/ibismuh/storage";
 
  type Ctx = { params: Promise<{ id: string }> };
 
@@ -251,7 +251,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
         channel: video.channel
           ? { name: video.channel.name, niche: video.channel.niche }
           : null,
-        generatedBy: "TubeForge Auto-Pilot",
+        generatedBy: "Ibismuh Studio Auto-Pilot",
         exportedAt: new Date().toISOString(),
       },
       null,
@@ -287,7 +287,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       creditLines.push(
         `Track: "${t.name}"${t.genre ? ` (${t.genre})` : ""}`,
         `License: ${t.licenseType}`,
-        t.sourceUrl ? `Source: ${t.sourceUrl}` : `Source: TubeForge in-app library`,
+        t.sourceUrl ? `Source: ${t.sourceUrl}` : `Source: Ibismuh Studio in-app library`,
         `Commercial use: ${t.commercialUse ? "allowed" : "NOT allowed — check before monetizing"}`,
         `Attribution required: ${t.attributionRequired ? "YES" : "no"}`,
         t.attributionRequired && t.attributionText ? `Credit line: ${t.attributionText}` : ``,
@@ -296,7 +296,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       );
     } else {
       creditLines.push(
-        "Synthesized in-app ambient bed (TubeForge original — generated from pure sine synthesis,",
+        "Synthesized in-app ambient bed (Ibismuh Studio original — generated from pure sine synthesis,",
         "no third-party samples; no attribution needed, cannot match any Content ID fingerprint)."
       );
     }

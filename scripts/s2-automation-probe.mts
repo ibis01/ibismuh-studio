@@ -9,7 +9,7 @@ import {
   duckChain,
   mixTail,
   musicLevelAutomation,
-} from "../src/lib/tubeforge/audiomix";
+} from "../src/lib/ibismuh/audiomix";
 
 const run = promisify(execFile);
 const dir = "/tmp/s2probe";

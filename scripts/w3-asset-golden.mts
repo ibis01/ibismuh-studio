@@ -24,11 +24,11 @@ import path from "node:path";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 
-import { ASSETS } from "../src/lib/tubeforge/whiteboard/assets";
-import { loadLibrary } from "../src/lib/tubeforge/whiteboard/assets";
-import { validateWhiteboardProject } from "../src/lib/tubeforge/whiteboard/storyboard";
-import { renderWhiteboard } from "../src/lib/tubeforge/whiteboard/render";
-import { extractAsset } from "../src/lib/tubeforge/whiteboard/assets";
+import { ASSETS } from "../src/lib/ibismuh/whiteboard/assets";
+import { loadLibrary } from "../src/lib/ibismuh/whiteboard/assets";
+import { validateWhiteboardProject } from "../src/lib/ibismuh/whiteboard/storyboard";
+import { renderWhiteboard } from "../src/lib/ibismuh/whiteboard/render";
+import { extractAsset } from "../src/lib/ibismuh/whiteboard/assets";
 
 const execFileP = promisify(execFile);
 const OUT_DIR = path.resolve("validation/w3-golden");

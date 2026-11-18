@@ -2,8 +2,8 @@
 // Appended to every voice picker when the active TTS provider can speak them.
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { listVoiceProfiles } from "@/lib/tubeforge/voice-clone";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { listVoiceProfiles } from "@/lib/ibismuh/voice-clone";
 
 export async function GET(req: NextRequest) {
   const auth = await requireUser(req);

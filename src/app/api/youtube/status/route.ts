@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
+import { requireUser } from "@/lib/ibismuh/tenant";
 import {
   callbackUrlFor,
   isConnected,
   fetchChannelInfo,
   getPublishDefaults,
-} from "@/lib/tubeforge/youtube";
-import { getUserSettings } from "@/lib/tubeforge/settings";
-import type { YouTubeStatusDTO } from "@/lib/tubeforge/types";
+} from "@/lib/ibismuh/youtube";
+import { getUserSettings } from "@/lib/ibismuh/settings";
+import type { YouTubeStatusDTO } from "@/lib/ibismuh/types";
 
 /** GET — connection state for the Settings card (callbackUrl built from origin). */
 export async function GET(req: NextRequest) {

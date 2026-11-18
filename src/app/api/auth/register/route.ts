@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { rawDatabase as rawDb } from "@/lib/tubeforge/tenant-db";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
 import {
   MIN_PASSWORD_LEN,
   createSessionRecord,
@@ -19,16 +19,16 @@ import {
   hashPassword,
   sessionCookie,
   sweepExpiredSessions,
-} from "@/lib/tubeforge/tenant";
-import { randomToken, sha256Hex } from "@/lib/tubeforge/crypto";
-import { requestLog } from "@/lib/tubeforge/log";
+} from "@/lib/ibismuh/tenant";
+import { randomToken, sha256Hex } from "@/lib/ibismuh/crypto";
+import { requestLog } from "@/lib/ibismuh/log";
 import {
   checkLegacyPassword,
   claimLegacyForOwner,
   pendingLegacyRows,
-} from "@/lib/tubeforge/claim";
-import { getAuthSecret } from "@/lib/tubeforge/auth-token";
-import { sendMail, linkInResponse } from "@/lib/tubeforge/email";
+} from "@/lib/ibismuh/claim";
+import { getAuthSecret } from "@/lib/ibismuh/auth-token";
+import { sendMail, linkInResponse } from "@/lib/ibismuh/email";
 
 const bodySchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
@@ -156,9 +156,9 @@ export async function POST(req: NextRequest) {
     try {
       await sendMail({
         to: email,
-        subject: "Confirm your TubeForge email",
+        subject: "Confirm your Ibismuh Studio email",
         text: [
-          `Welcome to TubeForge${name ? `, ${name}` : ""}!`,
+          `Welcome to Ibismuh Studio${name ? `, ${name}` : ""}!`,
           "",
           "Confirm your email address:",
           verifyUrl.toString(),

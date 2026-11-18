@@ -15,9 +15,9 @@ process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { PrismaClient } from "@prisma/client";
 import fs from "node:fs";
-import { withCtx, hashPassword } from "../src/lib/tubeforge/tenant";
-import { runDirectorPass, parsePlan } from "../src/lib/tubeforge/director";
-import { scanRestrictedSubjects } from "../src/lib/tubeforge/restricted-subjects";
+import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
+import { runDirectorPass, parsePlan } from "../src/lib/ibismuh/director";
+import { scanRestrictedSubjects } from "../src/lib/ibismuh/restricted-subjects";
 
 const prisma = new PrismaClient();
 const SUFFIX = `${Date.now().toString(36)}-${process.pid.toString(36)}`;

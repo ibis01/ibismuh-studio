@@ -1,9 +1,9 @@
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { readSceneImage } from "@/lib/tubeforge/story";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { readSceneImage } from "@/lib/ibismuh/story";
 
 type Ctx = { params: Promise<{ id: string; n: string }> };
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TubeForge backup — restored in Stage 1 (task T-1.1; was referenced by
+# Ibismuh Studio backup — restored in Stage 1 (task T-1.1; was referenced by
 # package.json "backup" and SETUP.md but missing from the shipped tree).
 #
 # SQLite mode (DATABASE_URL=file:...): hot-copies the database with
@@ -74,7 +74,7 @@ else
 fi
 
 cat > "$DEST/MANIFEST.txt" <<EOF
-TubeForge backup
+Ibismuh Studio backup
 Created: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 Host:    "$(hostname 2>/dev/null || echo unknown)"
 Mode:    $([[ "$DB_URL" == file:* ]] && echo sqlite || echo postgres)

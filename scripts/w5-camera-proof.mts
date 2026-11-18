@@ -26,15 +26,15 @@ import {
   buildBenchmarkProject,
   w1TotalDurationMs,
   type W1AspectId,
-} from "../src/lib/tubeforge/whiteboard/benchmark-scenarios";
-import { loadLibrary } from "../src/lib/tubeforge/whiteboard/assets";
-import { validateWhiteboardProject } from "../src/lib/tubeforge/whiteboard/storyboard";
-import { buildGeometry, sceneDurationMs } from "../src/lib/tubeforge/whiteboard/timing";
-import { beatSceneEvents } from "../src/lib/tubeforge/whiteboard/beat-plan";
-import { directCamera } from "../src/lib/tubeforge/whiteboard/camera-director";
-import { renderWhiteboard, probeDurationSec } from "../src/lib/tubeforge/whiteboard/render";
-import { runQcReport } from "../src/lib/tubeforge/qc";
-import { bedExpression, ORIGINAL_LIBRARY } from "../src/lib/tubeforge/music";
+} from "../src/lib/ibismuh/whiteboard/benchmark-scenarios";
+import { loadLibrary } from "../src/lib/ibismuh/whiteboard/assets";
+import { validateWhiteboardProject } from "../src/lib/ibismuh/whiteboard/storyboard";
+import { buildGeometry, sceneDurationMs } from "../src/lib/ibismuh/whiteboard/timing";
+import { beatSceneEvents } from "../src/lib/ibismuh/whiteboard/beat-plan";
+import { directCamera } from "../src/lib/ibismuh/whiteboard/camera-director";
+import { renderWhiteboard, probeDurationSec } from "../src/lib/ibismuh/whiteboard/render";
+import { runQcReport } from "../src/lib/ibismuh/qc";
+import { bedExpression, ORIGINAL_LIBRARY } from "../src/lib/ibismuh/music";
 
 const execFileP = promisify(execFile);
 const OUT_DIR = path.resolve("validation/w5");

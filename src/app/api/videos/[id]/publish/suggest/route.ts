@@ -10,11 +10,11 @@
 // 503 / 400 when the LLM call fails or returns junk (the message surfaces to the form).
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { suggestPublishMeta, type SuggestTone } from "@/lib/tubeforge/publish-suggest";
-import { errorText } from "@/lib/tubeforge/redact";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { suggestPublishMeta, type SuggestTone } from "@/lib/ibismuh/publish-suggest";
+import { errorText } from "@/lib/ibismuh/redact";
 
 type Ctx = { params: Promise<{ id: string }> };
 

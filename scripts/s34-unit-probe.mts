@@ -21,13 +21,13 @@ process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 process.env.TUBEFORGE_PRICING_VERIFIED ??= "1";
 
 import { PrismaClient } from "@prisma/client";
-import { withCtx, hashPassword } from "../src/lib/tubeforge/tenant";
+import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
 import {
   estimateInputTokens,
   estimateDispatchMicroUsd,
   emitUsage,
   admitDispatch,
-} from "../src/lib/tubeforge/spend";
+} from "../src/lib/ibismuh/spend";
 
 const prisma = new PrismaClient();
 const SUFFIX = Date.now().toString(36);
@@ -55,9 +55,9 @@ const req = <T,>(label: string, v: T | undefined | null): T => {
 // The gate's global state — pre-boot so admitDispatch skips the DB bootstrap
 // (the s32-unit-probe pattern; the durability laws are that probe's business).
 const spendState = req(
-  "spend gate global (__tfSpend)",
+  "spend gate global (__ibismuhSpend)",
   (globalThis as typeof globalThis & {
-    __tfSpend?: {
+    __ibismuhSpend?: {
       booted: boolean;
       bootFailed: boolean;
       bootPromise: Promise<void> | null;
@@ -65,7 +65,7 @@ const spendState = req(
       holds: Map<string, number>;
       nextHoldId: number;
     };
-  }).__tfSpend,
+  }).__ibismuhSpend,
 );
 function resetGate() {
   spendState.booted = true;

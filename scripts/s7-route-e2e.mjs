@@ -23,8 +23,8 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs";
 import path from "node:path";
-import { assembleTimeline, serializeTimeline } from "../src/lib/tubeforge/timeline";
-import { parseScenes } from "../src/lib/tubeforge/story";
+import { assembleTimeline, serializeTimeline } from "../src/lib/ibismuh/timeline";
+import { parseScenes } from "../src/lib/ibismuh/story";
 
 const execFileAsync = promisify(execFile);
 const db = new PrismaClient();

@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
 import {
   parseCriticReport,
   criticReportKey,
   runVideoCritic,
-} from "@/lib/tubeforge/video-critic";
-import { normalizeConsistencyCheckMode } from "@/lib/tubeforge/visual-consistency";
-import { getUserSetting } from "@/lib/tubeforge/settings";
-import { startJob, isJobRunning, lastJobError } from "@/lib/tubeforge/jobs";
-import * as storage from "@/lib/tubeforge/storage";
+} from "@/lib/ibismuh/video-critic";
+import { normalizeConsistencyCheckMode } from "@/lib/ibismuh/visual-consistency";
+import { getUserSetting } from "@/lib/ibismuh/settings";
+import { startJob, isJobRunning, lastJobError } from "@/lib/ibismuh/jobs";
+import * as storage from "@/lib/ibismuh/storage";
 
 type Ctx = { params: Promise<{ id: string }> };
 

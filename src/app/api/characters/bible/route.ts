@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { generateCharacterBible, serializeCharacter, recentVideosFor } from "@/lib/tubeforge/characters";
-import { errorText } from "@/lib/tubeforge/redact";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { generateCharacterBible, serializeCharacter, recentVideosFor } from "@/lib/ibismuh/characters";
+import { errorText } from "@/lib/ibismuh/redact";
 
 /**
  * POST — GLM "character bible": expands a name + short concept into a full

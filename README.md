@@ -131,8 +131,8 @@ runner stalls — see the worklog's CI-flake receipts).
 | Path | What lives there |
 | --- | --- |
 | `src/app/api/` | the HTTP surface — 100+ route handlers (videos, jobs, billing, auth, YouTube, voices, world, analytics) |
-| `src/lib/tubeforge/` | the pipeline modules — render, motion, captions, billing, queue, providers, storage, QC, director, timeline |
-| `src/components/tubeforge/` | the studio UI — editing studio, scene editor, views, command palette |
+| `src/lib/ibismuh/` | the pipeline modules — render, motion, captions, billing, queue, providers, storage, QC, director, timeline |
+| `src/components/ibismuh/` | the studio UI — editing studio, scene editor, views, command palette |
 | `prisma/` | the Postgres schema + migration chain, and the SQLite mirror used for local dev |
 | `scripts/` | ops scripts (backup, worker, seeds) + the per-stage evidence probes (`sN-unit-probe.mts` / `sN-route-e2e.mjs`) |
 | `e2e/` | the Playwright suites |

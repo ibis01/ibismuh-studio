@@ -1,6 +1,6 @@
 // S25 unit probe — "the excavation": two fossil finds, two different laws.
 //
-// FIND 1 — the buried pair. /api/settings/tts + src/lib/tubeforge/tts.ts
+// FIND 1 — the buried pair. /api/settings/tts + src/lib/ibismuh/tts.ts
 // were each other's ONLY consumer since the registry-driven voice stack
 // (providers/tts.ts + the /api/settings/ai card) superseded them: a config
 // surface nobody opened, writing preference rows nobody read. S25 buries
@@ -24,9 +24,9 @@ process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { PrismaClient } from "@prisma/client";
 import fs from "node:fs";
-import { claimLegacyForOwner, pendingLegacyRows } from "../src/lib/tubeforge/claim";
-import { decryptSecret } from "../src/lib/tubeforge/crypto";
-import { hashPassword } from "../src/lib/tubeforge/tenant";
+import { claimLegacyForOwner, pendingLegacyRows } from "../src/lib/ibismuh/claim";
+import { decryptSecret } from "../src/lib/ibismuh/crypto";
+import { hashPassword } from "../src/lib/ibismuh/tenant";
 
 const prisma = new PrismaClient();
 // S28 — the studio has a REAL tenant now (the owner's account lives in
@@ -45,11 +45,11 @@ const suffix = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 // =====================================================================
 {
   const routeGone = !fs.existsSync("src/app/api/settings/tts/route.ts");
-  const libGone = !fs.existsSync("src/lib/tubeforge/tts.ts");
+  const libGone = !fs.existsSync("src/lib/ibismuh/tts.ts");
   check("1.1  /api/settings/tts is buried", routeGone);
   check("1.2  the legacy tts module is buried", libGone);
   // ...and nothing ressurects it: no source file imports the old module.
-  const src = fs.readdirSync("src/lib/tubeforge").filter((f) => f.endsWith(".ts"));
+  const src = fs.readdirSync("src/lib/ibismuh").filter((f) => f.endsWith(".ts"));
   const routeFiles: string[] = [];
   const walk = (dir: string) => {
     for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -59,7 +59,7 @@ const suffix = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     }
   };
   walk("src/app");
-  const offenders = [...src.map((f) => `src/lib/tubeforge/${f}`), ...routeFiles].filter((f) =>
+  const offenders = [...src.map((f) => `src/lib/ibismuh/${f}`), ...routeFiles].filter((f) =>
     fs.readFileSync(f, "utf8").includes('tubeforge/tts"')
   );
   check("1.3  no source file imports the buried module", offenders.length === 0, offenders);
@@ -142,7 +142,7 @@ const suffix = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 // 3. the PWA contract — the exports the wiring consumes
 // =====================================================================
 {
-  const src = fs.readFileSync("src/components/tubeforge/pwa.tsx", "utf8");
+  const src = fs.readFileSync("src/components/ibismuh/pwa.tsx", "utf8");
   check("3.1  ServiceWorkerRegister registers /sw.js", src.includes('navigator.serviceWorker.register("/sw.js")'));
   check("3.2  the install button waits for beforeinstallprompt", src.includes("beforeinstallprompt"));
   check("3.3  the manual A2HS hint ships (iOS/Firefox path)", src.includes("ManualInstallHint"));
@@ -152,7 +152,7 @@ const suffix = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   check("3.5  the metadata links the manifest", layout.includes('manifest: "/manifest.webmanifest"'));
   check("3.6  the theme color rides the viewport export", layout.includes('themeColor: "#0a0a0a"'));
 
-  const settings = fs.readFileSync("src/components/tubeforge/views/settings-view.tsx", "utf8");
+  const settings = fs.readFileSync("src/components/ibismuh/views/settings-view.tsx", "utf8");
   check("3.7  the Settings page mounts the install card", settings.includes("<InstallAppButton />") && settings.includes("<ManualInstallHint />"));
 
   // the assets the SW precaches exist

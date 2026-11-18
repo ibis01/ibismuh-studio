@@ -14,8 +14,8 @@ import { execFile } from "child_process";
 import fs from "fs";
 import path from "path";
 import { promisify } from "util";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { resolveBedPreview, MUSIC_DIR } from "@/lib/tubeforge/music";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { resolveBedPreview, MUSIC_DIR } from "@/lib/ibismuh/music";
 
 const execFileAsync = promisify(execFile);
 

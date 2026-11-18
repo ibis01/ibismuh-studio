@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { syncYouTubeStats } from "@/lib/tubeforge/analytics";
-import { isConnected } from "@/lib/tubeforge/youtube";
-import { errorText } from "@/lib/tubeforge/redact";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { syncYouTubeStats } from "@/lib/ibismuh/analytics";
+import { isConnected } from "@/lib/ibismuh/youtube";
+import { errorText } from "@/lib/ibismuh/redact";
 
 /**
  * POST — pull fresh performance stats for every published video (one batched

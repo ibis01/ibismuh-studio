@@ -50,9 +50,9 @@ const {
   listVideoImports,
   resolveSpriteAssets,
   saveImport,
-} = await import("../src/lib/tubeforge/graphics/import-store");
-const { rawDatabase } = await import("../src/lib/tubeforge/tenant-db");
-const { UPLOAD_ROOT, removePrefix } = await import("../src/lib/tubeforge/storage");
+} = await import("../src/lib/ibismuh/graphics/import-store");
+const { rawDatabase } = await import("../src/lib/ibismuh/tenant-db");
+const { UPLOAD_ROOT, removePrefix } = await import("../src/lib/ibismuh/storage");
 
 const orgId = `s140-drill-org-${crypto.randomBytes(4).toString("hex")}`;
 const videoId = `s140-drill-${crypto.randomBytes(4).toString("hex")}`;

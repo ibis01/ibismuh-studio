@@ -16,10 +16,10 @@
  *   node --import tsx scripts/s73-llm-planner-probe.mts
  */
 const { scaffoldWhiteboardProjectLlm, buildPlannerCatalog } = await import(
-  "../src/lib/tubeforge/whiteboard/llm-planner"
+  "../src/lib/ibismuh/whiteboard/llm-planner"
 );
-const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
-const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
+const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
 
 const SCENES = [
   {

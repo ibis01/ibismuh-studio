@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { buildAuthUrl } from "@/lib/tubeforge/youtube";
-import { errorText } from "@/lib/tubeforge/redact";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { buildAuthUrl } from "@/lib/ibismuh/youtube";
+import { errorText } from "@/lib/ibismuh/redact";
 
 /** POST — build + return the Google consent URL (opened in a new tab by the UI). */
 export async function POST(req: NextRequest) {

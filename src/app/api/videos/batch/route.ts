@@ -1,21 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
 import type { Video } from "@prisma/client";
-import { parseJsonLoose } from "@/lib/tubeforge/ai";
-import { log } from "@/lib/tubeforge/log";
+import { parseJsonLoose } from "@/lib/ibismuh/ai";
+import { log } from "@/lib/ibismuh/log";
 
 // S57/T-57.2 — helper-scope logger (brainstormAngles has no request in
 // scope; the POST handler's own lines ride requestLog where they exist).
 const batchLog = log.child({ mod: "batch" });
-import { aiCall } from "@/lib/tubeforge/budget";
-import { CreditBlockedError, creditBlockResponse } from "@/lib/tubeforge/billing";
-import { runScriptJob } from "@/lib/tubeforge/script-job";
-import { startJob } from "@/lib/tubeforge/jobs";
-import { serializeVideo } from "@/lib/tubeforge/serialize";
-import { chatComplete } from "@/lib/tubeforge/providers/chat";
-import { FORMATS, RENDER_MODES } from "@/lib/tubeforge/types";
-import { errorText } from "@/lib/tubeforge/redact";
+import { aiCall } from "@/lib/ibismuh/budget";
+import { CreditBlockedError, creditBlockResponse } from "@/lib/ibismuh/billing";
+import { runScriptJob } from "@/lib/ibismuh/script-job";
+import { startJob } from "@/lib/ibismuh/jobs";
+import { serializeVideo } from "@/lib/ibismuh/serialize";
+import { chatComplete } from "@/lib/ibismuh/providers/chat";
+import { FORMATS, RENDER_MODES } from "@/lib/ibismuh/types";
+import { errorText } from "@/lib/ibismuh/redact";
 
 interface Angle {
   title: string;

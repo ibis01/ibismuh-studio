@@ -4,7 +4,7 @@
 // is the SOLE source of truth for Subscription status — billing writes go
 // through this endpoint, never through the user's own session.
 //
-// The handler logic lives in src/lib/tubeforge/billing.ts (processStripeEvent)
+// The handler logic lives in src/lib/ibismuh/billing.ts (processStripeEvent)
 // so the route can be a thin wrapper; routes are forbidden from importing
 // @/lib/db directly (the tf/no-raw-db-in-api rule — billing writes are
 // global, not per-tenant, so the lib is the right home).
@@ -33,8 +33,8 @@
 // session cookie. The signature is the auth.
 
 import { NextRequest, NextResponse } from "next/server";
-import { processStripeEvent, verifyStripeSignature } from "@/lib/tubeforge/billing";
-import { requestLog } from "@/lib/tubeforge/log";
+import { processStripeEvent, verifyStripeSignature } from "@/lib/ibismuh/billing";
+import { requestLog } from "@/lib/ibismuh/log";
 
 export async function POST(req: NextRequest) {
   const sig = req.headers.get("stripe-signature");

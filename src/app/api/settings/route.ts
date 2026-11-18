@@ -11,23 +11,23 @@
 //   POST → test a capability end-to-end with optional unsaved overrides
 
 import { NextRequest, NextResponse } from "next/server";
-import { resetZAIClient } from "@/lib/tubeforge/ai";
-import { invalidateZaiClients } from "@/lib/tubeforge/zai-client";
-import { createZaiForTest } from "@/lib/tubeforge/zai-config";
+import { resetZAIClient } from "@/lib/ibismuh/ai";
+import { invalidateZaiClients } from "@/lib/ibismuh/zai-client";
+import { createZaiForTest } from "@/lib/ibismuh/zai-config";
 import {
   syncZaiConfigFile,
   ZAI_SETTING_KEYS,
-} from "@/lib/tubeforge/providers/config";
+} from "@/lib/ibismuh/providers/config";
 import {
   deleteUserSetting,
   getUserSettings,
   setUserSettings,
-} from "@/lib/tubeforge/settings";
+} from "@/lib/ibismuh/settings";
 import {
   DEFAULT_SETTINGS,
   publicSettingsMap,
-} from "@/lib/tubeforge/settings-public";
-import { requireUser } from "@/lib/tubeforge/tenant";
+} from "@/lib/ibismuh/settings-public";
+import { requireUser } from "@/lib/ibismuh/tenant";
 import {
   getCapability,
   saveCapability,
@@ -35,25 +35,25 @@ import {
   maskKey,
   readLegacyZai,
   type CapabilityConfig,
-} from "@/lib/tubeforge/providers/settings";
+} from "@/lib/ibismuh/providers/settings";
 import {
   PROVIDERS_BY_CAPABILITY,
   CAPABILITY_META,
   type CapabilityId,
-} from "@/lib/tubeforge/providers/registry";
+} from "@/lib/ibismuh/providers/registry";
 import {
   DEFAULT_CHAT_MODEL,
   DEFAULT_ZAI_BASE_URL,
-} from "@/lib/tubeforge/types";
-import { chatComplete } from "@/lib/tubeforge/providers/chat";
-import { visionComplete } from "@/lib/tubeforge/providers/vision";
+} from "@/lib/ibismuh/types";
+import { chatComplete } from "@/lib/ibismuh/providers/chat";
+import { visionComplete } from "@/lib/ibismuh/providers/vision";
 import {
   probeSelfhostHealth,
   ttsSynthesize,
-} from "@/lib/tubeforge/providers/tts";
-import { imageEdit, imageGenerate } from "@/lib/tubeforge/providers/image";
-import { errorText } from "@/lib/tubeforge/redact";
-import { imageToVideo } from "@/lib/tubeforge/providers/video";
+} from "@/lib/ibismuh/providers/tts";
+import { imageEdit, imageGenerate } from "@/lib/ibismuh/providers/image";
+import { errorText } from "@/lib/ibismuh/redact";
+import { imageToVideo } from "@/lib/ibismuh/providers/video";
 
 const CAPABILITIES: CapabilityId[] = ["chat", "tts", "image", "video"];
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// TubeForge recovery — locked out? This switches the studio back to OPEN.
+// Ibismuh Studio recovery — locked out? This switches the studio back to OPEN.
 //
 //   bun run auth:reset            turn the lock off (your saved password is kept)
 //   bun run auth:reset --purge    turn the lock off AND forget the password
@@ -61,7 +61,7 @@ const left = db.prepare(`SELECT "value" FROM "Setting" WHERE "key" = 'auth.enabl
   | undefined;
 db.close();
 
-console.log(`TubeForge: lock disabled (db: ${path.relative(root, dbPath)})`);
+console.log(`Ibismuh Studio: lock disabled (db: ${path.relative(root, dbPath)})`);
 if (purge) console.log("  saved password forgotten — enabling the lock again will ask for a new one");
 else console.log("  saved password kept — Settings → Studio access can re-enable it");
 console.log(`  auth.enabled = ${left?.value ?? "false"} (flag file db/auth.lock removed)`);

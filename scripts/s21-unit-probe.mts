@@ -18,10 +18,10 @@ process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { NextRequest } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { createApiToken, createSessionRecord, createSessionToken, hashPassword } from "../src/lib/tubeforge/tenant";
-import { SESSION_COOKIE } from "../src/lib/tubeforge/auth-token";
+import { createApiToken, createSessionRecord, createSessionToken, hashPassword } from "../src/lib/ibismuh/tenant";
+import { SESSION_COOKIE } from "../src/lib/ibismuh/auth-token";
 import { GET as verifyGet, POST as verifyPost } from "../src/app/api/auth/verify-email/route";
-import { sha256Hex } from "../src/lib/tubeforge/crypto";
+import { sha256Hex } from "../src/lib/ibismuh/crypto";
 
 const prisma = new PrismaClient();
 let failures = 0;
@@ -57,7 +57,7 @@ const session = await createSessionRecord({ userId: user.id, organizationId: org
 const sessionToken = await createSessionToken(user.id, session.id);
 
 // park a verification token on the account (register's shape)
-const { randomToken } = await import("../src/lib/tubeforge/crypto");
+const { randomToken } = await import("../src/lib/ibismuh/crypto");
 const rawToken = randomToken();
 await prisma.user.update({
   where: { id: user.id },

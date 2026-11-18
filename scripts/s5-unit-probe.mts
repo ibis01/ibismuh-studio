@@ -14,17 +14,17 @@ import {
   resolveSoundChoice,
   resolveSoundBank,
   soundChoice,
-} from "../src/lib/tubeforge/studio-sound";
-import { SFX_KINDS } from "../src/lib/tubeforge/types";
-import { isSfxKind } from "../src/lib/tubeforge/sfx";
-import { isAmbienceKind } from "../src/lib/tubeforge/ambience";
+} from "../src/lib/ibismuh/studio-sound";
+import { SFX_KINDS } from "../src/lib/ibismuh/types";
+import { isSfxKind } from "../src/lib/ibismuh/sfx";
+import { isAmbienceKind } from "../src/lib/ibismuh/ambience";
 import {
   assembleTimeline,
   docSceneSettings,
   parseTimeline,
   serializeTimeline,
-} from "../src/lib/tubeforge/timeline";
-import { parseScenes } from "../src/lib/tubeforge/story";
+} from "../src/lib/ibismuh/timeline";
+import { parseScenes } from "../src/lib/ibismuh/story";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail?: unknown) => {

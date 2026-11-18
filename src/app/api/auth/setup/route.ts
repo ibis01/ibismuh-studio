@@ -4,8 +4,8 @@ import {
   setPassword,
   createSessionToken,
   sessionCookie,
-} from "@/lib/tubeforge/auth";
-import { getAuthSecret } from "@/lib/tubeforge/auth-token";
+} from "@/lib/ibismuh/auth";
+import { getAuthSecret } from "@/lib/ibismuh/auth-token";
 
 /**
  * POST — first-run: create the access password and sign in.

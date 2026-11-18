@@ -86,10 +86,10 @@ async function phaseA(): Promise<void> {
   console.log("◆ Stage 3 close-out — handler registry + payload delivery (in-process)");
 
   const { registerDefaultHandlers, resumableKinds } = await import(
-    "../src/lib/tubeforge/queue-handlers"
+    "../src/lib/ibismuh/queue-handlers"
   );
   const { registerJobHandler, handlerKinds, createPendingJob, kickQueue, initQueue, setClaiming } =
-    await import("../src/lib/tubeforge/queue");
+    await import("../src/lib/ibismuh/queue");
 
   registerDefaultHandlers();
   initQueue("web");
@@ -211,7 +211,7 @@ async function phaseA(): Promise<void> {
 async function phaseC(): Promise<void> {
   console.log("◆ S100 / P0.2 — leases + fencing (concurrent-worker + stale-worker battery)");
   const { claimJob, renewLease, reapExpiredLeases, writeOutcomeIfLeased, LEASE_TTL_MS } = await import(
-    "../src/lib/tubeforge/queue"
+    "../src/lib/ibismuh/queue"
   );
 
   const run = `l${Date.now().toString(36)}`;

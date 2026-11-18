@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { StorageQuotaError } from "@/lib/tubeforge/storage";
-import { loadLibrary } from "@/lib/tubeforge/whiteboard/assets";
-import { parseWhiteboardDoc } from "@/lib/tubeforge/whiteboard/whiteboard-planner";
-import { probeAssetRasterization } from "@/lib/tubeforge/whiteboard/render";
-import { WB_UPLOAD_MAX_BYTES, validateUploadedSvg } from "@/lib/tubeforge/whiteboard/upload";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { StorageQuotaError } from "@/lib/ibismuh/storage";
+import { loadLibrary } from "@/lib/ibismuh/whiteboard/assets";
+import { parseWhiteboardDoc } from "@/lib/ibismuh/whiteboard/whiteboard-planner";
+import { probeAssetRasterization } from "@/lib/ibismuh/whiteboard/render";
+import { WB_UPLOAD_MAX_BYTES, validateUploadedSvg } from "@/lib/ibismuh/whiteboard/upload";
 import {
   deleteVideoUpload,
   listVideoUploads,
   saveVideoUpload,
   uploadCountWalls,
   whiteboardAssetKey,
-} from "@/lib/tubeforge/whiteboard/asset-store";
-import { get } from "@/lib/tubeforge/storage";
+} from "@/lib/ibismuh/whiteboard/asset-store";
+import { get } from "@/lib/ibismuh/storage";
 
 type Ctx = { params: Promise<{ id: string }> };
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TubeForge local packaging — restored in Stage 1 (task T-1.1; was referenced
+# Ibismuh Studio local packaging — restored in Stage 1 (task T-1.1; was referenced
 # by SECURITY.md's distribution guidance but missing from the shipped tree).
 #
 # Builds download/tubeforge-local.zip for local-machine deployment. The

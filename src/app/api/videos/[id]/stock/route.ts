@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { clearStock, readStockKeys } from "@/lib/tubeforge/stock";
-import { runStockRefresh } from "@/lib/tubeforge/queue-handlers";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { clearStock, readStockKeys } from "@/lib/ibismuh/stock";
+import { runStockRefresh } from "@/lib/ibismuh/queue-handlers";
 import {
   startJob,
   isJobRunning,
   lastJobError,
   jobProgress,
   jobFleetStatus,
-} from "@/lib/tubeforge/jobs";
+} from "@/lib/ibismuh/jobs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-import { scratchDir, remove } from "@/lib/tubeforge/storage";
+import { scratchDir, remove } from "@/lib/ibismuh/storage";
 
 /** Renders become stale when the visual track changes.
  *  Storage seam (T-3.7): outputs die through the driver (s3-safe). */

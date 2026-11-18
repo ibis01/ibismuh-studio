@@ -31,9 +31,9 @@ import {
   FLICKER_SAMPLE,
   STUTTER_LIMITS,
   CUT_TOL_SEC,
-} from "../src/lib/tubeforge/render-qc.ts";
-import type { ExpectedCuts } from "../src/lib/tubeforge/render-qc.ts";
-import type { TransitionSettings } from "../src/lib/tubeforge/transitions.ts";
+} from "../src/lib/ibismuh/render-qc.ts";
+import type { ExpectedCuts } from "../src/lib/ibismuh/render-qc.ts";
+import type { TransitionSettings } from "../src/lib/ibismuh/transitions.ts";
 
 let passed = 0;
 const failures: string[] = [];
@@ -203,7 +203,7 @@ console.log("S36 probe — malformed stream tolerance");
 
 // 5. parsers never throw on garbage; garbage yields empty (→ unmeasured upstream)
 {
-  const { parseYavgLog, parsePtsCsv, parseSceneCuts } = await import("../src/lib/tubeforge/render-qc.ts");
+  const { parseYavgLog, parsePtsCsv, parseSceneCuts } = await import("../src/lib/ibismuh/render-qc.ts");
   eq(parseYavgLog("total garbage\nno metrics here").length, 0, "YAVG parser on garbage → []");
   eq(parsePtsCsv("N/A\n-1.5\n\nnone\n").length, 0, "pts parser drops N/A, negatives, blanks");
   eq(parseSceneCuts("[Parsed_showinfo_1 @ 0x0] no time here\nframe= 1 fps=0").length, 0, "showinfo parser skips pts_time-less lines");

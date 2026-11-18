@@ -3,7 +3,7 @@
 // production pipeline. Extracted verbatim from s62-i2v-validation.mts so the
 // lanes can never drift apart: the S63 re-measure reuses the S62 plans, and
 // that attribution is only honest if the seed scenes are byte-identical.
-import type { Scene } from "../src/lib/tubeforge/types";
+import type { Scene } from "../src/lib/ibismuh/types";
 
 export interface ProfileBrief {
   id: string;

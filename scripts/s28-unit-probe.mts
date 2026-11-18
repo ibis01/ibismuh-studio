@@ -41,8 +41,8 @@ console.log("\n§1/§2/§3 the cookie law");
     const [{ sessionCookie: fromAuth, clearedSessionCookie: clearedAuth },
            { sessionCookie: fromTenant, clearedSessionCookie: clearedTenant }] =
       await Promise.all([
-        import("${ROOT}/src/lib/tubeforge/auth.ts"),
-        import("${ROOT}/src/lib/tubeforge/tenant.ts"),
+        import("${ROOT}/src/lib/ibismuh/auth.ts"),
+        import("${ROOT}/src/lib/ibismuh/tenant.ts"),
       ]);
     const shape = (c) => ({ sameSite: c.sameSite, secure: c.secure, httpOnly: c.httpOnly, name: c.name });
     console.log(JSON.stringify({
@@ -108,7 +108,7 @@ console.log("\n§4 the relative-link law");
 // ---------- §5: the gate contract ----------
 console.log("\n§5 the gate contract");
 {
-  const gate = readFileSync(`${ROOT}/src/components/tubeforge/auth-gate.tsx`, "utf8");
+  const gate = readFileSync(`${ROOT}/src/components/ibismuh/auth-gate.tsx`, "utf8");
   check("5.1  the gate fetches verification.url AS-IS (relative => same-origin by construction)",
     /await fetch\(d\.verification\.url/.test(gate), null);
   check("5.2  the gate still reloads after a successful sign-in (the law that exposed the bug)",

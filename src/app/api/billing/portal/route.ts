@@ -16,9 +16,9 @@
 //     manages an EXISTING billing relationship, checkout creates one.
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser, sessionIdFromRequest } from "@/lib/tubeforge/tenant";
-import { portalReady, stripeGate, stripeCreate, portalParams } from "@/lib/tubeforge/stripe";
-import { resolveUserPlan } from "@/lib/tubeforge/billing";
+import { requireUser, sessionIdFromRequest } from "@/lib/ibismuh/tenant";
+import { portalReady, stripeGate, stripeCreate, portalParams } from "@/lib/ibismuh/stripe";
+import { resolveUserPlan } from "@/lib/ibismuh/billing";
 
 export async function POST(req: NextRequest) {
   const auth = await requireUser(req);

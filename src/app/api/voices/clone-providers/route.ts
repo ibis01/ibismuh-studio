@@ -11,9 +11,9 @@
 // clone form when the chosen provider is ready.
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { getCapability, getProviderCredential } from "@/lib/tubeforge/providers/settings";
-import { isCloneProvider, pickCloneProvider } from "@/lib/tubeforge/voice-clone";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { getCapability, getProviderCredential } from "@/lib/ibismuh/providers/settings";
+import { isCloneProvider, pickCloneProvider } from "@/lib/ibismuh/voice-clone";
 
 export async function GET(req: NextRequest) {
   const auth = await requireUser(req);

@@ -26,16 +26,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { W1_ASPECTS, W1_FPS, type W1AspectId } from "../src/lib/tubeforge/whiteboard/benchmark-scenarios";
-import { loadLibrary } from "../src/lib/tubeforge/whiteboard/assets";
-import { validateWhiteboardProject, type WhiteboardProject } from "../src/lib/tubeforge/whiteboard/storyboard";
-import { buildGeometry, type WordAnchors } from "../src/lib/tubeforge/whiteboard/timing";
-import { beatSceneEvents, splitSentences, words } from "../src/lib/tubeforge/whiteboard/beat-plan";
-import { sceneVoiceAnchors } from "../src/lib/tubeforge/whiteboard/voice-anchors";
-import { detectSpeechRuns } from "../src/lib/tubeforge/captions";
-import { renderWhiteboard, probeDurationSec } from "../src/lib/tubeforge/whiteboard/render";
-import { runQcReport } from "../src/lib/tubeforge/qc";
-import { bedExpression, ORIGINAL_LIBRARY } from "../src/lib/tubeforge/music";
+import { W1_ASPECTS, W1_FPS, type W1AspectId } from "../src/lib/ibismuh/whiteboard/benchmark-scenarios";
+import { loadLibrary } from "../src/lib/ibismuh/whiteboard/assets";
+import { validateWhiteboardProject, type WhiteboardProject } from "../src/lib/ibismuh/whiteboard/storyboard";
+import { buildGeometry, type WordAnchors } from "../src/lib/ibismuh/whiteboard/timing";
+import { beatSceneEvents, splitSentences, words } from "../src/lib/ibismuh/whiteboard/beat-plan";
+import { sceneVoiceAnchors } from "../src/lib/ibismuh/whiteboard/voice-anchors";
+import { detectSpeechRuns } from "../src/lib/ibismuh/captions";
+import { renderWhiteboard, probeDurationSec } from "../src/lib/ibismuh/whiteboard/render";
+import { runQcReport } from "../src/lib/ibismuh/qc";
+import { bedExpression, ORIGINAL_LIBRARY } from "../src/lib/ibismuh/music";
 
 const execFileP = promisify(execFile);
 const OUT_DIR = path.resolve("validation/w4");

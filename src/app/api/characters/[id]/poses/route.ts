@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { startJob } from "@/lib/tubeforge/jobs";
-import { listPoses, portraitExists } from "@/lib/tubeforge/characters";
-import { runPosesJob } from "@/lib/tubeforge/character-jobs";
-import { POSES } from "@/lib/tubeforge/types";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { startJob } from "@/lib/ibismuh/jobs";
+import { listPoses, portraitExists } from "@/lib/ibismuh/characters";
+import { runPosesJob } from "@/lib/ibismuh/character-jobs";
+import { POSES } from "@/lib/ibismuh/types";
 
 type Ctx = { params: Promise<{ id: string }> };
 

@@ -21,7 +21,7 @@
 import {
   originHostTrusted,
   parseAllowedOrigins,
-} from "../src/lib/tubeforge/origin-trust";
+} from "../src/lib/ibismuh/origin-trust";
 
 let pass = 0;
 let fail = 0;

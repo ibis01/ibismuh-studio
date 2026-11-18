@@ -45,11 +45,11 @@ async function main() {
   }
   console.log("synthesized:", moving, "and", frozen);
 
-  const { verifyClip, probeDuration } = await import("../src/lib/tubeforge/stock-verify.ts");
-  const { MOTION_STATIC_MAX, rankCandidates } = await import("../src/lib/tubeforge/stock-ranker.ts");
-  const { mergeIntoIndex } = await import("../src/lib/tubeforge/stock-index.ts");
-  type SceneIndexEntry = import("../src/lib/tubeforge/stock-index.ts").SceneIndexEntry;
-  type Scene = import("../src/lib/tubeforge/types.ts").Scene;
+  const { verifyClip, probeDuration } = await import("../src/lib/ibismuh/stock-verify.ts");
+  const { MOTION_STATIC_MAX, rankCandidates } = await import("../src/lib/ibismuh/stock-ranker.ts");
+  const { mergeIntoIndex } = await import("../src/lib/ibismuh/stock-index.ts");
+  type SceneIndexEntry = import("../src/lib/ibismuh/stock-index.ts").SceneIndexEntry;
+  type Scene = import("../src/lib/ibismuh/types.ts").Scene;
 
   const scene = {
     index: 1,

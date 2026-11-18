@@ -32,19 +32,19 @@ process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { withCtx, hashPassword } from "../src/lib/tubeforge/tenant";
-import { aiCallJson, parseJsonLoose } from "../src/lib/tubeforge/ai";
+import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
+import { aiCallJson, parseJsonLoose } from "../src/lib/ibismuh/ai";
 import {
   runDirectorPass,
   setDirectorState,
   parsePlan,
   resolveProfile,
   type DirectorPlan,
-} from "../src/lib/tubeforge/director";
-import { generateSceneImage, parseScenes, sceneImageFile } from "../src/lib/tubeforge/story";
-import { visionComplete } from "../src/lib/tubeforge/providers/vision";
-import { getCapability, saveCapability } from "../src/lib/tubeforge/providers/settings";
-import * as storage from "../src/lib/tubeforge/storage";
+} from "../src/lib/ibismuh/director";
+import { generateSceneImage, parseScenes, sceneImageFile } from "../src/lib/ibismuh/story";
+import { visionComplete } from "../src/lib/ibismuh/providers/vision";
+import { getCapability, saveCapability } from "../src/lib/ibismuh/providers/settings";
+import * as storage from "../src/lib/ibismuh/storage";
 
 const prisma = new PrismaClient();
 const SUFFIX = `${Date.now().toString(36)}-${process.pid.toString(36)}`;

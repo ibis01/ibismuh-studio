@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * TubeForge unit + regression suite — audio mixer, QC gate, music mood logic.
+ * Ibismuh Studio unit + regression suite — audio mixer, QC gate, music mood logic.
  *
  *   node --import tsx scripts/test-unit.mts          (also wired into `npm run check`)
  *
@@ -38,9 +38,9 @@ import {
   staticRunsFromFrames,
   voiceSplitChain,
   type LoudnessMeasurement,
-} from "../src/lib/tubeforge/audiomix";
-import { isMusicMoodId, moodTags, NICHE_MOODS } from "../src/lib/tubeforge/music";
-import { parseSrt, runQcReport } from "../src/lib/tubeforge/qc";
+} from "../src/lib/ibismuh/audiomix";
+import { isMusicMoodId, moodTags, NICHE_MOODS } from "../src/lib/ibismuh/music";
+import { parseSrt, runQcReport } from "../src/lib/ibismuh/qc";
 import {
   applyQcPolicy,
   parseQcReport,
@@ -50,7 +50,7 @@ import {
   QC_ENFORCEMENT_MATRIX,
   QC_POLICY_VERSION,
   type QcReportLike,
-} from "../src/lib/tubeforge/qc-policy";
+} from "../src/lib/ibismuh/qc-policy";
 import {
   describeVoiceHealth,
   isClonedVoiceId,
@@ -58,21 +58,21 @@ import {
   resolvePlayhtVoiceId,
   sanitizeVoice,
   voiceCatalog,
-} from "../src/lib/tubeforge/providers/tts";
+} from "../src/lib/ibismuh/providers/tts";
 import {
   cleanCloneName,
   isValidSampleUrl,
   MAX_SAMPLE_SEC,
   MIN_SAMPLE_SEC,
-} from "../src/lib/tubeforge/voice-clone";
+} from "../src/lib/ibismuh/voice-clone";
 import {
   closestPriorDistance,
   dHashFromGray9x8,
   hammingDistanceHex,
   imageHash,
   sceneImageHashes,
-} from "../src/lib/tubeforge/arthash";
-import { sceneQueries } from "../src/lib/tubeforge/stock-query";
+} from "../src/lib/ibismuh/arthash";
+import { sceneQueries } from "../src/lib/ibismuh/stock-query";
 import {
   clipKey,
   configuredSources,
@@ -81,7 +81,7 @@ import {
   pixabayParse,
   type SceneIndexEntry,
   type StockCandidate,
-} from "../src/lib/tubeforge/stock-index";
+} from "../src/lib/ibismuh/stock-index";
 import {
   candidateFloors,
   combineFrameVerdicts,
@@ -89,7 +89,7 @@ import {
   rankCandidates,
   semanticFactor,
   stockFrameTimes,
-} from "../src/lib/tubeforge/stock-ranker";
+} from "../src/lib/ibismuh/stock-ranker";
 import {
   costEfficiencyFromMicroUsd,
   DEFAULT_WEIGHTS,
@@ -102,10 +102,10 @@ import {
   RELIABILITY_PRIOR,
   scoreProviders,
   UNKNOWN_COST_FACTOR,
-} from "../src/lib/tubeforge/provider-score";
-import { deriveBoardStages, deriveCheckpoints } from "../src/lib/tubeforge/production-board";
-import { rigEligible, rigPlan, RIG_HEAD_FOCAL } from "../src/lib/tubeforge/character-rig";
-import { cameraAt as camera3dAt, parseScene3D, scaffoldScene3D, serializeScene3D } from "../src/lib/tubeforge/scene3d";
+} from "../src/lib/ibismuh/provider-score";
+import { deriveBoardStages, deriveCheckpoints } from "../src/lib/ibismuh/production-board";
+import { rigEligible, rigPlan, RIG_HEAD_FOCAL } from "../src/lib/ibismuh/character-rig";
+import { cameraAt as camera3dAt, parseScene3D, scaffoldScene3D, serializeScene3D } from "../src/lib/ibismuh/scene3d";
 import {
   bandOf,
   countWords,
@@ -115,14 +115,14 @@ import {
   sceneRole,
   sceneWpm,
   WPM_BANDS,
-} from "../src/lib/tubeforge/pacing";
-import { selfhostEndpoint, sharedVoiceServer } from "../src/lib/tubeforge/shared-voice";
+} from "../src/lib/ibismuh/pacing";
+import { selfhostEndpoint, sharedVoiceServer } from "../src/lib/ibismuh/shared-voice";
 import {
   LOGIN_MAX_FAILURES,
   LOGIN_WINDOW_MS,
   loginWindowDecision,
-} from "../src/lib/tubeforge/auth-throttle";
-import type { AssembledTimeline, TimelineScene } from "../src/lib/tubeforge/timeline";
+} from "../src/lib/ibismuh/auth-throttle";
+import type { AssembledTimeline, TimelineScene } from "../src/lib/ibismuh/timeline";
 import {
   cameraAt,
   formatTimecode,
@@ -133,20 +133,20 @@ import {
   seamBoundaries,
   snapToBoundaries,
   type PreviewSettings,
-} from "../src/lib/tubeforge/preview-lanes";
-import type { Scene } from "../src/lib/tubeforge/types";
+} from "../src/lib/ibismuh/preview-lanes";
+import type { Scene } from "../src/lib/ibismuh/types";
 import type {
   WhiteboardProject,
   WhiteboardScene,
-} from "../src/lib/tubeforge/whiteboard/storyboard";
+} from "../src/lib/ibismuh/whiteboard/storyboard";
 import {
   applyDeleteToDoc,
   applyDuplicateToDoc,
   applySplitToDoc,
   sceneSegmentSec,
   splitNarrationAt,
-} from "../src/lib/tubeforge/clip-ops";
-import { ANIM_FRAME_BUDGET, frameCountOf, framePlanWindows } from "../src/lib/tubeforge/anim/clock";
+} from "../src/lib/ibismuh/clip-ops";
+import { ANIM_FRAME_BUDGET, frameCountOf, framePlanWindows } from "../src/lib/ibismuh/anim/clock";
 import {
   GRAPHICS_BUDGETS,
   GRAPHICS_ELEMENT_KINDS,
@@ -161,15 +161,15 @@ import {
   writeGraphicsDoc,
   type GraphicsDoc,
   type GraphicsScene,
-} from "../src/lib/tubeforge/graphics/types";
-import { scaffoldGraphicsDoc } from "../src/lib/tubeforge/graphics/planner";
+} from "../src/lib/ibismuh/graphics/types";
+import { scaffoldGraphicsDoc } from "../src/lib/ibismuh/graphics/planner";
 import {
   frameAt,
   graphicsFrameCount,
   graphicsSceneDurationsMs,
   GRAPHICS_MOTION_SEMANTICS,
   type GraphicsFrameState,
-} from "../src/lib/tubeforge/graphics/frame";
+} from "../src/lib/ibismuh/graphics/frame";
 import {
   APPLY_GRAPHICS_FRAME_FN,
   composeGraphicsScene,
@@ -178,19 +178,19 @@ import {
   graphicsFramePayload,
   graphicsGroupClaims,
   placedGraphicsFrame,
-} from "../src/lib/tubeforge/graphics/compose";
+} from "../src/lib/ibismuh/graphics/compose";
 import {
   assertGraphicsBudget,
   graphicsBudgetReport,
-} from "../src/lib/tubeforge/graphics/preflight";
-import { graphicsTracks } from "../src/lib/tubeforge/graphics/tracks";
+} from "../src/lib/ibismuh/graphics/preflight";
+import { graphicsTracks } from "../src/lib/ibismuh/graphics/tracks";
 // S123 P3 — the engine renderer's pure seams, the draft viewport law and
 // the graphics QC group (the matrix + the lane-aware battery helpers).
 import {
   graphicsEncodeArgs,
   graphicsAssemblyArgs,
   sceneCursorMs,
-} from "../src/lib/tubeforge/graphics/render";
+} from "../src/lib/ibismuh/graphics/render";
 import {
   GRAPHICS_DRAFT_SCALES,
   draftSurfaceDim,
@@ -198,13 +198,13 @@ import {
   graphicsDraftKey,
   graphicsDraftPlan,
   isGraphicsDraftScale,
-} from "../src/lib/tubeforge/graphics/draft";
+} from "../src/lib/ibismuh/graphics/draft";
 import {
   graphicsExpectedCuts,
   graphicsHoldWindows,
   graphicsQcMatrix,
-} from "../src/lib/tubeforge/graphics/qc";
-import { judgeFreezes, judgeStaticRuns } from "../src/lib/tubeforge/qc";
+} from "../src/lib/ibismuh/graphics/qc";
+import { judgeFreezes, judgeStaticRuns } from "../src/lib/ibismuh/qc";
 // S124 — the element editor's pure laws (hit-test, placement math, the
 // slots-law z-order) + the composer's placed-frame truth and claim map.
 import {
@@ -213,7 +213,7 @@ import {
   movedPlacement,
   scaledPlacement,
   topmostElementAt,
-} from "../src/lib/tubeforge/graphics/editor";
+} from "../src/lib/ibismuh/graphics/editor";
 
 const execFileAsync = promisify(execFile);
 
@@ -576,7 +576,7 @@ await test("parseSrt: garbage and empty inputs → no cues, no crash", () => {
 });
 
 await test("formatSrtCues: hard non-overlap — the earlier cue always yields (Battle Yamuk 54 overlaps)", async () => {
-  const { formatSrtCues } = await import("../src/lib/tubeforge/captions.ts");
+  const { formatSrtCues } = await import("../src/lib/ibismuh/captions.ts");
   // Cue 1 runs into cue 2's window; cue 2 runs past cue 3's start; cue 4
   // arrives out of order (blended-timeline shift). NONE may overlap after
   // the pass, whatever the inputs do.
@@ -601,7 +601,7 @@ await test("formatSrtCues: hard non-overlap — the earlier cue always yields (B
 });
 
 await test("formatSrtCues: sane cues pass through untouched", async () => {
-  const { formatSrtCues } = await import("../src/lib/tubeforge/captions.ts");
+  const { formatSrtCues } = await import("../src/lib/ibismuh/captions.ts");
   const srt = formatSrtCues([
     { start: 0, end: 1.5, text: "a" },
     { start: 2.0, end: 3.5, text: "b" },
@@ -755,7 +755,7 @@ try {
   // at the known offsets — the first time the aligner's measurement half is
   // proven against ground truth.
   await test("S136 caption alignment: detectSpeechRuns measures the known speech windows", async () => {
-    const { detectSpeechRuns } = await import("../src/lib/tubeforge/captions.ts");
+    const { detectSpeechRuns } = await import("../src/lib/ibismuh/captions.ts");
     const wav = path.join(tmp, "speech-runs.wav");
     // 0.6s silence | 1.2s tone | 0.6s silence | 1.2s tone | 0.6s silence.
     // The gate expression uses `+` (boolean OR for 0/1 terms) — the volume
@@ -1271,7 +1271,7 @@ await test("THE NEVER-SILENT PIN: verdict pass implies ≥2 passing frames", () 
 suiteStart("S89 stock ref round-trip — verification survives the doc");
 
 await test("parseScenes: new ref fields survive (license, providerId, verification)", async () => {
-  const { parseScenes } = await import("../src/lib/tubeforge/story.ts");
+  const { parseScenes } = await import("../src/lib/ibismuh/story.ts");
   const scene = {
     index: 1,
     title: "T",
@@ -1309,7 +1309,7 @@ await test("parseScenes: new ref fields survive (license, providerId, verificati
 });
 
 await test("parseScenes: legacy ref still valid; bad verification drops the record only", async () => {
-  const { parseScenes } = await import("../src/lib/tubeforge/story.ts");
+  const { parseScenes } = await import("../src/lib/ibismuh/story.ts");
   const legacy = {
     index: 1,
     title: "T",
@@ -1737,7 +1737,7 @@ await test("cameraAt: exact interpolation, clamped ends", () => {
 // ---------------------------------------------------------------------------
 
 await test("S134 objectAt: keyless objects mirror their static fields exactly (the render-path byte-identity)", async () => {
-  const { objectAt, scaffoldScene3D } = await import("../src/lib/tubeforge/scene3d");
+  const { objectAt, scaffoldScene3D } = await import("../src/lib/ibismuh/scene3d");
   // S160: the scaffold's satellites/centerpiece now carry keyframes (the
   // alive-world law), so the KEYLESS identity law rides explicit keyless
   // clones — the law itself is unchanged (a keyless object mirrors its
@@ -1756,7 +1756,7 @@ await test("S134 objectAt: keyless objects mirror their static fields exactly (t
 });
 
 await test("S134 objectAt: per-channel tracks, clamped holds, independent channels", async () => {
-  const { objectAt } = await import("../src/lib/tubeforge/scene3d");
+  const { objectAt } = await import("../src/lib/ibismuh/scene3d");
   const obj = {
     id: "orb",
     kind: "sphere" as const,
@@ -1784,7 +1784,7 @@ await test("S134 objectAt: per-channel tracks, clamped holds, independent channe
 });
 
 await test("S134 the tolerant keyframes read + the strict write round-trip", async () => {
-  const { parseScene3D, serializeScene3D, scaffoldScene3D } = await import("../src/lib/tubeforge/scene3d");
+  const { parseScene3D, serializeScene3D, scaffoldScene3D } = await import("../src/lib/ibismuh/scene3d");
   const doc = scaffoldScene3D("s134 parse");
   const keyed = {
     ...doc,
@@ -1901,7 +1901,7 @@ process.env.TUBEFORGE_ENCRYPTION_KEY ||= "unit-test-key-0123456789abcdef";
 
 await test("crypto: AES-256-GCM roundtrip + distinct IVs", async () => {
   const { encryptSecret, decryptSecret, isEncryptedSecret } = await import(
-    "../src/lib/tubeforge/crypto.ts"
+    "../src/lib/ibismuh/crypto.ts"
   );
   const plain = "sk-live-abcdef-0123456789-SECRET";
   const a = encryptSecret(plain);
@@ -1914,7 +1914,7 @@ await test("crypto: AES-256-GCM roundtrip + distinct IVs", async () => {
 });
 
 await test("crypto: tampering is detected (GCM tag)", async () => {
-  const { encryptSecret, decryptSecret } = await import("../src/lib/tubeforge/crypto.ts");
+  const { encryptSecret, decryptSecret } = await import("../src/lib/ibismuh/crypto.ts");
   const stored = encryptSecret("another-secret");
   const parts = stored.split(".");
   const flipped = parts[2].startsWith("A") ? "B" + parts[2].slice(1) : "A" + parts[2].slice(1);
@@ -1929,7 +1929,7 @@ await test("crypto: tampering is detected (GCM tag)", async () => {
 });
 
 await test("crypto: sha256Hex is deterministic and format-stable", async () => {
-  const { sha256Hex } = await import("../src/lib/tubeforge/crypto.ts");
+  const { sha256Hex } = await import("../src/lib/ibismuh/crypto.ts");
   eq(
     sha256Hex("token"),
     sha256Hex("token"),
@@ -1946,7 +1946,7 @@ await test("crypto: sha256Hex is deterministic and format-stable", async () => {
 suiteStart("Stage 3 — provider timeout matrix (D-09)");
 
 await test("timeoutFor: defaults per capability; env overrides apply; invalid env ignored", async () => {
-  const http = await import("../src/lib/tubeforge/providers/http.ts");
+  const http = await import("../src/lib/ibismuh/providers/http.ts");
   http.resetTimeoutOverrides();
   eq(http.timeoutFor("generic"), 300_000, "generic keeps the old universal 300s");
   eq(http.timeoutFor("youtube-api"), 30_000, "YouTube metadata fails fast");
@@ -1969,7 +1969,7 @@ await test("timeoutFor: no timeout regression — youtube.ts routes through the 
   // Static sanity (the audited D-09 fix): every outbound YouTube HTTP call
   // goes through ytFetch — the only raw fetch( left is ytFetch's own body.
   const src = fs.readFileSync(
-    new URL("../src/lib/tubeforge/youtube.ts", import.meta.url),
+    new URL("../src/lib/ibismuh/youtube.ts", import.meta.url),
     "utf8"
   );
   const rawFetch = src
@@ -1989,7 +1989,7 @@ await test("claimIsStale: null claim, own claim, dead pid, live foreign pid, pri
   // case where an EARLIER test (e.g. the captions suite, whose import chain
   // captions → story → jobs → queue) already initialized the module.
   process.env.TUBEFORGE_NO_CLAIM = "1";
-  const queue = await import("../src/lib/tubeforge/queue.ts");
+  const queue = await import("../src/lib/ibismuh/queue.ts");
   queue.setClaiming(false);
   queue.initQueue("web");
   const myId = queue.queueWorkerId();
@@ -2015,7 +2015,7 @@ await test("claimIsStale: null claim, own claim, dead pid, live foreign pid, pri
 suiteStart("Stage 3 — streaming ZIP (D-24)");
 
 await test("streamZip: entries round-trip byte-exact (store + deflate + text/binary)", async () => {
-  const { streamZip } = await import("../src/lib/tubeforge/zip.ts");
+  const { streamZip } = await import("../src/lib/ibismuh/zip.ts");
   const { Readable } = await import("node:stream");
 
   const textData = Buffer.from("script.txt content\n".repeat(50), "utf8");
@@ -2049,7 +2049,7 @@ await test("streamZip: entries round-trip byte-exact (store + deflate + text/bin
 });
 
 await test("streamZip: python zipfile validates the archive and extracts exact bytes", async () => {
-  const { streamZip, zipMethodFor } = await import("../src/lib/tubeforge/zip.ts");
+  const { streamZip, zipMethodFor } = await import("../src/lib/ibismuh/zip.ts");
   const { Readable } = await import("node:stream");
 
   eq(zipMethodFor("final.mp4"), 0, "mp4 is stored (already compressed)");
@@ -2089,7 +2089,7 @@ print(hashlib.sha256(a).hexdigest(), hashlib.sha256(b).hexdigest())
 });
 
 await test("buildZip (in-memory path) still works — no regression for small bundles", async () => {
-  const { buildZip } = await import("../src/lib/tubeforge/zip.ts");
+  const { buildZip } = await import("../src/lib/ibismuh/zip.ts");
   const zip = buildZip([{ name: "a.txt", data: Buffer.from("hello") }]);
   eq(zip.readUInt32LE(0), 0x04034b50, "local header signature intact");
 });
@@ -2109,7 +2109,7 @@ await test("log: pino-format JSON lines, level filtering, child bindings, redact
   (process.stderr as { write: unknown }).write = collect;
   try {
     process.env.TUBEFORGE_LOG_LEVEL = "debug";
-    const mod = await import("../src/lib/tubeforge/log.ts");
+    const mod = await import("../src/lib/ibismuh/log.ts");
     const logger = mod.createLogger({ mod: "probe" }).child({ job: "j1" });
 
     logger.info("hello", { apiKey: "sk-secret-123", note: "plain" });
@@ -2130,7 +2130,7 @@ await test("log: pino-format JSON lines, level filtering, child bindings, redact
     // Level threshold: warn suppresses info/debug (threshold is dynamic).
     captured.length = 0;
     process.env.TUBEFORGE_LOG_LEVEL = "warn";
-    const quiet = await import("../src/lib/tubeforge/log.ts");
+    const quiet = await import("../src/lib/ibismuh/log.ts");
     const l2 = quiet.createLogger({});
     l2.info("hidden");
     l2.warn("shown");
@@ -2149,7 +2149,7 @@ await test("log: pino-format JSON lines, level filtering, child bindings, redact
 // ---------------------------------------------------------------------------
 
 await test("storage: normalizeKey rejects traversal and absolute paths, passes clean keys", async () => {
-  const mod = await import("../src/lib/tubeforge/storage.ts");
+  const mod = await import("../src/lib/ibismuh/storage.ts");
   eq(mod.normalizeKey("abc/def.png"), "abc/def.png", "clean key");
   eq(mod.normalizeKey("a//b/./c"), "a/b/c", "separators collapsed");
   let threw = false;
@@ -2164,7 +2164,7 @@ await test("storage: local driver roundtrip — put / get / stat / exists / remo
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "tf-storage-"));
   process.env.TUBEFORGE_UPLOAD_ROOT = dir;
   delete process.env.TUBEFORGE_STORAGE_DRIVER;
-  const mod = await import("../src/lib/tubeforge/storage.ts");
+  const mod = await import("../src/lib/ibismuh/storage.ts");
   const key = "v1/artifact.bin";
   const payload = crypto.randomBytes(2048);
   await mod.put(key, payload);
@@ -2185,7 +2185,7 @@ await test("storage: putFromPath same-path no-op + cross-dir move works", async 
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "tf-storage2-"));
   process.env.TUBEFORGE_UPLOAD_ROOT = path.join(dir, "root");
   delete process.env.TUBEFORGE_STORAGE_DRIVER;
-  const mod = await import("../src/lib/tubeforge/storage.ts");
+  const mod = await import("../src/lib/ibismuh/storage.ts");
   // direct write into the uploads layout, then register it (the render.ts pattern)
   const file = path.join(dir, "root", "vid", "final.mp4");
   await fsp.mkdir(path.dirname(file), { recursive: true });
@@ -2207,7 +2207,7 @@ await test("storage: removePrefix wipes a whole video folder", async () => {
   const dir = await fsp.mkdtemp(path.join(os.tmpdir(), "tf-storage3-"));
   process.env.TUBEFORGE_UPLOAD_ROOT = dir;
   delete process.env.TUBEFORGE_STORAGE_DRIVER;
-  const mod = await import("../src/lib/tubeforge/storage.ts");
+  const mod = await import("../src/lib/ibismuh/storage.ts");
   for (const f of ["scene-01.png", "scene-02.png", "voiceover.wav", "final.mp4"]) {
     await mod.put(`vid9/${f}`, Buffer.from(`data-${f}`));
   }
@@ -2221,7 +2221,7 @@ await test("storage: removePrefix wipes a whole video folder", async () => {
 });
 
 await test("storage: driver kind + info respond to env without restarts", async () => {
-  const mod = await import("../src/lib/tubeforge/storage.ts");
+  const mod = await import("../src/lib/ibismuh/storage.ts");
   eq(mod.storageDriverKind(), "local", "default driver is local");
   process.env.TUBEFORGE_STORAGE_DRIVER = "s3";
   eq(mod.storageDriverKind(), "s3", "env flips the driver");
@@ -2231,7 +2231,7 @@ await test("storage: driver kind + info respond to env without restarts", async 
 });
 
 await test("storage: scratchDir tracks the driver (uploads locally, tmp under s3)", async () => {
-  const mod = await import("../src/lib/tubeforge/storage.ts");
+  const mod = await import("../src/lib/ibismuh/storage.ts");
   delete process.env.TUBEFORGE_STORAGE_DRIVER;
   const localDir = mod.scratchDir("vidA");
   ok(localDir.startsWith(process.cwd()), "local scratch lives under the app (uploads layout)");
@@ -2245,7 +2245,7 @@ await test("storage: scratchDir tracks the driver (uploads locally, tmp under s3
 });
 
 await test("storage: list() enumerates a prefix and tolerates absence (T-4.0)", async () => {
-  const mod = await import("../src/lib/tubeforge/storage.ts");
+  const mod = await import("../src/lib/ibismuh/storage.ts");
   delete process.env.TUBEFORGE_STORAGE_DRIVER;
   const probe = `tf-list-probe-${Date.now()}`;
   // Two nested objects + one sibling prefix that must NOT leak in.
@@ -2272,7 +2272,7 @@ await test("storage: list() enumerates a prefix and tolerates absence (T-4.0)", 
 // ---------------------------------------------------------------------------
 
 await test("S42 sceneArtVersion: URL-safe token that rotates with mtime AND size", async () => {
-  const { sceneArtVersion } = await import("../src/lib/tubeforge/story.ts");
+  const { sceneArtVersion } = await import("../src/lib/ibismuh/story.ts");
   const base = sceneArtVersion({ size: 4096, mtime: new Date(1700000000123) });
   eq(base, "1700000000123-4096", "mtime ms + size, dash-joined");
   ok(/^[0-9]+-[0-9]+$/.test(base), "token is URL-safe (digits + dash only)");
@@ -2285,8 +2285,8 @@ await test("S42 sceneArtVersion: URL-safe token that rotates with mtime AND size
 });
 
 await test("S42 serializeScenes: the art URL carries ?v= and rotates when art is replaced", async () => {
-  const storage = await import("../src/lib/tubeforge/storage.ts");
-  const { parseScenes, serializeScenes } = await import("../src/lib/tubeforge/story.ts");
+  const storage = await import("../src/lib/ibismuh/storage.ts");
+  const { parseScenes, serializeScenes } = await import("../src/lib/ibismuh/story.ts");
   delete process.env.TUBEFORGE_STORAGE_DRIVER; // local driver — real bytes on disk
   const probe = `s42-art-probe-${Date.now()}`;
   const scenes = parseScenes(
@@ -2342,7 +2342,7 @@ await test("S42 serializeScenes: the art URL carries ?v= and rotates when art is
 // ---------------------------------------------------------------------------
 
 await test("S43 sniffImageFormat: HEIC brands pass, non-HEIC ftyp boxes do not", async () => {
-  const { sniffImageFormat } = await import("../src/lib/tubeforge/story.ts");
+  const { sniffImageFormat } = await import("../src/lib/ibismuh/story.ts");
   const heicFile = (brand: string) =>
     Buffer.concat([
       Buffer.alloc(4), // size placeholder
@@ -2361,7 +2361,7 @@ await test("S43 sniffImageFormat: HEIC brands pass, non-HEIC ftyp boxes do not",
 });
 
 await test("S43 replaceSceneImage: a real HEIC decodes, cover-crops and lands as scene art", async () => {
-  const { replaceSceneImage } = await import("../src/lib/tubeforge/story.ts");
+  const { replaceSceneImage } = await import("../src/lib/ibismuh/story.ts");
   delete process.env.TUBEFORGE_STORAGE_DRIVER; // local driver — real bytes on disk
   const probe = `s43-heic-probe-${Date.now()}`;
   const fixture = fs.readFileSync(path.join(import.meta.dirname, "fixtures", "scene-upload.heic"));
@@ -2383,7 +2383,7 @@ await test("S43 replaceSceneImage: a real HEIC decodes, cover-crops and lands as
 });
 
 await test("S43 captionOverridesFor: doc caption > user-edited row caption > word-synced chunks", async () => {
-  const { captionOverridesFor } = await import("../src/lib/tubeforge/captions.ts");
+  const { captionOverridesFor } = await import("../src/lib/ibismuh/captions.ts");
   const scenes = [
     { caption: "LLM line 1", captionUser: false }, // LLM-seeded — must NOT override
     { caption: "My caption", captionUser: true },   // human edit — overrides
@@ -2402,7 +2402,7 @@ await test("S43 captionOverridesFor: doc caption > user-edited row caption > wor
 });
 
 await test("S43 parseScenes: captionUser survives the row round-trip (legacy rows default false)", async () => {
-  const { parseScenes } = await import("../src/lib/tubeforge/story.ts");
+  const { parseScenes } = await import("../src/lib/ibismuh/story.ts");
   const parsed = parseScenes(
     JSON.stringify([
       {
@@ -2420,7 +2420,7 @@ await test("S43 parseScenes: captionUser survives the row round-trip (legacy row
 });
 
 await test("S43 assembleTimeline: doc captions seed ONLY from user-edited rows", async () => {
-  const { assembleTimeline } = await import("../src/lib/tubeforge/timeline.ts");
+  const { assembleTimeline } = await import("../src/lib/ibismuh/timeline.ts");
   const scenes = [
     {
       index: 1, title: "A", narration: "First scene narration here.", visual: "v", camera: "static",
@@ -2443,7 +2443,7 @@ await test("S43 assembleTimeline: doc captions seed ONLY from user-edited rows",
 await test("email: console mode logs and reports delivered=console, link stays in responses", async () => {
   const orig = process.env.TUBEFORGE_EMAIL_MODE;
   delete process.env.TUBEFORGE_EMAIL_MODE;
-  const mod = await import("../src/lib/tubeforge/email.ts");
+  const mod = await import("../src/lib/ibismuh/email.ts");
   const lines: string[] = [];
   const origLog = console.log;
   console.log = (...a: unknown[]) => lines.push(a.join(" "));
@@ -2469,7 +2469,7 @@ await test("email: smtp mode hides the link from responses and refuses empty con
   const orig = { mode: process.env.TUBEFORGE_EMAIL_MODE, host: process.env.TUBEFORGE_SMTP_HOST };
   process.env.TUBEFORGE_EMAIL_MODE = "smtp";
   delete process.env.TUBEFORGE_SMTP_HOST;
-  const mod = await import("../src/lib/tubeforge/email.ts");
+  const mod = await import("../src/lib/ibismuh/email.ts");
   eq(mod.emailMode(), "smtp", "mode picked up");
   eq(mod.linkInResponse(), false, "smtp responses never echo the link");
   let threw = false;
@@ -2490,7 +2490,7 @@ await test("email: smtp mode hides the link from responses and refuses empty con
 // ---------------------------------------------------------------------------
 
 await test("queue: splitEntityId parses scene/slide composite ids, rejects garbage", async () => {
-  const { splitEntityId } = await import("../src/lib/tubeforge/video-jobs.ts");
+  const { splitEntityId } = await import("../src/lib/ibismuh/video-jobs.ts");
 
   const [v1, n1] = splitEntityId("abc123#scene4", "#scene");
   eq(v1, "abc123", "scene videoId extracted");
@@ -2525,7 +2525,7 @@ await test("queue: resumableKinds covers every kind the routes start", async () 
   // Stage 6, whiteboard in S67, consistency in S77, reference in S88,
   // scene3d in S94, scene-recheck in S116, graphics in S123; the pre-fix
   // copy listed only 18 and enshrined the drift).
-  const { resumableKinds } = await import("../src/lib/tubeforge/queue-handlers.ts");
+  const { resumableKinds } = await import("../src/lib/ibismuh/queue-handlers.ts");
   const kinds = resumableKinds();
   const expected = [
     "script", "research", "stock", "voiceover", "storyboard", "scene",
@@ -2545,7 +2545,7 @@ await test("queue: resumableKinds covers every kind the routes start", async () 
 // ---------------------------------------------------------------------------
 
 await test("pronounce: substitutes longest-first, word-boundary, case-insensitive", async () => {
-  const { applyPronunciations, sortPairs } = await import("../src/lib/tubeforge/pronounce.ts");
+  const { applyPronunciations, sortPairs } = await import("../src/lib/ibismuh/pronounce.ts");
 
   const pairs = sortPairs([
     { from: "Colonel", to: "kernel" },
@@ -2573,7 +2573,7 @@ await test("pronounce: substitutes longest-first, word-boundary, case-insensitiv
 });
 
 await test("pronounce: parseStoredPronunciations degrades corrupt rows to empty", async () => {
-  const { parseStoredPronunciations } = await import("../src/lib/tubeforge/pronounce.ts");
+  const { parseStoredPronunciations } = await import("../src/lib/ibismuh/pronounce.ts");
 
   eq(parseStoredPronunciations(null).length, 0, "null -> empty");
   eq(parseStoredPronunciations("not json").length, 0, "corrupt JSON -> empty");
@@ -2604,7 +2604,7 @@ await test("tenant-db: every org-scoped model matches the lowercased lookup", as
   // camelCase entries, so five models (researchSession, scheduleSlot, videoStat,
   // voiceProfile, musicTrack) were silently UNSCOPED — a cross-tenant leak the
   // Stage 4b sweep caught live. This pins the normalization.
-  const { ORG_SCOPED_MODELS } = await import("../src/lib/tubeforge/tenant-db.ts");
+  const { ORG_SCOPED_MODELS } = await import("../src/lib/ibismuh/tenant-db.ts");
   const expected = [
     "channel", "character", "video", "activity", "researchsession",
     "scheduleslot", "videostat", "voiceprofile", "musictrack", "job", "membership",
@@ -2622,7 +2622,7 @@ await test("tenant-db: every org-scoped model matches the lowercased lookup", as
 // ---------------------------------------------------------------------------
 
 await test("director-plan: parsePlan normalizes junk into the vocabularies", async () => {
-  const { parsePlan } = await import("../src/lib/tubeforge/director-plan.ts");
+  const { parsePlan } = await import("../src/lib/ibismuh/director-plan.ts");
   const plan = parsePlan(
     JSON.stringify({
       concept: "Slow burn, escalation at the midpoint.",
@@ -2658,7 +2658,7 @@ await test("director-plan: parsePlan normalizes junk into the vocabularies", asy
 });
 
 await test("director-plan: corrupt / empty / null plans degrade to null", async () => {
-  const { parsePlan } = await import("../src/lib/tubeforge/director-plan.ts");
+  const { parsePlan } = await import("../src/lib/ibismuh/director-plan.ts");
   eq(parsePlan(null), null, "null → null");
   eq(parsePlan(undefined), null, "undefined → null");
   eq(parsePlan(""), null, "empty → null");
@@ -2669,7 +2669,7 @@ await test("director-plan: corrupt / empty / null plans degrade to null", async 
 
 await test("director-plan: addendum + duration + transition accessors", async () => {
   const { parsePlan, directorImageAddendum, planSceneDuration, planTransitionIn } = await import(
-    "../src/lib/tubeforge/director-plan.ts"
+    "../src/lib/ibismuh/director-plan.ts"
   );
   const plan = parsePlan(
     JSON.stringify({
@@ -2698,7 +2698,7 @@ await test("director-plan: addendum + duration + transition accessors", async ()
 });
 
 await test("motion: panEndpoints never emits a dead pan (Battle Yamuk 2.5s frozen stretch)", async () => {
-  const { panEndpoints } = await import("../src/lib/tubeforge/motion.ts");
+  const { panEndpoints } = await import("../src/lib/ibismuh/motion.ts");
   const work: [number, number] = [3840, 2160];
   // The exact failing case: pan-LEFT with a left-ish focal (0.32) at z=1.30 —
   // the window starts pinned at the left edge, so the leftward sweep clamps
@@ -2721,7 +2721,7 @@ await test("motion: panEndpoints never emits a dead pan (Battle Yamuk 2.5s froze
 });
 
 await test("director-plan: planStaticRuns flags 3+ consecutive unmotivated static shots", async () => {
-  const { parsePlan, planStaticRuns } = await import("../src/lib/tubeforge/director-plan.ts");
+  const { parsePlan, planStaticRuns } = await import("../src/lib/ibismuh/director-plan.ts");
   const shot = (shotIndex: number, camera = "static") => ({
     shotIndex,
     framing: "medium",
@@ -2804,7 +2804,7 @@ await test("director-plan: planStaticRuns flags 3+ consecutive unmotivated stati
 
 await test("director-plan: module E audio fields normalize + pacing factors", async () => {
   const { parsePlan, pacingSpeedFactor, planStaticRuns } = await import(
-    "../src/lib/tubeforge/director-plan.ts"
+    "../src/lib/ibismuh/director-plan.ts"
   );
   const plan = parsePlan(
     JSON.stringify({
@@ -2875,7 +2875,7 @@ await test("director-plan: module E audio fields normalize + pacing factors", as
 // ---------------------------------------------------------------------------
 
 await test("M1: legacy plan parsing — profile field stays absent (byte-identical)", async () => {
-  const { parsePlan, PROFILE_IDS } = await import("../src/lib/tubeforge/director-plan.ts");
+  const { parsePlan, PROFILE_IDS } = await import("../src/lib/ibismuh/director-plan.ts");
   // The existing parsePlan fixtures (above) pre-date M1 — none carry a
   // `profile` field. Re-parsing them must NOT add one.
   const legacy = parsePlan(
@@ -2919,7 +2919,7 @@ await test("M1: legacy plan parsing — profile field stays absent (byte-identic
 
 await test("M1: profile overlay — system + user prompts include the overlay and narrow vocabularies", async () => {
   const { directorSystemPrompt, buildDirectorUserPrompt, resolveProfile, PRODUCTION_PROFILES } = await import(
-    "../src/lib/tubeforge/director.ts"
+    "../src/lib/ibismuh/director.ts"
   );
   // The narrative overlay is the "faceless YouTube studio" line; the base
   // prompt is format-neutral Rules. Assembled: overlay + Rules.
@@ -2975,8 +2975,8 @@ await test("M1: profile overlay — system + user prompts include the overlay an
 });
 
 await test("M1: validation — advertisement without a product-forward shot 0 returns a readable issue", async () => {
-  const { PRODUCTION_PROFILES } = await import("../src/lib/tubeforge/director.ts");
-  const { parsePlan } = await import("../src/lib/tubeforge/director-plan.ts");
+  const { PRODUCTION_PROFILES } = await import("../src/lib/ibismuh/director.ts");
+  const { parsePlan } = await import("../src/lib/ibismuh/director-plan.ts");
   const adv = PRODUCTION_PROFILES["advertisement"];
 
   // A plan whose opening shot is atmospheric, not product-forward — the
@@ -3043,7 +3043,7 @@ await test("M1: validation — advertisement without a product-forward shot 0 re
 
 await test("M1: story regression — narrative profile output ≡ today's prompt shape", async () => {
   const { directorSystemPrompt, buildDirectorUserPrompt, resolveProfile } = await import(
-    "../src/lib/tubeforge/director.ts"
+    "../src/lib/ibismuh/director.ts"
   );
   // Today's (pre-M1) SYSTEM_PROMPT opening sentence IS the narrative overlay;
   // today's Rules + JSON schema IS the BASE_SYSTEM_PROMPT. So narrative-
@@ -3098,7 +3098,7 @@ await test("M1: format gate — empty-scenes check still throws; profiles resolv
   // (the format !== "story" throw is gone). The error message is unchanged.
   // We test the behavior at the layer runDirectorPass delegates to: a video
   // with no scenes (parseScenes returns []) surfaces the empty-scenes error.
-  const { parseScenes } = await import("../src/lib/tubeforge/story.ts");
+  const { parseScenes } = await import("../src/lib/ibismuh/story.ts");
   // parseScenes of null/empty/'' returns [] — the exact condition the empty-
   // scenes check fires on (mirroring director.ts:233).
   eq(parseScenes(null).length, 0, "null scenes → empty list (empty-scenes gate fires)");
@@ -3111,7 +3111,7 @@ await test("M1: format gate — empty-scenes check still throws; profiles resolv
   // scenes") that fires earlier when there is no scenes JSON at all.
   const expectedMessage = "No scenes to direct — generate the scene script first";
   const directorText = await fsp.readFile(
-    path.join(process.cwd(), "src/lib/tubeforge/director.ts"),
+    path.join(process.cwd(), "src/lib/ibismuh/director.ts"),
     "utf8"
   );
   ok(directorText.includes(expectedMessage), "runDirectorPass throws the empty-scenes error verbatim");
@@ -3134,7 +3134,7 @@ await test("M1: format gate — empty-scenes check still throws; profiles resolv
   ok(routeText.includes("profile"), "the route accepts the profile request param");
 
   // resolveProfile — every profile the spec names resolves, unknown → narrative.
-  const { resolveProfile, PRODUCTION_PROFILES } = await import("../src/lib/tubeforge/director.ts");
+  const { resolveProfile, PRODUCTION_PROFILES } = await import("../src/lib/ibismuh/director.ts");
   for (const id of ["narrative","documentary","explainer","advertisement","animation","podcast","social","islamic-history"]) {
     eq(resolveProfile(id).id, id, `${id} resolves`);
   }
@@ -3149,7 +3149,7 @@ await test("M1: format gate — empty-scenes check still throws; profiles resolv
 
 await test("timeline: estimateNarrationSec clamps + scales with TTS speed", async () => {
   const { estimateNarrationSec, sumEstimatedDuration } =
-    await import("../src/lib/tubeforge/timeline.ts");
+    await import("../src/lib/ibismuh/timeline.ts");
   // Empty / whitespace-only narration still needs a visible beat.
   eq(estimateNarrationSec("   "), 1.5, "empty narration gets a 1.5s floor");
   // A short sentence ~6 words at 1.0x = 6/2.5 + 0.4 lead-in ≈ 2.8s
@@ -3170,7 +3170,7 @@ await test("timeline: estimateNarrationSec clamps + scales with TTS speed", asyn
 });
 
 await test("timeline: assembleTimeline derives per-scene start/end + caption timing", async () => {
-  const { assembleTimeline } = await import("../src/lib/tubeforge/timeline.ts");
+  const { assembleTimeline } = await import("../src/lib/ibismuh/timeline.ts");
   const scenes = [
     { index: 1, title: "Open", narration: "Welcome to the show.", visual: "studio", camera: "pan-right", mood: "warm", caption: "Welcome", captionUser: true, hostInScene: true, rehook: false, sfx: "none" },
     { index: 2, title: "Body", narration: "Here is the substance of the episode you came for.", visual: "b-roll", camera: "static", mood: "neutral", caption: "The substance", hostInScene: false, rehook: false, sfx: "whoosh" },
@@ -3199,7 +3199,7 @@ await test("timeline: assembleTimeline derives per-scene start/end + caption tim
 });
 
 await test("timeline: plan duration can only EXTEND a scene, never cut narration (Battle Yamuk −34s drift)", async () => {
-  const { assembleTimeline } = await import("../src/lib/tubeforge/timeline.ts");
+  const { assembleTimeline } = await import("../src/lib/ibismuh/timeline.ts");
   // Two chunky scenes; measured voiceover says 30s total.
   const scenes = [
     { index: 1, title: "A", narration: "word ".repeat(40).trim(), visual: "v", camera: "c", mood: "m", caption: "", hostInScene: false, rehook: false, sfx: "none" },
@@ -3245,7 +3245,7 @@ await test("timeline: plan duration can only EXTEND a scene, never cut narration
 });
 
 await test("timeline: measured WAV lengths win over word-count estimates (S1 honesty)", async () => {
-  const { assembleTimeline } = await import("../src/lib/tubeforge/timeline.ts");
+  const { assembleTimeline } = await import("../src/lib/ibismuh/timeline.ts");
   // Same word count, wildly different real reads — the estimate path would
   // give both scenes the same share and silently trim the slow one.
   const scenes = [
@@ -3277,7 +3277,7 @@ await test("timeline: measured WAV lengths win over word-count estimates (S1 hon
 
 await test("timeline: parseTimeline degrades bad/legacy payloads to null", async () => {
   const { parseTimeline, serializeTimeline, assembleTimeline } =
-    await import("../src/lib/tubeforge/timeline.ts");
+    await import("../src/lib/ibismuh/timeline.ts");
   eq(parseTimeline(null), null, "null in → null out");
   eq(parseTimeline(""), null, "empty string → null out");
   eq(parseTimeline("not-json"), null, "non-JSON → null out");
@@ -3300,7 +3300,7 @@ await test("timeline: parseTimeline degrades bad/legacy payloads to null", async
 
 await test("timeline: render-job consumes per-scene durationSec from the assembled timeline", async () => {
   const { assembleTimeline, serializeTimeline, parseTimeline } =
-    await import("../src/lib/tubeforge/timeline.ts");
+    await import("../src/lib/ibismuh/timeline.ts");
 
   // The render job reads `parseTimeline(video.timeline).scenes.map(s => s.durationSec)`
   // when no per-render override is supplied. The shape must be (a) finite
@@ -3337,7 +3337,7 @@ await test("timeline: render-job consumes per-scene durationSec from the assembl
 // ---------------------------------------------------------------------------
 
 await test("captions: srtToVtt header + fractional separator + cue-number strip", async () => {
-  const { srtToVtt, looksLikeSrt } = await import("../src/lib/tubeforge/subtitle-export.ts");
+  const { srtToVtt, looksLikeSrt } = await import("../src/lib/ibismuh/subtitle-export.ts");
   const srt = [
     "1",
     "00:00:01,000 --> 00:00:04,500",
@@ -3362,7 +3362,7 @@ await test("captions: srtToVtt header + fractional separator + cue-number strip"
 });
 
 await test("research: matchSourcesToIdeas attaches only keyword-relevant sources", async () => {
-  const { matchSourcesToIdeas } = await import("../src/lib/tubeforge/research.ts");
+  const { matchSourcesToIdeas } = await import("../src/lib/ibismuh/research.ts");
   const idea = (id: string, keywords: string[]) =>
     ({ id, title: "", angle: "", keywords, searchVolume: "", competition: "", viralScore: 50, suggestedLength: "medium", why: "" });
   const results = [
@@ -3404,7 +3404,7 @@ await test("research: matchSourcesToIdeas attaches only keyword-relevant sources
 // ---------------------------------------------------------------------------
 
 await test("billing: PLAN_DEFAULTS has the three tiers with sensible monthly credits", async () => {
-  const { PLAN_DEFAULTS } = await import("../src/lib/tubeforge/billing.ts");
+  const { PLAN_DEFAULTS } = await import("../src/lib/ibismuh/billing.ts");
   eq(PLAN_DEFAULTS.starter.tier, "starter", "starter tier id");
   eq(PLAN_DEFAULTS.creator.tier, "creator", "creator tier id");
   eq(PLAN_DEFAULTS.studio.tier, "studio", "studio tier id");
@@ -3423,7 +3423,7 @@ await test("billing: PLAN_DEFAULTS has the three tiers with sensible monthly cre
 });
 
 await test("billing: planSupportsResolution gates by plan tier", async () => {
-  const { planSupportsResolution, PLAN_DEFAULTS } = await import("../src/lib/tubeforge/billing.ts");
+  const { planSupportsResolution, PLAN_DEFAULTS } = await import("../src/lib/ibismuh/billing.ts");
   ok(planSupportsResolution(PLAN_DEFAULTS.starter, "1080p"), "starter can render 1080p");
   ok(!planSupportsResolution(PLAN_DEFAULTS.starter, "1440p"), "starter cannot render 1440p");
   ok(!planSupportsResolution(PLAN_DEFAULTS.starter, "2160p"), "starter cannot render 2160p");
@@ -3436,9 +3436,9 @@ await test("billing: planSupportsResolution gates by plan tier", async () => {
 });
 
 await test("billing: hasCredits — Starter never hard-blocks; paid tier gates on balance", async () => {
-  const billing = await import("../src/lib/tubeforge/billing.ts");
+  const billing = await import("../src/lib/ibismuh/billing.ts");
   const { hasCredits, PLAN_DEFAULTS } = billing;
-  type ResolvedPlan = import("../src/lib/tubeforge/billing.ts").ResolvedPlan;
+  type ResolvedPlan = import("../src/lib/ibismuh/billing.ts").ResolvedPlan;
   const starterResolved: ResolvedPlan = {
     plan: PLAN_DEFAULTS.starter,
     subscription: null,
@@ -3456,7 +3456,7 @@ await test("billing: hasCredits — Starter never hard-blocks; paid tier gates o
 });
 
 await test("billing: CreditSpendKind covers every ROADMAP §7 spend kind + Stage 7.2 reservation kinds", async () => {
-  const billing = await import("../src/lib/tubeforge/billing.ts");
+  const billing = await import("../src/lib/ibismuh/billing.ts");
   // recordCreditSpend accepts these kinds; the reconciliation test joins
   // the AI-spend family (ai_call/hold/adjustment/hold_release) against
   // UsageRecord.costMicroUsd.
@@ -3483,7 +3483,7 @@ await test("billing: CreditSpendKind covers every ROADMAP §7 spend kind + Stage
 });
 
 await test("billing: reservationEnforcement — starter is unmetered, paid tiers enforce", async () => {
-  const billing = await import("../src/lib/tubeforge/billing.ts");
+  const billing = await import("../src/lib/ibismuh/billing.ts");
   const { reservationEnforcement } = billing;
   eq(reservationEnforcement("starter"), "unmetered", "starter never reserves (overdraft design)");
   eq(reservationEnforcement("creator"), "enforced", "creator reserves before the call");
@@ -3493,7 +3493,7 @@ await test("billing: reservationEnforcement — starter is unmetered, paid tiers
 });
 
 await test("billing: CreditBlockedError carries readable balance facts", async () => {
-  const billing = await import("../src/lib/tubeforge/billing.ts");
+  const billing = await import("../src/lib/ibismuh/billing.ts");
   const err = new billing.CreditBlockedError("video", 40_000, 3_000);
   ok(err instanceof Error, "is an Error");
   eq(err.name, "CreditBlockedError", "typed name (routes can instanceof it)");
@@ -3508,7 +3508,7 @@ await test("billing: CreditBlockedError carries readable balance facts", async (
 });
 
 await test("billing: resolveUserPlan returns the Starter default when no Subscription row exists", async () => {
-  const billing = await import("../src/lib/tubeforge/billing.ts");
+  const billing = await import("../src/lib/ibismuh/billing.ts");
   const { resolveUserPlan, PLAN_DEFAULTS, creditsToMicro } = billing;
   // A never-existed user (no Subscription row) → Starter plan, full monthly credits,
   // null subscription record. This is the "fresh install" path — no row writes
@@ -3523,7 +3523,7 @@ await test("billing: resolveUserPlan returns the Starter default when no Subscri
 });
 
 await test("billing: getEstimatedCostMicro covers every metered capability with positive costs", async () => {
-  const billing = await import("../src/lib/tubeforge/billing.ts");
+  const billing = await import("../src/lib/ibismuh/billing.ts");
   const { getEstimatedCostMicro, ESTIMATED_COST_MICRO } = billing;
   // Every capability budget.ts can report (CAPABILITY_OF in budget.ts) must
   // carry a positive per-call estimate — a missing entry silently falls back
@@ -3544,7 +3544,7 @@ await test("billing: getEstimatedCostMicro covers every metered capability with 
 });
 
 await test("billing: subscriptionAccess maps every Stripe status — unknown statuses fail CLOSED", async () => {
-  const { subscriptionAccess } = await import("../src/lib/tubeforge/billing.ts");
+  const { subscriptionAccess } = await import("../src/lib/ibismuh/billing.ts");
   eq(subscriptionAccess("active"), "full", "active → full");
   eq(subscriptionAccess("trialing"), "full", "trialing → full");
   eq(subscriptionAccess("past_due"), "grace", "past_due → grace (dunning keeps the plan)");
@@ -3561,7 +3561,7 @@ await test("billing: subscriptionAccess maps every Stripe status — unknown sta
 
 await test("billing: credit units — microCredits are canonical, conversion is total (no mixed-unit sums)", async () => {
   const { MICROS_PER_CREDIT, creditsToMicro, microToCredits, PLAN_DEFAULTS } = await import(
-    "../src/lib/tubeforge/billing.ts"
+    "../src/lib/ibismuh/billing.ts"
   );
   eq(MICROS_PER_CREDIT, 1000, "1 UI credit = 1,000 microCredits");
   eq(creditsToMicro(1), 1000, "1 credit → 1,000 micro");
@@ -3573,7 +3573,7 @@ await test("billing: credit units — microCredits are canonical, conversion is 
   // The exact defect this fixes: a full Creator allowance MUST cover the
   // render pre-check (RENDER_ESTIMATE_MICRO) with room to spare.
   const creatorAllowanceMicro = creditsToMicro(PLAN_DEFAULTS.creator.monthlyCredits);
-  const { RENDER_ESTIMATE_MICRO } = await import("../src/lib/tubeforge/billing.ts");
+  const { RENDER_ESTIMATE_MICRO } = await import("../src/lib/ibismuh/billing.ts");
   ok(
     creatorAllowanceMicro > RENDER_ESTIMATE_MICRO,
     `Creator allowance (${creatorAllowanceMicro} micro) covers the render pre-check (${RENDER_ESTIMATE_MICRO} micro)`
@@ -3581,7 +3581,7 @@ await test("billing: credit units — microCredits are canonical, conversion is 
 });
 
 await test("billing: verifyStripeSignature rejects tampered, stale, and malformed signatures", async () => {
-  const { verifyStripeSignature } = await import("../src/lib/tubeforge/billing.ts");
+  const { verifyStripeSignature } = await import("../src/lib/ibismuh/billing.ts");
   const secret = "whsec_test_secret_unit";
   const payload = JSON.stringify({ id: "evt_1", type: "invoice.paid" });
   const t = Math.floor(Date.now() / 1000);
@@ -3612,9 +3612,9 @@ await test("billing: verifyStripeSignature rejects tampered, stale, and malforme
 });
 
 await test("shots M2: CAMERA_TO_MOVE covers every CAMERA_MOVES entry", async () => {
-  const { CAMERA_TO_MOVE } = await import("../src/lib/tubeforge/shots.ts");
-  const { CAMERA_MOVES } = await import("../src/lib/tubeforge/director-plan.ts");
-  const { MOTION_MOVE_LABELS } = await import("../src/lib/tubeforge/motion.ts");
+  const { CAMERA_TO_MOVE } = await import("../src/lib/ibismuh/shots.ts");
+  const { CAMERA_MOVES } = await import("../src/lib/ibismuh/director-plan.ts");
+  const { MOTION_MOVE_LABELS } = await import("../src/lib/ibismuh/motion.ts");
   const moveKinds = new Set(Object.keys(MOTION_MOVE_LABELS)); // runtime MoveKind set
   for (const move of CAMERA_MOVES) {
     const mapped = CAMERA_TO_MOVE[move];
@@ -3625,7 +3625,7 @@ await test("shots M2: CAMERA_TO_MOVE covers every CAMERA_MOVES entry", async () 
 });
 
 await test("shots M2: buildSceneShots planned path — one execution per DirectorShot, imagePrompt leads", async () => {
-  const { buildSceneShots } = await import("../src/lib/tubeforge/shots.ts");
+  const { buildSceneShots } = await import("../src/lib/ibismuh/shots.ts");
   const scene = { index: 3, title: "t", narration: "n", visual: "a fortress at dusk", mood: "amber dusk" } as never;
   const planScene = {
     sceneIndex: 3,
@@ -3652,7 +3652,7 @@ await test("shots M2: buildSceneShots planned path — one execution per Directo
 });
 
 await test("shots M2: duration reconciliation — extend-only when the plan outruns narration", async () => {
-  const { buildSceneShots } = await import("../src/lib/tubeforge/shots.ts");
+  const { buildSceneShots } = await import("../src/lib/ibismuh/shots.ts");
   const scene = { index: 1, narration: "n", visual: "v", mood: "m" } as never;
   // Plan totals 12s vs 8s measured → pass through UNCHANGED (extend-only,
   // the Battle Yamuk rule inherited at shot level).
@@ -3680,7 +3680,7 @@ await test("shots M2: duration reconciliation — extend-only when the plan outr
 });
 
 await test("shots M2: no plan → legacy fallback (golden behavior)", async () => {
-  const { buildSceneShots, planShots } = await import("../src/lib/tubeforge/shots.ts");
+  const { buildSceneShots, planShots } = await import("../src/lib/ibismuh/shots.ts");
   const scene = { index: 2, narration: "n", visual: "v", mood: "m" } as never;
 
   // Short scene: single shot, the scene image, zoom-in — exactly the legacy path.
@@ -3701,7 +3701,7 @@ await test("shots M2: no plan → legacy fallback (golden behavior)", async () =
 });
 
 await test("shots M2: extras budget — at most 3 fresh AI images per scene, surplus keeps its rhythm as pseudo", async () => {
-  const { buildSceneShots, EXTRAS_BUDGET, MAX_SHOTS } = await import("../src/lib/tubeforge/shots.ts");
+  const { buildSceneShots, EXTRAS_BUDGET, MAX_SHOTS } = await import("../src/lib/ibismuh/shots.ts");
   const scene = { index: 4, title: "t", narration: "n", visual: "a harbor at dawn", mood: "cold light" } as never;
   const shot = (i: number) => ({
     shotIndex: i, framing: "wide", camera: "push-in", lens: "35mm",
@@ -3729,7 +3729,7 @@ await test("shots M2: extras budget — at most 3 fresh AI images per scene, sur
 });
 
 await test("shots M2: movementForKind — engine-grade MotionShot for every move, stills contract honored", async () => {
-  const { movementForKind, MOTION_MOVE_LABELS } = await import("../src/lib/tubeforge/motion.ts");
+  const { movementForKind, MOTION_MOVE_LABELS } = await import("../src/lib/ibismuh/motion.ts");
   const kinds = Object.keys(MOTION_MOVE_LABELS);
   const focal = { x: 0.5, y: 0.5 };
   for (const k of kinds) {
@@ -3751,7 +3751,7 @@ await test("shots M2: movementForKind — engine-grade MotionShot for every move
 });
 
 await test("shots M2: multiShotSceneGraph — per-input zoompan graph with an exact frame budget", async () => {
-  const { multiShotSceneGraph } = await import("../src/lib/tubeforge/motion.ts");
+  const { multiShotSceneGraph } = await import("../src/lib/ibismuh/motion.ts");
   const settings = { mode: "smart", intensity: 40, curve: "smooth", vary: true } as never;
   const fps = 30;
   const g = multiShotSceneGraph({
@@ -3796,7 +3796,7 @@ await test("shots M2: multiShotSceneGraph — per-input zoompan graph with an ex
 });
 
 await test("shots M2 render contract: 2-shot synthetic plan → exact duration + distinct visual segments (real ffmpeg)", async () => {
-  const { multiShotSceneGraph } = await import("../src/lib/tubeforge/motion.ts");
+  const { multiShotSceneGraph } = await import("../src/lib/ibismuh/motion.ts");
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "tf-m2-"));
   try {
     // Two DISTINCT sources + a narration stand-in — the smallest fixture that
@@ -4283,15 +4283,15 @@ suiteStart("clip ops: narration split + doc surgery");
 suiteStart("razor guard: speakableSpan");
 
 {
-  const { LEAD_SEC, TAIL_SEC, MIN_SEG_SEC } = await import("../src/lib/tubeforge/render");
+  const { LEAD_SEC, TAIL_SEC, MIN_SEG_SEC } = await import("../src/lib/ibismuh/render");
   const {
     speakableSpan,
     R_LEAD_SEC,
     R_TAIL_SEC,
     R_MIN_SEG_SEC,
     SPLIT_EDGE_GUARD_SEC,
-  } = await import("../src/lib/tubeforge/preview-lanes");
-  const { pcmToWav, wavDurationSec } = await import("../src/lib/tubeforge/wav");
+  } = await import("../src/lib/ibismuh/preview-lanes");
+  const { pcmToWav, wavDurationSec } = await import("../src/lib/ibismuh/wav");
 
   await test("mirror constants match the real render exports", () => {
     eq(R_LEAD_SEC, LEAD_SEC, "lead");
@@ -4377,10 +4377,10 @@ suiteStart("S2 honest mix: per-boundary transitions");
     transitionTotalDurationMulti,
     uniformBoundarySettings,
     TRANSITION_DURATION_MAX,
-  } = await import("../src/lib/tubeforge/transitions");
-  const { docSceneSettings } = await import("../src/lib/tubeforge/timeline");
-  const { musicLevelAutomation } = await import("../src/lib/tubeforge/audiomix");
-  const { MUSIC_SLIDER_GAIN } = await import("../src/lib/tubeforge/music");
+  } = await import("../src/lib/ibismuh/transitions");
+  const { docSceneSettings } = await import("../src/lib/ibismuh/timeline");
+  const { musicLevelAutomation } = await import("../src/lib/ibismuh/audiomix");
+  const { MUSIC_SLIDER_GAIN } = await import("../src/lib/ibismuh/music");
 
   const uniform = (n: number, style = "fade", d = 0.5) =>
     uniformBoundarySettings(n, { style, durationSec: d }) as { style: string; durationSec: number }[];
@@ -4608,7 +4608,7 @@ suiteStart("S2 honest mix: per-boundary transitions");
 
   await test("sanitizeTransitionDuration: absent means DEFAULT (0.5), not the 0.2 minimum", async () => {
     const { sanitizeTransitionDuration, TRANSITION_DEFAULT, TRANSITION_DURATION_MIN } =
-      await import("../src/lib/tubeforge/transitions");
+      await import("../src/lib/ibismuh/transitions");
     // The pre-S2 bug: Number(null) = 0 → clamp → 0.2 — default renders blended
     // 2.5× faster than the 0.5s the studio preview showed.
     eq(sanitizeTransitionDuration(null), TRANSITION_DEFAULT.durationSec, "null → 0.5 default");
@@ -4622,7 +4622,7 @@ suiteStart("S2 honest mix: per-boundary transitions");
 
   await test("S163 Phase A: the preset table — opus-measured beats at their literals, fps-free", async () => {
     const { TRANSITION_PRESET_DEFAULTS, presetDurationSec, TRANSITION_IDS, TRANSITION_DEFAULT } =
-      await import("../src/lib/tubeforge/transitions");
+      await import("../src/lib/ibismuh/transitions");
     // The opus DEFAULTS table numbers (S161 audit Part 2.2, MIT, read at
     // source): frames at opus's 30 fps reference derived ONCE into seconds —
     // the preset stores SECONDS, never frames (the S123 D3 fps-free law).
@@ -4641,7 +4641,7 @@ suiteStart("S2 honest mix: per-boundary transitions");
   });
 
   await test("S163 Phase A: sanitizeTransition/resolveTransition — the absent duration is style-aware", async () => {
-    const { sanitizeTransition, resolveTransition } = await import("../src/lib/tubeforge/transitions");
+    const { sanitizeTransition, resolveTransition } = await import("../src/lib/ibismuh/transitions");
     // A preset style carries its measured beat when the duration is absent.
     eq(sanitizeTransition({ style: "iris" }).durationSec, 0.267, "iris → 0.267");
     eq(sanitizeTransition({ style: "whiteout" }).durationSec, 1.4, "whiteout → 1.4");
@@ -4669,7 +4669,7 @@ suiteStart("S2 honest mix: per-boundary transitions");
 
   await test("S163 Phase A: the graph builder emits the presets — measured durations ride the xfade args", async () => {
     const { buildTransitionGraphMulti, transitionOffsetsMulti, transitionTotalDurationMulti, xfadeTransitionOf } =
-      await import("../src/lib/tubeforge/transitions");
+      await import("../src/lib/ibismuh/transitions");
     // THE COMPILE WALL: presets are named after the designed beat, not the
     // ffmpeg verb — and the raw id must NEVER reach the filtergraph (ffmpeg
     // 7.1 happens to carry its own "iris"; 5.1 — the Docker image — has
@@ -4702,7 +4702,7 @@ suiteStart("S2 honest mix: per-boundary transitions");
 // ---------- S34: spend-gate estimator — script-aware floors + per-hold usage slices ----------
 
 await test("estimateInputTokens: the ASCII chars/3 law is unchanged", async () => {
-  const { estimateInputTokens } = await import("../src/lib/tubeforge/spend.ts");
+  const { estimateInputTokens } = await import("../src/lib/ibismuh/spend.ts");
   eq(estimateInputTokens(""), 0, "empty text → 0");
   eq(estimateInputTokens("hello world"), 4, "11 ASCII chars → ceil(11/3) = 4");
   eq(estimateInputTokens("a".repeat(6000)), 2000, "6000 ASCII chars → 2000 (the S27 law)");
@@ -4710,7 +4710,7 @@ await test("estimateInputTokens: the ASCII chars/3 law is unchanged", async () =
 });
 
 await test("estimateInputTokens: non-Latin scripts price ABOVE chars/3 (the S34 fix)", async () => {
-  const { estimateInputTokens } = await import("../src/lib/tubeforge/spend.ts");
+  const { estimateInputTokens } = await import("../src/lib/ibismuh/spend.ts");
   // The pre-S34 bug: "你好世界".length 4 → chars/3 = 2 tokens, but a real
   // tokenizer bills ~4-6 for CJK — the $5 law broke on non-English content.
   eq(estimateInputTokens("你好世界"), 6, "4 CJK chars → ceil(4×1.5) = 6");
@@ -4724,7 +4724,7 @@ await test("estimateInputTokens: non-Latin scripts price ABOVE chars/3 (the S34 
 });
 
 await test("estimateInputTokens: astral plane (emoji) counts as surrogate pairs at 2 tokens each", async () => {
-  const { estimateInputTokens } = await import("../src/lib/tubeforge/spend.ts");
+  const { estimateInputTokens } = await import("../src/lib/ibismuh/spend.ts");
   eq(estimateInputTokens("😀😀"), 4, "2 astral emoji → 2×2 = 4");
   eq(estimateInputTokens("hi😀"), 3, "2 ASCII → 1, one emoji → 2");
   // JSON-escaped emoji are ASCII escape text — the same law prices them at
@@ -4733,13 +4733,13 @@ await test("estimateInputTokens: astral plane (emoji) counts as surrogate pairs 
 });
 
 await test("estimateInputTokens: mixed-script text sums per class", async () => {
-  const { estimateInputTokens } = await import("../src/lib/tubeforge/spend.ts");
+  const { estimateInputTokens } = await import("../src/lib/ibismuh/spend.ts");
   // 2 ASCII → 1; 2 CJK → 3; 1 emoji → 2 — total 6, every class at its own floor.
   eq(estimateInputTokens("hi你好😀"), 6, "ascii+cjk+astral mix");
 });
 
 await test("estimateDispatchMicroUsd: same-length CJK input reserves strictly more than ASCII", async () => {
-  const { estimateDispatchMicroUsd } = await import("../src/lib/tubeforge/spend.ts");
+  const { estimateDispatchMicroUsd } = await import("../src/lib/ibismuh/spend.ts");
   // Spaced English — a bare "aaaa…" run would be stripped as base64 before
   // the token math (the estimator's own heavy-payload rule), so the ASCII
   // side uses real prose shape.
@@ -4756,9 +4756,9 @@ await test("estimateDispatchMicroUsd: same-length CJK input reserves strictly mo
 });
 
 await test("spend sink: per-hold slices — baseline + usageSinceBaseline", async () => {
-  const { withCtx } = await import("../src/lib/tubeforge/tenant.ts");
+  const { withCtx } = await import("../src/lib/ibismuh/tenant.ts");
   const { emitUsage, sinkBaseline, usageSinceBaseline, drainUsage } = await import(
-    "../src/lib/tubeforge/spend.ts"
+    "../src/lib/ibismuh/spend.ts"
   );
   await withCtx({ userId: "u-s34", organizationId: "o-s34", role: "owner" }, async () => {
     // Fresh request: nothing emitted.
@@ -4800,7 +4800,7 @@ await test("spend sink: per-hold slices — baseline + usageSinceBaseline", asyn
 // ---------- S35 — Universal Scene Liveliness ----------
 
 await test("S35 selector: mode wins — animated is i2v everywhere, slides is slides everywhere", async () => {
-  const { selectChannels } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { selectChannels } = await import("../src/lib/ibismuh/liveliness.ts");
   const base = {
     mode: "animated" as const,
     motionOff: false,
@@ -4821,7 +4821,7 @@ await test("S35 selector: mode wins — animated is i2v everywhere, slides is sl
 });
 
 await test("S35 selector: stock mode — matched footage wins, fallbacks follow the plan + provider", async () => {
-  const { selectChannels } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { selectChannels } = await import("../src/lib/ibismuh/liveliness.ts");
   const base = {
     mode: "stock" as const,
     motionOff: false,
@@ -4844,7 +4844,7 @@ await test("S35 selector: stock mode — matched footage wins, fallbacks follow 
 });
 
 await test("S35 selector: the loop-closure — kenburns mode finally consumes the plan's needsI2V", async () => {
-  const { selectChannels } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { selectChannels } = await import("../src/lib/ibismuh/liveliness.ts");
   const base = {
     mode: "kenburns" as const,
     motionOff: false,
@@ -4863,7 +4863,7 @@ await test("S35 selector: the loop-closure — kenburns mode finally consumes th
 });
 
 await test("S35 selector: explicit human edits stay senior — keys, stills contract, off overrides", async () => {
-  const { selectChannels } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { selectChannels } = await import("../src/lib/ibismuh/liveliness.ts");
   const base = {
     mode: "kenburns" as const,
     motionOff: false,
@@ -4890,7 +4890,7 @@ await test("S35 selector: explicit human edits stay senior — keys, stills cont
 });
 
 await test("S35 i2v prompt: legacy camera ids keep their phrases; unknown falls back to drift", async () => {
-  const { i2vMotionPrompt } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { i2vMotionPrompt } = await import("../src/lib/ibismuh/liveliness.ts");
   const scene = {
     index: 3,
     title: "The charge",
@@ -4917,7 +4917,7 @@ await test("S35 i2v prompt: legacy camera ids keep their phrases; unknown falls 
 });
 
 await test("S35 i2v prompt: the FULL Director vocabulary drives generative motion (the old code drifted)", async () => {
-  const { i2vMotionPrompt } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { i2vMotionPrompt } = await import("../src/lib/ibismuh/liveliness.ts");
   const scene = {
     index: 5,
     title: "The camp",
@@ -4963,7 +4963,7 @@ await test("S35 i2v prompt: the FULL Director vocabulary drives generative motio
 });
 
 await test("S35 i2v prompt: scene-kind subject motion — text stays legible, faces live subtly", async () => {
-  const { i2vMotionPrompt } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { i2vMotionPrompt } = await import("../src/lib/ibismuh/liveliness.ts");
   const base = {
     index: 2,
     title: "The decree",
@@ -4992,7 +4992,7 @@ await test("S35 i2v prompt: scene-kind subject motion — text stays legible, fa
 // ---------- S36 — render QC lenses: flicker / stutter / cut alignment ----------
 
 await test("S36 flicker: pumping luma flags one merged event; crossfade ramps and single flashes stay clean", async () => {
-  const { flickerEventsFromLuma, FLICKER_SAMPLE } = await import("../src/lib/tubeforge/render-qc.ts");
+  const { flickerEventsFromLuma, FLICKER_SAMPLE } = await import("../src/lib/ibismuh/render-qc.ts");
   // A 2.5 Hz brightness pump at 8 Hz sampling: alternating ~90-unit swings
   // (the live-calibrated synthetic — real i2v pumping class).
   const pumped: number[] = [];
@@ -5019,7 +5019,7 @@ await test("S36 flicker: pumping luma flags one merged event; crossfade ramps an
 });
 
 await test("S36 parsers: captured ffmpeg 7.1.5 fixtures — YAVG log, packet pts CSV, showinfo lines", async () => {
-  const { parseYavgLog, parsePtsCsv, parseSceneCuts } = await import("../src/lib/tubeforge/render-qc.ts");
+  const { parseYavgLog, parsePtsCsv, parseSceneCuts } = await import("../src/lib/ibismuh/render-qc.ts");
   // Real lines from the live calibration run (fps=8 signalstats metadata=print).
   const yavgLog = [
     "[Parsed_metadata_3 @ 0x7fcdb000f880] lavfi.signalstats.YAVG=16.0278",
@@ -5051,7 +5051,7 @@ await test("S36 parsers: captured ffmpeg 7.1.5 fixtures — YAVG log, packet pts
 });
 
 await test("S36 stutter: decode-order pts sorts clean, duplicate runs and gaps flag", async () => {
-  const { stutterFromPts } = await import("../src/lib/tubeforge/render-qc.ts");
+  const { stutterFromPts } = await import("../src/lib/ibismuh/render-qc.ts");
   // Clean 30 fps CFR — the exact capture from the live clean.mp4 run.
   const clean: number[] = [];
   for (let i = 0; i < 120; i++) clean.push(i / 30);
@@ -5085,7 +5085,7 @@ await test("S36 stutter: decode-order pts sorts clean, duplicate runs and gaps f
 });
 
 await test("S36 cut alignment: stray cuts fail, missing hard cuts fail, blends explain", async () => {
-  const { alignCuts, expectedCutsForTimeline } = await import("../src/lib/tubeforge/render-qc.ts");
+  const { alignCuts, expectedCutsForTimeline } = await import("../src/lib/ibismuh/render-qc.ts");
   // A 3s + 3s hard-cut timeline (the live hardcut.mp4 case): detection at
   // exactly 3.0 aligns.
   const cut3 = expectedCutsForTimeline([3, 3], [{ style: "cut", durationSec: 0.5 }]);
@@ -5118,7 +5118,7 @@ await test("S36 cut alignment: stray cuts fail, missing hard cuts fail, blends e
 });
 
 await test("S36 single-scene expectation: any detected cut is a genuine continuity break", async () => {
-  const { alignCuts, expectedCutsForTimeline } = await import("../src/lib/tubeforge/render-qc.ts");
+  const { alignCuts, expectedCutsForTimeline } = await import("../src/lib/ibismuh/render-qc.ts");
   const single = expectedCutsForTimeline([42], []);
   eq(single.cuts.length, 0, "no boundaries");
   eq(single.windows.length, 0, "no windows");
@@ -5128,7 +5128,7 @@ await test("S36 single-scene expectation: any detected cut is a genuine continui
 // ---------- S36-audit — spend-gate observability (escape hatches surfaced) ----------
 
 await test("S36-audit: spendOverrides reports the operator escape hatches; a clean env stays silent", async () => {
-  const { spendOverrides } = await import("../src/lib/tubeforge/spend.ts");
+  const { spendOverrides } = await import("../src/lib/ibismuh/spend.ts");
   const savedGate = process.env.TUBEFORGE_SPEND_GATE;
   const savedPricing = process.env.TUBEFORGE_PRICING_VERIFIED;
   delete process.env.TUBEFORGE_SPEND_GATE;
@@ -5185,7 +5185,7 @@ const S37_BIG = async () => new Response(new ArrayBuffer(20_000));
 const S37_TINY = async () => new Response(new ArrayBuffer(100));
 
 await test("S37 zai-video-core: happy path polls to SUCCESS and downloads a real-sized clip", async () => {
-  const { zaiVideoViaClient } = await import("../src/lib/tubeforge/providers/zai-video-core.ts");
+  const { zaiVideoViaClient } = await import("../src/lib/ibismuh/providers/zai-video-core.ts");
   const { client, bodies } = fakeZaiVideoClient(
     [
       { task_status: "PROCESSING" },
@@ -5212,7 +5212,7 @@ await test("S37 zai-video-core: happy path polls to SUCCESS and downloads a real
 });
 
 await test("S37 zai-video-core: FAIL, no task id, SUCCESS-without-url, timeout, empty download all throw", async () => {
-  const { zaiVideoViaClient } = await import("../src/lib/tubeforge/providers/zai-video-core.ts");
+  const { zaiVideoViaClient } = await import("../src/lib/ibismuh/providers/zai-video-core.ts");
   type Core = typeof zaiVideoViaClient;
   const run = async (client: unknown, opts: Record<string, unknown> = {}, _fetchFn = S37_BIG) =>
     zaiVideoViaClient(client as Parameters<Core>[0], { prompt: "pan", imagePngBase64: S37_PNG }, { model: "m", pollMs: 1, ...opts } as Parameters<Core>[2]);
@@ -5232,7 +5232,7 @@ await test("S37 zai-video-core: FAIL, no task id, SUCCESS-without-url, timeout, 
 });
 
 await test("S37 zai-video-core: url fallback keys (video_url, url, video) all accepted", async () => {
-  const { zaiVideoViaClient } = await import("../src/lib/tubeforge/providers/zai-video-core.ts");
+  const { zaiVideoViaClient } = await import("../src/lib/ibismuh/providers/zai-video-core.ts");
   type Core = typeof zaiVideoViaClient;
   const run = (script: Array<Record<string, unknown>>) =>
     zaiVideoViaClient(
@@ -5252,17 +5252,17 @@ await test("S37 zai-video-core: url fallback keys (video_url, url, video) all ac
 // before S39 each `new AsyncLocalStorage()` was disjoint, and a ctx entered
 // by one copy (auth.enter() in a route) was invisible to another's assertCtx
 // — the live "No tenant context (runRenderJob)" on a render re-run after a
-// daemon restart. The fix keys the ALS on globalThis (__tfTenantAls); this
+// daemon restart. The fix keys the ALS on globalThis (__ibismuhTenantAls); this
 // test imports tenant.ts under a SECOND ESM identity (query string) and
 // proves the two copies now share one scope.
 await test("S39 tenant ALS: module-graph duplication shares one storage", async () => {
-  type TenantModule = typeof import("../src/lib/tubeforge/tenant.ts");
+  type TenantModule = typeof import("../src/lib/ibismuh/tenant.ts");
   // Copy A — the identity every other import in this file resolves to.
-  const a: TenantModule = await import("../src/lib/tubeforge/tenant.ts");
+  const a: TenantModule = await import("../src/lib/ibismuh/tenant.ts");
   // Copy B — a distinct ESM identity, exactly what a second compiled bundle
   // (another route's server chunk, the instrumentation graph) would be.
   // Non-literal specifier keeps TS from collapsing the two identities.
-  const bSpecifier = "../src/lib/tubeforge/tenant.ts?bundle=s39-second-copy";
+  const bSpecifier = "../src/lib/ibismuh/tenant.ts?bundle=s39-second-copy";
   const b = (await import(bSpecifier)) as TenantModule;
 
   const ctxA = { userId: "s39-u", organizationId: "s39-o", role: "owner" };
@@ -5490,7 +5490,7 @@ await test("S40 parseQcReport: tolerance matches the serializer (bad payloads ne
 // ---------------------------------------------------------------------------
 
 await test("S45 parseJsonLoose: plain and fenced JSON still parse untouched", async () => {
-  const { parseJsonLoose } = await import("../src/lib/tubeforge/ai.ts");
+  const { parseJsonLoose } = await import("../src/lib/ibismuh/ai.ts");
   const plain = parseJsonLoose('{"title":"T","scenes":[1,2]}');
   eq(plain.title, "T", "plain object parses");
   eq((plain.scenes as number[]).length, 2, "nested array survives");
@@ -5501,7 +5501,7 @@ await test("S45 parseJsonLoose: plain and fenced JSON still parse untouched", as
 });
 
 await test("S45 parseJsonLoose: trailing commas and curly quotes are repaired", async () => {
-  const { parseJsonLoose } = await import("../src/lib/tubeforge/ai.ts");
+  const { parseJsonLoose } = await import("../src/lib/ibismuh/ai.ts");
   const commas = parseJsonLoose('{"a":1,"b":[1,2,3,],}');
   eq(commas.a, 1, "trailing comma in object repaired");
   eq((commas.b as number[]).length, 3, "trailing comma in array repaired");
@@ -5510,7 +5510,7 @@ await test("S45 parseJsonLoose: trailing commas and curly quotes are repaired", 
 });
 
 await test("S45 parseJsonLoose: prose-with-a-brace after the JSON no longer swallows it", async () => {
-  const { parseJsonLoose } = await import("../src/lib/tubeforge/ai.ts");
+  const { parseJsonLoose } = await import("../src/lib/ibismuh/ai.ts");
   // THE live re-run shape: the model answered with the plan, then added a
   // closing thought containing a brace. The old greedy /\{[\s\S]*\}/ matched
   // from the first "{" to THAT last "}" — an unparseable blob — and its
@@ -5524,14 +5524,14 @@ await test("S45 parseJsonLoose: prose-with-a-brace after the JSON no longer swal
 });
 
 await test("S45 parseJsonLoose: braces inside string values never break the scan", async () => {
-  const { parseJsonLoose } = await import("../src/lib/tubeforge/ai.ts");
+  const { parseJsonLoose } = await import("../src/lib/ibismuh/ai.ts");
   const parsed = parseJsonLoose('{"caption":"use {braces} here","n":2}');
   eq(parsed.caption, "use {braces} here", "braces in a string literal are not depth");
   eq(parsed.n, 2, "sibling fields survive");
 });
 
 await test("S47 parseJsonLoose: unquoted scalar values are quoted (the live glm-4.6 killer)", async () => {
-  const { parseJsonLoose } = await import("../src/lib/tubeforge/ai.ts");
+  const { parseJsonLoose } = await import("../src/lib/ibismuh/ai.ts");
   // THE live director-benchmark shape: the whole payload is brace-balanced,
   // so the balanced scan finds it, but `\"lens\":100mm` is not JSON. Every
   // pre-S47 rung failed and the job died after 3 attempts.
@@ -5549,7 +5549,7 @@ await test("S47 parseJsonLoose: unquoted scalar values are quoted (the live glm-
 });
 
 await test("S47 parseJsonLoose: missing closers are appended, unmatched trailing closers dropped", async () => {
-  const { parseJsonLoose } = await import("../src/lib/tubeforge/ai.ts");
+  const { parseJsonLoose } = await import("../src/lib/ibismuh/ai.ts");
   const truncated = parseJsonLoose('{"title":"T","items":[{"n":1}');
   eq(truncated.title, "T", "truncated tail repaired by appending closers");
   eq((truncated.items as { n: number }[])[0].n, 1, "nested content survives the append");
@@ -5558,7 +5558,7 @@ await test("S47 parseJsonLoose: missing closers are appended, unmatched trailing
 });
 
 await test("S47 parseJsonLoose: truncation INSIDE a string value still fails honestly", async () => {
-  const { parseJsonLoose } = await import("../src/lib/tubeforge/ai.ts");
+  const { parseJsonLoose } = await import("../src/lib/ibismuh/ai.ts");
   let err: unknown;
   try {
     parseJsonLoose('{"concept":"a lone signal in the noise, cut mid-va');
@@ -5570,7 +5570,7 @@ await test("S47 parseJsonLoose: truncation INSIDE a string value still fails hon
 });
 
 await test("S45 parseJsonLoose: unparseable input throws the READABLE error, never a SyntaxError", async () => {
-  const { parseJsonLoose } = await import("../src/lib/tubeforge/ai.ts");
+  const { parseJsonLoose } = await import("../src/lib/ibismuh/ai.ts");
   let err: unknown;
   try {
     parseJsonLoose("I could not produce that plan, sorry.");
@@ -5592,7 +5592,7 @@ await test("S45 parseJsonLoose: unparseable input throws the READABLE error, nev
 });
 
 await test("S45 aiCallJson: parse + validate run INSIDE the retried closure — variance costs a fresh ask, not the job", async () => {
-  const { aiCallJson } = await import("../src/lib/tubeforge/ai.ts");
+  const { aiCallJson } = await import("../src/lib/ibismuh/ai.ts");
   // A minimal withRetry stand-in: run the composed fn up to N times, no
   // delay — the real retry pacing is budget.ts's contract (queue/billing
   // suites); this pins the COMPOSITION: every retry re-runs `ask` (a FRESH
@@ -5715,7 +5715,7 @@ await test("S45 parseQcReport: the scope field survives the round trip", () => {
 });
 
 await test("S45 previewQcPatch: preview evidence persists ONLY while no full render stands", async () => {
-  const { previewQcPatch } = await import("../src/lib/tubeforge/video-jobs.ts");
+  const { previewQcPatch } = await import("../src/lib/ibismuh/video-jobs.ts");
   const report = {
     passed: true,
     checkedAt: "2026-11-06T00:00:00.000Z",
@@ -5743,8 +5743,8 @@ await test("S45 previewQcPatch: preview evidence persists ONLY while no full ren
 });
 
 await test("S45 qcForPreview: scoped battery on a real preview.mp4 — no narration-sync, no captions, scope stamped", async () => {
-  const storage = await import("../src/lib/tubeforge/storage.ts");
-  const { qcForPreview } = await import("../src/lib/tubeforge/qc.ts");
+  const storage = await import("../src/lib/ibismuh/storage.ts");
+  const { qcForPreview } = await import("../src/lib/ibismuh/qc.ts");
   delete process.env.TUBEFORGE_STORAGE_DRIVER; // local driver — real bytes on disk
   const probe = `s45-preview-probe-${Date.now()}`;
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tf-s45-"));
@@ -5838,8 +5838,8 @@ await test("S46 loginWindowDecision: the straddle hole is closed (4+4 across a w
 // ---------------------------------------------------------------------------
 
 await test("S48 CAMERA_TO_MOVE: every v2 verb is engine-verbatim (identity or a documented 1:1 rename)", async () => {
-  const { CAMERA_MOVES } = await import("../src/lib/tubeforge/director-plan.ts");
-  const { CAMERA_TO_MOVE } = await import("../src/lib/tubeforge/shots.ts");
+  const { CAMERA_MOVES } = await import("../src/lib/ibismuh/director-plan.ts");
+  const { CAMERA_TO_MOVE } = await import("../src/lib/ibismuh/shots.ts");
   // The v2 vocabulary IS the engine's move set: only static→hold and
   // punch-in→punch are renames; every other id maps to ITSELF.
   const renames: Record<string, string> = { static: "hold", "punch-in": "punch" };
@@ -5863,7 +5863,7 @@ await test("S48 CAMERA_TO_MOVE: every v2 verb is engine-verbatim (identity or a 
 });
 
 await test("S48 parsePlan: a v2 plan parses with all 19 fields snapped; version records provenance", async () => {
-  const { parsePlan } = await import("../src/lib/tubeforge/director-plan.ts");
+  const { parsePlan } = await import("../src/lib/ibismuh/director-plan.ts");
   const json = JSON.stringify({
     version: 2,
     generatedAt: "2026-11-07T00:00:00.000Z",
@@ -5932,7 +5932,7 @@ await test("S48 parsePlan: a v2 plan parses with all 19 fields snapped; version 
 });
 
 await test("S48 parsePlan: a v1 plan upgrades losslessly — legacy verbs kept verbatim, version stays 1", async () => {
-  const { parsePlan } = await import("../src/lib/tubeforge/director-plan.ts");
+  const { parsePlan } = await import("../src/lib/ibismuh/director-plan.ts");
   const json = JSON.stringify({
     version: 1,
     generatedAt: "2026-11-01T00:00:00.000Z",
@@ -5962,7 +5962,7 @@ await test("S48 parsePlan: a v1 plan upgrades losslessly — legacy verbs kept v
 });
 
 await test("S48 buildSceneShots: per-shot focal + moveSpeed ride the execution verbatim", async () => {
-  const { buildSceneShots } = await import("../src/lib/tubeforge/shots.ts");
+  const { buildSceneShots } = await import("../src/lib/ibismuh/shots.ts");
   const scene = {
     index: 1, title: "T", narration: "n", visual: "v", camera: "static",
     mood: "m", caption: "c", hostInScene: false, rehook: false, sfx: "none",
@@ -6000,7 +6000,7 @@ await test("S48 buildSceneShots: per-shot focal + moveSpeed ride the execution v
 });
 
 await test("S48 shotIntensity + focalFromToken: the motion-side seams", async () => {
-  const { shotIntensity, focalFromToken } = await import("../src/lib/tubeforge/motion.ts");
+  const { shotIntensity, focalFromToken } = await import("../src/lib/ibismuh/motion.ts");
   eq(shotIntensity(12), 12, "no speed → the base intensity");
   eq(shotIntensity(12, 1), 12, "normal → the base intensity");
   eq(Math.abs(shotIntensity(12, 0.7) - 8.4) < 1e-9, true, "slow → 0.7× (8.4)");
@@ -6018,7 +6018,7 @@ await test("S48 shotIntensity + focalFromToken: the motion-side seams", async ()
 });
 
 await test("S48 resolveChatModel: operator pick > director hint > gateway default", async () => {
-  const { resolveChatModel } = await import("../src/lib/tubeforge/llm.ts");
+  const { resolveChatModel } = await import("../src/lib/ibismuh/llm.ts");
   eq(resolveChatModel("gpt-4o", "glm-4.6"), "gpt-4o", "the operator's Settings pick always wins");
   eq(resolveChatModel("", "glm-4.6"), "glm-4.6", "hint applies when no operator pick exists");
   eq(resolveChatModel(null, "glm-4.6"), "glm-4.6", "null settings model → hint");
@@ -6029,8 +6029,8 @@ await test("S48 resolveChatModel: operator pick > director hint > gateway defaul
 });
 
 await test("S48 directorSystemPrompt: the 19-field schema + engine vocabulary reach the LLM", async () => {
-  const { directorSystemPrompt, DIRECTOR_MODEL_HINT } = await import("../src/lib/tubeforge/director.ts");
-  const { resolveProfile } = await import("../src/lib/tubeforge/production-profiles.ts");
+  const { directorSystemPrompt, DIRECTOR_MODEL_HINT } = await import("../src/lib/ibismuh/director.ts");
+  const { resolveProfile } = await import("../src/lib/ibismuh/production-profiles.ts");
   const sys = directorSystemPrompt(resolveProfile("narrative"));
   // The JSON example carries every one of the 19 shot fields.
   for (const field of [
@@ -6049,7 +6049,7 @@ await test("S48 directorSystemPrompt: the 19-field schema + engine vocabulary re
 });
 
 await test("S48 shotPrompt: v2 cinematic clauses weave into extra-shot prompts (v1 shots unchanged)", async () => {
-  const { shotPrompt } = await import("../src/lib/tubeforge/shots.ts");
+  const { shotPrompt } = await import("../src/lib/ibismuh/shots.ts");
   const scene = {
     index: 2, title: "T", narration: "n", visual: "the ancient library", camera: "static",
     mood: "dusk light", caption: "c", hostInScene: false, rehook: false, sfx: "none",
@@ -6076,7 +6076,7 @@ await test("S48 shotPrompt: v2 cinematic clauses weave into extra-shot prompts (
 });
 
 await test("S48 planStaticRuns: the pacing gate survives the v2 schema untouched", async () => {
-  const { planStaticRuns } = await import("../src/lib/tubeforge/director-plan.ts");
+  const { planStaticRuns } = await import("../src/lib/ibismuh/director-plan.ts");
   // A v2-shaped plan whose shots are ALL static + motion off + no i2v/stock
   // is the same flat-pacing sin the Stage 5 gate exists to catch.
   const plan = {
@@ -6107,7 +6107,7 @@ await test("S48 planStaticRuns: the pacing gate survives the v2 schema untouched
 // ---------------------------------------------------------------------------
 
 await test("S49 resolveContentPolicy: unknown/absent/garbage → standard, never silent activation", async () => {
-  const { resolveContentPolicy } = await import("../src/lib/tubeforge/restricted-subjects.ts");
+  const { resolveContentPolicy } = await import("../src/lib/ibismuh/restricted-subjects.ts");
   eq(resolveContentPolicy(null), "standard", "null → standard");
   eq(resolveContentPolicy(undefined), "standard", "undefined → standard");
   eq(resolveContentPolicy(""), "standard", "empty → standard");
@@ -6117,7 +6117,7 @@ await test("S49 resolveContentPolicy: unknown/absent/garbage → standard, never
 });
 
 await test("S49 scanRestrictedSubjects: the registry detects every tier, word-bounded", async () => {
-  const { scanRestrictedSubjects } = await import("../src/lib/tubeforge/restricted-subjects.ts");
+  const { scanRestrictedSubjects } = await import("../src/lib/ibismuh/restricted-subjects.ts");
   const hits = (text: string) => scanRestrictedSubjects(text, "islamic-history").map((m) => m.entry);
   // The Prophet (transliterations, honorifics, the definite reference).
   ok(hits("Muhammad receives the first revelation in the cave of Hira").includes("the Prophet Muhammad ﷺ"), "Muhammad");
@@ -6154,7 +6154,7 @@ await test("S49 scanRestrictedSubjects: the registry detects every tier, word-bo
 
 await test("S49 sanitizePromptForPolicy: substitution, negative clause, identity", async () => {
   const { sanitizePromptForPolicy, policyNegativeClause, ALTERNATIVE_COMPOSITIONS } =
-    await import("../src/lib/tubeforge/restricted-subjects.ts");
+    await import("../src/lib/ibismuh/restricted-subjects.ts");
   // Standard policy = the exact identity transform.
   const standard = "The Prophet Muhammad stands in the cave of Hira. Wide 16:9 cinematic frame.";
   eq(sanitizePromptForPolicy(standard, "standard").prompt, standard, "standard policy is identity (byte-for-byte)");
@@ -6192,7 +6192,7 @@ await test("S49 sanitizePromptForPolicy: substitution, negative clause, identity
 });
 
 await test("S49 policy overlays: empty for standard, doctrine for islamic-history", async () => {
-  const { policyVisualRules, policySystemOverlay } = await import("../src/lib/tubeforge/restricted-subjects.ts");
+  const { policyVisualRules, policySystemOverlay } = await import("../src/lib/ibismuh/restricted-subjects.ts");
   eq(policyVisualRules("standard"), "", "no visual rules under standard");
   eq(policySystemOverlay("standard"), "", "no system overlay under standard");
   const vr = policyVisualRules("islamic-history");
@@ -6203,8 +6203,8 @@ await test("S49 policy overlays: empty for standard, doctrine for islamic-histor
 });
 
 await test("S49 directorSystemPrompt: the policy overlay stacks on the profile voice", async () => {
-  const { directorSystemPrompt } = await import("../src/lib/tubeforge/director.ts");
-  const { resolveProfile } = await import("../src/lib/tubeforge/production-profiles.ts");
+  const { directorSystemPrompt } = await import("../src/lib/ibismuh/director.ts");
+  const { resolveProfile } = await import("../src/lib/ibismuh/production-profiles.ts");
   const plain = directorSystemPrompt(resolveProfile("narrative"));
   const withPolicy = directorSystemPrompt(resolveProfile("narrative"), "islamic-history");
   ok(!plain.includes("ISLAMIC VISUAL PROTECTION"), "no overlay without a policy");
@@ -6213,7 +6213,7 @@ await test("S49 directorSystemPrompt: the policy overlay stacks on the profile v
 });
 
 await test("S49 parsePlan: contentPolicy provenance rides the plan", async () => {
-  const { parsePlan } = await import("../src/lib/tubeforge/director-plan.ts");
+  const { parsePlan } = await import("../src/lib/ibismuh/director-plan.ts");
   const plan = parsePlan(JSON.stringify({
     version: 2, concept: "c",
     contentPolicy: "islamic-history",
@@ -6229,7 +6229,7 @@ await test("S49 parsePlan: contentPolicy provenance rides the plan", async () =>
 });
 
 await test("S49 qc battery: the restricted-visual check rides the report when the scan ran", async () => {
-  const { runQcReport } = await import("../src/lib/tubeforge/qc.ts");
+  const { runQcReport } = await import("../src/lib/ibismuh/qc.ts");
   const opts = {
     mp4Path: "/nonexistent/tf-s49/final.mp4",
     videoDuration: 10,
@@ -6257,7 +6257,7 @@ await test("S49 qc battery: the restricted-visual check rides the report when th
 });
 
 await test("S49 qc gate: restricted-visual blocks export/publish (fail-closed)", async () => {
-  const { applyQcPolicy, QC_ENFORCEMENT_MATRIX } = await import("../src/lib/tubeforge/qc-policy.ts");
+  const { applyQcPolicy, QC_ENFORCEMENT_MATRIX } = await import("../src/lib/ibismuh/qc-policy.ts");
   eq(QC_ENFORCEMENT_MATRIX["restricted-visual"]?.severity, "block", "matrix classifies restricted-visual as BLOCK");
   const mk = (status: "pass" | "fail" | "unmeasured") => ({
     passed: status === "pass",
@@ -6276,7 +6276,7 @@ await test("S49 qc gate: restricted-visual blocks export/publish (fail-closed)",
 });
 
 await test("S49 runRestrictedVisualScan: a scan that cannot run reports unmeasured, never throws", async () => {
-  const { runRestrictedVisualScan } = await import("../src/lib/tubeforge/restricted-subjects.ts");
+  const { runRestrictedVisualScan } = await import("../src/lib/ibismuh/restricted-subjects.ts");
   // A nonexistent input file: ffmpeg fails → the scan must catch and report
   // "unmeasured" (the fail-closed contract — the QC gate then holds export).
   const outcome = await runRestrictedVisualScan({ mp4Path: "/nonexistent/tf-s49/final.mp4", durationSec: 10 });
@@ -6286,8 +6286,8 @@ await test("S49 runRestrictedVisualScan: a scan that cannot run reports unmeasur
 });
 
 await test("S49 islamic-history profile: 8th profile, catalog + parsePlan snap agree", async () => {
-  const { PRODUCTION_PROFILES, PROFILE_IDS_CATALOG, resolveProfile } = await import("../src/lib/tubeforge/production-profiles.ts");
-  const { PROFILE_IDS, parsePlan } = await import("../src/lib/tubeforge/director-plan.ts");
+  const { PRODUCTION_PROFILES, PROFILE_IDS_CATALOG, resolveProfile } = await import("../src/lib/ibismuh/production-profiles.ts");
+  const { PROFILE_IDS, parsePlan } = await import("../src/lib/ibismuh/director-plan.ts");
   ok(PRODUCTION_PROFILES["islamic-history"] !== undefined, "the 8th profile exists");
   eq(PROFILE_IDS.includes("islamic-history"), true, "PROFILE_IDS carries it (parsePlan snap set)");
   eq(PROFILE_IDS_CATALOG.includes("islamic-history"), true, "the catalog carries it");
@@ -6308,7 +6308,7 @@ await test("S49 islamic-history profile: 8th profile, catalog + parsePlan snap a
 // ---------------------------------------------------------------------------
 
 await test("S50 multiShotSceneGraph: per-shot fade — the xfade chain with an EXACT frame budget", async () => {
-  const { multiShotSceneGraph, SHOT_FADE_SEC } = await import("../src/lib/tubeforge/motion.ts");
+  const { multiShotSceneGraph, SHOT_FADE_SEC } = await import("../src/lib/ibismuh/motion.ts");
   const settings = { mode: "smart", intensity: 40, curve: "smooth", vary: true } as never;
   const fps = 30;
   // 3 shots (4s/3s/3s), fade after shot 0, cut after shot 1 — the mixed join.
@@ -6369,7 +6369,7 @@ await test("S50 multiShotSceneGraph: per-shot fade — the xfade chain with an E
 });
 
 await test("S50 multiShotSceneGraph fade render contract: the xfade chain renders with EXACT duration (real ffmpeg)", async () => {
-  const { multiShotSceneGraph } = await import("../src/lib/tubeforge/motion.ts");
+  const { multiShotSceneGraph } = await import("../src/lib/ibismuh/motion.ts");
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "tf-s50-"));
   try {
     const imgA = path.join(tmp, "scene-01.png");
@@ -6426,8 +6426,8 @@ await test("S50 multiShotSceneGraph fade render contract: the xfade chain render
 });
 
 await test("S50 i2vMotionPrompt: the v2 vocabulary speaks, subjectAction leads, moveSpeed colors", async () => {
-  const { i2vMotionPrompt, I2V_CAMERA_PHRASES } = await import("../src/lib/tubeforge/liveliness.ts");
-  const { CAMERA_MOVES } = await import("../src/lib/tubeforge/director-plan.ts");
+  const { i2vMotionPrompt, I2V_CAMERA_PHRASES } = await import("../src/lib/ibismuh/liveliness.ts");
+  const { CAMERA_MOVES } = await import("../src/lib/ibismuh/director-plan.ts");
   const scene = {
     index: 1, title: "T", narration: "n",
     visual: "the harbor at dawn, gulls wheeling over the mastheads",
@@ -6476,7 +6476,7 @@ await test("S50 i2vMotionPrompt: the v2 vocabulary speaks, subjectAction leads, 
 });
 
 await test("S50 buildSceneShots carries transitionOut into the execution", async () => {
-  const { buildSceneShots } = await import("../src/lib/tubeforge/shots.ts");
+  const { buildSceneShots } = await import("../src/lib/ibismuh/shots.ts");
   const scene = {
     index: 1, title: "T", narration: "n", visual: "v", camera: "static",
     mood: "m", caption: "c", hostInScene: false, rehook: false, sfx: "none",
@@ -6495,7 +6495,7 @@ await test("S50 buildSceneShots carries transitionOut into the execution", async
 });
 
 await test("S50 PALINDROME_LOOP_GRAPH: the loop the renderer runs really loops seamlessly (real ffmpeg)", async () => {
-  const { PALINDROME_LOOP_GRAPH } = await import("../src/lib/tubeforge/motion.ts");
+  const { PALINDROME_LOOP_GRAPH } = await import("../src/lib/ibismuh/motion.ts");
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "tf-s50-loop-"));
   try {
     // A 2s clip with continuous GUARANTEED motion: a linear PAN across a
@@ -6579,7 +6579,7 @@ await test("S50 PALINDROME_LOOP_GRAPH: the loop the renderer runs really loops s
 // ---------------------------------------------------------------------------
 
 await test("S51 parseReferenceKeys: the JSON column's fail-open contract", async () => {
-  const { parseReferenceKeys } = await import("../src/lib/tubeforge/references.ts");
+  const { parseReferenceKeys } = await import("../src/lib/ibismuh/references.ts");
   eq(parseReferenceKeys(null), [], "null column → no refs");
   eq(parseReferenceKeys(undefined), [], "undefined column → no refs");
   eq(parseReferenceKeys(""), [], "empty string → no refs");
@@ -6594,7 +6594,7 @@ await test("S51 parseReferenceKeys: the JSON column's fail-open contract", async
 });
 
 await test("S51 nextReferenceKey: lowest-free allocation stays inside the cap forever", async () => {
-  const { nextReferenceKey } = await import("../src/lib/tubeforge/references.ts");
+  const { nextReferenceKey } = await import("../src/lib/ibismuh/references.ts");
   const P = "characters/x";
   eq(nextReferenceKey(P, []), `${P}/ref-1.png`, "empty library → slot 1");
   eq(
@@ -6622,7 +6622,7 @@ await test("S51 nextReferenceKey: lowest-free allocation stays inside the cap fo
 });
 
 await test("S51 isReferenceKey: the DELETE route's path-traversal guard", async () => {
-  const { isReferenceKey } = await import("../src/lib/tubeforge/references.ts");
+  const { isReferenceKey } = await import("../src/lib/ibismuh/references.ts");
   const P = "characters/x";
   ok(isReferenceKey(P, `${P}/ref-1.png`), "a real key passes");
   ok(!isReferenceKey(P, `${P}/portrait.png`), "the portrait is not a reference");
@@ -6639,8 +6639,8 @@ await test("S51 saveReferenceImage: real ffmpeg normalization + the storage seam
     removeReferenceFile,
     MAX_REFERENCE_BYTES,
     REFERENCE_LONG_EDGE,
-  } = await import("../src/lib/tubeforge/references.ts");
-  const storage = await import("../src/lib/tubeforge/storage.ts");
+  } = await import("../src/lib/ibismuh/references.ts");
+  const storage = await import("../src/lib/ibismuh/storage.ts");
   const FFOPT = { timeout: 60_000, maxBuffer: 4 * 1024 * 1024 } as const;
   const expectThrow = async (p: Promise<unknown>, needle: string) => {
     try {
@@ -6706,7 +6706,7 @@ await test("S51 saveReferenceImage: real ffmpeg normalization + the storage seam
 });
 
 await test("S51 buildPortraitPrompt: the age-fidelity contract (anchor primacy + echo)", async () => {
-  const { buildPortraitPrompt, buildAnchorFallback } = await import("../src/lib/tubeforge/characters.ts");
+  const { buildPortraitPrompt, buildAnchorFallback } = await import("../src/lib/ibismuh/characters.ts");
   const anchor = "nova: late-20s presenter, short silver hair, sharp green eyes";
   const prompt = buildPortraitPrompt({ name: "Nova", anchor, style: "cinematic realism" });
   // Primacy: the ANCHOR is the first thing the model reads (the S47 baseline
@@ -6727,7 +6727,7 @@ await test("S51 getApprovedLocationRefKey's selection law, pinned at the seam it
   // pin the pure law it enforces: PLAN ORDER wins, the NEWEST (array tail)
   // ref seeds, and props are excluded by design. The seam: parseReferenceKeys
   // feeding the same selection the accessor runs.
-  const { parseReferenceKeys } = await import("../src/lib/tubeforge/references.ts");
+  const { parseReferenceKeys } = await import("../src/lib/ibismuh/references.ts");
   const planOrder = ["the neon market", "the rooftop"];
   const rows = [
     { name: "the rooftop", referenceImages: JSON.stringify(["locations/r/ref-1.png"]) },
@@ -6751,7 +6751,7 @@ await test("S51 getApprovedLocationRefKey's selection law, pinned at the seam it
 
 await test("S52 profilePickerList: the picker's wire contract", async () => {
   const { profilePickerList, PROFILE_IDS_CATALOG } = await import(
-    "../src/lib/tubeforge/production-profiles.ts"
+    "../src/lib/ibismuh/production-profiles.ts"
   );
   const list = profilePickerList();
   eq(list.length, 8, "all 8 profiles are offered");
@@ -6774,8 +6774,8 @@ await test("S52 profilePickerList: the picker's wire contract", async () => {
 });
 
 await test("S52 planProfileNotes: the authoring profile's live advisory (no silent creative decisions)", async () => {
-  const { planProfileNotes } = await import("../src/lib/tubeforge/production-profiles.ts");
-  type Plan = import("../src/lib/tubeforge/director-plan.ts").DirectorPlan;
+  const { planProfileNotes } = await import("../src/lib/ibismuh/production-profiles.ts");
+  type Plan = import("../src/lib/ibismuh/director-plan.ts").DirectorPlan;
   const shot = (imagePrompt: string) => ({
     shotIndex: 0, framing: "medium", camera: "static", lens: "35mm",
     composition: "centered", duration: 3, imagePrompt,
@@ -6824,7 +6824,7 @@ await test("S52 planProfileNotes: the authoring profile's live advisory (no sile
 
 await test("S53 subjectVerdictFromJudge: the threshold law (lighting never flips it)", async () => {
   const { subjectVerdictFromJudge, SUBJECT_CONSISTENCY_FLOOR } = await import(
-    "../src/lib/tubeforge/visual-qc.ts"
+    "../src/lib/ibismuh/visual-qc.ts"
   );
   eq(SUBJECT_CONSISTENCY_FLOOR, 70, "the floor the S51 benchmark finding inherits");
   eq(subjectVerdictFromJudge({ consistent: true, score: 100 }).status, "pass", "no-subject frames verdict stands (the judge's own contract)");
@@ -6848,7 +6848,7 @@ await test("S53 subjectVerdictFromJudge: the threshold law (lighting never flips
 
 await test("S53 visual scan prompts: the two laws the judges must carry", async () => {
   const { SUBJECT_CONTINUITY_SYSTEM, TEXT_ARTIFACT_SYSTEM } = await import(
-    "../src/lib/tubeforge/visual-qc.ts"
+    "../src/lib/ibismuh/visual-qc.ts"
   );
   // The S51 finding made explicit: lighting-induced hue shifts are notes,
   // not drift — only identity-defining changes count.
@@ -6863,7 +6863,7 @@ await test("S53 visual scan prompts: the two laws the judges must carry", async 
 });
 
 await test("S53 sampleFramesEvenly: real ffmpeg sampling + the never-throw contract", async () => {
-  const { sampleFramesEvenly } = await import("../src/lib/tubeforge/visual-qc.ts");
+  const { sampleFramesEvenly } = await import("../src/lib/ibismuh/visual-qc.ts");
   const FFOPT = { timeout: 60_000, maxBuffer: 4 * 1024 * 1024 } as const;
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "s53-frames-"));
   try {
@@ -6893,7 +6893,7 @@ await test("S53 sampleFramesEvenly: real ffmpeg sampling + the never-throw contr
 });
 
 await test("S53 qc battery: the advanced visual lenses ride the report when the scans ran", async () => {
-  const { runQcReport } = await import("../src/lib/tubeforge/qc.ts");
+  const { runQcReport } = await import("../src/lib/ibismuh/qc.ts");
   const opts = {
     mp4Path: "/nonexistent/tf-s53/final.mp4",
     videoDuration: 10,
@@ -6925,7 +6925,7 @@ await test("S53 qc battery: the advanced visual lenses ride the report when the 
 });
 
 await test("S53 qc gate: the advanced visual lenses ADVISE, never hold", async () => {
-  const { applyQcPolicy, QC_ENFORCEMENT_MATRIX } = await import("../src/lib/tubeforge/qc-policy.ts");
+  const { applyQcPolicy, QC_ENFORCEMENT_MATRIX } = await import("../src/lib/ibismuh/qc-policy.ts");
   eq(QC_ENFORCEMENT_MATRIX["subject-continuity"]?.severity, "report", "subject-continuity is REPORT (repaint-or-accept is the operator's call)");
   eq(QC_ENFORCEMENT_MATRIX["text-artifacts"]?.severity, "report", "text-artifacts is REPORT (until calibration evidence justifies a flip)");
   const mk = (status: "pass" | "fail" | "unmeasured") => ({
@@ -6947,7 +6947,7 @@ await test("S53 qc gate: the advanced visual lenses ADVISE, never hold", async (
 
 await test("S53 runSubjectContinuityScan + runTextArtifactScan: cannot-run reports unmeasured, never throws", async () => {
   const { runSubjectContinuityScan, runTextArtifactScan } = await import(
-    "../src/lib/tubeforge/visual-qc.ts"
+    "../src/lib/ibismuh/visual-qc.ts"
   );
   // A nonexistent input file: ffmpeg samples nothing → both scans report
   // "unmeasured" with a readable detail (the never-throw contract).
@@ -6967,7 +6967,7 @@ await test("S53 runSubjectContinuityScan + runTextArtifactScan: cannot-run repor
 suiteStart("S55 — cinematic quality fixes (T-55.3)");
 
 await test("S55 movementForKind: declared statics execute the ambient drift; the stillness contract stays a TRUE hold", async () => {
-  const { movementForKind, STATIC_AMBIENT_DRIFT } = await import("../src/lib/tubeforge/motion.ts");
+  const { movementForKind, STATIC_AMBIENT_DRIFT } = await import("../src/lib/ibismuh/motion.ts");
   const focal = { x: 0.5, y: 0.5 };
   // The owner's option (ii): a DECLARED static (motion on) creeps z 1.00→1.03.
   const declared = movementForKind("hold", focal, 40);
@@ -6984,7 +6984,7 @@ await test("S55 movementForKind: declared statics execute the ambient drift; the
 });
 
 await test("S55 shotZoompan: the ambient-drift static executes the creep; TRUE holds keep the constant graph", async () => {
-  const { multiShotSceneGraph } = await import("../src/lib/tubeforge/motion.ts");
+  const { multiShotSceneGraph } = await import("../src/lib/ibismuh/motion.ts");
   const fps = 30;
   const drifting = multiShotSceneGraph({
     dur: 6,
@@ -7012,7 +7012,7 @@ await test("S55 shotZoompan: the ambient-drift static executes the creep; TRUE h
 });
 
 await test("S55 shotGraphJoins: the graph's own boundaries, frame-exact against the fitted allocation", async () => {
-  const { shotGraphJoins, multiShotSceneGraph, SHOT_FADE_SEC } = await import("../src/lib/tubeforge/motion.ts");
+  const { shotGraphJoins, multiShotSceneGraph, SHOT_FADE_SEC } = await import("../src/lib/ibismuh/motion.ts");
   const settings = { mode: "smart", intensity: 40, curve: "smooth", vary: true } as never;
   const fps = 30;
   // Hard concats: 4/3/3s over a 10s scene — flips land on the FITTED
@@ -7059,7 +7059,7 @@ await test("S55 shotGraphJoins: the graph's own boundaries, frame-exact against 
 });
 
 await test("S55 expectedCutsForTimeline: intra-scene shot joins ride the expectation as blended-clock windows", async () => {
-  const { alignCuts, expectedCutsForTimeline } = await import("../src/lib/tubeforge/render-qc.ts");
+  const { alignCuts, expectedCutsForTimeline } = await import("../src/lib/ibismuh/render-qc.ts");
   // 2 scenes (4s + 4s) joined by a 0.5s fade: the seam blends at 3.5s, so
   // scene 2's local 0 sits at 3.5s on the blended clock. Scene 1 carries a
   // hard flip at local 2.0s (→ blended 2.0); scene 2 a fade hand-off at
@@ -7093,7 +7093,7 @@ await test("S55 expectedCutsForTimeline: intra-scene shot joins ride the expecta
 });
 
 await test("S55 ambient-drift static: freezedetect-clean on a real render, the TRUE hold still flags (real ffmpeg)", async () => {
-  const { multiShotSceneGraph } = await import("../src/lib/tubeforge/motion.ts");
+  const { multiShotSceneGraph } = await import("../src/lib/ibismuh/motion.ts");
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "tf-s55-"));
   try {
     const img = path.join(tmp, "scene-01.png");
@@ -7142,7 +7142,7 @@ await test("S55 ambient-drift static: freezedetect-clean on a real render, the T
 
 suiteStart("S55 — Islamic dense-frame QC (T-55.4)");
 await test("S55 planDenseGrid: 0.50s grid, honest coarsening at the 240 cap, degenerate durations snap safe", async () => {
-  const { planDenseGrid, RESTRICTED_DENSE_FPS, RESTRICTED_DENSE_MAX_FRAMES } = await import("../src/lib/tubeforge/restricted-subjects.ts");
+  const { planDenseGrid, RESTRICTED_DENSE_FPS, RESTRICTED_DENSE_MAX_FRAMES } = await import("../src/lib/ibismuh/restricted-subjects.ts");
   // The S49 gap this task closes: a 60s render now yields a 120-frame local
   // grid (0.50s) instead of 8 evenly-sampled VLM frames (7.5s mean gap).
   eq(planDenseGrid(20), { fps: RESTRICTED_DENSE_FPS, count: 40 }, "20s → 40 frames @0.50s");
@@ -7158,7 +7158,7 @@ await test("S55 planDenseGrid: 0.50s grid, honest coarsening at the 240 cap, deg
 });
 
 await test("S55 selectVlmFrames: forced seats kept, even grid fills the cap, deterministic + chronological", async () => {
-  const { selectVlmFrames, RESTRICTED_VLM_MAX_FRAMES } = await import("../src/lib/tubeforge/restricted-subjects.ts");
+  const { selectVlmFrames, RESTRICTED_VLM_MAX_FRAMES } = await import("../src/lib/ibismuh/restricted-subjects.ts");
   // Small grid → every frame judged (no selection needed).
   eq(selectVlmFrames(10, []), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "denseCount ≤ cap → all frames");
   eq(selectVlmFrames(10, [3, 7]), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9], "forced is a subset of an all-frames selection");
@@ -7187,7 +7187,7 @@ await test("S55 selectVlmFrames: forced seats kept, even grid fills the cap, det
 });
 
 await test("S55 restrictedVerdictFromBatches: first fail wins, unmeasured beats pass, all-clean is the only pass", async () => {
-  const { restrictedVerdictFromBatches } = await import("../src/lib/tubeforge/restricted-subjects.ts");
+  const { restrictedVerdictFromBatches } = await import("../src/lib/ibismuh/restricted-subjects.ts");
   eq(restrictedVerdictFromBatches([]).status, "unmeasured", "no batches → unmeasured (fail-closed)");
   const fail = restrictedVerdictFromBatches([
     { status: "pass", frames: [], note: "clean" },
@@ -7214,7 +7214,7 @@ await test("S55 restrictedVerdictFromBatches: first fail wins, unmeasured beats 
 });
 
 await test("S55 face tripwire (real detector when present): solid frames are a false-positive control; absence degrades gracefully", async () => {
-  const { runFaceTripwire, RESTRICTED_FACE_MIN_AREA_FRAC, FACE_TRIPWIRE_PY } = await import("../src/lib/tubeforge/restricted-subjects.ts");
+  const { runFaceTripwire, RESTRICTED_FACE_MIN_AREA_FRAC, FACE_TRIPWIRE_PY } = await import("../src/lib/ibismuh/restricted-subjects.ts");
   const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), "tf-s55-tripwire-"));
   try {
     // The probe script the scan itself writes (same bytes, same contract).
@@ -7250,7 +7250,7 @@ await test("S55 face tripwire (real detector when present): solid frames are a f
 suiteStart("S55 — Islamic export acceptance (T-55.5)");
 await test("S55 editSceneImage instruction: the AI-edit prompt rides the L3 sanitizer (standard = the pre-S55 bytes)", async () => {
   const { sanitizePromptForPolicy, policyNegativeClause, ALTERNATIVE_COMPOSITIONS } =
-    await import("../src/lib/tubeforge/restricted-subjects.ts");
+    await import("../src/lib/ibismuh/restricted-subjects.ts");
   // The EXACT composition the fixed editSceneImage builds (story.ts): the
   // user's free-text instruction embedded in the surgical edit template.
   // The T-55.5 acceptance found this path UNSANITIZED (the S49 L3 seam
@@ -7306,7 +7306,7 @@ await test("log: requestLog binds the middleware-stamped request id", async () =
   (process.stderr as { write: unknown }).write = collect;
   try {
     process.env.TUBEFORGE_LOG_LEVEL = "debug";
-    const mod = await import("../src/lib/tubeforge/log.ts");
+    const mod = await import("../src/lib/ibismuh/log.ts");
     eq(mod.REQUEST_ID_HEADER, "x-request-id", "the header name is the contract");
 
     // A stamped request → the child carries req; children inherit it.
@@ -7361,7 +7361,7 @@ await test("log: the portable sink falls back to console when process streams ar
     // Simulate an edge/browser bundle: process exists but has no std streams.
     Object.defineProperty(process, "stdout", { value: {}, configurable: true });
     Object.defineProperty(process, "stderr", { value: {}, configurable: true });
-    const mod = await import("../src/lib/tubeforge/log.ts");
+    const mod = await import("../src/lib/ibismuh/log.ts");
     mod.createLogger({ mod: "edge" }).info("fallback line");
     mod.createLogger({ mod: "edge" }).error("fallback error line");
     eq(captured.length, 2, "both levels emitted through the console fallback");
@@ -7384,7 +7384,7 @@ await test("log: the portable sink falls back to console when process streams ar
 // ─── S62 — the i2v motion-prompt contract (what the real-video lane rides) ───
 
 await test("S62 motion prompt: camera phrase + speed prefix + subjectAction priority", async () => {
-  const { i2vMotionPrompt } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { i2vMotionPrompt } = await import("../src/lib/ibismuh/liveliness.ts");
   const scene = {
     index: 1, title: "s", narration: "n", visual: "a frosted bottle on wet slate",
     camera: "static", mood: "rich brown and gold", caption: "c",
@@ -7404,7 +7404,7 @@ await test("S62 motion prompt: camera phrase + speed prefix + subjectAction prio
 });
 
 await test("S62 motion prompt: planScene null → scene's legacy camera + per-kind subject clause", async () => {
-  const { i2vMotionPrompt } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { i2vMotionPrompt } = await import("../src/lib/ibismuh/liveliness.ts");
   const scene = {
     index: 2, title: "s", narration: "n", visual: "harbor cranes at dawn",
     camera: "pan-left", mood: "archival", caption: "c",
@@ -7417,8 +7417,8 @@ await test("S62 motion prompt: planScene null → scene's legacy camera + per-ki
 });
 
 await test("S62 motion prompt: the full S48 engine camera vocabulary maps to real phrases", async () => {
-  const { i2vMotionPrompt, I2V_CAMERA_PHRASES } = await import("../src/lib/tubeforge/liveliness.ts");
-  const { CAMERA_MOVES } = await import("../src/lib/tubeforge/director-plan.ts");
+  const { i2vMotionPrompt, I2V_CAMERA_PHRASES } = await import("../src/lib/ibismuh/liveliness.ts");
+  const { CAMERA_MOVES } = await import("../src/lib/ibismuh/director-plan.ts");
   ok(CAMERA_MOVES.length >= 10, `engine vocabulary present (${CAMERA_MOVES.length} moves)`);
   for (const cam of CAMERA_MOVES) {
     const phrase = I2V_CAMERA_PHRASES[cam];
@@ -7433,7 +7433,7 @@ await test("S62 motion prompt: the full S48 engine camera vocabulary maps to rea
 });
 
 await test("S62 motion prompt: only slow/fast modulate — normal and absent leave the phrase bare", async () => {
-  const { i2vMotionPrompt } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { i2vMotionPrompt } = await import("../src/lib/ibismuh/liveliness.ts");
   const scene = {
     index: 1, title: "s", narration: "n", visual: "v", camera: "static",
     mood: "m", caption: "c", hostInScene: false, rehook: false, sfx: "none",
@@ -7449,7 +7449,7 @@ await test("S62 motion prompt: only slow/fast modulate — normal and absent lea
 // ─── S63 — the tempo law + the doctrine-always-rides law ───
 
 await test("S63 tempo law: no camera phrase carries a tempo word — the prefix owns tempo", async () => {
-  const { I2V_CAMERA_PHRASES } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { I2V_CAMERA_PHRASES } = await import("../src/lib/ibismuh/liveliness.ts");
   const TEMPO = /\b(slow|fast|gentle|deliberate|quick|energetic|slowly|quickly)\b/i;
   const verbs = Object.keys(I2V_CAMERA_PHRASES);
   ok(verbs.length >= 16, `the full vocabulary is present (${verbs.length} phrases)`);
@@ -7459,7 +7459,7 @@ await test("S63 tempo law: no camera phrase carries a tempo word — the prefix 
   // And no prefix × phrase composition can double or contradict tempo
   // (the S62 receipts: "Quick, energetic slow cinematic zoom in" on social's
   // real fast hook; "Slow, deliberate slow" on islamic-history's slow zoom).
-  const { i2vMotionPrompt } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { i2vMotionPrompt } = await import("../src/lib/ibismuh/liveliness.ts");
   const scene = {
     index: 1, title: "s", narration: "n", visual: "v", camera: "static",
     mood: "m", caption: "c", hostInScene: false, rehook: false, sfx: "none",
@@ -7480,7 +7480,7 @@ await test("S63 tempo law: no camera phrase carries a tempo word — the prefix 
 });
 
 await test("S63 doctrine-always-rides: a pose subjectAction can no longer delete the motion clause", async () => {
-  const { i2vMotionPrompt, I2V_SUBJECT_MOTION } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { i2vMotionPrompt, I2V_SUBJECT_MOTION } = await import("../src/lib/ibismuh/liveliness.ts");
   const scene = {
     index: 1, title: "s", narration: "n",
     visual: "cutaway diagram of a car engine cylinder, piston sliding down",
@@ -7521,7 +7521,7 @@ await test("S63 doctrine-always-rides: a pose subjectAction can no longer delete
 suiteStart("S64 whiteboard — the SVG security gate (sanitizeSvg)");
 
 await test("S64 sanitizer strips <script> subtrees and keeps legitimate markup", async () => {
-  const { sanitizeSvg } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { sanitizeSvg } = await import("../src/lib/ibismuh/whiteboard/svg");
   const out = sanitizeSvg(
     '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script><path id="p" d="M 0 0 L 5 5"/></svg>'
   );
@@ -7531,14 +7531,14 @@ await test("S64 sanitizer strips <script> subtrees and keeps legitimate markup",
 });
 
 await test("S64 sanitizer strips event-handler attributes (quoted or bare)", async () => {
-  const { sanitizeSvg } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { sanitizeSvg } = await import("../src/lib/ibismuh/whiteboard/svg");
   const out = sanitizeSvg('<svg onload="a()"><path d="M 0 0" onclick=\'b()\' onerror=c /></svg>');
   ok(!/\son[a-z]+\s*=/i.test(out), `an on* handler survived: ${out}`);
   ok(out.includes("<path"), "the path element itself survives");
 });
 
 await test("S64 sanitizer strips foreignObject / image / use / animate (external-content elements)", async () => {
-  const { sanitizeSvg } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { sanitizeSvg } = await import("../src/lib/ibismuh/whiteboard/svg");
   const out = sanitizeSvg(
     '<svg><foreignObject><div>x</div></foreignObject><image href="https://e/x.png"/><use xlink:href="#x"/><animate attributeName="o"/><path id="p" d="M 0 0"/></svg>'
   );
@@ -7547,7 +7547,7 @@ await test("S64 sanitizer strips foreignObject / image / use / animate (external
 });
 
 await test("S64 sanitizer neutralizes javascript:/data: hrefs", async () => {
-  const { sanitizeSvg } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { sanitizeSvg } = await import("../src/lib/ibismuh/whiteboard/svg");
   const out = sanitizeSvg(
     '<svg><a href="javascript:alert(1)"><path d="M 0 0"/></a><path d="M 1 1" xlink:href="data:text/html,x"/></svg>'
   );
@@ -7555,7 +7555,7 @@ await test("S64 sanitizer neutralizes javascript:/data: hrefs", async () => {
 });
 
 await test("S64 sanitizer removes XML prolog / DOCTYPE / ENTITY declarations", async () => {
-  const { sanitizeSvg } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { sanitizeSvg } = await import("../src/lib/ibismuh/whiteboard/svg");
   const out = sanitizeSvg('<?xml version="1.0"?><!DOCTYPE svg [<!ENTITY xx "y">]><svg><!ENTITY a "b"><path d="M 0 0"/></svg>');
   ok(!out.includes("<?xml"), "prolog survived");
   ok(!out.includes("<!DOCTYPE"), "doctype survived");
@@ -7563,7 +7563,7 @@ await test("S64 sanitizer removes XML prolog / DOCTYPE / ENTITY declarations", a
 });
 
 await test("S64 sanitizer neutralizes external url() refs and script-y style payloads", async () => {
-  const { sanitizeSvg } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { sanitizeSvg } = await import("../src/lib/ibismuh/whiteboard/svg");
   const out = sanitizeSvg(
     '<svg><path d="M 0 0" style="fill:url(https://evil/x.png)"/><rect d="" style="background:url(javascript:alert(1))"/></svg>'
   );
@@ -7573,7 +7573,7 @@ await test("S64 sanitizer neutralizes external url() refs and script-y style pay
 });
 
 await test("S64 sanitizer passes clean house markup through byte-identical", async () => {
-  const { sanitizeSvg } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { sanitizeSvg } = await import("../src/lib/ibismuh/whiteboard/svg");
   const clean = '<svg xmlns="http://www.w3.org/2000/svg"><path id="hm-outline" d="M 100 62 C 74 26, 24 44, 24 94 Z" fill="#e63946" fill-opacity="0" stroke="#1d3557" stroke-width="5" stroke-linecap="round"/><text id="t" x="34" y="120" font-family="DejaVu Sans, sans-serif" font-size="22" fill="#457b9d" font-weight="bold">RA</text></svg>';
   eq(sanitizeSvg(clean), clean, "legit markup must round-trip untouched");
 });
@@ -7581,14 +7581,14 @@ await test("S64 sanitizer passes clean house markup through byte-identical", asy
 suiteStart("S64 whiteboard — the path grammar + arc-length geometry");
 
 await test("S64 parsePathData tokenizes commands and numbers (scientific notation included)", async () => {
-  const { parsePathData } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { parsePathData } = await import("../src/lib/ibismuh/whiteboard/svg");
   eq(parsePathData("M 0 0 L 10 10"), [{ cmd: "M", args: [0, 0] }, { cmd: "L", args: [10, 10] }]);
   eq(parsePathData("M 1e2 .5 L -2.5E-1 4"), [{ cmd: "M", args: [100, 0.5] }, { cmd: "L", args: [-0.25, 4] }]);
   eq(parsePathData("Z"), [{ cmd: "Z", args: [] }]);
 });
 
 await test("S64 normalizeCommands: implicit repeats — extra pairs after M degrade to L (same case)", async () => {
-  const { normalizeCommands, parsePathData } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { normalizeCommands, parsePathData } = await import("../src/lib/ibismuh/whiteboard/svg");
   eq(normalizeCommands(parsePathData("M 0 0 10 10 20 20")), [
     { cmd: "M", args: [0, 0] },
     { cmd: "L", args: [10, 10] },
@@ -7602,7 +7602,7 @@ await test("S64 normalizeCommands: implicit repeats — extra pairs after M degr
 });
 
 await test("S64 flattenPath: absolute and relative lines accumulate exact lengths", async () => {
-  const { pathSegments, totalLength } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { pathSegments, totalLength } = await import("../src/lib/ibismuh/whiteboard/svg");
   const segs = pathSegments("M 0 0 L 3 4 L 10 4");
   eq(segs.length, 1, "one subpath");
   eq(segs[0].points, [{ x: 0, y: 0 }, { x: 3, y: 4 }, { x: 10, y: 4 }]);
@@ -7614,14 +7614,14 @@ await test("S64 flattenPath: absolute and relative lines accumulate exact length
 });
 
 await test("S64 flattenPath: H/V move one axis (absolute + relative)", async () => {
-  const { pathSegments, totalLength } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { pathSegments, totalLength } = await import("../src/lib/ibismuh/whiteboard/svg");
   const hv = pathSegments("M 0 0 H 10 V 5 h -5 v -2");
   eq(hv[0].points, [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 5 }, { x: 5, y: 5 }, { x: 5, y: 3 }]);
   approx(totalLength(hv), 22, 1e-9);
 });
 
 await test("S64 flattenPath: cubic C hits its endpoint and bows past the chord", async () => {
-  const { pathSegments, totalLength } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { pathSegments, totalLength } = await import("../src/lib/ibismuh/whiteboard/svg");
   const c = pathSegments("M 0 0 C 0 100 100 100 100 0");
   const pts = c[0].points;
   eq(pts[pts.length - 1], { x: 100, y: 0 }, "exact endpoint");
@@ -7629,21 +7629,21 @@ await test("S64 flattenPath: cubic C hits its endpoint and bows past the chord",
 });
 
 await test("S64 flattenPath: S reflects the previous cubic control — spec-exact equivalence", async () => {
-  const { pathSegments } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { pathSegments } = await import("../src/lib/ibismuh/whiteboard/svg");
   const withS = pathSegments("M 0 0 C 0 100 100 100 100 0 S 200 -100 200 0");
   const explicit = pathSegments("M 0 0 C 0 100 100 100 100 0 C 100 -100 200 -100 200 0");
   eq(withS, explicit, "S must equal the explicit reflected-control C");
 });
 
 await test("S64 flattenPath: T reflects the previous quadratic control — spec-exact equivalence", async () => {
-  const { pathSegments } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { pathSegments } = await import("../src/lib/ibismuh/whiteboard/svg");
   const withT = pathSegments("M 0 0 Q 50 100 100 0 T 200 0");
   const explicit = pathSegments("M 0 0 Q 50 100 100 0 Q 150 -100 200 0");
   eq(withT, explicit, "T must equal the explicit reflected-control Q");
 });
 
 await test("S64 flattenPath: A arcs — semicircle and quarter-circle ≈ π·r (spec F.6 endpoint→center)", async () => {
-  const { pathSegments, totalLength, sampleAtLength } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { pathSegments, totalLength, sampleAtLength } = await import("../src/lib/ibismuh/whiteboard/svg");
   const semi = pathSegments("M 0 0 A 50 50 0 0 1 100 0");
   approx(totalLength(semi), Math.PI * 50, 2.5, "semicircle ≈ π·r");
   const mid = sampleAtLength(semi, (Math.PI * 50) / 2);
@@ -7657,7 +7657,7 @@ await test("S64 flattenPath: A arcs — semicircle and quarter-circle ≈ π·r 
 });
 
 await test("S64 flattenPath: Z closes the subpath; M opens a new one", async () => {
-  const { pathSegments, totalLength } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { pathSegments, totalLength } = await import("../src/lib/ibismuh/whiteboard/svg");
   const z = pathSegments("M 0 0 L 10 0 L 10 10 Z");
   ok(z[0].closed, "Z marks closed");
   eq(z[0].points[z[0].points.length - 1], { x: 0, y: 0 }, "Z returns to the subpath start");
@@ -7666,7 +7666,7 @@ await test("S64 flattenPath: Z closes the subpath; M opens a new one", async () 
 });
 
 await test("S64 sampleAtLength: position, tangent, and clamping", async () => {
-  const { pathSegments, sampleAtLength } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { pathSegments, sampleAtLength } = await import("../src/lib/ibismuh/whiteboard/svg");
   const p = pathSegments("M 0 0 L 10 0 L 10 10");
   const s5 = sampleAtLength(p, 5);
   eq(s5.point, { x: 5, y: 0 });
@@ -7679,7 +7679,7 @@ await test("S64 sampleAtLength: position, tangent, and clamping", async () => {
 });
 
 await test("S64 transformPoint: translate∘rotate∘scale matches SVG transform semantics", async () => {
-  const { transformPoint } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { transformPoint } = await import("../src/lib/ibismuh/whiteboard/svg");
   const t = transformPoint({ x: 1, y: 0 }, { x: 100, y: 0, scale: 2, rotateDeg: 90 });
   approx(t.x, 100, 1e-9);
   approx(t.y, 2, 1e-9);
@@ -7712,7 +7712,7 @@ function wbProject(scenes: unknown, extra: Record<string, unknown> = {}): unknow
 }
 
 await test("S64 storyboard: a valid project parses; a cameraless scene stays EMPTY (the W5 no-camera-keys law)", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const r = validateWhiteboardProject(wbProject([{ ...WB_SCENE, camera: [] }]), WB_LIB);
   if (!r.project) { ok(false, `expected valid, got: ${r.errors.join("; ")}`); return; }
   eq(r.errors, []);
@@ -7725,7 +7725,7 @@ await test("S64 storyboard: a valid project parses; a cameraless scene stays EMP
 });
 
 await test("S64 storyboard: unknown asset / double placement / invalid placement are rejected", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const unknown = validateWhiteboardProject(
     wbProject([{ ...WB_SCENE, placements: [{ assetId: "ghost", placement: { x: 0, y: 0, scale: 1, rotateDeg: 0 } }] }]),
     WB_LIB
@@ -7753,7 +7753,7 @@ await test("S64 storyboard: unknown asset / double placement / invalid placement
 });
 
 await test("S64 storyboard: draw_path / write_text / reveal_color reference integrity", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const badPath = validateWhiteboardProject(
     wbProject([{ ...WB_SCENE, animations: [{ type: "draw_path", assetId: "a1", pathId: "p9", startMs: 0, durationMs: 100 }] }]),
     WB_LIB
@@ -7786,7 +7786,7 @@ await test("S64 storyboard: draw_path / write_text / reveal_color reference inte
 });
 
 await test("S64 storyboard: unknown animation type / bad times / bad move target rejected", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const badType = validateWhiteboardProject(
     wbProject([{ ...WB_SCENE, animations: [{ type: "disintegrate", assetId: "a1", startMs: 0, durationMs: 100 }] }]),
     WB_LIB
@@ -7813,7 +7813,7 @@ await test("S64 storyboard: unknown animation type / bad times / bad move target
 });
 
 await test("S64 storyboard: malformed camera keyframes are dropped with an error; valid ones sort", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const r = validateWhiteboardProject(
     wbProject([{
       ...WB_SCENE,
@@ -7842,7 +7842,7 @@ await test("S64 storyboard: malformed camera keyframes are dropped with an error
 });
 
 await test("S64 storyboard: defaults and clamps (dimensions, fps, hand)", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const r = validateWhiteboardProject(
     wbProject([WB_SCENE], { width: 99, height: 9999, fps: 999, hand: { style: "sparkly", scale: 99 } }),
     WB_LIB
@@ -7856,7 +7856,7 @@ await test("S64 storyboard: defaults and clamps (dimensions, fps, hand)", async 
 });
 
 await test("S64 storyboard: missing narration nulls the project", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const r = validateWhiteboardProject(wbProject([{ ...WB_SCENE, narration: "  " }]), WB_LIB);
   ok(r.project === null && r.errors.some((e) => e.includes("narration missing")), `errors: ${r.errors.join("; ")}`);
 });
@@ -7864,7 +7864,7 @@ await test("S64 storyboard: missing narration nulls the project", async () => {
 suiteStart("S64 whiteboard — timing: narration clock, draw scheduling, the frame plan");
 
 await test("S64 timing: estimateNarrationMs — the 2.6 wps house pace, clamped [4s, 30s]", async () => {
-  const { estimateNarrationMs, WORDS_PER_SEC } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { estimateNarrationMs, WORDS_PER_SEC } = await import("../src/lib/ibismuh/whiteboard/timing");
   eq(WORDS_PER_SEC, 2.6);
   const words = Array.from({ length: 26 }, (_, i) => `w${i}`).join(" ");
   eq(estimateNarrationMs(words), 10000);
@@ -7873,14 +7873,14 @@ await test("S64 timing: estimateNarrationMs — the 2.6 wps house pace, clamped 
 });
 
 await test("S64 timing: sceneDurationMs precedence — explicit > measured VO > estimate", async () => {
-  const { sceneDurationMs } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { sceneDurationMs } = await import("../src/lib/ibismuh/whiteboard/timing");
   eq(sceneDurationMs({ ...WB_SCENE, durationMs: 8000 }, null), 8000, "explicit wins");
   eq(sceneDurationMs({ ...WB_SCENE }, 5000), 5350, "VO + 350ms tail");
   eq(sceneDurationMs({ ...WB_SCENE }, null), 4000, "2-word estimate clamps to the 4s floor");
 });
 
 await test("S64 timing: scheduleScene fills the narration window — weighted, fill-scaled, deterministic", async () => {
-  const { scheduleScene, buildGeometry, LEAD_IN_MS, HOLD_END_MS } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { scheduleScene, buildGeometry, LEAD_IN_MS, HOLD_END_MS } = await import("../src/lib/ibismuh/whiteboard/timing");
   const geo = buildGeometry([{ id: "a1", paths: [{ id: "p1", d: "M 0 0 L 100 0" }, { id: "p2", d: "M 0 0 L 10 0" }] }]);
   const ev = scheduleScene(WB_PLAIN, 10000, geo);
   eq(ev.length, 2, "both paths scheduled");
@@ -7910,7 +7910,7 @@ await test("S64 timing: scheduleScene fills the narration window — weighted, f
 });
 
 await test("S64 timing: the editor's explicit timing is senior — no double-schedule", async () => {
-  const { scheduleScene, buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { scheduleScene, buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
   const geo = buildGeometry([{ id: "a1", paths: [{ id: "p1", d: "M 0 0 L 100 0" }, { id: "p2", d: "M 0 0 L 10 0" }] }]);
   const withExplicit = scheduleScene(WB_SCENE, 10000, geo);
   const p1Events = withExplicit.filter((e) => e.type === "draw_path" && e.pathId === "p1");
@@ -7919,7 +7919,7 @@ await test("S64 timing: the editor's explicit timing is senior — no double-sch
 });
 
 await test("S64 timing: frameAt — progress ramp, camera drift, pen follows/rests/enters on the true path", async () => {
-  const { frameAt, buildGeometry, cameraDrift } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { frameAt, buildGeometry, cameraDrift } = await import("../src/lib/ibismuh/whiteboard/timing");
   const geo = buildGeometry([{ id: "a1", paths: [{ id: "p1", d: "M 0 0 L 100 0" }] }]);
   const project: WhiteboardProject = { title: "t", width: 1920, height: 1080, fps: 24, hand: { style: "marker", scale: 1 }, scenes: [WB_PLAIN] };
   const events = [{ type: "draw_path" as const, assetId: "a1", pathId: "p1", startMs: 1000, durationMs: 1000 }];
@@ -7944,7 +7944,7 @@ await test("S64 timing: frameAt — progress ramp, camera drift, pen follows/res
 });
 
 await test("S64 timing: cameraAt — eased keyframes; W5: keys ride the DIRECTED breath, the fallback drift stays cameraless", async () => {
-  const { cameraAt, cameraDrift, directedBreath } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { cameraAt, cameraDrift, directedBreath } = await import("../src/lib/ibismuh/whiteboard/timing");
   const scene: WhiteboardScene = {
     ...WB_PLAIN,
     camera: [
@@ -7974,7 +7974,7 @@ await test("S64 timing: cameraAt — eased keyframes; W5: keys ride the DIRECTED
 });
 
 await test("S68 timing: cameraAt — the empty-camera fallback centers on the project's own dimensions", async () => {
-  const { cameraAt, cameraDrift } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { cameraAt, cameraDrift } = await import("../src/lib/ibismuh/whiteboard/timing");
   const bare: WhiteboardScene = { ...WB_PLAIN, camera: [] };
   const t = 4000;
   const d = cameraDrift(t); // the permanent drift rides on EVERY fallback
@@ -7993,7 +7993,7 @@ await test("S68 timing: cameraAt — the empty-camera fallback centers on the pr
 });
 
 await test("S64 timing: cameraDrift — bounded, deterministic, and always moving", async () => {
-  const { cameraDrift } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { cameraDrift } = await import("../src/lib/ibismuh/whiteboard/timing");
   const d0 = cameraDrift(0);
   ok(Math.abs(d0.dx) <= 96.001 && Math.abs(d0.dy) <= 66.001, "drift stays within its settle-swelled bounds");
   const d9 = cameraDrift(9000);
@@ -8013,7 +8013,7 @@ await test("S64 timing: cameraDrift — bounded, deterministic, and always movin
 });
 
 await test("S64 timing: placementAt — move_object eases between base and target", async () => {
-  const { placementAt } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { placementAt } = await import("../src/lib/ibismuh/whiteboard/timing");
   const scene: WhiteboardScene = {
     ...WB_PLAIN,
     animations: [{ type: "move_object", assetId: "a1", startMs: 1000, durationMs: 1000, to: { x: 100, y: 0, scale: 1, rotateDeg: 0 } }],
@@ -8025,15 +8025,15 @@ await test("S64 timing: placementAt — move_object eases between base and targe
 });
 
 await test("S64 timing: frameCount", async () => {
-  const { frameCount } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { frameCount } = await import("../src/lib/ibismuh/whiteboard/timing");
   eq(frameCount(10000, 24), 240);
   eq(frameCount(100, 24), 2);
   eq(frameCount(10, 24), 1, "never zero frames");
 });
 
 await test("S64 timing: the frame plan is a pure function — same inputs, same frames", async () => {
-  const { frameAt, buildGeometry, scheduleScene } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { framePayload } = await import("../src/lib/tubeforge/whiteboard/wb-page");
+  const { frameAt, buildGeometry, scheduleScene } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { framePayload } = await import("../src/lib/ibismuh/whiteboard/wb-page");
   const geo = buildGeometry([{ id: "a1", paths: [{ id: "p1", d: "M 0 0 L 100 0" }, { id: "p2", d: "M 0 0 L 50 0" }] }]);
   const project: WhiteboardProject = { title: "t", width: 1920, height: 1080, fps: 24, hand: { style: "marker", scale: 1 }, scenes: [WB_PLAIN] };
   const seq = (): string =>
@@ -8058,8 +8058,8 @@ try {
   ]);
 
   await test("normalizeVoSlot: a far-below-target slot is linear-normalized into the window", async () => {
-    const { normalizeVoSlot } = await import("../src/lib/tubeforge/whiteboard/render");
-    const { measureLoudness, LUFS_PASS_WINDOW } = await import("../src/lib/tubeforge/audiomix");
+    const { normalizeVoSlot } = await import("../src/lib/ibismuh/whiteboard/render");
+    const { measureLoudness, LUFS_PASS_WINDOW } = await import("../src/lib/ibismuh/audiomix");
     const out = await normalizeVoSlot(quietWav, path.join(voTmp, "norm"), "scene-1");
     ok(out !== quietWav, "an out-of-window slot must be re-encoded, not passed through");
     ok(fs.existsSync(out), "the normalized slot exists on disk");
@@ -8072,7 +8072,7 @@ try {
   });
 
   await test("normalizeVoSlot: an in-window slot passes through untouched (no double processing)", async () => {
-    const { normalizeVoSlot } = await import("../src/lib/tubeforge/whiteboard/render");
+    const { normalizeVoSlot } = await import("../src/lib/ibismuh/whiteboard/render");
     const first = await normalizeVoSlot(quietWav, path.join(voTmp, "norm"), "scene-1");
     const second = await normalizeVoSlot(first, path.join(voTmp, "norm"), "scene-2");
     eq(second, first, "an in-window input returns the SAME path — normalization is idempotent by measurement");
@@ -8084,7 +8084,7 @@ try {
 suiteStart("S64 whiteboard — the asset library");
 
 await test("S64 assets: every drawable is an id-carrying <path>/<text> — extraction is complete", async () => {
-  const { ASSETS, extractAsset } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { ASSETS, extractAsset } = await import("../src/lib/ibismuh/whiteboard/assets");
   ok(ASSETS.length >= 9, `library present (${ASSETS.length} assets)`);
   for (const a of ASSETS) {
     ok(
@@ -8098,8 +8098,8 @@ await test("S64 assets: every drawable is an id-carrying <path>/<text> — extra
 });
 
 await test("S64 assets: loadLibrary builds the index + registers the scheduler's text metadata", async () => {
-  const { loadLibrary, HAND_TIP } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { TEXT_CHARS_BY_ID, TEXT_ANCHORS } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { loadLibrary, HAND_TIP } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { TEXT_CHARS_BY_ID, TEXT_ANCHORS } = await import("../src/lib/ibismuh/whiteboard/timing");
   const lib = loadLibrary();
   ok(lib.assets.has("hand-marker"), "the drawing hand is in the library");
   eq(HAND_TIP, { x: 70, y: 150 }, "the marker tip anchor");
@@ -8112,8 +8112,8 @@ await test("S64 assets: loadLibrary builds the index + registers the scheduler's
 });
 
 await test("S142 the effects pack (audit P4) — the emphasis vocabulary registers clean and rides every law", async () => {
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { validateAsset } = await import("../src/lib/tubeforge/whiteboard/asset-validate");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { validateAsset } = await import("../src/lib/ibismuh/whiteboard/asset-validate");
   const lib = loadLibrary();
   const fxIds = [...lib.assets.values()].filter((a) => a.id.startsWith("fx-")).map((a) => a.id).sort();
   eq(
@@ -8152,7 +8152,7 @@ await test("S142 the effects pack (audit P4) — the emphasis vocabulary registe
 });
 
 await test("S64 assets: extractAsset parses path data and text geometry", async () => {
-  const { extractAsset } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { extractAsset } = await import("../src/lib/ibismuh/whiteboard/assets");
   const ex = extractAsset({
     id: "x",
     viewBox: { w: 10, h: 10 },
@@ -8166,8 +8166,8 @@ await test("S64 assets: extractAsset parses path data and text geometry", async 
 suiteStart("S64 whiteboard — renderer pure contracts");
 
 await test("S64 render: framePayload serializes the full frame state (the applier's wire format)", async () => {
-  const { framePayload } = await import("../src/lib/tubeforge/whiteboard/wb-page");
-  const { frameAt, buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { framePayload } = await import("../src/lib/ibismuh/whiteboard/wb-page");
+  const { frameAt, buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
   const geo = buildGeometry([{ id: "a1", paths: [{ id: "p1", d: "M 0 0 L 100 0" }] }]);
   const project: WhiteboardProject = { title: "t", width: 1920, height: 1080, fps: 24, hand: { style: "marker", scale: 1 }, scenes: [WB_PLAIN] };
   const events = [{ type: "draw_path" as const, assetId: "a1", pathId: "p1", startMs: 0, durationMs: 1000 }];
@@ -8191,7 +8191,7 @@ await test("S64 render: framePayload serializes the full frame state (the applie
 });
 
 await test("S64 render: the applier resolves frame-plan keys through the registered id maps (the namespace seam)", async () => {
-  const { APPLY_FRAME_FN } = await import("../src/lib/tubeforge/whiteboard/wb-page");
+  const { APPLY_FRAME_FN } = await import("../src/lib/ibismuh/whiteboard/wb-page");
   ok(
     APPLY_FRAME_FN.includes("__wbDraw") && APPLY_FRAME_FN.includes("__wbText"),
     "the applier must resolve keys via window.__wbDraw/__wbText"
@@ -8213,7 +8213,7 @@ await test("S64 render: the applier resolves frame-plan keys through the registe
 suiteStart("S65 whiteboard — E1: the id-charset law");
 
 await test("S65 charset: validWhiteboardId accepts legal ids and rejects the namespace separators + exotics", async () => {
-  const { validWhiteboardId } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validWhiteboardId } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   ok(validWhiteboardId("a"), "single letter");
   ok(validWhiteboardId("hm-outline"), "single hyphens are legal (the starter library's own convention)");
   ok(validWhiteboardId("p_1.x"), "underscore + dot");
@@ -8228,7 +8228,7 @@ await test("S65 charset: validWhiteboardId accepts legal ids and rejects the nam
 });
 
 await test("S65 charset: the project validator rejects scene ids that break the law (missing ids still default)", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const bad = validateWhiteboardProject(wbProject([{ ...WB_SCENE, id: "scene--1" }]), WB_LIB);
   ok(bad.project === null, "a `--` scene id must null the project");
   ok(bad.errors.some((e) => e.includes("id charset")), `errors: ${bad.errors.join("; ")}`);
@@ -8249,7 +8249,7 @@ await test("S65 charset: the project validator rejects scene ids that break the 
 });
 
 await test("S65 charset: extractAsset excludes corrupting ids from the drawable index and reports them", async () => {
-  const { extractAsset } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { extractAsset } = await import("../src/lib/ibismuh/whiteboard/assets");
   const ex = extractAsset({
     id: "x",
     viewBox: { w: 10, h: 10 },
@@ -8271,7 +8271,7 @@ await test("S65 charset: extractAsset excludes corrupting ids from the drawable 
 });
 
 await test("S65 charset: the starter library is clean under the law (nothing rejected, no separator ids in the index)", async () => {
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   for (const ex of lib.extracted.values()) {
     eq(ex.rejected, [], `${ex.asset.id}: the built-in asset must be fully drawable`);
@@ -8289,8 +8289,8 @@ await test("S65 charset: the starter library is clean under the law (nothing rej
 suiteStart("S65 whiteboard — E1: the resource budgets");
 
 await test("S65 budgets: the per-path command budget counts through the real grammar (implicit repeats included)", async () => {
-  const { extractAsset, WB_PATH_COMMAND_BUDGET } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { countPathCommands } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { extractAsset, WB_PATH_COMMAND_BUDGET } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { countPathCommands } = await import("../src/lib/ibismuh/whiteboard/svg");
   // The unit of account is EXPANDED commands: `M 0 0 L p1 p2 …` is
   // 1 (M) + N (implicit L repeats) commands. countPathCommands is pinned
   // directly first, then through the extraction gate.
@@ -8327,7 +8327,7 @@ await test("S65 budgets: the per-path command budget counts through the real gra
 });
 
 await test("S65 budgets: per-scene caps — placements, animations, camera keys", async () => {
-  const { validateWhiteboardProject, WB_BUDGETS } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject, WB_BUDGETS } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const placements = (n: number) =>
     Array.from({ length: n }, () => ({ assetId: "a1", placement: { x: 0, y: 0, scale: 1, rotateDeg: 0 } }));
 
@@ -8372,7 +8372,7 @@ await test("S65 budgets: per-scene caps — placements, animations, camera keys"
 });
 
 await test("S65 budgets: project caps — scenes, explicit scene duration, Σ explicit durations", async () => {
-  const { validateWhiteboardProject, WB_BUDGETS } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject, WB_BUDGETS } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const nScenes = (n: number, extra: Partial<WhiteboardScene> = {}) =>
     wbProject(Array.from({ length: n }, (_, i) => ({ ...WB_SCENE, id: `s${i + 1}`, ...extra })));
 
@@ -8398,7 +8398,7 @@ await test("S65 budgets: project caps — scenes, explicit scene duration, Σ ex
 });
 
 await test("S65 budgets: the pure frame estimator — duration priority, arithmetic, and the render wall", async () => {
-  const { estimateProjectFrames, WB_RENDER_FRAME_BUDGET } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { estimateProjectFrames, WB_RENDER_FRAME_BUDGET } = await import("../src/lib/ibismuh/whiteboard/timing");
   // One explicit-duration scene, one VO-driven scene, one estimate-driven scene.
   const proj: WhiteboardProject = {
     title: "t", width: 1920, height: 1080, fps: 24, hand: { style: "marker", scale: 1 },
@@ -8429,7 +8429,7 @@ await test("S65 budgets: the pure frame estimator — duration priority, arithme
 });
 
 await test("S65 budgets: renderWhiteboard refuses an over-budget project BEFORE chromium launches", async () => {
-  const { renderWhiteboard } = await import("../src/lib/tubeforge/whiteboard/render");
+  const { renderWhiteboard } = await import("../src/lib/ibismuh/whiteboard/render");
   const huge: WhiteboardProject = {
     title: "t", width: 1920, height: 1080, fps: 24, hand: { style: "marker", scale: 1 },
     scenes: Array.from({ length: 24 }, (_, i) => ({
@@ -8452,7 +8452,7 @@ await test("S65 budgets: renderWhiteboard refuses an over-budget project BEFORE 
 suiteStart("S67 whiteboard — the ported E2 library (reconciliation)");
 
 await test("S67 port: the library grew to 18 assets and every drawable survives the laws", async () => {
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   ok(lib.assets.size >= 18, `expected ≥18 assets (10 S64 + 8 ported), got ${lib.assets.size}`);
   for (const [id, ex] of lib.extracted) {
@@ -8468,8 +8468,8 @@ await test("S67 port: the library grew to 18 assets and every drawable survives 
 });
 
 await test("S67 port: every ported path is a SINGLE subpath (the S64 seam constraint)", async () => {
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { parsePathData } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { parsePathData } = await import("../src/lib/ibismuh/whiteboard/svg");
   const lib = loadLibrary();
   // A mid-path M teleports the drawing hand and restarts the dash reveal —
   // the benchmark-proven geometry is single-subpath, so the port splits.
@@ -8482,8 +8482,8 @@ await test("S67 port: every ported path is a SINGLE subpath (the S64 seam constr
 });
 
 await test("S67 port: every ported path sits inside the expanded-command budget", async () => {
-  const { loadLibrary, WB_PATH_COMMAND_BUDGET } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { countPathCommands } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { loadLibrary, WB_PATH_COMMAND_BUDGET } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { countPathCommands } = await import("../src/lib/ibismuh/whiteboard/svg");
   const lib = loadLibrary();
   for (const [, ex] of lib.extracted) {
     for (const p of ex.paths) {
@@ -8504,9 +8504,9 @@ const SCENES_IN = [
 ];
 
 await test("S67 scaffold: deterministic, narration-copied, budgeted, validator-clean", async () => {
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const a = scaffoldWhiteboardProject({ scenes: SCENES_IN, topic: "Markets" });
   const b = scaffoldWhiteboardProject({ scenes: SCENES_IN, topic: "Markets" });
   eq(JSON.stringify(a), JSON.stringify(b), "determinism: same scenes → byte-identical project");
@@ -8524,7 +8524,7 @@ await test("S67 scaffold: deterministic, narration-copied, budgeted, validator-c
 });
 
 await test("S67 scaffold: the keyword rule table picks from the library tags", async () => {
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
   const p = scaffoldWhiteboardProject({
     scenes: [
       { index: 1, title: "t", narration: "How the idea took hold." },
@@ -8544,7 +8544,7 @@ await test("S67 scaffold: the keyword rule table picks from the library tags", a
 });
 
 await test("S67 scaffold: no-cue scenes rotate the fallback cycle deterministically", async () => {
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
   // Truly cue-free copy: no keyword-table hit anywhere, so the rotation
   // alone decides — and the rotation is position-indexed, i.e. stable.
   const noCue = Array.from({ length: 6 }, (_, i) => ({
@@ -8560,7 +8560,7 @@ await test("S67 scaffold: no-cue scenes rotate the fallback cycle deterministica
 });
 
 await test("S67 scaffold: opener gets the title card, closer gets the stat card", async () => {
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
   const p = scaffoldWhiteboardProject({ scenes: SCENES_IN, topic: "t" });
   ok(p.scenes[0].placements.some((pl) => pl.assetId === "title-hero"), "opener: title-hero present");
   ok(p.scenes[p.scenes.length - 1].placements.some((pl) => pl.assetId === "close-card"), "closer: close-card present");
@@ -8574,8 +8574,8 @@ await test("S67 scaffold: opener gets the title card, closer gets the stat card"
 });
 
 await test("S67 scaffold: the scene-count wall refuses beyond the project budget", async () => {
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
-  const { WB_BUDGETS } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
+  const { WB_BUDGETS } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const tooMany = Array.from({ length: WB_BUDGETS.scenesPerProject + 1 }, (_, i) => ({
     index: i + 1, title: `t${i}`, narration: `beat ${i}`,
   }));
@@ -8599,8 +8599,8 @@ const S137_TOPIC = "Why tiny daily habits beat big resolutions";
 
 await test("S137 cards: deterministic, topic-bearing, charset-legal, no benchmark text", async () => {
   const { buildGeneratedCards, WB_GENERATED_TITLE_PREFIX, WB_GENERATED_CLOSE_PREFIX } =
-    await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
-  const { validWhiteboardId } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+    await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
+  const { validWhiteboardId } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const a = buildGeneratedCards({ videoId: S137_VIDEO, topic: S137_TOPIC, lastNarration: "Your tiny habit starts today. Not Monday. Today." });
   const b = buildGeneratedCards({ videoId: S137_VIDEO, topic: S137_TOPIC, lastNarration: "Your tiny habit starts today. Not Monday. Today." });
   eq(JSON.stringify(a), JSON.stringify(b), "determinism: same inputs → byte-identical cards");
@@ -8630,9 +8630,9 @@ await test("S137 cards: deterministic, topic-bearing, charset-legal, no benchmar
 });
 
 await test("S137 rich scaffold: the topic's cards, large primary + support, alternating paper", async () => {
-  const { scaffoldWhiteboardProject, buildGeneratedCards } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { scaffoldWhiteboardProject, buildGeneratedCards } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const cards = buildGeneratedCards({ videoId: S137_VIDEO, topic: "Money grows when the data measures the trend", lastNarration: "Start with one check." });
   const scenes = Array.from({ length: 5 }, (_, i) => ({
     index: i + 1,
@@ -8674,7 +8674,7 @@ await test("S137 rich scaffold: the topic's cards, large primary + support, alte
 });
 
 await test("S137 additive law: without generated assets the planner is byte-identical to the legacy contract", async () => {
-  const { scaffoldWhiteboardProject, buildGeneratedCards } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
+  const { scaffoldWhiteboardProject, buildGeneratedCards } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
   const scenes = [
     { index: 1, title: "t", narration: "How the idea took hold." },
     { index: 2, title: "t", narration: "The revenue doubled." },
@@ -8695,7 +8695,7 @@ await test("S137 additive law: without generated assets the planner is byte-iden
 });
 
 await test("S137 reserved law: the LLM planner keeps the generated cards structural and out of the catalog", async () => {
-  const { isPlannerReservedAssetId, buildPlannerCatalog } = await import("../src/lib/tubeforge/whiteboard/llm-planner");
+  const { isPlannerReservedAssetId, buildPlannerCatalog } = await import("../src/lib/ibismuh/whiteboard/llm-planner");
   ok(isPlannerReservedAssetId(`wb-title-${S137_VIDEO}`), "generated title id is reserved");
   ok(isPlannerReservedAssetId(`wb-close-${S137_VIDEO}`), "generated close id is reserved");
   ok(isPlannerReservedAssetId("title-hero") && isPlannerReservedAssetId("hand-marker"), "built-in reserved ids unchanged");
@@ -8713,7 +8713,7 @@ await test("S137 reserved law: the LLM planner keeps the generated cards structu
 suiteStart("S67 whiteboard — doc parse/serialize + job entity ids");
 
 await test("S67 doc: tolerant parse discipline — null on junk, never a throw", async () => {
-  const { parseWhiteboardDoc, serializeWhiteboardDoc } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
+  const { parseWhiteboardDoc, serializeWhiteboardDoc } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
   eq(parseWhiteboardDoc(null), null, "null column");
   eq(parseWhiteboardDoc(""), null, "empty column");
   eq(parseWhiteboardDoc("not json {"), null, "unparseable");
@@ -8726,7 +8726,7 @@ await test("S67 doc: tolerant parse discipline — null on junk, never a throw",
 });
 
 await test("S67 jobs: splitEntityId('#wb') carries charset-legal scene ids only", async () => {
-  const { splitEntityId } = await import("../src/lib/tubeforge/video-jobs.ts");
+  const { splitEntityId } = await import("../src/lib/ibismuh/video-jobs.ts");
   const [v1, s1] = splitEntityId("abc123#wbscene-3", "#wb");
   eq(v1, "abc123", "video id split");
   eq(s1, "scene-3", "whiteboard scene id suffix");
@@ -8738,7 +8738,7 @@ await test("S67 jobs: splitEntityId('#wb') carries charset-legal scene ids only"
 });
 
 await test("S67 jobs: parseWhiteboardPayload is tolerant of junk payloads", async () => {
-  const { parseWhiteboardPayload } = await import("../src/lib/tubeforge/queue-handlers.ts");
+  const { parseWhiteboardPayload } = await import("../src/lib/ibismuh/queue-handlers.ts");
   eq(parseWhiteboardPayload(undefined), {}, "no payload");
   eq(parseWhiteboardPayload(null), {}, "null payload");
   eq(parseWhiteboardPayload("junk"), {}, "wrong type");
@@ -8752,9 +8752,9 @@ await test("S67 jobs: parseWhiteboardPayload is tolerant of junk payloads", asyn
 suiteStart("S68 whiteboard — aspect-aware scaffold, validator camera key, scheduler precedence");
 
 await test("S68 scaffold: 9:16 / 1:1 boards carry their own center and proportionally placed ink", async () => {
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
 
   // 9:16 — the historical bug this kills: the default camera pinned (960, 540)
   // on a 1080-wide board = the viewport sitting at the right edge.
@@ -8790,7 +8790,7 @@ await test("S68 scaffold: 9:16 / 1:1 boards carry their own center and proportio
 });
 
 await test("S68 scaffold: out-of-band dims fall back to the house 1920×1080@24", async () => {
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
   const junk1 = scaffoldWhiteboardProject({ scenes: SCENES_IN, topic: "t", width: 9999, height: -5, fps: 120 });
   eq(junk1.width, 1920, "width beyond 3840 → default");
   eq(junk1.height, 1080, "negative height → default");
@@ -8800,8 +8800,8 @@ await test("S68 scaffold: out-of-band dims fall back to the house 1920×1080@24"
 });
 
 await test("S68 validator: a cameraless doc stays EMPTY; the dimension-aware center is the render fallback; explicit keys pass the policies", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const base = {
     title: "T",
@@ -8838,9 +8838,9 @@ await test("S68 validator: a cameraless doc stays EMPTY; the dimension-aware cen
 });
 
 await test("S68 scheduler: explicit events are SENIOR — verbatim times, the fill law takes the rest", async () => {
-  const { scheduleScene } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { scheduleScene } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
   const lib = loadLibrary();
   const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
   // spark carries 6 drawable paths; claim ONE with hand-authored timing.
@@ -8871,8 +8871,8 @@ await test("S68 scheduler: explicit events are SENIOR — verbatim times, the fi
 suiteStart("S69 whiteboard — upload gates 1-4 (E9 Phase C / E11 §7, the pure half)");
 
 await test("S69 id derivation: filename stems slug to charset-legal up- ids", async () => {
-  const { deriveUploadAssetId } = await import("../src/lib/tubeforge/whiteboard/upload");
-  const { validWhiteboardId } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { deriveUploadAssetId } = await import("../src/lib/ibismuh/whiteboard/upload");
+  const { validWhiteboardId } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   eq(deriveUploadAssetId("My Drawing!.svg"), "up-my-drawing", "punctuation runs collapse to one dash");
   eq(deriveUploadAssetId("logo v2.SVG"), "up-logo-v2", "case-insensitive extension, spaces slug");
   eq(deriveUploadAssetId("  ---__---.svg"), "up-upload", "slugless stems fall back to a stable id");
@@ -8883,7 +8883,7 @@ await test("S69 id derivation: filename stems slug to charset-legal up- ids", as
 });
 
 await test("S69 sniff: valid single-root SVG yields the fragment + viewBox", async () => {
-  const { sniffSvgUpload } = await import("../src/lib/tubeforge/whiteboard/upload");
+  const { sniffSvgUpload } = await import("../src/lib/ibismuh/whiteboard/upload");
   const doc = Buffer.from(
     `<?xml version="1.0"?><!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "x.dtd">\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120"><path id="p1" d="M 10 10 L 90 90" fill="none"/><text id="t1" x="9" y="20" font-size="12">hi</text></svg>`,
     "utf8"
@@ -8898,7 +8898,7 @@ await test("S69 sniff: valid single-root SVG yields the fragment + viewBox", asy
 });
 
 await test("S69 sniff: the structure walls refuse readably", async () => {
-  const { sniffSvgUpload } = await import("../src/lib/tubeforge/whiteboard/upload");
+  const { sniffSvgUpload } = await import("../src/lib/ibismuh/whiteboard/upload");
   const bad = (s: string) => {
     const r = sniffSvgUpload(Buffer.from(s, "utf8"));
     ok("errors" in r, `must refuse: ${s.slice(0, 44)}…`);
@@ -8916,7 +8916,7 @@ await test("S69 sniff: the structure walls refuse readably", async () => {
 });
 
 await test("S69 validate: the happy path passes gates 1-4 with counts", async () => {
-  const { validateUploadedSvg } = await import("../src/lib/tubeforge/whiteboard/upload");
+  const { validateUploadedSvg } = await import("../src/lib/ibismuh/whiteboard/upload");
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><path id="s1" d="M 10 10 L 60 60" fill="none" stroke="#1d3557" stroke-width="6"/><path id="s2" d="M 40 10 C 60 30, 80 50, 100 90" fill="none"/><text id="cap" x="10" y="180" font-size="20">S69</text></svg>`;
   const v = validateUploadedSvg(Buffer.from(svg, "utf8"), "Probe.svg");
   ok(v.ok, `must pass: ${v.ok ? "" : v.errors.join(" · ")}`);
@@ -8930,7 +8930,7 @@ await test("S69 validate: the happy path passes gates 1-4 with counts", async ()
 });
 
 await test("S69 validate: the attack surface is neutralized, the asset survives", async () => {
-  const { validateUploadedSvg } = await import("../src/lib/tubeforge/whiteboard/upload");
+  const { validateUploadedSvg } = await import("../src/lib/ibismuh/whiteboard/upload");
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><script>alert(1)</script><path id="ok1" d="M 5 5 L 50 50" onclick="evil()"/><path id="ok2" d="M 5 60 L 50 110" fill="none"/><image href="https://evil/x.png" x="0" y="0" width="10" height="10"/><a href="javascript:evil()"><path id="ok3" d="M 60 5 L 110 50" fill="none"/></a></svg>`;
   const v = validateUploadedSvg(Buffer.from(svg, "utf8"), "attack.svg");
   ok(v.ok, `gates pass (the pipeline neutralizes rather than punishes): ${v.ok ? "" : v.errors.join(" · ")}`);
@@ -8944,7 +8944,7 @@ await test("S69 validate: the attack surface is neutralized, the asset survives"
 });
 
 await test("S69 validate: the budget walls refuse with the reasons", async () => {
-  const { validateUploadedSvg } = await import("../src/lib/tubeforge/whiteboard/upload");
+  const { validateUploadedSvg } = await import("../src/lib/ibismuh/whiteboard/upload");
   const manyL = (n: number) =>
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><path id="big" d="M 0 0 ${Array.from({ length: n }, (_, i) => `L ${i % 400} ${Math.floor(i / 400)}`).join(" ")}" fill="none"/></svg>`;
   // Per-path wall: 600 implicit L commands > 512.
@@ -8966,7 +8966,7 @@ await test("S69 validate: the budget walls refuse with the reasons", async () =>
 });
 
 await test("S69 validate: charset-violating ids + reserved ids + no drawables refuse", async () => {
-  const { validateUploadedSvg } = await import("../src/lib/tubeforge/whiteboard/upload");
+  const { validateUploadedSvg } = await import("../src/lib/ibismuh/whiteboard/upload");
   const withId = (id: string) =>
     Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path id="${id}" d="M 0 0 L 40 40" fill="none"/></svg>`, "utf8");
   const bad = validateUploadedSvg(withId("we--ird"), "charset.svg");
@@ -8987,8 +8987,8 @@ await test("S69 validate: charset-violating ids + reserved ids + no drawables re
 });
 
 await test("S69 loadLibrary(uploads): the merge registers uploads beside the built-ins", async () => {
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const upload = {
     id: "up-probe",
     viewBox: { w: 200, h: 200 },
@@ -9034,7 +9034,7 @@ await test("S69 loadLibrary(uploads): the merge registers uploads beside the bui
 });
 
 await test("S69 load-time sanitize law: a re-sanitized upload is safe even if storage lied", async () => {
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const sketchy = {
     id: "up-sketchy",
     viewBox: { w: 100, h: 100 },
@@ -9051,7 +9051,7 @@ console.log(`\n${"─".repeat(56)}`);
 suiteStart("S70 creator intelligence — CI-1 hook scoring (deterministic anchor)");
 
 await test("S70 hook scorer: specific + tense beats vague, evidence in the notes", async () => {
-  const { scoreHookHeuristic } = await import("../src/lib/tubeforge/hook-score");
+  const { scoreHookHeuristic } = await import("../src/lib/ibismuh/hook-score");
   const strong = scoreHookHeuristic("Why 47% of marathon runners quit before mile 20 — and how to avoid it");
   const vague = scoreHookHeuristic("Amazing secrets about things you won't believe");
   ok(strong.total > vague.total, `specific hook (${strong.total}) beats vague (${vague.total})`);
@@ -9070,8 +9070,8 @@ await test("S70 hook scorer: specific + tense beats vague, evidence in the notes
 });
 
 await test("S70 retention beats ride the story engine's own spine", async () => {
-  const { markRetentionBeats } = await import("../src/lib/tubeforge/hook-score");
-  const { isRehookPosition } = await import("../src/lib/tubeforge/story");
+  const { markRetentionBeats } = await import("../src/lib/ibismuh/hook-score");
+  const { isRehookPosition } = await import("../src/lib/ibismuh/story");
   const beats = markRetentionBeats(10);
   eq(beats[0].kind, "hook", "scene 1 is the hook");
   for (const b of beats.slice(1)) {
@@ -9082,7 +9082,7 @@ await test("S70 retention beats ride the story engine's own spine", async () => 
 });
 
 await test("S70 title-promise check: missing concrete terms are the gap", async () => {
-  const { verifyTitlePromise } = await import("../src/lib/tubeforge/hook-score");
+  const { verifyTitlePromise } = await import("../src/lib/ibismuh/hook-score");
   const good = verifyTitlePromise("How Your Heart Works", "Today we look at how your heart works, beat by beat.");
   ok(good.delivers, "the opening names the title's terms");
   const gap = verifyTitlePromise("How Your Heart Works", "Welcome back to the channel — let's get into it.");
@@ -9094,7 +9094,7 @@ await test("S70 title-promise check: missing concrete terms are the gap", async 
 suiteStart("S70 creator intelligence — CI-2 packaging lint (the pairing)");
 
 await test("S70 packaging lint: truncation, vagueness, duplication, thumb text", async () => {
-  const { lintPackagingDeterministic } = await import("../src/lib/tubeforge/packaging-lint");
+  const { lintPackagingDeterministic } = await import("../src/lib/ibismuh/packaging-lint");
   const byId = (checks: { id: string }[], id: string) => checks.find((c) => c.id === id);
 
   // Truncation: past 70 chars the tail is invisible nearly everywhere.
@@ -9135,7 +9135,7 @@ await test("S70 packaging lint: truncation, vagueness, duplication, thumb text",
 });
 
 await test("S70 packaging lint: the report aggregates honestly, no VLM invented", async () => {
-  const { lintPackaging } = await import("../src/lib/tubeforge/packaging-lint");
+  const { lintPackaging } = await import("../src/lib/ibismuh/packaging-lint");
   const clean = await lintPackaging({ title: "How Your Heart Works" });
   eq(clean.heuristic, true, "the report is labeled a heuristic");
   eq(clean.vlmJudged, false, "no image → no VLM claim");
@@ -9156,7 +9156,7 @@ await test("S70 packaging lint: the report aggregates honestly, no VLM invented"
 suiteStart("S70 CI-3 — Shorts self-containment (the moment-pick seam)");
 
 await test("S70 self-containment: a cold-start clip outscores a backward-pointing one", async () => {
-  const { selfContainmentScore, pickBestScene } = await import("../src/lib/tubeforge/shorts");
+  const { selfContainmentScore, pickBestScene } = await import("../src/lib/ibismuh/shorts");
   const cold = selfContainmentScore({
     narration: "Marathon runners quit at mile 20 for one reason: fuel. Here is how to avoid the wall.",
     caption: "The 7 secrets nobody tells you",
@@ -9189,7 +9189,7 @@ await test("S70 self-containment: a cold-start clip outscores a backward-pointin
 });
 
 await test("S70 self-containment: the Shorts speech window and payoff ending", async () => {
-  const { selfContainmentScore } = await import("../src/lib/tubeforge/shorts");
+  const { selfContainmentScore } = await import("../src/lib/ibismuh/shorts");
   const inWindow = selfContainmentScore({
     narration:
       "Sleep is not downtime. During deep sleep your brain flushes waste, your muscles repair, and your memories move into long-term storage. Skip it and every system pays. Here is what eight hours actually buys you.",
@@ -9212,8 +9212,8 @@ await test("S70 self-containment: the Shorts speech window and payoff ending", a
 suiteStart("S72 CI-4 — retention analysis (the pure half)");
 
 await test("S72 retention: cliffs surface with evidence, mapped through the timeline projection", async () => {
-  const { analyzeRetentionCurve } = await import("../src/lib/tubeforge/retention");
-  const { assembleTimeline } = await import("../src/lib/tubeforge/timeline");
+  const { analyzeRetentionCurve } = await import("../src/lib/ibismuh/retention");
+  const { assembleTimeline } = await import("../src/lib/ibismuh/timeline");
   const mkScene = (index: number, narration: string) => ({
     index, title: `Scene ${index}`, narration, visual: "a frame", camera: "zoom-in",
     mood: "neutral", caption: "", hostInScene: false, rehook: false, sfx: "none",
@@ -9253,7 +9253,7 @@ await test("S72 retention: cliffs surface with evidence, mapped through the time
 });
 
 await test("S72 retention: a boundary cliff reads as an opener problem; caps + tolerance", async () => {
-  const { analyzeRetentionCurve } = await import("../src/lib/tubeforge/retention");
+  const { analyzeRetentionCurve } = await import("../src/lib/ibismuh/retention");
   const mkScene = (index: number, narration: string) => ({
     index, title: `S${index}`, narration, visual: "v", camera: "zoom-in",
     mood: "neutral", caption: "", hostInScene: false, rehook: false, sfx: "none",
@@ -9265,7 +9265,7 @@ await test("S72 retention: a boundary cliff reads as an opener problem; caps + t
   ];
   // A cliff exactly at scene 2's start: the projection puts it there
   // (tRatio derived from the timeline itself in this test).
-  const { assembleTimeline } = await import("../src/lib/tubeforge/timeline");
+  const { assembleTimeline } = await import("../src/lib/ibismuh/timeline");
   const timeline = assembleTimeline(scenes, {});
   const durationSec = timeline.scenes.reduce((a, t) => a + t.durationSec, 0);
   const boundaryRatio = timeline.scenes[1].startSec / durationSec;
@@ -9291,7 +9291,7 @@ await test("S72 retention: a boundary cliff reads as an opener problem; caps + t
   ok(capped.drops.length <= 5, `capped at 5 findings (${capped.drops.length})`);
 
   // The tolerant parse: junk is null, never a throw.
-  const { parseRetentionReport } = await import("../src/lib/tubeforge/retention");
+  const { parseRetentionReport } = await import("../src/lib/ibismuh/retention");
   eq(parseRetentionReport(null), null, "null column → null");
   eq(parseRetentionReport("{not json"), null, "invalid JSON → null");
   eq(parseRetentionReport(JSON.stringify({ nope: 1 })), null, "wrong shape → null");
@@ -9312,7 +9312,7 @@ const S73_SCENES = [
 ];
 
 await test("S73 catalog: reserved ids never reach the model; uploads lead, order deterministic", async () => {
-  const { buildPlannerCatalog, WB_PLANNER_RESERVED_IDS } = await import("../src/lib/tubeforge/whiteboard/llm-planner");
+  const { buildPlannerCatalog, WB_PLANNER_RESERVED_IDS } = await import("../src/lib/ibismuh/whiteboard/llm-planner");
   const catalog = buildPlannerCatalog([
     { id: "hand-marker", tags: ["hand", "marker"], viewBox: { w: 140, h: 170 } },
     { id: "title-hero", tags: ["generic", "title"], viewBox: { w: 800, h: 200 } },
@@ -9325,7 +9325,7 @@ await test("S73 catalog: reserved ids never reach the model; uploads lead, order
   eq(catalog[0].uploaded, true, "the upload is flagged for the prompt");
   eq(WB_PLANNER_RESERVED_IDS.has("title-hero"), true, "the grammar's cards stay reserved");
   // Against the REAL library: every non-reserved built-in is offered.
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const real = buildPlannerCatalog(lib.assets.values());
   eq(real.length, lib.assets.size - 3, "real library: all but the three reserved ids");
@@ -9333,7 +9333,7 @@ await test("S73 catalog: reserved ids never reach the model; uploads lead, order
 });
 
 await test("S73 normalize: unknown/reserved/dupes dropped with reasons; coordinates clamped onto the board", async () => {
-  const { normalizeLlmScenePlans } = await import("../src/lib/tubeforge/whiteboard/llm-planner");
+  const { normalizeLlmScenePlans } = await import("../src/lib/ibismuh/whiteboard/llm-planner");
   const catalogIds = new Set(["coin", "heart-main", "bar-chart", "lightbulb", "up-mine"]);
   const out = normalizeLlmScenePlans(
     [
@@ -9377,7 +9377,7 @@ await test("S73 normalize: unknown/reserved/dupes dropped with reasons; coordina
 });
 
 await test("S73 normalize: the per-scene concept cap drops extras and names the cap", async () => {
-  const { normalizeLlmScenePlans, WB_PLANNER_CONCEPTS_PER_SCENE } = await import("../src/lib/tubeforge/whiteboard/llm-planner");
+  const { normalizeLlmScenePlans, WB_PLANNER_CONCEPTS_PER_SCENE } = await import("../src/lib/ibismuh/whiteboard/llm-planner");
   const catalogIds = new Set(["coin", "heart-main", "bar-chart", "lightbulb", "up-mine"]);
   const capped = normalizeLlmScenePlans(
     [
@@ -9407,10 +9407,10 @@ await test("S73 normalize: the per-scene concept cap drops extras and names the 
 });
 
 await test("S73 compose: structural cards survive, concepts swap, camera/fill law untouched, validator-clean", async () => {
-  const { composeLlmScaffold } = await import("../src/lib/tubeforge/whiteboard/llm-planner");
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { composeLlmScaffold } = await import("../src/lib/ibismuh/whiteboard/llm-planner");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const native = scaffoldWhiteboardProject({ scenes: S73_SCENES, topic: "T" });
   const served = new Map([
     [
@@ -9441,12 +9441,12 @@ await test("S73 compose: structural cards survive, concepts swap, camera/fill la
 
 await test("S73 wrapper: a good model reply composes an LLM scaffold that validates clean", async () => {
   const { scaffoldWhiteboardProjectLlm, buildPlannerCatalog } = await import(
-    "../src/lib/tubeforge/whiteboard/llm-planner"
+    "../src/lib/ibismuh/whiteboard/llm-planner"
   );
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
-  const passThrough: import("../src/lib/tubeforge/whiteboard/llm-planner").PlannerCall = (_service, _label, fn) => fn();
+  const passThrough: import("../src/lib/ibismuh/whiteboard/llm-planner").PlannerCall = (_service, _label, fn) => fn();
   const goodAsk = async () =>
     JSON.stringify({
       scenes: [
@@ -9472,12 +9472,12 @@ await test("S73 wrapper: a good model reply composes an LLM scaffold that valida
 
 await test("S73 wrapper: a scene the model skips falls back per-scene, honestly listed", async () => {
   const { scaffoldWhiteboardProjectLlm, buildPlannerCatalog } = await import(
-    "../src/lib/tubeforge/whiteboard/llm-planner"
+    "../src/lib/ibismuh/whiteboard/llm-planner"
   );
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
-  const passThrough: import("../src/lib/tubeforge/whiteboard/llm-planner").PlannerCall = (_service, _label, fn) => fn();
+  const passThrough: import("../src/lib/ibismuh/whiteboard/llm-planner").PlannerCall = (_service, _label, fn) => fn();
   const partialAsk = async () =>
     JSON.stringify({
       scenes: [
@@ -9498,13 +9498,13 @@ await test("S73 wrapper: a scene the model skips falls back per-scene, honestly 
 
 await test("S73 wrapper: a failed round-trip degrades to the native scaffold, labeled with the reason", async () => {
   const { scaffoldWhiteboardProjectLlm, buildPlannerCatalog } = await import(
-    "../src/lib/tubeforge/whiteboard/llm-planner"
+    "../src/lib/ibismuh/whiteboard/llm-planner"
   );
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const catalog = buildPlannerCatalog(lib.assets.values());
-  const passThrough: import("../src/lib/tubeforge/whiteboard/llm-planner").PlannerCall = (_service, _label, fn) => fn();
+  const passThrough: import("../src/lib/ibismuh/whiteboard/llm-planner").PlannerCall = (_service, _label, fn) => fn();
   const native = scaffoldWhiteboardProject({ scenes: S73_SCENES, topic: "T" });
 
   // The gateway itself fails.
@@ -9544,7 +9544,7 @@ await test("S73 wrapper: a failed round-trip degrades to the native scaffold, la
 suiteStart("S74 — the paired motion re-measure (S63's open item, adapted post-rebuild)");
 
 await test("S74: i2vMotionPrompt reads ONLY shot0's camera/moveSpeed/subjectAction from the plan — the reconstruction law", async () => {
-  const { i2vMotionPrompt } = await import("../src/lib/tubeforge/liveliness.ts");
+  const { i2vMotionPrompt } = await import("../src/lib/ibismuh/liveliness.ts");
   const scene = {
     index: 1, title: "T", narration: "n", visual: "a red barn in a field",
     camera: "static", mood: "warm light", caption: "c", hostInScene: false,
@@ -9583,9 +9583,9 @@ await test("S74: i2vMotionPrompt reads ONLY shot0's camera/moveSpeed/subjectActi
 });
 
 await test("S74: the committed S62 manifest + BRIEFS reconstruct all eight after-prompts (pose-kill repaired, tempo law, sentence boundary)", async () => {
-  const { i2vMotionPrompt, I2V_SUBJECT_MOTION } = await import("../src/lib/tubeforge/liveliness.ts");
-  const { classifyScene } = await import("../src/lib/tubeforge/motion.ts");
-  const { resolveContentPolicy, sanitizePromptForPolicy } = await import("../src/lib/tubeforge/restricted-subjects.ts");
+  const { i2vMotionPrompt, I2V_SUBJECT_MOTION } = await import("../src/lib/ibismuh/liveliness.ts");
+  const { classifyScene } = await import("../src/lib/ibismuh/motion.ts");
+  const { resolveContentPolicy, sanitizePromptForPolicy } = await import("../src/lib/ibismuh/restricted-subjects.ts");
   const { BRIEFS } = await import("./s-profile-briefs.mts");
 
   const s62 = JSON.parse(
@@ -9713,7 +9713,7 @@ await test("S74: the blind scorer REJECTS malformed replies instead of clamping 
 
 suiteStart("S75 — E10 readiness: the container-safe chromium launch (the /dev/shm receipt)");
 await test("S75: the whiteboard chromium launch args are container-safe (--no-sandbox + --disable-dev-shm-usage)", async () => {
-  const { WB_CHROMIUM_LAUNCH_ARGS } = await import("../src/lib/tubeforge/whiteboard/render");
+  const { WB_CHROMIUM_LAUNCH_ARGS } = await import("../src/lib/ibismuh/whiteboard/render");
   ok(
     WB_CHROMIUM_LAUNCH_ARGS.includes("--disable-dev-shm-usage"),
     "missing --disable-dev-shm-usage (64MB /dev/shm kills a bare launch mid-scene)"
@@ -9727,7 +9727,7 @@ await test("S75: BOTH whiteboard launch sites launch through WB_CHROMIUM_LAUNCH_
   // A source-level tripwire so a future chromium.launch({ headless: true })
   // cannot silently reintroduce the /dev/shm OOM kill (the S75 E10 receipt:
   // the 16:9 benchmark died at scene 2, frame 230/378, SIGKILL, no trace).
-  const renderSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/render.ts", "utf8");
+  const renderSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/render.ts", "utf8");
   const bareLaunches = renderSrc.match(/chromium\.launch\(\{ headless: true \}\)/g) ?? [];
   eq(bareLaunches.length, 0, "a bare chromium.launch({ headless: true }) remains in the whiteboard renderer");
   const argsLaunches = renderSrc.match(/chromium\.launch\(\{ headless: true, args: \[\.\.\.WB_CHROMIUM_LAUNCH_ARGS\] \}\)/g) ?? [];
@@ -9737,7 +9737,7 @@ await test("S75: the scene loop RECYCLES its chromium context per scene — no p
   // The S75 E10 receipt, second kill: ONE page held across the project grew
   // until the 4GB worker's OOM killer fired mid-scene (no JS trace). The
   // context must be born inside the scene loop and closed in its finally.
-  const renderSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/render.ts", "utf8");
+  const renderSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/render.ts", "utf8");
   // Anchor on the MAIN render's launch (the last one) — the asset rasterize
   // probe has its own short-lived launch+context and is not under test here.
   const launchIdx = renderSrc.lastIndexOf("chromium.launch");
@@ -9754,7 +9754,7 @@ await test("S75: the scene encode PADS the VO (apad) — -shortest must never ea
   // The S75 E10 receipt: -shortest truncated every scene to the VO length
   // (9 frames short each; 1623 budgeted frames, 1578 delivered) — the
   // estimator's 350ms tail (timing.ts VO branch) never reached the file.
-  const renderSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/render.ts", "utf8");
+  const renderSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/render.ts", "utf8");
   const sceneEncode = renderSrc.slice(renderSrc.indexOf('"-framerate"'), renderSrc.indexOf("runFfmpeg(args)"));
   ok(sceneEncode.includes('"-af", "apad"'), "the scene encode lost its apad (the VO must pad to the scene duration)");
   eq((sceneEncode.match(/"-shortest"/g) ?? []).length, 0, '"-shortest" returned to the scene encode as an argument (it eats the tail)');
@@ -9767,7 +9767,7 @@ await test("S75: the assembly MIXES the narration — the voice track must reach
   // The S75 E10 receipt, second kill: the mix filter mapped ONLY the ducked
   // bed — final.mp4 measured -32.0 LUFS (narration absent). The S64 comment
   // already said the intent ("ducks to 0.16 UNDER the voice").
-  const renderSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/render.ts", "utf8");
+  const renderSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/render.ts", "utf8");
   ok(
     // W7 — the amix went template-shaped (the SFX arm widens it to 3
     // inputs); the voice and the bed still lead the mix at normalize=0.
@@ -9786,7 +9786,7 @@ await test("S75: the slides engine keeps its container-safe launch args (S165: t
   // held by this suite's first pin) PLUS the S165 determinism flags. The
   // contract is stronger, not weaker: the slide rasterizer inherits every
   // future launch-arg law the constant gains.
-  const slidesSrc = fs.readFileSync("src/lib/tubeforge/slides.ts", "utf8");
+  const slidesSrc = fs.readFileSync("src/lib/ibismuh/slides.ts", "utf8");
   ok(
     slidesSrc.includes("import { WB_CHROMIUM_LAUNCH_ARGS } from \"./whiteboard/render\""),
     "the slides engine no longer imports the shared launch-args constant",
@@ -9820,7 +9820,7 @@ await test("S75: the whiteboard render's duration probe runs BEFORE putFromPath 
   // the storage key (the S68 receipt's exact trap), so the probe stats a
   // moved-away file and every locally-stored whiteboard render recorded
   // videoDuration 0.0 (S3's scratch copy stays — production never saw it).
-  const jobsSrc = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const jobsSrc = fs.readFileSync("src/lib/ibismuh/video-jobs.ts", "utf8");
   // S136 re-anchor: the probe line gained the probe WALL (an unmeasurable
   // render now THROWS instead of coalescing to 0), so the anchor is the new
   // probedDuration line — and the wall itself must sit before the put too.
@@ -9866,7 +9866,7 @@ const {
   buildTargetBatch,
   mergeTargetedRow,
   normalizeConsistencyCheckMode,
-} = await import("../src/lib/tubeforge/visual-consistency.ts");
+} = await import("../src/lib/ibismuh/visual-consistency.ts");
 
 await test("S77: verdictFromScore keeps the family thresholds (80/55) — shared with the continuity pass", () => {
   eq(verdictFromScore(100), "consistent");
@@ -10364,7 +10364,7 @@ await test("S80: normalizeConsistencyCheckMode — the two valid non-defaults pa
 // identity locks as scene art (continuity clauses + seed ladder).
 {
   const { composeLockedShotPrompt, shotLikenessEditPrompt, shotLocationEditPrompt, pickShotEditSeed } =
-    await import("../src/lib/tubeforge/shots.ts");
+    await import("../src/lib/ibismuh/shots.ts");
 
   await test("S81: composeLockedShotPrompt — anchor-only is BYTE-IDENTICAL to the pre-S81 composition", () => {
     const base = "A wide shot of the courtyard. ultra-realistic photograph.";
@@ -10444,7 +10444,7 @@ await test("S80: normalizeConsistencyCheckMode — the two valid non-defaults pa
     CROSS_VIDEO_MAX,
     buildPoseTargets,
     POSE_IDENTITY_SYSTEM,
-  } = await import("../src/lib/tubeforge/character-identity.ts");
+  } = await import("../src/lib/ibismuh/character-identity.ts");
 
   await test("S82: buildCrossVideoBatch — newest-first, capped at 6, frame-less and beyond-cap entries reported skipped with honest reasons", () => {
     const e = (videoId: string, updatedAt: string, frameKey: string | null) => ({
@@ -10605,8 +10605,8 @@ await test("S80: normalizeConsistencyCheckMode — the two valid non-defaults pa
     parseCriticReport,
     criticReportKey,
     CRITIC_SYSTEM,
-  } = await import("../src/lib/tubeforge/video-critic.ts");
-  const { parseConsistencyReport } = await import("../src/lib/tubeforge/visual-consistency.ts");
+  } = await import("../src/lib/ibismuh/video-critic.ts");
+  const { parseConsistencyReport } = await import("../src/lib/ibismuh/visual-consistency.ts");
 
   const qcCheck = (id: string, status: "pass" | "fail" | "unmeasured") => ({
     id, label: `Check ${id}`, status, pass: status === "pass", value: status === "pass" ? "ok" : status,
@@ -10773,7 +10773,7 @@ await test("S80: normalizeConsistencyCheckMode — the two valid non-defaults pa
     deriveTracks,
     guardTimelineOverwrite,
     TIMELINE_OVERWRITE_ERROR,
-  } = await import("../src/lib/tubeforge/timeline.ts");
+  } = await import("../src/lib/ibismuh/timeline.ts");
   const scenes = [
     { index: 1, title: "A", narration: "one two three", visual: "v", camera: "c", mood: "m", caption: "", hostInScene: false, rehook: false, sfx: "none" },
   ] as never[];
@@ -10946,14 +10946,14 @@ await test("S80: normalizeConsistencyCheckMode — the two valid non-defaults pa
 // ---------- S87 slice 2 — the compositor reads tracks[]: the composition plan + parity ----------
 {
   const { assembleTimeline, serializeTimeline, parseTimeline, docSceneSettings } = await import(
-    "../src/lib/tubeforge/timeline.ts"
+    "../src/lib/ibismuh/timeline.ts"
   );
   const { planFromTracks, planFromScenes, compositionPlan } = await import(
-    "../src/lib/tubeforge/composition-plan.ts"
+    "../src/lib/ibismuh/composition-plan.ts"
   );
   const { sanitizeTransition, sanitizeTransitionStyle, TRANSITION_IDS, fadeblackWindowsMulti } =
-    await import("../src/lib/tubeforge/transitions.ts");
-  const { expectedCutsForTimeline } = await import("../src/lib/tubeforge/render-qc.ts");
+    await import("../src/lib/ibismuh/transitions.ts");
+  const { expectedCutsForTimeline } = await import("../src/lib/ibismuh/render-qc.ts");
 
   const mkScenes = (n: number) =>
     Array.from({ length: n }, (_, i) => ({
@@ -11145,14 +11145,14 @@ await test("S80: normalizeConsistencyCheckMode — the two valid non-defaults pa
 
 // ---------- S87 slice 3 — Whiteboard emits tracks[]: the engine joins the contract ----------
 {
-  const { planFromTracks } = await import("../src/lib/tubeforge/composition-plan.ts");
+  const { planFromTracks } = await import("../src/lib/ibismuh/composition-plan.ts");
   const { framePlanClock, whiteboardTracks } = await import(
-    "../src/lib/tubeforge/whiteboard/tracks.ts"
+    "../src/lib/ibismuh/whiteboard/tracks.ts"
   );
   const { estimateProjectFrames, frameCount } = await import(
-    "../src/lib/tubeforge/whiteboard/timing.ts"
+    "../src/lib/ibismuh/whiteboard/timing.ts"
   );
-  type WBProject = import("../src/lib/tubeforge/whiteboard/storyboard.ts").WhiteboardProject;
+  type WBProject = import("../src/lib/ibismuh/whiteboard/storyboard.ts").WhiteboardProject;
 
   // The fixture: a 3-scene scaffold-shaped project (ids mirror story scene
   // indexes — the row linkage) + a hand-authored id (no linkage).
@@ -11327,10 +11327,10 @@ await test("S80: normalizeConsistencyCheckMode — the two valid non-defaults pa
 // ---------- S87 slice 4 — the legacy branches collapse (the pre-soak bricks) ----------
 {
   const { assembleTimeline, serializeTimeline, parseTimeline } = await import(
-    "../src/lib/tubeforge/timeline.ts"
+    "../src/lib/ibismuh/timeline.ts"
   );
-  const { planFromTracks } = await import("../src/lib/tubeforge/composition-plan.ts");
-  type TimelineScene = import("../src/lib/tubeforge/timeline.ts").TimelineScene;
+  const { planFromTracks } = await import("../src/lib/ibismuh/composition-plan.ts");
+  type TimelineScene = import("../src/lib/ibismuh/timeline.ts").TimelineScene;
 
   const mkScenes = (n: number) =>
     Array.from({ length: n }, (_, i) => ({
@@ -11446,7 +11446,7 @@ await test("S80: normalizeConsistencyCheckMode — the two valid non-defaults pa
     serializeReferenceAnalysis,
     referenceBlockForPrompt,
     referenceNamespaceKeys,
-  } = await import("../src/lib/tubeforge/reference-video.ts");
+  } = await import("../src/lib/ibismuh/reference-video.ts");
 
   await test("S88: pacingStats + pacingProfile — the pacing law (deterministic, junk-tolerant)", async () => {
     // 3 cuts over 60s → 4 shots (10/10/10/30): mean 15, median 10, 3 cuts/min → slow.
@@ -11624,8 +11624,8 @@ const S95_VID = () =>
   new Response(new ArrayBuffer(10_000), { headers: { "content-type": "video/mp4" } });
 
 await test("S95 THE PRICING SYNC LAW: every registry chat model of a PAID provider prices at a real row", async () => {
-  const reg = await import("../src/lib/tubeforge/providers/registry.ts");
-  const spend = await import("../src/lib/tubeforge/spend.ts");
+  const reg = await import("../src/lib/ibismuh/providers/registry.ts");
+  const spend = await import("../src/lib/ibismuh/spend.ts");
   const unpriced: string[] = [];
   for (const p of reg.PROVIDERS_BY_CAPABILITY.chat) {
     if (!spend.isPaidProvider(p.id)) continue;
@@ -11641,7 +11641,7 @@ await test("S95 THE PRICING SYNC LAW: every registry chat model of a PAID provid
 });
 
 await test("S95 pricing provenance: the three reconciled rows price at their verified sources", async () => {
-  const spend = await import("../src/lib/tubeforge/spend.ts");
+  const spend = await import("../src/lib/ibismuh/spend.ts");
   // grok-4 — xAI docs + price tracker, verified 2026-11-12 UTC: $3 in / $15 out.
   const grok = spend.priceForModel("grok-4");
   eq(grok.in, 3_000_000, "grok-4 input $3/1M");
@@ -11667,8 +11667,8 @@ await test("S95 pricing provenance: the three reconciled rows price at their ver
 });
 
 await test("S95 THE TOMBSTONE LAW: a retired model has NO row — it rides the conservative fallback, never a stale cheap one", async () => {
-  const spend = await import("../src/lib/tubeforge/spend.ts");
-  const reg = await import("../src/lib/tubeforge/providers/registry.ts");
+  const spend = await import("../src/lib/ibismuh/spend.ts");
+  const reg = await import("../src/lib/ibismuh/providers/registry.ts");
   ok(!spend.modelPriced("grok-3"), "grok-3 left xAI's current models page — no price row");
   const offered = reg.PROVIDERS_BY_CAPABILITY.chat
     .find((p) => p.id === "xai")
@@ -11698,7 +11698,7 @@ await test("S95 heygen cost honesty: a keyed free TIER is cost-unknown, never fr
 });
 
 await test("S95 heygen: the voice-id law, the free model default, and the x-api-key ride along", async () => {
-  const { heygenTts } = await import("../src/lib/tubeforge/providers/tts.ts");
+  const { heygenTts } = await import("../src/lib/ibismuh/providers/tts.ts");
   type Core = typeof heygenTts;
   const cfg = { provider: "heygen", apiKey: "hk-pin", baseUrl: "", model: "" } as Parameters<Core>[1];
   let sawUrl = "";
@@ -11726,7 +11726,7 @@ await test("S95 heygen: the voice-id law, the free model default, and the x-api-
 });
 
 await test("S95 heygen: a 32-hex voice id passes through; custom base url and model are honored", async () => {
-  const { heygenTts } = await import("../src/lib/tubeforge/providers/tts.ts");
+  const { heygenTts } = await import("../src/lib/ibismuh/providers/tts.ts");
   type Core = typeof heygenTts;
   const cfg = {
     provider: "heygen",
@@ -11755,7 +11755,7 @@ await test("S95 heygen: a 32-hex voice id passes through; custom base url and mo
 });
 
 await test("S95 heygen: the JSON envelope — audio_url, nested data.audio_url and bare url all resolve", async () => {
-  const { heygenTts } = await import("../src/lib/tubeforge/providers/tts.ts");
+  const { heygenTts } = await import("../src/lib/ibismuh/providers/tts.ts");
   type Core = typeof heygenTts;
   const cfg = { provider: "heygen", apiKey: "k", baseUrl: "", model: "" } as Parameters<Core>[1];
   for (const [label, payload] of [
@@ -11779,7 +11779,7 @@ await test("S95 heygen: the JSON envelope — audio_url, nested data.audio_url a
 });
 
 await test("S95 heygen: JSON without a url, empty audio, HTTP 401, and a missing key all throw honestly", async () => {
-  const { heygenTts } = await import("../src/lib/tubeforge/providers/tts.ts");
+  const { heygenTts } = await import("../src/lib/ibismuh/providers/tts.ts");
   type Core = typeof heygenTts;
   const cfg = { provider: "heygen", apiKey: "k", baseUrl: "", model: "" } as Parameters<Core>[1];
 
@@ -11788,7 +11788,7 @@ await test("S95 heygen: JSON without a url, empty audio, HTTP 401, and a missing
   // fetch and leak each other's captures (the first draft of this pin did
   // exactly that; the leaked stub then answered an unrelated background
   // call and poisoned the restore chain).
-  const http = await import("../src/lib/tubeforge/providers/http.ts");
+  const http = await import("../src/lib/ibismuh/providers/http.ts");
   const cases: Array<[string, (url: string, init: RequestInit) => Response | Promise<Response>]> = [
     // JSON envelope with no resolvable url
     ["JSON without a resolvable url", async () => S95_JSON({ error: "nope" })],
@@ -11850,7 +11850,7 @@ await test("S95 heygen: JSON without a url, empty audio, HTTP 401, and a missing
 suiteStart("S149 — the Cartesia live-voice law (the archived-library incident)");
 
 await test("S149 catalog: the static safety net carries ONLY verified ids — the eight archived-library ids are gone", async () => {
-  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  const tts = await import("../src/lib/ibismuh/providers/tts.ts");
   const catalog = tts.voiceCatalog("cartesia");
   eq(catalog.length, 2, "exactly the verified pair (Clive, Parker)");
   ok(catalog.some((v) => v.id === "b24f41fd-00a3-4cd8-992a-a0c9f13f3ef1"), "Clive rides");
@@ -11872,7 +11872,7 @@ await test("S149 catalog: the static safety net carries ONLY verified ids — th
 });
 
 await test("S149 shapes: the UUID test and the cartesia sanitize law", async () => {
-  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  const tts = await import("../src/lib/ibismuh/providers/tts.ts");
   eq(tts.isCartesiaVoiceId("b24f41fd-00a3-4cd8-992a-a0c9f13f3ef1"), true, "a uuid is a cartesia voice id");
   eq(tts.isCartesiaVoiceId("B24F41FD-00A3-4CD8-992A-A0C9F13F3EF1"), true, "case-insensitive");
   eq(tts.isCartesiaVoiceId("jam"), false, "a studio voice name is not");
@@ -11892,13 +11892,13 @@ function s149Cfg(keySuffix: string, baseUrl = "https://api.cartesia.test") {
     apiKey: `ck-pin-${keySuffix}`,
     baseUrl,
     model: "sonic-3.6",
-  } as Parameters<typeof import("../src/lib/tubeforge/providers/tts.ts").resolveCartesiaVoiceId>[1];
+  } as Parameters<typeof import("../src/lib/ibismuh/providers/tts.ts").resolveCartesiaVoiceId>[1];
 }
 
 const S149_LIVE = { voices: [{ id: "11111111-2222-4333-8444-555566667777", name: "Live First" }] };
 
 await test("S149 resolve: a UUID the live list KNOWS rides verbatim; resolve never synthesizes", async () => {
-  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  const tts = await import("../src/lib/ibismuh/providers/tts.ts");
   const known = "11111111-2222-4333-8444-555566667777";
   let posts = 0;
   await withFetchStub(async (url) => {
@@ -11913,7 +11913,7 @@ await test("S149 resolve: a UUID the live list KNOWS rides verbatim; resolve nev
 });
 
 await test("S149 resolve: an UNKNOWN uuid (an archived id) lands on the live first voice — audio, not a 404", async () => {
-  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  const tts = await import("../src/lib/ibismuh/providers/tts.ts");
   const archived = "694f9389-aac1-45b6-b726-9d9369183238"; // Bright Female — the production killer
   await withFetchStub(async (url) => {
     if (url.includes("/voices")) return S95_JSON(S149_LIVE);
@@ -11925,7 +11925,7 @@ await test("S149 resolve: an UNKNOWN uuid (an archived id) lands on the live fir
 });
 
 await test("S149 resolve: an unreachable live list NEVER rewrites a uuid — Cartesia's readable 404 stays honest", async () => {
-  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  const tts = await import("../src/lib/ibismuh/providers/tts.ts");
   const requested = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeffff0000";
   await withFetchStub(async () => new Response("boom", { status: 500 }), async () => {
     const id = await tts.resolveCartesiaVoiceId(requested, s149Cfg("unr1"));
@@ -11934,7 +11934,7 @@ await test("S149 resolve: an unreachable live list NEVER rewrites a uuid — Car
 });
 
 await test("S149 resolve: a foreign name goes to the live first voice; offline it falls to the static first (Clive)", async () => {
-  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  const tts = await import("../src/lib/ibismuh/providers/tts.ts");
   await withFetchStub(async (url) => {
     if (url.includes("/voices")) return S95_JSON(S149_LIVE);
     return S95_WAV();
@@ -11949,7 +11949,7 @@ await test("S149 resolve: a foreign name goes to the live first voice; offline i
 });
 
 await test("S149 self-heal: a 404 after a verbatim resolve refreshes the list and retries ONCE on the real first voice", async () => {
-  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  const tts = await import("../src/lib/ibismuh/providers/tts.ts");
   type Core = typeof tts.cartesiaTts;
   const cfg = {
     provider: "cartesia",
@@ -11997,7 +11997,7 @@ await test("S149 self-heal: a 404 after a verbatim resolve refreshes the list an
 });
 
 await test("S149 self-heal: a 404 whose refreshed list still lacks a substitute rethrows the readable Cartesia error", async () => {
-  const tts = await import("../src/lib/tubeforge/providers/tts.ts");
+  const tts = await import("../src/lib/ibismuh/providers/tts.ts");
   type Core = typeof tts.cartesiaTts;
   const cfg = {
     provider: "cartesia",
@@ -12029,7 +12029,7 @@ await test("S149 self-heal: a 404 whose refreshed list still lacks a substitute 
 });
 
 await test("S95 magichour: the four-step happy path — upload-url, timed PUT, submit, video-projects poll, download", async () => {
-  const { magicHourVideo } = await import("../src/lib/tubeforge/providers/video.ts");
+  const { magicHourVideo } = await import("../src/lib/ibismuh/providers/video.ts");
   type Core = typeof magicHourVideo;
   const cfg = {
     provider: "magichour",
@@ -12099,7 +12099,7 @@ await test("S95 magichour: the four-step happy path — upload-url, timed PUT, s
 });
 
 await test("S95 magichour: missing upload shape, no job id, failure status, url-less complete, and the poll budget all throw", async () => {
-  const { magicHourVideo } = await import("../src/lib/tubeforge/providers/video.ts");
+  const { magicHourVideo } = await import("../src/lib/ibismuh/providers/video.ts");
   type Core = typeof magicHourVideo;
   const cfg = { provider: "magichour", apiKey: "k", baseUrl: "", model: "" } as Parameters<Core>[1];
   const req = { prompt: "pan", imagePngBase64: "aGVsbG8=", duration: 5 } as Parameters<Core>[0];
@@ -12194,7 +12194,7 @@ await test("S95 magichour: missing upload shape, no job id, failure status, url-
 // adapter, the priors sync, and the cost-honesty law in place.
 
 await test("S96 priors + registry: together joins the image lane in lockstep", async () => {
-  const reg = await import("../src/lib/tubeforge/providers/registry.ts");
+  const reg = await import("../src/lib/ibismuh/providers/registry.ts");
   const meta = reg.IMAGE_PROVIDERS.find((p) => p.id === "together");
   ok(meta, "the together registry row exists");
   ok(
@@ -12242,14 +12242,14 @@ await test("S96 together cost honesty: a keyed free TIER is cost-unknown, never 
 });
 
 await test("S96 pollinations watermark honesty: the registry note discloses the anonymous-tier watermark", async () => {
-  const reg = await import("../src/lib/tubeforge/providers/registry.ts");
+  const reg = await import("../src/lib/ibismuh/providers/registry.ts");
   const note = reg.IMAGE_PROVIDERS.find((p) => p.id === "pollinations")?.note ?? "";
   ok(/watermark/i.test(note), "the note says the word watermark — users picking the keyless lane must know");
   ok(/Together/i.test(note), "the note points at the watermark-free alternative");
 });
 
 await test("S96 together: URL, bearer key, and the full body contract (model/prompt/size/steps 4/seed/negative/png)", async () => {
-  const { togetherImage } = await import("../src/lib/tubeforge/providers/image.ts");
+  const { togetherImage } = await import("../src/lib/ibismuh/providers/image.ts");
   type Core = typeof togetherImage;
   const cfg = { provider: "together", apiKey: "tgk-pin", baseUrl: "", model: "" } as Parameters<Core>[1];
   let sawUrl = "";
@@ -12287,7 +12287,7 @@ await test("S96 together: URL, bearer key, and the full body contract (model/pro
 });
 
 await test("S96 together: non-schnell models take the provider step default; the url envelope downloads; seeds clamp", async () => {
-  const { togetherImage } = await import("../src/lib/tubeforge/providers/image.ts");
+  const { togetherImage } = await import("../src/lib/ibismuh/providers/image.ts");
   type Core = typeof togetherImage;
   const cfg = {
     provider: "together",
@@ -12320,7 +12320,7 @@ await test("S96 together: non-schnell models take the provider step default; the
 });
 
 await test("S96 together: no key, 429 cool-down, and image-less JSON all throw honestly", async () => {
-  const { togetherImage } = await import("../src/lib/tubeforge/providers/image.ts");
+  const { togetherImage } = await import("../src/lib/ibismuh/providers/image.ts");
   type Core = typeof togetherImage;
   const base = { provider: "together", baseUrl: "", model: "" } as Parameters<Core>[1];
 
@@ -12396,7 +12396,7 @@ await test("S98 imageTestFreeLane: the free lanes skip the paid-test confirm, ev
   // in providers/image.ts — settings-view imports it, and the adapter module
   // pulls zai-client.ts (server-only SDK) into the browser bundle; the
   // production build caught exactly that when it first shipped there.
-  const { imageTestFreeLane } = await import("../src/lib/tubeforge/providers/registry.ts");
+  const { imageTestFreeLane } = await import("../src/lib/ibismuh/providers/registry.ts");
   // pollinations — keyless, always free (watermarked, but $0).
   eq(imageTestFreeLane("pollinations", ""), true, "pollinations + blank model: free");
   eq(imageTestFreeLane("pollinations", "flux"), true, "pollinations + flux: free");
@@ -12547,7 +12547,7 @@ await test("S99 the verifier's own contract: forbidden list, the .gitkeep allowa
 // source, and the schema/migration reality.
 
 await test("S100 lease config law: the renewal cadence sits strictly inside the TTL", async () => {
-  const q = await import("../src/lib/tubeforge/queue");
+  const q = await import("../src/lib/ibismuh/queue");
   ok(Number.isFinite(q.LEASE_TTL_MS) && q.LEASE_TTL_MS > 0, "TTL is a sane positive number");
   ok(
     q.LEASE_TTL_MS >= 30_000,
@@ -12560,7 +12560,7 @@ await test("S100 lease config law: the renewal cadence sits strictly inside the 
 });
 
 await test("S100 THE FENCING LAW: every Job write in queue.ts is conditional — no unconditional terminal writes survive", () => {
-  const src = fs.readFileSync("src/lib/tubeforge/queue.ts", "utf8");
+  const src = fs.readFileSync("src/lib/ibismuh/queue.ts", "utf8");
   ok(
     !/\bjob\.update\(\{/.test(src),
     "queue.ts performs ZERO plain job.update writes — terminal state goes through updateMany guarded by leaseToken or status",
@@ -12617,7 +12617,7 @@ await test("S100 the lease columns are real schema, backed by a migration in the
 await test("S101 THE ADMISSION LAW: the ceiling check and the hold are ONE serialized transaction", () => {
   // S106 split: the admission law lives in storage-quota.ts (the facade
   // re-exports it — the pin follows the law's home, not the old layout).
-  const src = fs.readFileSync("src/lib/tubeforge/storage-quota.ts", "utf8");
+  const src = fs.readFileSync("src/lib/ibismuh/storage-quota.ts", "utf8");
   ok(
     src.includes("storageAdmissionTx") && src.includes('isolationLevel: "Serializable"'),
     "the admission runs Serializable on Postgres (SQLite serializes through its write lock) — the S32 spend-admission pattern",
@@ -12641,7 +12641,7 @@ await test("S101 THE ADMISSION LAW: the ceiling check and the hold are ONE seria
 });
 
 await test("S101 THE INTEGRATION LAW: put and putFromPath hold BEFORE writing, release on failure, settle the real delta", () => {
-  const src = fs.readFileSync("src/lib/tubeforge/storage.ts", "utf8");
+  const src = fs.readFileSync("src/lib/ibismuh/storage.ts", "utf8");
   // Both write paths reserve before the driver write (S106 split: the
   // facade carries exactly the two put-path call sites — the admission
   // law itself + the battery live in storage-quota.ts / test-storage).
@@ -12656,7 +12656,7 @@ await test("S101 THE INTEGRATION LAW: put and putFromPath hold BEFORE writing, r
   // The hold never moves the committed counter: release() touches ONLY the
   // reservation table — the quota it held is fully reclaimable. (S106 split:
   // the release/commit bodies live in storage-quota.ts.)
-  const quotaSrc = fs.readFileSync("src/lib/tubeforge/storage-quota.ts", "utf8");
+  const quotaSrc = fs.readFileSync("src/lib/ibismuh/storage-quota.ts", "utf8");
   ok(
     /release: async \(\) => \{[\s\S]*?storageReservation\.deleteMany/.test(quotaSrc),
     "release() deletes ONLY the hold row — a hold never moved the committed counter, so dropping one frees exactly the bytes it reserved",
@@ -12664,7 +12664,7 @@ await test("S101 THE INTEGRATION LAW: put and putFromPath hold BEFORE writing, r
 });
 
 await test("S101 the sweep + wiring: expired holds drop lazily from the queue tick, the model is real schema", () => {
-  const quotaSrc = fs.readFileSync("src/lib/tubeforge/storage-quota.ts", "utf8");
+  const quotaSrc = fs.readFileSync("src/lib/ibismuh/storage-quota.ts", "utf8");
   ok(
     quotaSrc.includes("export async function sweepExpiredStorageReservations"),
     "the expiry sweep is exported (crash net for processes that died between admission and settle)",
@@ -12673,13 +12673,13 @@ await test("S101 the sweep + wiring: expired holds drop lazily from the queue ti
 
   // The facade re-exports the sweep (the queue's dynamic import resolves it
   // through "./storage" — the import graph stays one-directional).
-  const facadeSrc = fs.readFileSync("src/lib/tubeforge/storage.ts", "utf8");
+  const facadeSrc = fs.readFileSync("src/lib/ibismuh/storage.ts", "utf8");
   ok(
     /export \{[\s\S]*?sweepExpiredStorageReservations[\s\S]*?\} from "\.\/storage-quota"/.test(facadeSrc),
     "the facade re-exports the sweep (the queue tick's dynamic import keeps resolving through ./storage)",
   );
 
-  const queueSrc = fs.readFileSync("src/lib/tubeforge/queue.ts", "utf8");
+  const queueSrc = fs.readFileSync("src/lib/ibismuh/queue.ts", "utf8");
   ok(
     queueSrc.includes("sweepExpiredStorageReservations") && queueSrc.includes("% 60"),
     "the queue tick sweeps expired holds lazily (~1/min per process) through a cycle-free dynamic import",
@@ -12708,7 +12708,7 @@ await test("S101 the sweep + wiring: expired holds drop lazily from the queue ti
 // cases); these pins hold the architecture laws in the source.
 
 await test("S102 THE TRUST LAW: one proxy-trust module, both resolvers delegate, the edge bundle stays pure", () => {
-  const pt = fs.readFileSync("src/lib/tubeforge/proxy-trust.ts", "utf8");
+  const pt = fs.readFileSync("src/lib/ibismuh/proxy-trust.ts", "utf8");
   ok(
     pt.includes("for (let i = entries.length - 1; i >= 0; i -= 1)") && pt.includes("isTrustedProxyIp(entries[i])"),
     "the walk is RIGHT to LEFT, trusted entries skipped — the spoofable first XFF value is dead",
@@ -12720,12 +12720,12 @@ await test("S102 THE TRUST LAW: one proxy-trust module, both resolvers delegate,
     "proxy-trust.ts imports NOTHING runtime-bound — the edge middleware may safely import its consumers",
   );
 
-  const rl = fs.readFileSync("src/lib/tubeforge/rate-limit.ts", "utf8");
+  const rl = fs.readFileSync("src/lib/ibismuh/rate-limit.ts", "utf8");
   ok(
     rl.includes('import { trustedClientIp } from "./proxy-trust"') && !rl.includes('.split(",")[0]'),
     "the middleware's resolver delegates to the law — no first-XFF-value code path survives in rate-limit.ts",
   );
-  const tenant = fs.readFileSync("src/lib/tubeforge/tenant.ts", "utf8");
+  const tenant = fs.readFileSync("src/lib/ibismuh/tenant.ts", "utf8");
   ok(
     tenant.includes("return trustedClientIp(headers)") && !tenant.includes(`split(",")[0]`),
     "tenant.clientIp (the S46 login-lockout key) delegates too — the lockout-poisoning vector is closed at BOTH call sites",
@@ -12738,7 +12738,7 @@ await test("S102 THE TRUST LAW: one proxy-trust module, both resolvers delegate,
 });
 
 await test("S102 THE SHARED LAW: the authoritative limiter is DB-backed, atomic, fail-open, and wired at the universal gate", () => {
-  const src = fs.readFileSync("src/lib/tubeforge/shared-rate-limit.ts", "utf8");
+  const src = fs.readFileSync("src/lib/ibismuh/shared-rate-limit.ts", "utf8");
   ok(
     src.includes('ON CONFLICT ("key", "windowStart")') && src.includes('RETURNING "count"'),
     "the admission is ONE statement — the upsert increments and returns the count, so the DB serializes the racers",
@@ -12753,7 +12753,7 @@ await test("S102 THE SHARED LAW: the authoritative limiter is DB-backed, atomic,
     "the limiter keys on the TRUSTED client ip — forged chains converge on the victim's bucket, rotation cannot evade",
   );
 
-  const tenant = fs.readFileSync("src/lib/tubeforge/tenant.ts", "utf8");
+  const tenant = fs.readFileSync("src/lib/ibismuh/tenant.ts", "utf8");
   ok(
     tenant.includes("await enforceSharedRateLimit(req.headers, MUTATING_METHODS.has(req.method))"),
     "requireUser enforces the shared limiter — every protected route inherits it with zero per-route wiring",
@@ -12763,7 +12763,7 @@ await test("S102 THE SHARED LAW: the authoritative limiter is DB-backed, atomic,
     "the shared decision maps onto the AuthResult union — routes answer 429 with an honest retry window",
   );
 
-  const queueSrc = fs.readFileSync("src/lib/tubeforge/queue.ts", "utf8");
+  const queueSrc = fs.readFileSync("src/lib/ibismuh/queue.ts", "utf8");
   ok(
     queueSrc.includes("sweepRateLimitCounters"),
     "stale windows are swept from the queue tick's lazy slot (5 windows kept for forensics)",
@@ -12789,7 +12789,7 @@ await test("S102 THE SHARED LAW: the authoritative limiter is DB-backed, atomic,
 // these pins hold the pure header law and the ownership law.
 
 await test("S104 THE CSP LAW: production script-src carries a nonce + strict-dynamic, never unsafe-inline/unsafe-eval", async () => {
-  const { buildCsp } = await import("../src/lib/tubeforge/csp");
+  const { buildCsp } = await import("../src/lib/ibismuh/csp");
   const prod = buildCsp("NONCE123", { dev: false });
   const scriptSrc = prod.match(/script-src[^;]*/)?.[0] ?? "";
   ok(scriptSrc.includes("'nonce-NONCE123'"), "the per-request nonce is embedded verbatim");
@@ -12845,7 +12845,7 @@ await test("S104 THE OWNERSHIP LAW: middleware owns the CSP, next.config ships n
       mw.indexOf("PRODUCTION FAIL-SAFE") > mw.indexOf('pathname.startsWith("/api/")'),
     "the document branch returns BEFORE the API gate — signed-out pages still render the sign-in screen",
   );
-  const svg = fs.readFileSync("src/lib/tubeforge/whiteboard/svg.ts", "utf8");
+  const svg = fs.readFileSync("src/lib/ibismuh/whiteboard/svg.ts", "utf8");
   ok(
     svg.includes("export function sanitizeSvg") && svg.includes('"script"'),
     "the SVG ingestion gate stands (S64): sanitize before storage, rasterize before trust — the audit's PARTIAL is now FULL",
@@ -12859,7 +12859,7 @@ await test("S104 THE OWNERSHIP LAW: middleware owns the CSP, next.config ships n
 // ---------------------------------------------------------------------------
 
 await test("scene-revisions: mintSceneId is deterministic and collision-free", async () => {
-  const { mintSceneId } = await import("../src/lib/tubeforge/scene-revisions.ts");
+  const { mintSceneId } = await import("../src/lib/ibismuh/scene-revisions.ts");
   eq(mintSceneId(3, new Set()), "s3", "fresh hint mints s<hint>");
   eq(mintSceneId(3, new Set(["s3"])), "s3-2", "taken hint disambiguates -2");
   eq(mintSceneId(3, new Set(["s3", "s3-2"])), "s3-3", "and -3 next");
@@ -12867,7 +12867,7 @@ await test("scene-revisions: mintSceneId is deterministic and collision-free", a
 });
 
 await test("scene-revisions: carrySceneIds preserves identity by index, mints for new scenes", async () => {
-  const { carrySceneIds } = await import("../src/lib/tubeforge/scene-revisions.ts");
+  const { carrySceneIds } = await import("../src/lib/ibismuh/scene-revisions.ts");
   const mk = (index: number, id?: string): Scene => ({
     index, title: `t${index}`, narration: "n", visual: "v", camera: "slow-zoom",
     mood: "m", caption: "c", hostInScene: false, rehook: false, sfx: "none", ...(id ? { id } : {}),
@@ -12894,7 +12894,7 @@ await test("scene-revisions: carrySceneIds preserves identity by index, mints fo
 });
 
 await test("scene-revisions: mintFreshSceneIds never reuses a retired identity", async () => {
-  const { mintFreshSceneIds } = await import("../src/lib/tubeforge/scene-revisions.ts");
+  const { mintFreshSceneIds } = await import("../src/lib/ibismuh/scene-revisions.ts");
   const mk = (index: number): Scene => ({
     index, title: `t${index}`, narration: "n", visual: "v", camera: "slow-zoom",
     mood: "m", caption: "c", hostInScene: false, rehook: false, sfx: "none",
@@ -12909,7 +12909,7 @@ await test("scene-revisions: mintFreshSceneIds never reuses a retired identity",
 });
 
 await test("scene-revisions: ensureSceneIdsInPlace mints without replacing objects", async () => {
-  const { ensureSceneIdsInPlace } = await import("../src/lib/tubeforge/scene-revisions.ts");
+  const { ensureSceneIdsInPlace } = await import("../src/lib/ibismuh/scene-revisions.ts");
   const a: Scene = {
     index: 1, title: "t", narration: "n", visual: "v", camera: "slow-zoom",
     mood: "m", caption: "c", hostInScene: false, rehook: false, sfx: "none",
@@ -12926,7 +12926,7 @@ await test("scene-revisions: ensureSceneIdsInPlace mints without replacing objec
 });
 
 await test("scene-revisions: the union slice round-trips and diffs honestly", async () => {
-  const { contentJson, parseRevisionContent } = await import("../src/lib/tubeforge/scene-revisions.ts");
+  const { contentJson, parseRevisionContent } = await import("../src/lib/ibismuh/scene-revisions.ts");
   const scene: Scene = {
     index: 1, title: "t", narration: "n", visual: "v", camera: "slow-zoom",
     mood: "m", caption: "c", hostInScene: false, rehook: false, sfx: "none",
@@ -12947,7 +12947,7 @@ await test("scene-revisions: the union slice round-trips and diffs honestly", as
 });
 
 await test("scene-revisions: checkExpectedVersion — 0 passes on no history, mismatch conflicts", async () => {
-  const { checkExpectedVersion, RevisionConflict } = await import("../src/lib/tubeforge/scene-revisions.ts");
+  const { checkExpectedVersion, RevisionConflict } = await import("../src/lib/ibismuh/scene-revisions.ts");
   checkExpectedVersion(0, null); // first edit on a never-touched scene
   checkExpectedVersion(3, { version: 3 }); // honest head
   let threw = false;
@@ -12982,10 +12982,10 @@ await test("scene-revisions: the eleven mutator sites all record revisions (sour
     ["src/app/api/videos/[id]/studio/voice/route.ts", "commitSceneChanges"],
     ["src/app/api/videos/[id]/studio/pace/route.ts", "commitSceneChanges"],
     ["src/app/api/videos/[id]/script/route.ts", "commitSceneChanges"],
-    ["src/lib/tubeforge/script-job.ts", "commitSceneChanges"],
-    ["src/lib/tubeforge/convert.ts", "commitSceneChanges"],
-    ["src/lib/tubeforge/stock.ts", "commitSceneChanges"],
-    ["src/lib/tubeforge/video-jobs.ts", "commitSceneChanges"],
+    ["src/lib/ibismuh/script-job.ts", "commitSceneChanges"],
+    ["src/lib/ibismuh/convert.ts", "commitSceneChanges"],
+    ["src/lib/ibismuh/stock.ts", "commitSceneChanges"],
+    ["src/lib/ibismuh/video-jobs.ts", "commitSceneChanges"],
   ];
   for (const [file, needle] of mutators) {
     const src = fs.readFileSync(file, "utf8");
@@ -12993,7 +12993,7 @@ await test("scene-revisions: the eleven mutator sites all record revisions (sour
   }
   // And the ONLY remaining direct scenes-column writes are stock's two
   // video-vanished fallbacks (guarded by the `if (video)` branch).
-  const stockSrc = fs.readFileSync("src/lib/tubeforge/stock.ts", "utf8");
+  const stockSrc = fs.readFileSync("src/lib/ibismuh/stock.ts", "utf8");
   const direct = (stockSrc.match(/scenes: JSON\.stringify/g) ?? []).length;
   eq(direct, 2, "stock keeps exactly the two defensive fallback writes");
 });
@@ -13017,7 +13017,7 @@ await test("scene-revisions: PATCH /scenes carries the optimistic-concurrency ga
 // ---------------------------------------------------------------------------
 
 await test("scene-deps: the dependency table laws (narration/caption/visual/seedVariant)", async () => {
-  const { SCENE_DEPENDS } = await import("../src/lib/tubeforge/scene-deps.ts");
+  const { SCENE_DEPENDS } = await import("../src/lib/ibismuh/scene-deps.ts");
   // A narration change stales this scene's WAV + clip, the merged read and
   // every render — and implicates the boundary. It must NOT stale the art.
   eq(
@@ -13043,7 +13043,7 @@ await test("scene-deps: the dependency table laws (narration/caption/visual/seed
 });
 
 await test("scene-deps: planSceneInvalidation folds fields and names exact keys", async () => {
-  const { planSceneInvalidation } = await import("../src/lib/tubeforge/scene-deps.ts");
+  const { planSceneInvalidation } = await import("../src/lib/ibismuh/scene-deps.ts");
   const plan = planSceneInvalidation("vid", 2, ["narration"]);
   eq(
     plan.sceneKeys,
@@ -13067,7 +13067,7 @@ await test("scene-deps: planSceneInvalidation folds fields and names exact keys"
 });
 
 await test("scene-deps: the key vocabulary covers both lanes", async () => {
-  const { sceneArtifactKeys } = await import("../src/lib/tubeforge/scene-deps.ts");
+  const { sceneArtifactKeys } = await import("../src/lib/ibismuh/scene-deps.ts");
   eq(
     sceneArtifactKeys("vid", 7, ["image", "audio", "video"]),
     ["vid/scene-07.png", "vid/slide-07.png", "vid/scene-07.wav", "vid/scene-07.mp4", "vid/whiteboard/scene-7.mp4"],
@@ -13076,7 +13076,7 @@ await test("scene-deps: the key vocabulary covers both lanes", async () => {
 });
 
 await test("scene-artifacts: the cost bridge rides the metering layer (source pin)", async () => {
-  const budget = fs.readFileSync("src/lib/tubeforge/budget.ts", "utf8");
+  const budget = fs.readFileSync("src/lib/ibismuh/budget.ts", "utf8");
   ok(
     budget.includes("videoId: attribution?.videoId ?? null") &&
       budget.includes("artifactId: attribution?.artifactId ?? null"),
@@ -13086,18 +13086,18 @@ await test("scene-artifacts: the cost bridge rides the metering layer (source pi
     budget.includes("accumulateArtifactCost(attribution.artifactId, costMicroUsd)"),
     "a metered scene-scoped call accumulates its cost onto the artifact row"
   );
-  const deps = fs.readFileSync("src/lib/tubeforge/scene-deps.ts", "utf8");
+  const deps = fs.readFileSync("src/lib/ibismuh/scene-deps.ts", "utf8");
   ok(
     deps.includes("export const SCENE_DEPENDS"),
     "the dependency table is the exported, declarative source of truth"
   );
   // The over-invalidation fix is wired at the two single-scene sites.
-  const jobs = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const jobs = fs.readFileSync("src/lib/ibismuh/video-jobs.ts", "utf8");
   ok(
     jobs.includes("{ slidePngs: true, sceneIndex }") && jobs.includes("{ sceneIndex })"),
     "the scene job + the slide re-screenshot pass sceneIndex (the S113 fix)"
   );
-  const render = fs.readFileSync("src/lib/tubeforge/render.ts", "utf8");
+  const render = fs.readFileSync("src/lib/ibismuh/render.ts", "utf8");
   ok(
     render.includes("opts: { slidePngs?: boolean; sceneIndex?: number }"),
     "invalidateRenderedArtifacts accepts the scene scope"
@@ -13105,7 +13105,7 @@ await test("scene-artifacts: the cost bridge rides the metering layer (source pi
 });
 
 await test("scene-revisions: rollback sweeps through the declarative map (source pin)", async () => {
-  const rev = fs.readFileSync("src/lib/tubeforge/scene-revisions.ts", "utf8");
+  const rev = fs.readFileSync("src/lib/ibismuh/scene-revisions.ts", "utf8");
   ok(
     rev.includes("planSceneInvalidation") && rev.includes("sweepInvalidArtifacts"),
     "rollbackScene enforces the SAME dependency map PATCH /scenes does"
@@ -13121,7 +13121,7 @@ await test("scene-revisions: rollback sweeps through the declarative map (source
 // ---------------------------------------------------------------------------
 
 await test("scene-artifacts: the stale law (current / stale / unknown)", async () => {
-  const { artifactStaleness } = await import("../src/lib/tubeforge/scene-artifacts.ts");
+  const { artifactStaleness } = await import("../src/lib/ibismuh/scene-artifacts.ts");
   eq(artifactStaleness({ status: "ready", revisionVersion: 3 }, 3), "current", "built from the head");
   eq(artifactStaleness({ status: "ready", revisionVersion: 2 }, 3), "stale", "built from a superseded revision — labeled, never silent");
   eq(artifactStaleness({ status: "stale", revisionVersion: 3 }, 3), "stale", "a swept artifact is stale whatever its revision");
@@ -13130,13 +13130,13 @@ await test("scene-artifacts: the stale law (current / stale / unknown)", async (
 });
 
 await test("scene-preview: the lane is wired and walled (source pin)", async () => {
-  const render = fs.readFileSync("src/lib/tubeforge/render.ts", "utf8");
+  const render = fs.readFileSync("src/lib/ibismuh/render.ts", "utf8");
   ok(
     render.includes("scenePreview?: { sceneIndex: number }") &&
       render.includes("scene-preview-${String(opts.scenePreview.sceneIndex).padStart(2, \"0\")}.mp4"),
     "renderVideo names the output scene-preview-NN.mp4 under the preview semantics (no srt export)"
   );
-  const jobs = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const jobs = fs.readFileSync("src/lib/ibismuh/video-jobs.ts", "utf8");
   ok(
     jobs.includes("return runScenePreviewJob(videoId, video, scenes, opts.sceneIndex as number, opts);"),
     "the render job branches to the scene-preview lane on sceneIndex"
@@ -13167,8 +13167,8 @@ await test("scene-preview: the lane is wired and walled (source pin)", async () 
 // ---------------------------------------------------------------------------
 
 await test("scene-repairs: the estimate uses the admission's own table", async () => {
-  const { repairEstimateMicroUsd } = await import("../src/lib/tubeforge/scene-repairs.ts");
-  const { ESTIMATED_COST_MICRO } = await import("../src/lib/tubeforge/billing.ts");
+  const { repairEstimateMicroUsd } = await import("../src/lib/ibismuh/scene-repairs.ts");
+  const { ESTIMATED_COST_MICRO } = await import("../src/lib/ibismuh/billing.ts");
   eq(
     repairEstimateMicroUsd("kenburns"),
     ESTIMATED_COST_MICRO.image,
@@ -13182,7 +13182,7 @@ await test("scene-repairs: the estimate uses the admission's own table", async (
 });
 
 await test("scene-repairs: the repair plan names exactly what regenerates", async () => {
-  const { repairPlan } = await import("../src/lib/tubeforge/scene-repairs.ts");
+  const { repairPlan } = await import("../src/lib/ibismuh/scene-repairs.ts");
   const plan = repairPlan("vid", 4);
   ok(plan.sceneKeys.includes("vid/scene-04.png"), "the art take regenerates");
   ok(!plan.sceneKeys.some((k) => k.endsWith(".wav")), "the read never regenerates");
@@ -13190,7 +13190,7 @@ await test("scene-repairs: the repair plan names exactly what regenerates", asyn
 });
 
 await test("cost-guard: the ceiling admission law", async () => {
-  const { CostCeilingExceededError } = await import("../src/lib/tubeforge/cost-guard.ts");
+  const { CostCeilingExceededError } = await import("../src/lib/ibismuh/cost-guard.ts");
   ok(
     new CostCeilingExceededError(500, 600, 200).message.includes("ceiling"),
     "the refusal names the ceiling in human words"
@@ -13198,7 +13198,7 @@ await test("cost-guard: the ceiling admission law", async () => {
 });
 
 await test("s115: the idempotency + approval gates are wired (source pin)", async () => {
-  const queue = fs.readFileSync("src/lib/tubeforge/queue.ts", "utf8");
+  const queue = fs.readFileSync("src/lib/ibismuh/queue.ts", "utf8");
   ok(
     queue.includes("idempotencyKey?: string | null") &&
       queue.includes('["pending", "running", "done"].includes(standing.status)') &&
@@ -13213,12 +13213,12 @@ await test("s115: the idempotency + approval gates are wired (source pin)", asyn
     queue.includes('(err as { code?: string }).code === "P2002"'),
     "the unique index is the race floor — a colliding insert re-reads the winner"
   );
-  const jobs = fs.readFileSync("src/lib/tubeforge/jobs.ts", "utf8");
+  const jobs = fs.readFileSync("src/lib/ibismuh/jobs.ts", "utf8");
   ok(
     jobs.includes("if (enqueued.duplicate) return false;"),
     "startJob refuses to run a duplicate — no closure, no spend"
   );
-  const repairs = fs.readFileSync("src/lib/tubeforge/scene-repairs.ts", "utf8");
+  const repairs = fs.readFileSync("src/lib/ibismuh/scene-repairs.ts", "utf8");
   ok(
     repairs.includes("approving twice cannot spend twice"),
     "a repair that is already running/completed refuses re-approval"
@@ -13240,7 +13240,7 @@ await test("s115: the idempotency + approval gates are wired (source pin)", asyn
 // ---------------------------------------------------------------------------
 
 await test("scene-qc: seamExpectation derives the seam from the stitcher's own math", async () => {
-  const { seamExpectation } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { seamExpectation } = await import("../src/lib/ibismuh/scene-qc.ts");
   // A CUT boundary between 10s + 8s: no blend debt, the seam sits at 10.0.
   const cut = seamExpectation([10, 8], { style: "cut", durationSec: 0.5 }, 1);
   eq(cut.boundaryTime, 10, "a cut seam sits at the cumulative duration (no blend debt)");
@@ -13255,7 +13255,7 @@ await test("scene-qc: seamExpectation derives the seam from the stitcher's own m
 });
 
 await test("scene-qc: alignSeam — the seam law (cut must appear, blend need not, strays fail)", async () => {
-  const { alignSeam, seamExpectation } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { alignSeam, seamExpectation } = await import("../src/lib/ibismuh/scene-qc.ts");
   const cut = seamExpectation([10, 8], { style: "cut", durationSec: 0.5 }, 1);
   eq(alignSeam([10.0], cut).status, "pass", "a cut landing on the seam passes");
   eq(alignSeam([9.7], cut).status, "pass", "within tolerance (0.6s) is the seam");
@@ -13278,7 +13278,7 @@ await test("scene-qc: alignSeam — the seam law (cut must appear, blend need no
 });
 
 await test("scene-qc: checkSceneCues — the scene-sliced caption laws", async () => {
-  const { checkSceneCues } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { checkSceneCues } = await import("../src/lib/ibismuh/scene-qc.ts");
   eq(
     checkSceneCues([{ start: 10, end: 12 }, { start: 12, end: 14 }], [10, 20], true).status,
     "pass",
@@ -13314,7 +13314,7 @@ await test("scene-qc: checkSceneCues — the scene-sliced caption laws", async (
 // ---------- S136 at scene scope — the scene preview's audio contract ----------
 
 await test("scene-qc sceneAudioVerdict: silent scene + video-only preview → playable PASSES, sound lenses not asked", async () => {
-  const { sceneAudioVerdict } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { sceneAudioVerdict } = await import("../src/lib/ibismuh/scene-qc.ts");
   const v = sceneAudioVerdict(
     { probeClean: true, hasVideo: true, hasAudio: false, hasAudioStream: false },
     false,
@@ -13327,7 +13327,7 @@ await test("scene-qc sceneAudioVerdict: silent scene + video-only preview → pl
 });
 
 await test("scene-qc sceneAudioVerdict: narrated scene + no audio → playable FAILS (words cut), lenses stay fail-closed", async () => {
-  const { sceneAudioVerdict } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { sceneAudioVerdict } = await import("../src/lib/ibismuh/scene-qc.ts");
   const v = sceneAudioVerdict(
     { probeClean: true, hasVideo: true, hasAudio: false, hasAudioStream: false },
     true,
@@ -13340,7 +13340,7 @@ await test("scene-qc sceneAudioVerdict: narrated scene + no audio → playable F
 });
 
 await test("scene-qc sceneAudioVerdict: narrated + AAC → the legacy verdict byte-identical, lenses asked", async () => {
-  const { sceneAudioVerdict } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { sceneAudioVerdict } = await import("../src/lib/ibismuh/scene-qc.ts");
   const v = sceneAudioVerdict(
     { probeClean: true, hasVideo: true, hasAudio: true, hasAudioStream: true },
     true,
@@ -13352,7 +13352,7 @@ await test("scene-qc sceneAudioVerdict: narrated + AAC → the legacy verdict by
 });
 
 await test("scene-qc sceneAudioVerdict: an unreadable probe stays fail-closed (applicability true)", async () => {
-  const { sceneAudioVerdict } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { sceneAudioVerdict } = await import("../src/lib/ibismuh/scene-qc.ts");
   // probeClean=false → applicability TRUE regardless of the stream flags
   // (the garbage-bytes law: a probe that failed knows nothing).
   for (const hasAudioStream of [false, true]) {
@@ -13366,7 +13366,7 @@ await test("scene-qc sceneAudioVerdict: an unreadable probe stays fail-closed (a
 });
 
 await test("scene-qc sceneAudioVerdict: no H.264 video stream → honest value, never a playable pass", async () => {
-  const { sceneAudioVerdict } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { sceneAudioVerdict } = await import("../src/lib/ibismuh/scene-qc.ts");
   const v = sceneAudioVerdict(
     { probeClean: true, hasVideo: false, hasAudio: true, hasAudioStream: true },
     false,
@@ -13377,7 +13377,7 @@ await test("scene-qc sceneAudioVerdict: no H.264 video stream → honest value, 
 });
 
 await test("scene-qc: the verdict law + the approval gate", async () => {
-  const { recheckVerdictPassed, approvalBlocker, parseRecheckReport } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { recheckVerdictPassed, approvalBlocker, parseRecheckReport } = await import("../src/lib/ibismuh/scene-qc.ts");
   const pass = { id: "x", label: "x", status: "pass", pass: true, value: "" };
   const unmeasured = { id: "x", label: "x", status: "unmeasured", pass: false, value: "" };
   ok(recheckVerdictPassed([pass], []), "all-pass with no seams is clean");
@@ -13412,7 +13412,7 @@ await test("scene-qc: the verdict law + the approval gate", async () => {
 });
 
 await test("scene-qc: seamsOfScene — which seams a scene owns", async () => {
-  const { seamsOfScene } = await import("../src/lib/tubeforge/scene-qc.ts");
+  const { seamsOfScene } = await import("../src/lib/ibismuh/scene-qc.ts");
   eq(JSON.stringify(seamsOfScene(1, 3)), JSON.stringify([1]), "scene 1 of 3 owns only the seam after it");
   eq(JSON.stringify(seamsOfScene(2, 3)), JSON.stringify([1, 2]), "a middle scene owns both seams");
   eq(JSON.stringify(seamsOfScene(3, 3)), JSON.stringify([2]), "the last scene owns only the seam before it");
@@ -13420,7 +13420,7 @@ await test("scene-qc: seamsOfScene — which seams a scene owns", async () => {
 });
 
 await test("scene-qc: resolveSceneDuration — the render's own fold, exported once (no private copies)", async () => {
-  const { resolveSceneDuration, LEAD_SEC, TAIL_SEC, MIN_SEG_SEC } = await import("../src/lib/tubeforge/render.ts");
+  const { resolveSceneDuration, LEAD_SEC, TAIL_SEC, MIN_SEG_SEC } = await import("../src/lib/ibismuh/render.ts");
   // A 1s WAV: the base is 1 + 0.35 + 0.85 = 2.2 (above the 2.0 floor).
   eq(resolveSceneDuration(1, Number.NaN, Number.NaN), 1 + LEAD_SEC + TAIL_SEC, "no doc value: WAV + lead + tail");
   eq(resolveSceneDuration(0.1, Number.NaN, Number.NaN), MIN_SEG_SEC, "the MIN_SEG floor holds");
@@ -13439,12 +13439,12 @@ await test("scene-qc: resolveSceneDuration — the render's own fold, exported o
     "the speed factor participates in the floor"
   );
   // The fold is THE one implementation — the render loop calls it.
-  const render = fs.readFileSync("src/lib/tubeforge/render.ts", "utf8");
+  const render = fs.readFileSync("src/lib/ibismuh/render.ts", "utf8");
   ok(
     render.includes("resolveSceneDuration(rawWav, timelineDurations[i] ?? NaN, docScenes?.[i]?.speed ?? NaN)"),
     "renderVideo's duration loop consumes the exported fold (the seam expectation and the render can never disagree)"
   );
-  const sceneQc = fs.readFileSync("src/lib/tubeforge/scene-qc.ts", "utf8");
+  const sceneQc = fs.readFileSync("src/lib/ibismuh/scene-qc.ts", "utf8");
   ok(
     sceneQc.includes("resolveSceneDuration(") && !sceneQc.includes("LEAD_SEC + TAIL_SEC, MIN_SEG_SEC"),
     "scene-qc derives expected durations through the shared fold, not a private copy"
@@ -13452,7 +13452,7 @@ await test("scene-qc: resolveSceneDuration — the render's own fold, exported o
 });
 
 await test("scene-qc: the battery reuses the whole-file probes (source pin)", async () => {
-  const sceneQc = fs.readFileSync("src/lib/tubeforge/scene-qc.ts", "utf8");
+  const sceneQc = fs.readFileSync("src/lib/ibismuh/scene-qc.ts", "utf8");
   ok(
     sceneQc.includes('from "./qc"') && sceneQc.includes("analyzePass") && sceneQc.includes("ffprobeJson") && sceneQc.includes("parseSrt"),
     "the scene battery imports the battery's own probe shell (no private ffmpeg copies)"
@@ -13463,7 +13463,7 @@ await test("scene-qc: the battery reuses the whole-file probes (source pin)", as
   );
   ok(
     sceneQc.includes("export { check as qcCheck, analyzePass, ffprobeJson };") === false &&
-      fs.readFileSync("src/lib/tubeforge/qc.ts", "utf8").includes("export { check as qcCheck, analyzePass, ffprobeJson };"),
+      fs.readFileSync("src/lib/ibismuh/qc.ts", "utf8").includes("export { check as qcCheck, analyzePass, ffprobeJson };"),
     "qc.ts exports the builders exactly once, at the source of truth"
   );
   ok(
@@ -13475,7 +13475,7 @@ await test("scene-qc: the battery reuses the whole-file probes (source pin)", as
     route.includes("approve: true") && route.includes("approvalBlocker"),
     "the recheck route carries both arms: run (job) + approve (the gated flip)"
   );
-  const handlers = fs.readFileSync("src/lib/tubeforge/queue-handlers.ts", "utf8");
+  const handlers = fs.readFileSync("src/lib/ibismuh/queue-handlers.ts", "utf8");
   ok(
     handlers.includes('registerJobHandler("scene-recheck"') && handlers.includes("out.boundaryAfter = p.boundaryAfter"),
     "the scene-recheck kind is crash-resumable and the boundaryAfter grammar survives a resume"
@@ -13494,7 +13494,7 @@ await test("scene-qc: the battery reuses the whole-file probes (source pin)", as
 // ---------------------------------------------------------------------------
 
 await test("render-assembly: parseRenderManifest — tolerant, schema 1 only", async () => {
-  const { parseRenderManifest } = await import("../src/lib/tubeforge/render-assembly.ts");
+  const { parseRenderManifest } = await import("../src/lib/ibismuh/render-assembly.ts");
   eq(parseRenderManifest(null), null, "null manifest (never rendered) parses to null");
   eq(parseRenderManifest("{not json"), null, "corrupt JSON parses to null (refuse, never guess)");
   eq(
@@ -13519,7 +13519,7 @@ await test("render-assembly: parseRenderManifest — tolerant, schema 1 only", a
 });
 
 await test("render-assembly: compareManifest — the staleness law (pure)", async () => {
-  const { compareManifest } = await import("../src/lib/tubeforge/render-assembly.ts");
+  const { compareManifest } = await import("../src/lib/ibismuh/render-assembly.ts");
   const manifest = (entries: unknown[]) =>
     ({ schema: 1, renderedAt: "", mode: "kenburns", entries }) as Parameters<typeof compareManifest>[0];
 
@@ -13582,7 +13582,7 @@ await test("render-assembly: compareManifest — the staleness law (pure)", asyn
 });
 
 await test("render-assembly: the assembly + manifest + gates are wired (source pin)", async () => {
-  const jobs = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const jobs = fs.readFileSync("src/lib/ibismuh/video-jobs.ts", "utf8");
   ok(
     jobs.includes("const assembly = await resolveRenderAssembly(video);") &&
       jobs.includes("scenes: renderScenes,") &&
@@ -13662,8 +13662,8 @@ await test("s118: the §8.2 audit rows + the VCE persistence + the surfaces are 
     assemble.includes("db.activity") && assemble.includes("Timeline saved"),
     "PUT /assemble leaves an audit row"
   );
-  const vce = fs.readFileSync("src/lib/tubeforge/visual-consistency.ts", "utf8");
-  const repairs = fs.readFileSync("src/lib/tubeforge/scene-repairs.ts", "utf8");
+  const vce = fs.readFileSync("src/lib/ibismuh/visual-consistency.ts", "utf8");
+  const repairs = fs.readFileSync("src/lib/ibismuh/scene-repairs.ts", "utf8");
   ok(
     vce.includes('await import("./scene-repairs")') && vce.includes("persistVceProposals(videoId, report.proposals)"),
     "both VCE write sites persist their proposals — lazily imported (scene-repairs pulls video-jobs; the cycle breaks at import time)"
@@ -13673,7 +13673,7 @@ await test("s118: the §8.2 audit rows + the VCE persistence + the surfaces are 
     "the persistence is dedup-guarded — re-running the engine never spams the inbox"
   );
   const board = fs.readFileSync("src/app/api/videos/[id]/board/route.ts", "utf8");
-  const boardUi = fs.readFileSync("src/components/tubeforge/production-board.tsx", "utf8");
+  const boardUi = fs.readFileSync("src/components/ibismuh/production-board.tsx", "utf8");
   ok(
     board.includes("videoSpendMicroUsd") && board.includes("ceilingMicroUsd"),
     "the board serves the per-video spend + ceiling (the attribution note's tail, closed)"
@@ -13682,9 +13682,9 @@ await test("s118: the §8.2 audit rows + the VCE persistence + the surfaces are 
     boardUi.includes("on this video") && !boardUi.includes("attributionNote"),
     "the board SHOWS the per-video cost; the stale 'no per-video attribution' note is gone"
   );
-  const editor = fs.readFileSync("src/components/tubeforge/scene-editor.tsx", "utf8");
+  const editor = fs.readFileSync("src/components/ibismuh/scene-editor.tsx", "utf8");
   ok(
-    editor.includes("SceneTrustPanel") && fs.existsSync("src/components/tubeforge/scene-trust-panel.tsx"),
+    editor.includes("SceneTrustPanel") && fs.existsSync("src/components/ibismuh/scene-trust-panel.tsx"),
     "the Scene Studio mounts the trust panel (revisions, recheck, approval, repairs, seams)"
   );
   ok(
@@ -13695,7 +13695,7 @@ await test("s118: the §8.2 audit rows + the VCE persistence + the surfaces are 
 
 await test("s119: the render lane contract — resolveRenderLane truth table (pure)", async () => {
   const { resolveRenderLane, isStoryRenderMode, laneDecisionsComplete } = await import(
-    "../src/lib/tubeforge/render-lane"
+    "../src/lib/ibismuh/render-lane"
   );
   // Explicit whiteboard ask: engine lane + pin (the "picked Whiteboard in
   // the picker, hit the big Render button" click that used to degrade to
@@ -13736,7 +13736,7 @@ await test("s119: the render lane contract — resolveRenderLane truth table (pu
 
 await test("s123: the graphics lane rows of the truth table + the ship-dark law", async () => {
   const { resolveRenderLane, laneDecisionsComplete, isStoryRenderMode, isEngineLaneId } = await import(
-    "../src/lib/tubeforge/render-lane"
+    "../src/lib/ibismuh/render-lane"
   );
   // Explicit graphics ask: the engine lane + pin (the whiteboard rows,
   // mirrored symmetrically — the engine lanes are a set, not a case).
@@ -13772,7 +13772,7 @@ await test("s123: the graphics lane rows of the truth table + the ship-dark law"
   // together in the S123 P3 commit, so this pin now asserts the SHIPPED
   // state (a picker entry without its route branch is the S119 bug class;
   // the source pin below holds the three files to the lockstep).
-  const { RENDER_MODES } = await import("../src/lib/tubeforge/types");
+  const { RENDER_MODES } = await import("../src/lib/ibismuh/types");
   const graphicsMode = RENDER_MODES.find((m) => m.id === "graphics");
   ok(graphicsMode !== undefined, "lockstep shipped: RENDER_MODES offers graphics (the P3 commit landed picker + route + dispatch in one commit)");
   ok(graphicsMode?.icon === "BarChart3" && typeof graphicsMode?.desc === "string", "the graphics picker entry carries its icon + desc");
@@ -13796,7 +13796,7 @@ await test("s123 P3: the lane is wired end-to-end — route branch, job dispatch
   // The job dispatch: runRenderJob delegates a graphics row to the engine
   // lane (the durable replay path — a stale compositor row never renders
   // a graphics video through the story gates).
-  const jobs = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const jobs = fs.readFileSync("src/lib/ibismuh/video-jobs.ts", "utf8");
   ok(
     jobs.includes('if (video.renderMode === "graphics") {\n    return runGraphicsJob(videoId);\n  }'),
     "runRenderJob delegates a graphics row to runGraphicsJob (the whiteboard delegation, mirrored)"
@@ -13806,12 +13806,12 @@ await test("s123 P3: the lane is wired end-to-end — route branch, job dispatch
     "splitEntityId carries the #g suffix (the durable draft-entity encoding)"
   );
   // The queue handler + the recovery law.
-  const handlers = fs.readFileSync("src/lib/tubeforge/queue-handlers.ts", "utf8");
+  const handlers = fs.readFileSync("src/lib/ibismuh/queue-handlers.ts", "utf8");
   ok(
     handlers.includes('registerJobHandler("graphics"') && handlers.includes("parseGraphicsPayload"),
     "the durable queue registers the graphics handler (a resumed row re-runs the SAME lane)"
   );
-  const jobsKind = fs.readFileSync("src/lib/tubeforge/jobs.ts", "utf8");
+  const jobsKind = fs.readFileSync("src/lib/ibismuh/jobs.ts", "utf8");
   ok(
     jobsKind.includes('row.kind === "graphics" && row.entityId === baseEntityId(row.entityId)'),
     "the graphics FULL render rides the idempotence recovery wall (an already-landed final is marked done, never re-rendered)"
@@ -13820,7 +13820,7 @@ await test("s123 P3: the lane is wired end-to-end — route branch, job dispatch
   // BUILDER REGISTRY + the ENGINE-SEGMENT verdict (the law evolved: engine
   // clips execute through their lanes AND arrive as pre-rendered segments
   // when the plan is mixed; the refusal is still registry-driven).
-  const compositor = fs.readFileSync("src/lib/tubeforge/render.ts", "utf8");
+  const compositor = fs.readFileSync("src/lib/ibismuh/render.ts", "utf8");
   ok(
     compositor.includes("engineSegmentVerdict((planScenes ?? []).map((ps) => ps.kind),") ||
       compositor.includes("engineSegmentVerdict("),
@@ -13841,7 +13841,7 @@ await test("s123 P3: the lane is wired end-to-end — route branch, job dispatch
     "the S123 migration adds the column for the postgres chain (the sqlite push mirrors it)"
   );
   // The plan contract seats the kind the wall refuses.
-  const plan = fs.readFileSync("src/lib/tubeforge/composition-plan.ts", "utf8");
+  const plan = fs.readFileSync("src/lib/ibismuh/composition-plan.ts", "utf8");
   ok(
     plan.includes('c.kind === "graphics"'),
     "planFromTracks maps graphics-kind clips onto the plan kind the compositor wall refuses"
@@ -13863,7 +13863,7 @@ await test("s119: the lane contract is wired — route resolves the lane, scaffo
     /renderMode: "whiteboard"/.test(scaffold),
     "POST /whiteboard/scaffold pins the row to the whiteboard lane (scaffolding IS whiteboard intent)"
   );
-  const dialog = fs.readFileSync("src/components/tubeforge/video-detail-dialog.tsx", "utf8");
+  const dialog = fs.readFileSync("src/components/ibismuh/video-detail-dialog.tsx", "utf8");
   ok(
     dialog.includes("Render request failed (HTTP"),
     "the dialog's startRender throws on !res.ok — a refused admission is a destructive toast, never a false 'Video rendered'"
@@ -13885,11 +13885,11 @@ await test("w1: the benchmark definition is pure, fixed and aspect-complete", as
     w1SceneSpans,
     w1SeamPlan,
     w1TotalDurationMs,
-  } = await import("../src/lib/tubeforge/whiteboard/benchmark-scenarios");
+  } = await import("../src/lib/ibismuh/whiteboard/benchmark-scenarios");
   const { validateWhiteboardProject } = await import(
-    "../src/lib/tubeforge/whiteboard/storyboard"
+    "../src/lib/ibismuh/whiteboard/storyboard"
   );
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
 
   // The frozen shape: five scene types, three house aspects, 24 fps.
   ok(W1_SCENE_IDS.length === 5, "exactly five fixed scene types");
@@ -14048,7 +14048,7 @@ await test("w1: the baseline receipt, the rubric doc and the text-reveal fix are
 
   // The W1 catch — the text-reveal fix — is in the tree: the clip rect is
   // addressed THROUGH its clipPath parent on every frame (the sliver bug).
-  const wbPage = fs.readFileSync("src/lib/tubeforge/whiteboard/wb-page.ts", "utf8");
+  const wbPage = fs.readFileSync("src/lib/ibismuh/whiteboard/wb-page.ts", "utf8");
   ok(
     wbPage.includes("clip.firstElementChild") && wbPage.includes("W1 baseline catch"),
     "APPLY_FRAME_FN addresses the clip rect through its clipPath parent — the invisible-text sliver bug is fixed at the one-source law"
@@ -14061,7 +14061,7 @@ await test("w1: the baseline receipt, the rubric doc and the text-reveal fix are
   // The harness + the pure definition are committed.
   ok(fs.existsSync("scripts/w1-whiteboard-benchmark.mts"), "the W1 harness script is committed");
   ok(
-    fs.existsSync("src/lib/tubeforge/whiteboard/benchmark-scenarios.ts"),
+    fs.existsSync("src/lib/ibismuh/whiteboard/benchmark-scenarios.ts"),
     "the pure benchmark definition module is committed"
   );
 });
@@ -14071,7 +14071,7 @@ await test("w1: the baseline receipt, the rubric doc and the text-reveal fix are
 suiteStart("W2 whiteboard — the semantic beat compiler (beat-plan.ts)");
 
 await test("W2 splitSentences: punctuation attaches, empties drop, unpunctuated text is one sentence", async () => {
-  const { splitSentences } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
+  const { splitSentences } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
   eq(splitSentences("One. Two! Three?"), ["One.", "Two!", "Three?"], "three sentences, punctuation kept");
   eq(splitSentences("  A  bumpy   ride.   Then lift-off!  "), ["A bumpy ride.", "Then lift-off!"], "whitespace collapsed");
   eq(splitSentences("no terminal punctuation here"), ["no terminal punctuation here"], "unpunctuated text is ONE sentence");
@@ -14080,9 +14080,9 @@ await test("W2 splitSentences: punctuation attaches, empties drop, unpunctuated 
 });
 
 await test("W2 planBeats: deterministic; windows inside the clock; the hold holds; order monotonic", async () => {
-  const { planBeats } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
-  const { buildGeometry, LEAD_IN_MS, HOLD_END_MS } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { planBeats } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { buildGeometry, LEAD_IN_MS, HOLD_END_MS } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
   const scene = {
@@ -14130,7 +14130,7 @@ await test("W2 planBeats: deterministic; windows inside the clock; the hold hold
 });
 
 await test("S147 the rhetorical layer — the second lens classifies the directive's taxonomy", async () => {
-  const { classifyRhetorical, beatEmphasisOf } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
+  const { classifyRhetorical, beatEmphasisOf } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
   eq(classifyRhetorical("Imagine a factory floor.", 0, 3), "setup", "the opener is setup");
   eq(classifyRhetorical("The sensor detects movement and sends an alert.", 1, 4), "mechanism", "the how sentence is mechanism");
   eq(classifyRhetorical("Studies show 40 percent fewer errors.", 1, 3), "evidence", "the numbers sentence is evidence");
@@ -14143,9 +14143,9 @@ await test("S147 the rhetorical layer — the second lens classifies the directi
 });
 
 await test("S147 planBeats fills the additive fields; the mark fires LAST in the compile", async () => {
-  const { planBeats, compileBeats } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
-  const { buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { planBeats, compileBeats } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
   const meta = new Map([...lib.assets.values()].map((a) => [a.id, { alts: a.alts, role: a.role }]));
@@ -14174,9 +14174,9 @@ await test("S147 planBeats fills the additive fields; the mark fires LAST in the
 });
 
 await test("S147 byte-identity — no fx placements ⇒ identical windows, assignments, and compiled events with or without meta", async () => {
-  const { planBeats, compileBeats } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
-  const { buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { planBeats, compileBeats } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
   const meta = new Map([...lib.assets.values()].map((a) => [a.id, { alts: a.alts, role: a.role }]));
@@ -14200,9 +14200,9 @@ await test("S147 byte-identity — no fx placements ⇒ identical windows, assig
 });
 
 await test("W2 planBeats: the cards own the opening and closing sentences", async () => {
-  const { planBeats } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
-  const { buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { planBeats } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
   const scene = {
@@ -14226,9 +14226,9 @@ await test("W2 planBeats: the cards own the opening and closing sentences", asyn
 });
 
 await test("R1 planBeats: the opening-stroke guarantee — in the anchors world a late-opening beat pulls its first placement to sentence 0", async () => {
-  const { planBeats, OPENING_STROKE_MAX_MS } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
-  const { buildGeometry, LEAD_IN_MS } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { planBeats, OPENING_STROKE_MAX_MS } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { buildGeometry, LEAD_IN_MS } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
   // The dead-air shape the 265s receipt froze on: a long opening sentence
@@ -14277,7 +14277,7 @@ await test("R1 planBeats: the opening-stroke guarantee — in the anchors world 
   // re-render's 174.4s freeze — an ASR mismatch degraded the scene to the
   // estimator and pushed its first asset ~8.9s deep), while the W2 pins'
   // shorter estimator openings stay untouched.
-  const { OPENING_STROKE_ESTIMATOR_MAX_MS } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
+  const { OPENING_STROKE_ESTIMATOR_MAX_MS } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
   const estimator = planBeats(scene, { durationMs: 14000, geometry: geo });
   ok(
     estimator[0].startMs <= OPENING_STROKE_ESTIMATOR_MAX_MS,
@@ -14287,9 +14287,9 @@ await test("R1 planBeats: the opening-stroke guarantee — in the anchors world 
 });
 
 await test("W2 compileBeats: explicit events stay senior; no double claims; nothing outlasts the clock", async () => {
-  const { planBeats, compileBeats, beatSceneEvents } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
-  const { buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { planBeats, compileBeats, beatSceneEvents } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
   const explicit = {
@@ -14335,9 +14335,9 @@ await test("W2 compileBeats: explicit events stay senior; no double claims; noth
 });
 
 await test("W2 beatSceneEvents: the semantic delta is real — draws ride the narration, not the lead-in", async () => {
-  const { beatSceneEvents } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
-  const { buildGeometry, scheduleScene } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { beatSceneEvents } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { buildGeometry, scheduleScene } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
   const scene = {
@@ -14367,9 +14367,9 @@ await test("W2 beatSceneEvents: the semantic delta is real — draws ride the na
 });
 
 await test("W2 beatSceneEvents: the fallback is the fill law byte-for-byte when the plan degenerates", async () => {
-  const { beatSceneEvents } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
-  const { buildGeometry, scheduleScene } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { beatSceneEvents } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { buildGeometry, scheduleScene } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
   // A placement whose asset carries no drawable work at all → no beats →
@@ -14407,11 +14407,11 @@ await test("W2 beatSceneEvents: the fallback is the fill law byte-for-byte when 
 
 await test("W2 LLM beats: normalization validates beat-by-beat; valid beats set the mention order", async () => {
   const { normalizeLlmScenePlans, composeLlmScaffold, scaffoldWhiteboardProjectLlm } = await import(
-    "../src/lib/tubeforge/whiteboard/llm-planner"
+    "../src/lib/ibismuh/whiteboard/llm-planner"
   );
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const scenes = [
     { index: 1, title: "Open", narration: "How the idea took hold. Then money moved fast! The data sealed the trend." },
@@ -14469,7 +14469,7 @@ await test("W2 LLM beats: normalization validates beat-by-beat; valid beats set 
   ok(v.project !== null, `the beat-ordered scaffold validates clean: ${v.errors.join(" · ")}`);
 
   // The wrapper end-to-end: a reply WITH beats reports them honestly.
-  const passThrough: import("../src/lib/tubeforge/whiteboard/llm-planner").PlannerCall = (_s, _l, fn) => fn();
+  const passThrough: import("../src/lib/ibismuh/whiteboard/llm-planner").PlannerCall = (_s, _l, fn) => fn();
   const { project, report } = await scaffoldWhiteboardProjectLlm(
     { scenes, topic: "T", catalog: [{ id: "coin", tags: ["money"], w: 100, h: 100 }, { id: "bar-chart", tags: ["data"], w: 100, h: 100 }] },
     {
@@ -14516,8 +14516,8 @@ await test("W2 LLM beats: normalization validates beat-by-beat; valid beats set 
 
 await test("W2: the seams and the one-source constants are wired (source pins)", async () => {
   // The render seam and the editor preview share THE one entry point.
-  const renderSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/render.ts", "utf8");
-  const canvasSrc = fs.readFileSync("src/components/tubeforge/whiteboard/wb-canvas.tsx", "utf8");
+  const renderSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/render.ts", "utf8");
+  const canvasSrc = fs.readFileSync("src/components/ibismuh/whiteboard/wb-canvas.tsx", "utf8");
   ok(
     renderSrc.includes("beatSceneEvents(scene, durationMs, geometry, assetTags") &&
       renderSrc.includes("anchorsBySceneId.get(scene.id)"),
@@ -14529,12 +14529,12 @@ await test("W2: the seams and the one-source constants are wired (source pins)",
   );
   // The beat compiler imports the fill law's constants — never a second
   // implementation of the schedule math.
-  const beatSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/beat-plan.ts", "utf8");
+  const beatSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/beat-plan.ts", "utf8");
   ok(
     beatSrc.includes('PATH_GAP_MS,') && beatSrc.includes('MIN_PATH_MS,') && beatSrc.includes('MS_PER_CHAR,'),
     "beat-plan reuses the fill law's arithmetic constants from timing.ts"
   );
-  const timingSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/timing.ts", "utf8");
+  const timingSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/timing.ts", "utf8");
   ok(
     timingSrc.includes("export const PATH_GAP_MS = 130;") && timingSrc.includes("export const MS_PER_CHAR = 55;"),
     "timing.ts exports the shared constants (one source, additive)"
@@ -14546,7 +14546,7 @@ await test("W2: the seams and the one-source constants are wired (source pins)",
     "the beat layer never touches the doc contract (compile-only, decision §10.1)"
   );
   // The LLM prompt offers beats in the same schema.
-  const llmSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/llm-planner.ts", "utf8");
+  const llmSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/llm-planner.ts", "utf8");
   ok(
     llmSrc.includes('"beats"') && llmSrc.includes('import { splitSentences } from "./beat-plan";'),
     "the LLM planner emits beats in the same schema and shares THE sentence splitter"
@@ -14558,10 +14558,10 @@ await test("W2: the seams and the one-source constants are wired (source pins)",
 suiteStart("W3 asset validator — the stroke-authored law, gated (S120 §3)");
 
 const mkAsset = (id: string, svg: string, tags: string[] = [], meta: Record<string, unknown> = {}) =>
-  ({ id, viewBox: { w: 200, h: 200 }, tags, svg, ...meta }) as import("../src/lib/tubeforge/whiteboard/assets").WhiteboardAsset;
+  ({ id, viewBox: { w: 200, h: 200 }, tags, svg, ...meta }) as import("../src/lib/ibismuh/whiteboard/assets").WhiteboardAsset;
 
 await test("W3 teleport: a mid-path M fires, a degenerate path fires, every built-in rides one stroke", async () => {
-  const { checkTeleport } = await import("../src/lib/tubeforge/whiteboard/asset-validate");
+  const { checkTeleport } = await import("../src/lib/ibismuh/whiteboard/asset-validate");
   const multi = checkTeleport({ id: "tp", d: "M 10 10 L 50 50 M 60 60 L 90 90" });
   ok(!multi.ok, "multi-subpath (mid-path M) fires");
   ok(/teleports the hand/.test(multi.reason ?? ""), "the reason names the teleport");
@@ -14572,8 +14572,8 @@ await test("W3 teleport: a mid-path M fires, a degenerate path fires, every buil
   // Relative m counts too — the flattener normalizes both cases.
   const rel = checkTeleport({ id: "rp", d: "M 10 10 L 20 20 m 10 10 L 40 40" });
   ok(!rel.ok, "a relative m mid-path fires the same way");
-  const { ASSETS } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { extractAsset } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { ASSETS } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { extractAsset } = await import("../src/lib/ibismuh/whiteboard/assets");
   for (const a of ASSETS) {
     for (const p of extractAsset(a).paths) {
       ok(checkTeleport(p).ok, `built-in ${a.id}/${p.id} is one stroke`);
@@ -14582,7 +14582,7 @@ await test("W3 teleport: a mid-path M fires, a degenerate path fires, every buil
 });
 
 await test("W3 self-intersection: a bowtie fires, a T-touch passes, closed shapes close clean", async () => {
-  const { checkSelfIntersection } = await import("../src/lib/tubeforge/whiteboard/asset-validate");
+  const { checkSelfIntersection } = await import("../src/lib/ibismuh/whiteboard/asset-validate");
   const bowtie = checkSelfIntersection({ id: "bt", d: "M 20 20 L 80 80 L 80 20 L 20 80 Z" });
   ok(!bowtie.ok, "a figure-8 bowtie fires");
   ok(/crosses itself/.test(bowtie.reason ?? ""), "the reason names the crossing");
@@ -14597,7 +14597,7 @@ await test("W3 self-intersection: a bowtie fires, a T-touch passes, closed shape
 });
 
 await test("W3 caps: missing/zero width fires, bad linecap fires, pen groups hold one pen", async () => {
-  const { checkCaps, WB_STROKE_WIDTH_MAX } = await import("../src/lib/tubeforge/whiteboard/asset-validate");
+  const { checkCaps, WB_STROKE_WIDTH_MAX } = await import("../src/lib/ibismuh/whiteboard/asset-validate");
   const noWidth = checkCaps({ id: "p", d: "M 0 0 L 10 10", stroke: "#000" });
   ok(!noWidth.ok, "stroke without stroke-width fires");
   const zero = checkCaps({ id: "p", d: "M 0 0 L 10 10", stroke: "#000", strokeWidth: 0 });
@@ -14620,7 +14620,7 @@ await test("W3 caps: missing/zero width fires, bad linecap fires, pen groups hol
 });
 
 await test("W3 closed-direction: a retrace fires, every built-in closed shape winds", async () => {
-  const { checkClosedDirection } = await import("../src/lib/tubeforge/whiteboard/asset-validate");
+  const { checkClosedDirection } = await import("../src/lib/ibismuh/whiteboard/asset-validate");
   const retrace = checkClosedDirection({ id: "rt", d: "M 20 100 L 100 100 L 20 100 Z" });
   ok(!retrace.ok, "an out-and-back closed line (net area 0) fires");
   ok(/winding/.test(retrace.reason ?? ""), "the reason names the winding");
@@ -14631,9 +14631,9 @@ await test("W3 closed-direction: a retrace fires, every built-in closed shape wi
 });
 
 await test("W3 fill-after-outline: a lead fill fires, the hand's fills are exempt, dual-role strokes pass", async () => {
-  const { checkFillAfterOutline } = await import("../src/lib/tubeforge/whiteboard/asset-validate");
+  const { checkFillAfterOutline } = await import("../src/lib/ibismuh/whiteboard/asset-validate");
   const leadFill = mkAsset("lead", `<path id="ff" d="M 100 100 A 40 40 0 1 0 100.01 100" fill="#e63946"/><path id="oo" d="M 100 50 A 50 50 0 1 0 100.01 50" fill="none" stroke="#000" stroke-width="4"/>`);
-  const { extractAsset } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { extractAsset } = await import("../src/lib/ibismuh/whiteboard/assets");
   const bad = checkFillAfterOutline(leadFill, extractAsset(leadFill));
   ok(bad.length === 1 && !bad[0].ok, "a solid fill before its outline fires");
   ok(/before its boundary/.test(bad[0].reason ?? ""), "the reason reads like advice");
@@ -14641,20 +14641,20 @@ await test("W3 fill-after-outline: a lead fill fires, the hand's fills are exemp
   const dual = mkAsset("dual", `<path id="hm-outline" d="M 100 62 C 74 26, 24 44, 24 94 C 24 136, 62 162, 100 184 C 138 162, 176 136, 176 94 C 176 44, 126 26, 100 62 Z" fill="#e63946" fill-opacity="0" stroke="#000" stroke-width="5"/>`);
   ok(checkFillAfterOutline(dual, extractAsset(dual)).length === 0, "a stroke path that also carries a fill is not a lead fill");
   // The hand leads its document by design — exempt.
-  const { ASSETS } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { ASSETS } = await import("../src/lib/ibismuh/whiteboard/assets");
   const hand = ASSETS.find((a) => a.id === "hand-marker");
   ok(hand, "the hand asset is in the library");
   if (hand) ok(checkFillAfterOutline(hand, extractAsset(hand)).length === 0, "the hand asset's leading fills are exempt");
 });
 
 await test("W3 orientation: a flipped arrow head fires, real arrows point, labels stay in the box", async () => {
-  const { checkOrientation } = await import("../src/lib/tubeforge/whiteboard/asset-validate");
+  const { checkOrientation } = await import("../src/lib/ibismuh/whiteboard/asset-validate");
   const flipped = mkAsset("fl", `<path id="s" d="M 30 170 C 40 100, 90 60, 160 44" fill="none" stroke="#000" stroke-width="5" stroke-linecap="round"/><path id="h" d="M 8 148 L 34 163 L 18 188" fill="none" stroke="#000" stroke-width="5"/>`, ["arrow"]);
-  const { extractAsset } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { extractAsset } = await import("../src/lib/ibismuh/whiteboard/assets");
   const bad = checkOrientation(flipped, extractAsset(flipped));
   ok(bad.length === 1 && !bad[0].ok, "a head at the tail fires");
   ok(/flipped or detached/.test(bad[0].reason ?? ""), "the reason names the flip");
-  const { ASSETS } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { ASSETS } = await import("../src/lib/ibismuh/whiteboard/assets");
   for (const id of ["arrow-curve", "arrow-return", "arrow-growth"]) {
     const a = ASSETS.find((x) => x.id === id);
     ok(a, `${id} present`);
@@ -14668,8 +14668,8 @@ await test("W3 orientation: a flipped arrow head fires, real arrows point, label
 });
 
 await test("W3 aggregate: all built-ins pass their own validator, byte-identical on rerun", async () => {
-  const { validateAsset } = await import("../src/lib/tubeforge/whiteboard/asset-validate");
-  const { ASSETS } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { validateAsset } = await import("../src/lib/ibismuh/whiteboard/asset-validate");
+  const { ASSETS } = await import("../src/lib/ibismuh/whiteboard/assets");
   for (const a of ASSETS) {
     const r = validateAsset(a);
     ok(r.ok, `built-in ${a.id} passes: ${r.findings.map((f) => f.reason).join(" · ")}`);
@@ -14684,7 +14684,7 @@ await test("W3 aggregate: all built-ins pass their own validator, byte-identical
 });
 
 await test("W3 loadLibrary: built-ins self-validate (a broken one throws), uploads warn-and-exclude without mutation", async () => {
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   eq(lib.warnings.length, 0, "the clean library loads with no warnings");
   ok(lib.assets.size >= 26, `the extended starter pack is present (got ${lib.assets.size})`);
@@ -14713,7 +14713,7 @@ await test("W3 loadLibrary: built-ins self-validate (a broken one throws), uploa
 });
 
 await test("W3 upload gate: stroke-authored geometry rejects with readable copy", async () => {
-  const { validateUploadedSvg } = await import("../src/lib/tubeforge/whiteboard/upload");
+  const { validateUploadedSvg } = await import("../src/lib/ibismuh/whiteboard/upload");
   const teleportDoc = Buffer.from(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><path id="tp" d="M 10 10 L 50 50 M 60 60 L 90 90" fill="none" stroke="#1d3557" stroke-width="6"/></svg>`,
     "utf8"
@@ -14731,7 +14731,7 @@ await test("W3 upload gate: stroke-authored geometry rejects with readable copy"
 });
 
 await test("W3 extraction: the pen attributes ride along for the validator", async () => {
-  const { extractAsset } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { extractAsset } = await import("../src/lib/ibismuh/whiteboard/assets");
   const a = mkAsset("pen", `<path id="p1" d="M 0 0 L 10 10" fill="none" stroke="#1d3557" stroke-width="6" stroke-linecap="round"/><path id="p2" d="M 0 20 L 10 30" fill="#e63946"/>`);
   const ex = extractAsset(a);
   eq(ex.paths[0].strokeWidth, 6, "stroke-width extracted");
@@ -14746,7 +14746,7 @@ await test("W3 extraction: the pen attributes ride along for the validator", asy
 suiteStart("W4 slice 1 — word anchors: the schedule rides the spoken clock");
 
 await test("W4 anchorEnvelope: sane anchors collapse to their envelope, garbage degrades to null", async () => {
-  const { anchorEnvelope } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { anchorEnvelope } = await import("../src/lib/ibismuh/whiteboard/timing");
   eq(anchorEnvelope(undefined), null, "no anchors → null");
   eq(anchorEnvelope({ byWord: [] }), null, "empty anchors → null");
   const sane = { byWord: [
@@ -14771,7 +14771,7 @@ await test("W4 anchorEnvelope: sane anchors collapse to their envelope, garbage 
 });
 
 await test("W4 scheduleScene: absent anchors are byte-for-byte today's fill law; degenerate anchors degrade identically", async () => {
-  const { scheduleScene, buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { scheduleScene, buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
   const geo = buildGeometry([{ id: "a1", paths: [{ id: "p1", d: "M 0 0 L 100 0" }, { id: "p2", d: "M 0 0 L 10 0" }] }]);
   const plain = scheduleScene(WB_PLAIN, 10000, geo);
   eq(JSON.stringify(scheduleScene(WB_PLAIN, 10000, geo, undefined)), JSON.stringify(plain), "explicit undefined = no anchors");
@@ -14784,7 +14784,7 @@ await test("W4 scheduleScene: absent anchors are byte-for-byte today's fill law;
 });
 
 await test("W4 scheduleScene: with anchors the draw fills the SPOKEN window", async () => {
-  const { scheduleScene, buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { scheduleScene, buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
   const geo = buildGeometry([{ id: "a1", paths: [{ id: "p1", d: "M 0 0 L 100 0" }, { id: "p2", d: "M 0 0 L 10 0" }] }]);
   const anchors = { byWord: Array.from({ length: 6 }, (_, i) => ({ index: i, startMs: 900 + i * 300, endMs: 900 + i * 300 + 220 })) };
   const ev = scheduleScene(WB_PLAIN, 10000, geo, anchors);
@@ -14801,8 +14801,8 @@ await test("W4 scheduleScene: with anchors the draw fills the SPOKEN window", as
 });
 
 await test("W4 planBeats: aligned anchors make each sentence's window its spoken span; a mismatch degrades byte-for-byte", async () => {
-  const { planBeats } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
-  const { buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { planBeats } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
   const scene: WhiteboardScene = {
     id: "w4a",
     narration: "The heart pumps blood. Money moves markets. The end stands alone.",
@@ -14840,8 +14840,8 @@ await test("W4 planBeats: aligned anchors make each sentence's window its spoken
 });
 
 await test("W4 beatSceneEvents: anchors flow through the fallback AND the plan (one seam)", async () => {
-  const { beatSceneEvents } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
-  const { buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { beatSceneEvents } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
   const geo = buildGeometry([{ id: "a1", paths: [{ id: "p1", d: "M 0 0 L 100 0" }, { id: "p2", d: "M 0 0 L 10 0" }] }]);
   // No sentences → the plan degenerates → the fill-law fallback, WITH anchors.
   const noNarration: WhiteboardScene = { ...WB_PLAIN, narration: "" };
@@ -14861,8 +14861,8 @@ await test("W4 beatSceneEvents: anchors flow through the fallback AND the plan (
 });
 
 await test("W4 checkReadability: the pixel wall rejects scale-0.4 specks; zoom rescues; unknown text fails closed", async () => {
-  const { checkReadability, WB_TEXT_READABILITY_PX } = await import("../src/lib/tubeforge/whiteboard/text-draw");
-  const { ASSETS } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { checkReadability, WB_TEXT_READABILITY_PX } = await import("../src/lib/ibismuh/whiteboard/text-draw");
+  const { ASSETS } = await import("../src/lib/ibismuh/whiteboard/assets");
   ok(ASSETS.some((a) => a.id === "heart-labels"), "the label asset is in the library (its texts registered)");
   const out = { width: 1920, sceneWidth: 1920 };
   const fine = checkReadability({ assetId: "heart-labels", textId: "hl-ra", placementScale: 1 }, { zoom: 1 }, out);
@@ -14882,9 +14882,9 @@ await test("W4 checkReadability: the pixel wall rejects scale-0.4 specks; zoom r
 });
 
 await test("W4 compile-only: the anchors never ride the doc contract", async () => {
-  const src = fs.readFileSync("src/lib/tubeforge/whiteboard/storyboard.ts", "utf8");
+  const src = fs.readFileSync("src/lib/ibismuh/whiteboard/storyboard.ts", "utf8");
   ok(!src.includes("WordAnchors") && !src.includes("byWord"), "the storyboard (validator + serializer) never sees the anchors");
-  const timingSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/timing.ts", "utf8");
+  const timingSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/timing.ts", "utf8");
   ok(timingSrc.includes("export interface WordAnchors"), "the anchor contract lives with the scheduler (one source)");
 });
 
@@ -14893,7 +14893,7 @@ await test("W4 compile-only: the anchors never ride the doc contract", async () 
 suiteStart("Stage S — anim/: easing, keyframes, the clock (S120 §8)");
 
 await test("S easing: the table is complete, pure, clamped — and the overshoot curves actually overshoot", async () => {
-  const { EASE_CURVES, evalEase, isEaseName } = await import("../src/lib/tubeforge/anim/easing");
+  const { EASE_CURVES, evalEase, isEaseName } = await import("../src/lib/ibismuh/anim/easing");
   eq(Object.keys(EASE_CURVES).sort(), ["drift", "ease-back", "ease-in-out", "ease-out", "expo-in-out", "expo-out", "exponential", "glide", "linear", "measured-back", "measured-in", "measured-in-out", "measured-out", "parabolic-in-out", "pop"], "fifteen named curves, closed table (S162 added the measured nine)");
   ok(isEaseName("pop") && !isEaseName("spring"), "the guard knows the table");
   for (const [name, fn] of Object.entries(EASE_CURVES)) {
@@ -14926,11 +14926,11 @@ await test("S easing: the table is complete, pure, clamped — and the overshoot
 });
 
 await test("S easing: the zoompan expressions reproduce motion.ts's shapes byte-for-byte", async () => {
-  const { zoomProgressExpr } = await import("../src/lib/tubeforge/anim/easing");
+  const { zoomProgressExpr } = await import("../src/lib/ibismuh/anim/easing");
   eq(zoomProgressExpr("linear", 120), "(on/120)", "linear = motion.ts's linear shape");
   eq(zoomProgressExpr("smooth", 120), "(0.5-0.5*cos(PI*on/120))", "smooth = motion.ts's cosine shape");
   eq(zoomProgressExpr("ease-in-out", 90), zoomProgressExpr("smooth", 90), "ease-in-out compiles to the same cosine");
-  const motionSrc = fs.readFileSync("src/lib/tubeforge/motion.ts", "utf8");
+  const motionSrc = fs.readFileSync("src/lib/ibismuh/motion.ts", "utf8");
   ok(motionSrc.includes("(0.5-0.5*cos(PI*on/"), "motion.ts's own source carries the same smooth shape (one family)");
   eq(zoomProgressExpr("ease-back", 60), "(1+2.70158*pow(on/60-1,3)+1.70158*pow(on/60-1,2))", "ease-back compiles to its closed form");
   let threw = false;
@@ -14943,7 +14943,7 @@ await test("S easing: the zoompan expressions reproduce motion.ts's shapes byte-
 });
 
 await test("S keyframes: clamped evaluation, strict ascent, per-segment ease, structured lerp", async () => {
-  const { evalAt, keyframes } = await import("../src/lib/tubeforge/anim/keyframe");
+  const { evalAt, keyframes } = await import("../src/lib/ibismuh/anim/keyframe");
   const keys = [
     { tMs: 0, value: 0 },
     { tMs: 1000, value: 100, ease: "ease-in-out" as const },
@@ -14981,9 +14981,9 @@ await test("S keyframes: clamped evaluation, strict ascent, per-segment ease, st
 });
 
 await test("S clock: framePlanWindows matches the whiteboard's framePlanClock byte-behavior; the wall is one wall", async () => {
-  const { framePlanWindows, ANIM_FRAME_BUDGET, frameCountOf, quantizeClock } = await import("../src/lib/tubeforge/anim/clock");
-  const { framePlanClock } = await import("../src/lib/tubeforge/whiteboard/tracks");
-  const { WB_RENDER_FRAME_BUDGET } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { framePlanWindows, ANIM_FRAME_BUDGET, frameCountOf, quantizeClock } = await import("../src/lib/ibismuh/anim/clock");
+  const { framePlanClock } = await import("../src/lib/ibismuh/whiteboard/tracks");
+  const { WB_RENDER_FRAME_BUDGET } = await import("../src/lib/ibismuh/whiteboard/timing");
   const ms = [4000, 5350, 12000, 4000];
   eq(JSON.stringify(framePlanWindows(ms, 24)), JSON.stringify(framePlanClock(ms, 24)), "byte-identical to the whiteboard's clock");
   eq(frameCountOf(5350, 24), 128, "frameCountOf = the encoder's exact count");
@@ -15009,7 +15009,7 @@ await test("S clock: framePlanWindows matches the whiteboard's framePlanClock by
 });
 
 await test("S purity: the substrate imports no fs, no clock, no randomness", async () => {
-  for (const f of ["src/lib/tubeforge/anim/easing.ts", "src/lib/tubeforge/anim/keyframe.ts", "src/lib/tubeforge/anim/clock.ts"]) {
+  for (const f of ["src/lib/ibismuh/anim/easing.ts", "src/lib/ibismuh/anim/keyframe.ts", "src/lib/ibismuh/anim/clock.ts"]) {
     const src = fs.readFileSync(f, "utf8");
     ok(!/from\s+["'](fs|node:fs|path|node:path|os|node:os)["']/.test(src), `${f} touches no filesystem`);
     ok(!/Date\.now|performance\.now|setTimeout|Math\.random/.test(src), `${f} reads no clock and rolls no dice`);
@@ -15022,10 +15022,10 @@ await test("S purity: the substrate imports no fs, no clock, no randomness", asy
 suiteStart("W5 camera director — content-driven framing, the drift demoted to fallback (S120 §3)");
 
 await test("W5 director: deterministic; a ≤1-beat scene returns [] (the drift fallback owns it)", async () => {
-  const { directCamera } = await import("../src/lib/tubeforge/whiteboard/camera-director");
-  const { buildGeometry, sceneDurationMs } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { beatSceneEvents } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { directCamera } = await import("../src/lib/ibismuh/whiteboard/camera-director");
+  const { buildGeometry, sceneDurationMs } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { beatSceneEvents } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const geo = buildGeometry([{ id: "heart-main", paths: [{ id: "p1", d: "M 0 0 L 10 0" }] }]);
   const tags = new Map([...lib.assets.values()].map((a) => [a.id, a.tags] as [string, string[]]));
@@ -15070,7 +15070,7 @@ await test("W5 director: deterministic; a ≤1-beat scene returns [] (the drift 
 });
 
 await test("W5 policies: crafted violations fire with readable reasons; the director's own keys pass", async () => {
-  const { cameraPolicies, CAMERA_MAX_ZOOM_PER_SEC } = await import("../src/lib/tubeforge/whiteboard/camera-director");
+  const { cameraPolicies, CAMERA_MAX_ZOOM_PER_SEC } = await import("../src/lib/ibismuh/whiteboard/camera-director");
   const keys = [
     { cx: 960, cy: 540, scale: 1, startMs: 0, durationMs: 0 },
     { cx: 1400, cy: 540, scale: 1, startMs: 5000, durationMs: 100 },
@@ -15103,7 +15103,7 @@ await test("W5 policies: crafted violations fire with readable reasons; the dire
 });
 
 await test("W5 validator: policy violations are ERRORS, never clamps; the directed benchmark keys validate clean", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const bad = validateWhiteboardProject(
     wbProject([{
       ...WB_SCENE,
@@ -15131,11 +15131,11 @@ await test("W5 validator: policy violations are ERRORS, never clamps; the direct
 });
 
 await test("W5 framing receipts: the directed W1 benchmark keys pass every policy on all three aspects", async () => {
-  const { W1_ASPECTS, W1_ASPECT_IDS, buildBenchmarkProject } = await import("../src/lib/tubeforge/whiteboard/benchmark-scenarios");
-  const { directCamera, cameraPolicies } = await import("../src/lib/tubeforge/whiteboard/camera-director");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { buildGeometry, sceneDurationMs } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { beatSceneEvents } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
+  const { W1_ASPECTS, W1_ASPECT_IDS, buildBenchmarkProject } = await import("../src/lib/ibismuh/whiteboard/benchmark-scenarios");
+  const { directCamera, cameraPolicies } = await import("../src/lib/ibismuh/whiteboard/camera-director");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { buildGeometry, sceneDurationMs } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { beatSceneEvents } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
   const lib = loadLibrary();
   const geo = buildGeometry([...lib.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths })));
   const tags = new Map([...lib.assets.values()].map((a) => [a.id, a.tags] as [string, string[]]));
@@ -15174,7 +15174,7 @@ await test("W5 framing receipts: the directed W1 benchmark keys pass every polic
 // ===========================================================================
 
 await test("W4 glyphs: the committed table is the receipt's table — full ASCII coverage, well-formed outlines", async () => {
-  const { GLYPH_TABLE, GLYPH_TABLE_SHA256 } = await import("../src/lib/tubeforge/whiteboard/glyphs");
+  const { GLYPH_TABLE, GLYPH_TABLE_SHA256 } = await import("../src/lib/ibismuh/whiteboard/glyphs");
   eq(GLYPH_TABLE.fontId, "caveat-w500", "the single face is pinned (no font picker)");
   eq(GLYPH_TABLE.upem, 1000, "Caveat's upem is 1000");
   // the receipt pins the generator's output hash — regenerate deliberately,
@@ -15198,10 +15198,10 @@ await test("W4 glyphs: the committed table is the receipt's table — full ASCII
 });
 
 await test("W4 glyphs: the layout math is exact — advance, y-flip, spacing, determinism, honest skips", async () => {
-  const { textToGlyphPaths } = await import("../src/lib/tubeforge/whiteboard/text-draw");
+  const { textToGlyphPaths } = await import("../src/lib/ibismuh/whiteboard/text-draw");
   const a = textToGlyphPaths("AB", { x: 100, y: 500, size: 80 });
   eq(a.skipped.length, 0, "ASCII letters are covered");
-  const glyphRows = (await import("../src/lib/tubeforge/whiteboard/glyphs")).GLYPH_TABLE.glyphs;
+  const glyphRows = (await import("../src/lib/ibismuh/whiteboard/glyphs")).GLYPH_TABLE.glyphs;
   const rowA = glyphRows.get("A");
   const rowB = glyphRows.get("B");
   ok(rowA !== undefined && rowB !== undefined, "A and B are committed glyphs");
@@ -15250,7 +15250,7 @@ await test("W4 glyphs: the layout math is exact — advance, y-flip, spacing, de
 // ===========================================================================
 
 await test("W4 glyph mode: the transform is deterministic and falls back honestly", async () => {
-  const { applyGlyphTextMode, textToGlyphPaths } = await import("../src/lib/tubeforge/whiteboard/text-draw");
+  const { applyGlyphTextMode, textToGlyphPaths } = await import("../src/lib/ibismuh/whiteboard/text-draw");
   const svg = '<text id="t1" x="10" y="50" font-size="40" fill="#123456">Hi</text>';
   const a = applyGlyphTextMode(svg);
   const b = applyGlyphTextMode(svg);
@@ -15281,9 +15281,9 @@ await test("W4 glyph mode: the transform is deterministic and falls back honestl
 });
 
 await test("W4 glyph mode: registration end-to-end — paths not texts, draw_path not write_text, readability intact", async () => {
-  const { loadLibrary, ASSETS } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { scheduleScene, buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { checkReadability } = await import("../src/lib/tubeforge/whiteboard/text-draw");
+  const { loadLibrary, ASSETS } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { scheduleScene, buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { checkReadability } = await import("../src/lib/ibismuh/whiteboard/text-draw");
   const lib = loadLibrary();
   const builtIn = lib.extracted.get("glyph-note");
   ok(builtIn !== undefined, "the glyph-mode home asset is registered");
@@ -15322,8 +15322,8 @@ await test("W4 glyph mode: the PAGE seam rides the transformed svg — the conto
   // forever, and a word that never renders. The pin: the composed page for
   // a glyph-mode placement exposes the contour PATH elements and no
   // <text> — the same loadLibrary map the editor canvas composes from.
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { composeScene } = await import("../src/lib/tubeforge/whiteboard/wb-page");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { composeScene } = await import("../src/lib/ibismuh/whiteboard/wb-page");
   const lib = loadLibrary();
   const scene = {
     id: "s", durationMs: 8000, background: "#ffffff" as const,
@@ -15355,9 +15355,9 @@ await test("W4 glyph mode: the PAGE seam rides the transformed svg — the conto
 suiteStart("W4 slice 3 — voice anchors: the captions lane's clock, the beat plan's strokes");
 
 await test("W4 voice anchors: the count contract — the bridge's word stream IS the beat plan's tokenization", async () => {
-  const { buildVoiceAnchors } = await import("../src/lib/tubeforge/whiteboard/voice-anchors");
-  const { captionChunks } = await import("../src/lib/tubeforge/captions");
-  const { splitSentences, words } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
+  const { buildVoiceAnchors } = await import("../src/lib/ibismuh/whiteboard/voice-anchors");
+  const { captionChunks } = await import("../src/lib/ibismuh/captions");
+  const { splitSentences, words } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
   // Hyphens split, decimals survive as two tokens, apostrophes ride along —
   // the two tokenizations must still agree on the COUNT.
   const narration = "The state-of-the-art pump costs $6.5 million. It's the heart's twin, isn't it?";
@@ -15376,9 +15376,9 @@ await test("W4 voice anchors: the count contract — the bridge's word stream IS
 });
 
 await test("W4 voice anchors: exact spans — the chunk windows ride wavChunkWindows, the words slice them evenly", async () => {
-  const { buildVoiceAnchors } = await import("../src/lib/tubeforge/whiteboard/voice-anchors");
-  const { captionChunks, wavChunkWindows } = await import("../src/lib/tubeforge/captions");
-  const { words } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
+  const { buildVoiceAnchors } = await import("../src/lib/ibismuh/whiteboard/voice-anchors");
+  const { captionChunks, wavChunkWindows } = await import("../src/lib/ibismuh/captions");
+  const { words } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
   const narration = "The heart pumps. Blood returns home.";
   const chunks = captionChunks(narration);
   eq(chunks.length, 2, "two caption chunks");
@@ -15433,10 +15433,10 @@ function anchorEnvelopeOk(anchors: { byWord: { startMs: number; endMs: number }[
 }
 
 await test("W4 voice anchors → the beat plan: the strokes move onto the spoken window", async () => {
-  const { buildVoiceAnchors } = await import("../src/lib/tubeforge/whiteboard/voice-anchors");
-  const { captionChunks } = await import("../src/lib/tubeforge/captions");
-  const { beatSceneEvents } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
-  const { buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { buildVoiceAnchors } = await import("../src/lib/ibismuh/whiteboard/voice-anchors");
+  const { captionChunks } = await import("../src/lib/ibismuh/captions");
+  const { beatSceneEvents } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
   const geo = buildGeometry([{ id: "a1", paths: [{ id: "p1", d: "M 0 0 L 100 0" }, { id: "p2", d: "M 0 0 L 10 0" }] }]);
   const tags = new Map([["a1", ["generic"]]]);
   const narration = "The heart pumps. Blood returns home.";
@@ -15468,20 +15468,20 @@ await test("W4 voice anchors → the beat plan: the strokes move onto the spoken
 await test("W4 voice anchors: the render seam and the caller are wired (compile-only source pins)", async () => {
   const fs = await import("node:fs");
   // The render job builds the anchors pre-flight and feeds the beat plan.
-  const renderSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/render.ts", "utf8");
+  const renderSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/render.ts", "utf8");
   ok(renderSrc.includes('import { sceneVoiceAnchors } from "./voice-anchors"'), "render.ts imports the ladder");
   ok(renderSrc.includes("anchorsBySceneId"), "render.ts carries the per-scene anchors map");
   ok(/beatSceneEvents\(scene,\s*durationMs,\s*geometry,\s*assetTags,\s*anchorsBySceneId\.get\(scene\.id\),\s*assetMeta\)/.test(renderSrc), "the beat plan receives the scene's anchors (and the S147 meta)");
   // The lane caller opts in on BOTH paths (preview + full render).
-  const jobsSrc = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const jobsSrc = fs.readFileSync("src/lib/ibismuh/video-jobs.ts", "utf8");
   const calls = jobsSrc.match(/renderWhiteboard\((\w+),\s*\{[^}]*\}\)/gs) ?? [];
   ok(calls.length >= 2, `both whiteboard render call sites found (${calls.length})`);
   for (const c of calls) ok(/asrAnchors:\s*true/.test(c), "the caller opts into the voice anchors");
   // The captions lane's shared mapping is the one source both read.
-  const capSrc = fs.readFileSync("src/lib/tubeforge/captions.ts", "utf8");
+  const capSrc = fs.readFileSync("src/lib/ibismuh/captions.ts", "utf8");
   ok(capSrc.includes("export function wavChunkWindows"), "wavChunkWindows is the exported chunk↔clock mapping");
   ok(capSrc.includes("const windows = wavChunkWindows(ends, totalWords, runs);"), "buildSmartSrt rides the shared mapping (the refactor holds)");
-  const vaSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/voice-anchors.ts", "utf8");
+  const vaSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/voice-anchors.ts", "utf8");
   ok(vaSrc.includes("wavChunkWindows"), "the bridge rides the same mapping");
   ok(!/function words\(/.test(vaSrc), "the bridge does not fork a tokenizer (beat-plan's words is the one source)");
 });
@@ -15535,7 +15535,7 @@ function W6_RAW_PROJECT(sceneBoard: unknown): Record<string, unknown> {
 }
 
 await test("W6 validator: the additive-parse law — no board field means a clean scene, unchanged", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const raw = W6_RAW_PROJECT(undefined);
   const { project, errors } = validateWhiteboardProject(raw, W6_LIBRARY);
   ok(project !== null, "the board-less doc parses");
@@ -15549,7 +15549,7 @@ await test("W6 validator: the additive-parse law — no board field means a clea
 });
 
 await test("W6 validator: continuous boards round-trip every field", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const board = { mode: "continuous", carryPlacements: ["a1"], exit: "fade", transitionMs: 800 };
   const { project, errors } = validateWhiteboardProject(W6_RAW_PROJECT(board), W6_LIBRARY);
   ok(project !== null, "a sane continuous doc parses");
@@ -15563,7 +15563,7 @@ await test("W6 validator: continuous boards round-trip every field", async () =>
 });
 
 await test("W6 validator: crafted board violations fire with readable reasons", async () => {
-  const { validateWhiteboardProject, BOARD_TRANSITION_MS_MAX } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject, BOARD_TRANSITION_MS_MAX } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const v = (board: unknown) => validateWhiteboardProject(W6_RAW_PROJECT(board), W6_LIBRARY);
   let r = v({ exit: "fade" });
   ok(r.project === null && r.errors.some((e) => e.includes("board must be")), "a modeless board is malformed");
@@ -15618,7 +15618,7 @@ await test("W6 validator: crafted board violations fire with readable reasons", 
 });
 
 await test("W6 resolveCarriedInk: end-state placements, subset carry, color carry, defaults", async () => {
-  const { resolveCarriedInk } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { resolveCarriedInk } = await import("../src/lib/ibismuh/whiteboard/timing");
   const prev: WhiteboardScene = {
     id: "prev",
     narration: "Move the heart, reveal its fill.",
@@ -15659,7 +15659,7 @@ await test("W6 resolveCarriedInk: end-state placements, subset carry, color carr
 });
 
 await test("W6 carriedExitAt: keep is constant; fade/erase/pan are eased, deterministic, joint-continuous", async () => {
-  const { carriedExitAt } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { carriedExitAt } = await import("../src/lib/ibismuh/whiteboard/timing");
   const width = 1920;
   const fade = { placements: new Map(), colors: new Map(), exit: "fade" as const, transitionMs: 600 };
   const erase = { placements: new Map(), colors: new Map(), exit: "erase" as const, transitionMs: 600 };
@@ -15695,7 +15695,7 @@ await test("W6 carriedExitAt: keep is constant; fade/erase/pan are eased, determ
 });
 
 await test("W6 frameAt: the carried-state equality pin — frame 0 of scene K+1 contains exactly scene K's carried ink", async () => {
-  const { frameAt, resolveCarriedInk, buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { frameAt, resolveCarriedInk, buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
   const geo = buildGeometry([
     { id: "a1", paths: [{ id: "p1", d: "M 0 0 L 100 0" }, { id: "p2", d: "M 0 10 L 50 10" }] },
     { id: "a2", paths: [{ id: "p1", d: "M 0 0 L 30 30" }] },
@@ -15757,8 +15757,8 @@ await test("W6 frameAt: the carried-state equality pin — frame 0 of scene K+1 
 });
 
 await test("W6 wb-page: the carried layer renders UNDER the scene ink through the shared seam", async () => {
-  const { composeScene, framePayload } = await import("../src/lib/tubeforge/whiteboard/wb-page");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { composeScene, framePayload } = await import("../src/lib/ibismuh/whiteboard/wb-page");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   const project = { title: "W6", width: 1920, height: 1080, fps: 24, hand: { style: "marker" as const, scale: 1 }, scenes: [] };
   const scene: WhiteboardScene = {
@@ -15793,13 +15793,13 @@ await test("W6 wb-page: the carried layer renders UNDER the scene ink through th
   const cleanPayload = JSON.parse(framePayload({ ...frame, carried: null } as never, 1920, 1080));
   eq(cleanPayload.carried, null, "a clean frame's payload carries null");
   // The applier handles the layer (source pin — the shared APPLY_FRAME_FN):
-  const { APPLY_FRAME_FN } = await import("../src/lib/tubeforge/whiteboard/wb-page");
+  const { APPLY_FRAME_FN } = await import("../src/lib/ibismuh/whiteboard/wb-page");
   ok(APPLY_FRAME_FN.includes("p.carried"), "the one applier knows the carried layer");
   ok(APPLY_FRAME_FN.includes("L * ex.erase"), "erase rides the dash law's own numbers");
 });
 
 await test("W6 tracks: the board policy changes no clip (the no-grammar-change pin)", async () => {
-  const { whiteboardTracks } = await import("../src/lib/tubeforge/whiteboard/tracks");
+  const { whiteboardTracks } = await import("../src/lib/ibismuh/whiteboard/tracks");
   const clean: WhiteboardProject = {
     title: "t", width: 1920, height: 1080, fps: 24, hand: { style: "marker", scale: 1 },
     scenes: [
@@ -15821,19 +15821,19 @@ await test("W6 tracks: the board policy changes no clip (the no-grammar-change p
 
 await test("W6 render seam + manifest: the carry wiring and the additive boardMode (compile-only pins)", async () => {
   const fs = await import("node:fs");
-  const renderSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/render.ts", "utf8");
+  const renderSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/render.ts", "utf8");
   ok(renderSrc.includes("resolveCarriedInk"), "render.ts imports the carry resolver");
   ok(/const carryPlan =[\s\S]*?resolveCarriedInk\(prevScene, sceneMs\[si - 1\], scene\.board\)/.test(renderSrc), "the loop resolves the carry from the PREVIOUS scene's clock");
   ok(/composeScene\(scene, project, lib\.assets, carryPlan\)/.test(renderSrc), "the compose receives the carry plan");
   ok(/frameAt\(project, scene, events, geometry, tMs, carryPlan, assetRoles\)/.test(renderSrc), "the frame plan receives the carry plan (and the W7 roles)");
   ok(renderSrc.includes("boardModes: project.scenes.map"), "the result carries per-scene board modes");
-  const asmSrc = fs.readFileSync("src/lib/tubeforge/render-assembly.ts", "utf8");
+  const asmSrc = fs.readFileSync("src/lib/ibismuh/render-assembly.ts", "utf8");
   ok(asmSrc.includes("boardMode?:"), "AssemblyEntry carries the additive boardMode");
   ok(/boardMode: typeof e\.boardMode === "string" \? e\.boardMode : undefined/.test(asmSrc), "the manifest parse tolerates both shapes");
-  const jobsSrc = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const jobsSrc = fs.readFileSync("src/lib/ibismuh/video-jobs.ts", "utf8");
   ok(/manifestOf\(await resolveRenderAssembly\(video\), "whiteboard", result\.boardModes\)/.test(jobsSrc), "the whiteboard final stamps its board modes into the S117 manifest");
   // The editor rides the same resolver (the one-source law):
-  const canvasSrc = fs.readFileSync("src/components/tubeforge/whiteboard/wb-canvas.tsx", "utf8");
+  const canvasSrc = fs.readFileSync("src/components/ibismuh/whiteboard/wb-canvas.tsx", "utf8");
   ok(canvasSrc.includes("resolveCarriedInk"), "the editor resolves the SAME carry plan");
   ok(/composeScene\(rt\.scene, project, rt\.lib\.assets, rt\.carry\)/.test(canvasSrc), "the editor composes with the carry plan");
   ok(/frameAt\(project, rt2\.scene, rt2\.events, rt2\.geometry, tMs, rt2\.carry, rt2\.roles\)/.test(canvasSrc), "the editor frames with the carry plan (and the W7 roles)");
@@ -15848,7 +15848,7 @@ await test("W6 render seam + manifest: the carry wiring and the additive boardMo
 suiteStart("W7 finishing layer — the hand family, travel, poses (S120 §3)");
 
 await test("W7 hand family: all eight register through the validator; the left mirrors derive from one art source", async () => {
-  const { loadLibrary, HAND_TIPS, HAND_TIP, handAssetIdFor } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { loadLibrary, HAND_TIPS, HAND_TIP, handAssetIdFor } = await import("../src/lib/ibismuh/whiteboard/assets");
   const lib = loadLibrary();
   for (const id of ["hand-marker", "hand-pencil", "hand-chalk", "hand-marker-l", "hand-pencil-l", "hand-chalk-l", "hand-point", "hand-rest"]) {
     ok(lib.assets.has(id), `${id} registers`);
@@ -15875,7 +15875,7 @@ await test("W7 hand family: all eight register through the validator; the left m
 });
 
 await test("W7 pen-up travel: the hand crosses the gap visibly, joint-continuous, bounded, holding the next tool", async () => {
-  const { handAt, buildGeometry, HAND_TRAVEL_LIFT } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { handAt, buildGeometry, HAND_TRAVEL_LIFT } = await import("../src/lib/ibismuh/whiteboard/timing");
   const geo = buildGeometry([
     { id: "a1", paths: [{ id: "p1", d: "M 0 0 L 100 0" }] },
     { id: "a2", paths: [{ id: "p1", d: "M 200 200 L 300 200" }] },
@@ -15933,7 +15933,7 @@ await test("W7 pen-up travel: the hand crosses the gap visibly, joint-continuous
 });
 
 await test("W7 poses: role metadata selects the grip; text writes; the tail rests", async () => {
-  const { handAt, buildGeometry } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { handAt, buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
   const geo = buildGeometry([
     { id: "plain", paths: [{ id: "p1", d: "M 0 0 L 10 0" }] },
     { id: "lbl", paths: [{ id: "p1", d: "M 0 0 L 10 0" }] },
@@ -15975,7 +15975,7 @@ await test("W7 poses: role metadata selects the grip; text writes; the tail rest
 });
 
 await test("W7 board policy extras: hand.side and sfxOn round-trip (the editor's new fields survive)", async () => {
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const lib = { assetIds: new Set(["a1"]), pathIdsByAsset: new Map([["a1", new Set(["p1"])]]), textIdsByAsset: new Map() };
   const raw = {
     title: "t", width: 1920, height: 1080, fps: 24,
@@ -16000,8 +16000,8 @@ await test("W7 board policy extras: hand.side and sfxOn round-trip (the editor's
 suiteStart("W7 finishing layer — the whiteboard SFX (recipes + the pure cue plan)");
 
 await test("W7 sfx recipes: the four whiteboard kinds synthesize real wavs; the director catalog is untouched", async () => {
-  const { ensureSfx, WB_SFX_KINDS } = await import("../src/lib/tubeforge/sfx");
-  const { SFX_KINDS } = await import("../src/lib/tubeforge/types");
+  const { ensureSfx, WB_SFX_KINDS } = await import("../src/lib/ibismuh/sfx");
+  const { SFX_KINDS } = await import("../src/lib/ibismuh/types");
   eq([...WB_SFX_KINDS], ["pen-stroke", "pen-stop", "page-turn", "pop"], "the whiteboard kind set");
   for (const k of WB_SFX_KINDS) {
     ok(!(SFX_KINDS as readonly string[]).includes(k), `${k} stays OUT of the director lane's catalog`);
@@ -16017,7 +16017,7 @@ await test("W7 sfx recipes: the four whiteboard kinds synthesize real wavs; the 
 });
 
 await test("W7 cue plan: pop opens, page-turns mark the wipes, pen-stops need a hearable gap, the cap keeps the accents", async () => {
-  const { planSceneSfxCues, whiteboardSfxCues, WB_SFX_CUES_MAX_PER_SCENE } = await import("../src/lib/tubeforge/whiteboard/sfx-plan");
+  const { planSceneSfxCues, whiteboardSfxCues, WB_SFX_CUES_MAX_PER_SCENE } = await import("../src/lib/ibismuh/whiteboard/sfx-plan");
   // First scene: the opening pop; strokes cue pen-stroke; the long hold
   // after the last stroke earns a pen-stop.
   const first = planSceneSfxCues({ isFirstScene: true, boardClean: true, durationMs: 6000 }, [
@@ -16062,7 +16062,7 @@ await test("W7 cue plan: pop opens, page-turns mark the wipes, pen-stops need a 
 
 await test("W7 seams: the render consumes the family + the sfx layer; the page shows the pose groups (compile-only pins)", async () => {
   const fs = await import("node:fs");
-  const renderSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/render.ts", "utf8");
+  const renderSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/render.ts", "utf8");
   ok(renderSrc.includes("handAssetIdFor(project.hand.style, project.hand.side)"), "the tool hand resolves per style+side");
   ok(renderSrc.includes("assetRoles"), "the pose selector's roles map is built");
   ok(/frameAt\(project, scene, events, geometry, tMs, carryPlan, assetRoles\)/.test(renderSrc), "the frame plan receives the roles");
@@ -16070,19 +16070,19 @@ await test("W7 seams: the render consumes the family + the sfx layer; the page s
   ok(renderSrc.includes("project.sfxOn"), "the SFX layer reads the doc's own flag");
   ok(renderSrc.includes("buildSceneSfxFile"), "the per-scene assembler exists");
   ok(renderSrc.includes('amix=inputs=${sfxFile ? 3 : 2}'), "the bed+VO+SFX three-way mix exists");
-  const pageSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/wb-page.ts", "utf8");
+  const pageSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/wb-page.ts", "utf8");
   ok(pageSrc.includes('data-pose="write"') && pageSrc.includes('data-pose="rest"'), "the page carries all pose groups");
   ok(pageSrc.includes("p.hand.pose"), "the applier toggles poses per frame");
   ok(pageSrc.includes("p.hand.scale"), "the applier multiplies the pose's lift scale");
-  const canvasSrc = fs.readFileSync("src/components/tubeforge/whiteboard/wb-canvas.tsx", "utf8");
+  const canvasSrc = fs.readFileSync("src/components/ibismuh/whiteboard/wb-canvas.tsx", "utf8");
   ok(canvasSrc.includes("handAssetIdFor"), "the editor embeds the SAME hand family");
-  const studioSrc = fs.readFileSync("src/components/tubeforge/whiteboard/whiteboard-studio.tsx", "utf8");
+  const studioSrc = fs.readFileSync("src/components/ibismuh/whiteboard/whiteboard-studio.tsx", "utf8");
   ok(studioSrc.includes("Board — what this scene inherits"), "the studio surfaces the board policy");
   ok(studioSrc.includes("Pen SFX"), "the studio surfaces the SFX toggle");
   ok(studioSrc.includes("handAssetIdFor") === false, "no stray imports in the studio");
   // The composed page for any scene carries the pose skeleton.
-  const { composeScene } = await import("../src/lib/tubeforge/whiteboard/wb-page");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
+  const { composeScene } = await import("../src/lib/ibismuh/whiteboard/wb-page");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
   const proj: WhiteboardProject = { title: "t", width: 1920, height: 1080, fps: 24, hand: { style: "marker", scale: 1 }, scenes: [] };
   const scene: WhiteboardScene = { id: "s", narration: "n", durationMs: 4000, background: "#ffffff", placements: [], animations: [], camera: [] };
   const html = composeScene(scene, proj, loadLibrary().assets).html;
@@ -16102,8 +16102,8 @@ await test("W7 seams: the render consumes the family + the sfx layer; the page s
 suiteStart("S121 P0 — the VoiceStudio optional provider + measured word timing");
 
 await test("S121 voice passthrough: a VoiceStudio voice reaches the server verbatim; the alias catalog is served", async () => {
-  const tts = await import("../src/lib/tubeforge/providers/tts");
-  const reg = await import("../src/lib/tubeforge/providers/registry");
+  const tts = await import("../src/lib/ibismuh/providers/tts");
+  const reg = await import("../src/lib/ibismuh/providers/registry");
   // The registry rows exist and carry the license verdicts in their hints.
   const vsTts = reg.providerMeta("tts", "voicestudio");
   ok(vsTts, "the voicestudio TTS row exists");
@@ -16124,7 +16124,7 @@ await test("S121 voice passthrough: a VoiceStudio voice reaches the server verba
 });
 
 await test("S121 detailed ASR: support table, verbose_json parsing, the wire form", async () => {
-  const asr = await import("../src/lib/tubeforge/providers/asr");
+  const asr = await import("../src/lib/ibismuh/providers/asr");
   // The support table — the pure law.
   eq(asr.asrSupportsWordTimestamps("voicestudio"), true, "voicestudio serves words");
   eq(asr.asrSupportsWordTimestamps("openai"), true, "openai serves words");
@@ -16191,7 +16191,7 @@ await test("S121 detailed ASR: support table, verbose_json parsing, the wire for
 });
 
 await test("S121 measured captions: token stream, measured chunk windows, the laws hold", async () => {
-  const captions = await import("../src/lib/tubeforge/captions");
+  const captions = await import("../src/lib/ibismuh/captions");
   // Clean spans: each chunk's window IS its words' measured span.
   const words = [
     { word: "one", start: 0.1, end: 0.3 },
@@ -16239,9 +16239,9 @@ await test("S121 measured captions: token stream, measured chunk windows, the la
 });
 
 await test("S121 measured anchors: per-word measured spans land; the proportional baseline is byte-identical when the rung is absent", async () => {
-  const { buildVoiceAnchors } = await import("../src/lib/tubeforge/whiteboard/voice-anchors");
-  const { captionChunks } = await import("../src/lib/tubeforge/captions");
-  const { words } = await import("../src/lib/tubeforge/whiteboard/beat-plan");
+  const { buildVoiceAnchors } = await import("../src/lib/ibismuh/whiteboard/voice-anchors");
+  const { captionChunks } = await import("../src/lib/ibismuh/captions");
+  const { words } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
   const narration = "The heart pumps. Blood returns home.";
   const chunks = captionChunks(narration);
   const counts = chunks.map((c) => words(c.text).length);
@@ -16288,7 +16288,7 @@ await test("S121 measured anchors: per-word measured spans land; the proportiona
 });
 
 await test("S121 consent ledger: the basis vocabulary is closed", async () => {
-  const vc = await import("../src/lib/tubeforge/voice-clone");
+  const vc = await import("../src/lib/ibismuh/voice-clone");
   ok(vc.isConsentBasis("own_voice"), "own_voice accepted");
   ok(vc.isConsentBasis("speaker_permission"), "speaker_permission accepted");
   ok(!vc.isConsentBasis("found_it_on_youtube"), "anything else is refused");
@@ -16313,7 +16313,7 @@ await test("S121 consent ledger: the basis vocabulary is closed", async () => {
 });
 
 await test("S121 consent ledger: the clone flow's consent law (parseCloneConsent)", async () => {
-  const vc = await import("../src/lib/tubeforge/voice-clone");
+  const vc = await import("../src/lib/ibismuh/voice-clone");
 
   // Both absent → no consent recorded, cloning never blocked.
   const absent = vc.parseCloneConsent("", "");
@@ -16348,21 +16348,21 @@ await test("S121 consent ledger: the clone flow's consent law (parseCloneConsent
 });
 
 await test("S121 word-offset arithmetic: chunked audio shifts measured words by the measured chunk start", async () => {
-  const verify = await import("../src/lib/tubeforge/verify");
+  const verify = await import("../src/lib/ibismuh/verify");
   eq(verify.shiftAsrWord({ word: "hi", start: 1.2, end: 1.5 }, 25), { word: "hi", start: 26.2, end: 26.5 }, "second-chunk offset");
   eq(verify.shiftAsrWord({ word: "hi", start: 0, end: 0.3 }, 0), { word: "hi", start: 0, end: 0.3 }, "zero offset is identity");
   eq(verify.shiftAsrWord({ word: "w", start: 0.5, end: 0.8 }, 25.37), { word: "w", start: 25.87, end: 26.17 }, "a MEASURED (non-integer) chunk start shifts exactly");
 });
 
 await test("S121 settings: the asr capability follows tts until an ai.asr row is saved", async () => {
-  const score = await import("../src/lib/tubeforge/provider-score");
+  const score = await import("../src/lib/ibismuh/provider-score");
   // The registry sync law holds with the new capability (priorsComplete pins
   // every capability incl. asr — the priors table has the ASR rows).
   ok(score.priorsComplete(), "every registry provider has a priors row (asr included)");
   ok(score.priorsFor("asr", "voicestudio").fit > 0.9, "the voicestudio ASR prior exists");
   // The inheritance: reading the asr capability with no ai.asr row returns
   // the tts answer — one inheritance point, byte-identical behavior unset.
-  const settings = await import("../src/lib/tubeforge/providers/settings");
+  const settings = await import("../src/lib/ibismuh/providers/settings");
   const ttsCfg = await settings.getCapability("tts");
   const asrCfg = await settings.getCapability("asr");
   eq(asrCfg.provider, ttsCfg.provider, "unset asr rides the tts provider");
@@ -16376,7 +16376,7 @@ await test("S121 settings: the asr capability follows tts until an ai.asr row is
 suiteStart("S121 P1 — semantic scene directives + pause-aware captions + evidence-bound review gates");
 
 await test("S121 P1 grouping: measured cues split at real spoken pauses, never misalign", async () => {
-  const captions = await import("../src/lib/tubeforge/captions.ts");
+  const captions = await import("../src/lib/ibismuh/captions.ts");
 
   // One chunk, five words with a big spoken pause between word 2 and 3 —
   // the >400ms gap flushes a cue boundary.
@@ -16444,7 +16444,7 @@ await test("S121 P1 grouping: measured cues split at real spoken pauses, never m
 });
 
 await test("S121 P1 director: the semantic directive vocabulary is policed", async () => {
-  const dp = await import("../src/lib/tubeforge/director-plan.ts");
+  const dp = await import("../src/lib/ibismuh/director-plan.ts");
 
   // The validator refuses, naming its reason, every hollow form.
   const refusals: [string, () => void, RegExp][] = [
@@ -16503,7 +16503,7 @@ await test("S121 P1 director: the semantic directive vocabulary is policed", asy
 });
 
 await test("S121 P1 evidence binding: the override covers the report's CONTENT, not just its timestamp", async () => {
-  const qp = await import("../src/lib/tubeforge/qc-policy.ts");
+  const qp = await import("../src/lib/ibismuh/qc-policy.ts");
 
   // canonicalJson: key order is irrelevant, whitespace-free, recursive.
   eq(qp.canonicalJson({ b: 2, a: 1 }), '{"a":1,"b":2}', "keys are sorted");
@@ -16550,7 +16550,7 @@ await test("S121 P1 evidence binding: the override covers the report's CONTENT, 
 suiteStart("S121 P2 — the camera-keys, two-bone IK, contact and gait substrate");
 
 await test("S121 P2 anim/camera: the keys model validates, interpolates smoothstep, and projects", async () => {
-  const cam = await import("../src/lib/tubeforge/anim/camera");
+  const cam = await import("../src/lib/ibismuh/anim/camera");
   // validate refusals — each names its reason
   const refusals: [string, () => void][] = [
     ["empty keys", () => cam.validateCameraMove({ intent: "x", keys: [] })],
@@ -16590,7 +16590,7 @@ await test("S121 P2 anim/camera: the keys model validates, interpolates smoothst
 });
 
 await test("S121 P2 anim/ik: two-bone IK round-trips, respects the pole, refuses the unreachable", async () => {
-  const ik = await import("../src/lib/tubeforge/anim/ik");
+  const ik = await import("../src/lib/ibismuh/anim/ik");
   const chain = { upper: 1, fore: 1 };
   // unreachable refused
   let threw = false;
@@ -16613,7 +16613,7 @@ await test("S121 P2 anim/ik: two-bone IK round-trips, respects the pole, refuses
 });
 
 await test("S121 P2 anim/contact: ownership flows legally or the timeline is refused", async () => {
-  const ct = await import("../src/lib/tubeforge/anim/contact");
+  const ct = await import("../src/lib/ibismuh/anim/contact");
   const legal = [
     { t: 0, kind: "grab" as const, subject: "hero", object: "sword" },
     { t: 1.5, kind: "handoff" as const, subject: "hero", object: "sword", to: "squire" },
@@ -16654,7 +16654,7 @@ await test("S121 P2 anim/contact: ownership flows legally or the timeline is ref
 });
 
 await test("S121 P2 anim/gait: the phase rides world distance, never the camera", async () => {
-  const gait = await import("../src/lib/tubeforge/anim/gait");
+  const gait = await import("../src/lib/ibismuh/anim/gait");
   const p = { strideLength: 1, cadence: 2 };
   eq(gait.gaitPhaseAt(p, 0, 100), 0, "a stationary body stands in phase no matter the clock");
   eq(gait.gaitPhaseAt(p, 2.5, 0), 2.5, "phase is distance in strides");
@@ -16675,8 +16675,8 @@ await test("S121 P2 anim/gait: the phase rides world distance, never the camera"
 suiteStart("S121 P3/P4 — the dub client builders and the license policy");
 
 await test("S121 P3/P4: the dub client builders and the license policy table", async () => {
-  const dub = await import("../src/lib/tubeforge/providers/voicestudio-extra");
-  const lic = await import("../src/lib/tubeforge/providers/model-license-policy");
+  const dub = await import("../src/lib/ibismuh/providers/voicestudio-extra");
+  const lic = await import("../src/lib/ibismuh/providers/model-license-policy");
   // dubUrl laws
   ok(dub.dubUrl("http://127.0.0.1:3900/", "/dub/upload").endsWith("/dub/upload"), "the upload route joins cleanly");
   ok(dub.dubUrl("http://127.0.0.1:3900", "/dub/transcribe", "abc123").includes("/dub/transcribe/abc123"), "the poll route carries the job id");
@@ -17468,7 +17468,7 @@ await test("S130 camera time-sanity — a key past the scene clock REFUSES (the 
 });
 
 await test("S130 cameraAt — clamped holds, linear glide, the destination key's ease", async () => {
-  const { cameraAt } = await import("../src/lib/tubeforge/graphics/camera");
+  const { cameraAt } = await import("../src/lib/ibismuh/graphics/camera");
   const keys = [
     { tMs: 0, zoom: 1, tx: 0, ty: 0 },
     { tMs: 1000, zoom: 2, tx: 100, ty: -50, ease: "ease-out" as const },
@@ -17502,7 +17502,7 @@ await test("S130 frameAt carries the camera only when the scene directs it — c
 });
 
 await test("S130 the composer wraps scene content in #gcam only when a camera exists (additive seam)", async () => {
-  const { composeGraphicsScene } = await import("../src/lib/tubeforge/graphics/compose");
+  const { composeGraphicsScene } = await import("../src/lib/ibismuh/graphics/compose");
   const doc = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], {
     durationMs: 2000,
     camera: [gCamKey(0, 1, 0, 0), gCamKey(1000, 2, 100, 0)],
@@ -17631,7 +17631,7 @@ await test("S131 event time-sanity — a cue past the scene clock REFUSES (the m
 });
 
 await test("S131 graphicsEventList — the global projection: frame accumulation across scenes, quantized tSec, 0-based index", async () => {
-  const { graphicsEventList } = await import("../src/lib/tubeforge/graphics/events");
+  const { graphicsEventList } = await import("../src/lib/ibismuh/graphics/events");
   const doc = mustValidate(gDoc([
     gScene("s1", [gEl("a", "headline")], {
       durationMs: 2000,
@@ -17671,7 +17671,7 @@ await test("S131 graphicsEventList — the global projection: frame accumulation
 suiteStart("graphics — S132 (PAE-4) render recovery");
 
 await test("S132 the render fingerprint — every scene-shaping input moves it; map order never does", async () => {
-  const { renderFingerprint } = await import("../src/lib/tubeforge/graphics/render");
+  const { renderFingerprint } = await import("../src/lib/ibismuh/graphics/render");
   const docA = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2000 })]), "doc a");
   const docB = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2500 })]), "doc b");
   const base = renderFingerprint(docA, {});
@@ -17687,7 +17687,7 @@ await test("S132 the render fingerprint — every scene-shaping input moves it; 
 });
 
 await test("S132 the resume decision — fresh start, fail-closed refusal, encoded-and-present skips", async () => {
-  const { resumePlan } = await import("../src/lib/tubeforge/graphics/render");
+  const { resumePlan } = await import("../src/lib/ibismuh/graphics/render");
   eq(resumePlan(null, "fp", () => true), null, "no manifest → nothing to resume (fresh start)");
   const manifest = {
     version: 1,
@@ -17715,7 +17715,7 @@ await test("S132 the resume decision — fresh start, fail-closed refusal, encod
 });
 
 await test("S132 the manifest io — round-trip through a real dir; corrupt/wrong-version reads as NO manifest", async () => {
-  const { renderFingerprint, readRenderManifest, writeRenderManifest, renderManifestPath, resumePlan } = await import("../src/lib/tubeforge/graphics/render");
+  const { renderFingerprint, readRenderManifest, writeRenderManifest, renderManifestPath, resumePlan } = await import("../src/lib/ibismuh/graphics/render");
   const doc = mustValidate(gDoc([gScene("s1", [gEl("h1", "headline")], { durationMs: 2000 })]), "manifest doc");
   const fp = renderFingerprint(doc, {});
   const tmp = fs.mkdtempSync("/tmp/s132-manifest-");
@@ -17743,7 +17743,7 @@ await test("S132 the manifest io — round-trip through a real dir; corrupt/wron
 });
 
 await test("S145 the drill's finding — the manifest is written on the FRESH path too (a first-time crash is recoverable)", async () => {
-  const src = fs.readFileSync("src/lib/tubeforge/graphics/render.ts", "utf8");
+  const src = fs.readFileSync("src/lib/ibismuh/graphics/render.ts", "utf8");
   // The write must sit OUTSIDE the resume gate: the fresh path initializes
   // the manifest whenever the resume decision produced none — a fresh
   // render that dies mid-program must leave the crash record the seam
@@ -17772,7 +17772,7 @@ await test("S145 the drill's finding — the manifest is written on the FRESH pa
 suiteStart("graphics — S133 (PAE-5) the QC lenses");
 
 await test("S133 the read-time formula — clamp(400 + 30 ms/char, 400, 4000), ONE home", async () => {
-  const { readcheckMinMs } = await import("../src/lib/tubeforge/graphics/qc");
+  const { readcheckMinMs } = await import("../src/lib/ibismuh/graphics/qc");
   eq(readcheckMinMs(0), 400, "the floor");
   eq(readcheckMinMs(10), 700, "400 + 300");
   eq(readcheckMinMs(100), 3400, "400 + 3000");
@@ -17781,7 +17781,7 @@ await test("S133 the read-time formula — clamp(400 + 30 ms/char, 400, 4000), O
 });
 
 await test("S133 the readcheck lens — the visibility window math and the longest-string rule", async () => {
-  const { graphicsReadcheck, readcheckMinMs } = await import("../src/lib/tubeforge/graphics/qc");
+  const { graphicsReadcheck, readcheckMinMs } = await import("../src/lib/ibismuh/graphics/qc");
   const doc = mustValidate(gDoc([gScene("s1", [
     gEl("ok", "headline", { enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" } }),
     gEl("brief", "headline", {
@@ -17812,7 +17812,7 @@ await test("S133 the readcheck lens — the visibility window math and the longe
 });
 
 await test("S133 the determinism sweep — stable hash, finite channels, the ≤600 grid, the NaN tripwire", async () => {
-  const { graphicsDeterminismSweep } = await import("../src/lib/tubeforge/graphics/qc");
+  const { graphicsDeterminismSweep } = await import("../src/lib/ibismuh/graphics/qc");
   const doc = mustValidate(gDoc([gScene("s1", [
     gEl("h1", "headline", {
       enter: { kind: "rise", durationMs: 400, delayMs: 0, ease: "ease-out" },
@@ -17851,7 +17851,7 @@ await test("S133 the matrix rows — G1-READ-1 and G1-DET-1 ride the pre-render 
 });
 
 await test("S133 the hold windows — tween and camera windows extend the legal hold start", async () => {
-  const { graphicsHoldWindows: holds } = await import("../src/lib/tubeforge/graphics/qc");
+  const { graphicsHoldWindows: holds } = await import("../src/lib/ibismuh/graphics/qc");
   const plain = mustValidate(gDoc([gScene("s1", [
     gEl("h1", "headline", { enter: { kind: "fade", durationMs: 500, delayMs: 0, ease: "linear" } }),
   ])], { durationMs: 3000 }));
@@ -18111,7 +18111,7 @@ await test("G1.3 the skeleton carries every element; group children nest INSIDE 
 });
 
 await test("G1.3 the hostile icon lands inert — sanitizeSvg strips the payload, escape holds the attribute", async () => {
-  const { sanitizeSvg, pathSegments, totalLength } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { sanitizeSvg, pathSegments, totalLength } = await import("../src/lib/ibismuh/whiteboard/svg");
   const hostile = 'M 0 0 L 8 8" onload="alert(1)//<script>alert(2)</script>';
   const doc = mustValidate(gDoc([gScene("s1", [gEl("ic", "icon", { icon: { paths: [hostile] } })])]), "hostile icon");
   const { html } = composeGraphicsScene(g3FirstScene(doc), doc);
@@ -18153,7 +18153,7 @@ await test("G1.3 bar lengths bake the data reveal — value/scaleMax × ½ surfa
 });
 
 await test("G1.3 icon paths bake the stroke-dash reveal along their arc length (svg.ts geometry, reused)", async () => {
-  const { pathSegments, totalLength } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const { pathSegments, totalLength } = await import("../src/lib/ibismuh/whiteboard/svg");
   const d = "M 0 0 L 8 8 L 16 0";
   const expected = String(Math.round(totalLength(pathSegments(d)) * 1e6) / 1e6);
   ok(G3.html.includes(`stroke-dasharray="${expected}"`), "dasharray = the arc length");
@@ -18284,7 +18284,7 @@ function g14Native(): GraphicsDoc {
 }
 
 await test("G1.4 the native scaffold is deterministic and validator-clean", async () => {
-  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
+  const { scaffoldGraphicsDoc } = await import("../src/lib/ibismuh/graphics/planner");
   const a = scaffoldGraphicsDoc({ scenes: G14_SCENES, topic: "Growth" });
   const b = scaffoldGraphicsDoc({ scenes: G14_SCENES, topic: "Growth" });
   eq(JSON.stringify(a), JSON.stringify(b), "same story → byte-identical doc");
@@ -18325,7 +18325,7 @@ await test("G1.4 the rule table routes the archetypes — stat / list / chart / 
 });
 
 await test("G1.4 every scaffold motion is legal per kind and inside the scene clock", async () => {
-  const { estimateNarrationMs } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { estimateNarrationMs } = await import("../src/lib/ibismuh/whiteboard/timing");
   const doc = g14Native();
   for (const scene of doc.scenes) {
     const clock = estimateNarrationMs(scene.narration);
@@ -18343,8 +18343,8 @@ await test("G1.4 every scaffold motion is legal per kind and inside the scene cl
 });
 
 await test("G1.4 the walls — an empty story and an over-budget story refuse", async () => {
-  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
-  const { GRAPHICS_BUDGETS } = await import("../src/lib/tubeforge/graphics/types");
+  const { scaffoldGraphicsDoc } = await import("../src/lib/ibismuh/graphics/planner");
+  const { GRAPHICS_BUDGETS } = await import("../src/lib/ibismuh/graphics/types");
   let threw = false;
   try {
     scaffoldGraphicsDoc({ scenes: [], topic: "x" });
@@ -18368,7 +18368,7 @@ await test("G1.4 the walls — an empty story and an over-budget story refuse", 
 });
 
 await test("G1.4 surface snapping — caller geometry lands on a house surface", async () => {
-  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
+  const { scaffoldGraphicsDoc } = await import("../src/lib/ibismuh/graphics/planner");
   eq([scaffoldGraphicsDoc({ scenes: G14_SCENES.slice(0, 1), topic: "t", width: 1280, height: 720 }).width,
       scaffoldGraphicsDoc({ scenes: G14_SCENES.slice(0, 1), topic: "t", width: 1280, height: 720 }).height],
      [1920, 1080], "1280×720 snaps to 16:9");
@@ -18383,9 +18383,9 @@ await test("G1.4 surface snapping — caller geometry lands on a house surface",
 });
 
 await test("G1.4 the icon library parses — every path under the command budget", async () => {
-  const { countPathCommands } = await import("../src/lib/tubeforge/whiteboard/svg");
-  const { GRAPHICS_BUDGETS } = await import("../src/lib/tubeforge/graphics/types");
-  const { GRAPHICS_ICON_LIBRARY } = await import("../src/lib/tubeforge/graphics/planner");
+  const { countPathCommands } = await import("../src/lib/ibismuh/whiteboard/svg");
+  const { GRAPHICS_BUDGETS } = await import("../src/lib/ibismuh/graphics/types");
+  const { GRAPHICS_ICON_LIBRARY } = await import("../src/lib/ibismuh/graphics/planner");
   const ids = Object.keys(GRAPHICS_ICON_LIBRARY);
   ok(ids.length >= 4, `the library is non-trivial (${ids.length} icons)`);
   for (const id of ids) {
@@ -18401,7 +18401,7 @@ await test("G1.4 the icon library parses — every path under the command budget
 });
 
 await test("G1.4 normalize polices the grammar — every drop reported, survivors clamped", async () => {
-  const { normalizeGraphicsProposals } = await import("../src/lib/tubeforge/graphics/llm-planner");
+  const { normalizeGraphicsProposals } = await import("../src/lib/ibismuh/graphics/llm-planner");
   const out = normalizeGraphicsProposals(
     [
       {
@@ -18463,7 +18463,7 @@ await test("G1.4 normalize polices the grammar — every drop reported, survivor
 });
 
 await test("G1.4 normalize is pure — same proposals, same result, byte-identical", async () => {
-  const { normalizeGraphicsProposals } = await import("../src/lib/tubeforge/graphics/llm-planner");
+  const { normalizeGraphicsProposals } = await import("../src/lib/ibismuh/graphics/llm-planner");
   const raw = [
     { scene: 1, elements: [{ kind: "headline", text: "Hi", enter: { kind: "pop", durationMs: 300, delayMs: 100, ease: "pop" } }] },
     { scene: 2, elements: [{ kind: "counter", from: 0, to: 10, enter: "count" }] },
@@ -18474,8 +18474,8 @@ await test("G1.4 normalize is pure — same proposals, same result, byte-identic
 });
 
 await test("G1.4 the scene clock clamps overrunning motions and drops the unfittable", async () => {
-  const { normalizeGraphicsProposals } = await import("../src/lib/tubeforge/graphics/llm-planner");
-  const { estimateNarrationMs } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { normalizeGraphicsProposals } = await import("../src/lib/ibismuh/graphics/llm-planner");
+  const { estimateNarrationMs } = await import("../src/lib/ibismuh/whiteboard/timing");
   const scene2 = G14_SCENES[1];
   ok(scene2 !== undefined, "fixture scene 2 present");
   const clock = estimateNarrationMs(scene2.narration);
@@ -18506,7 +18506,7 @@ await test("G1.4 the scene clock clamps overrunning motions and drops the unfitt
 });
 
 await test("G1.4 the group police — children must be accepted same-scene non-group elements", async () => {
-  const { normalizeGraphicsProposals } = await import("../src/lib/tubeforge/graphics/llm-planner");
+  const { normalizeGraphicsProposals } = await import("../src/lib/ibismuh/graphics/llm-planner");
   const out = normalizeGraphicsProposals(
     [
       {
@@ -18536,7 +18536,7 @@ await test("G1.4 the group police — children must be accepted same-scene non-g
 
 await test("G1.4 the cap — over 6 elements per scene drops the extras and names the cap", async () => {
   const { normalizeGraphicsProposals, GRAPHICS_PLANNER_ELEMENTS_PER_SCENE } = await import(
-    "../src/lib/tubeforge/graphics/llm-planner"
+    "../src/lib/ibismuh/graphics/llm-planner"
   );
   const out = normalizeGraphicsProposals(
     [
@@ -18558,7 +18558,7 @@ await test("G1.4 the cap — over 6 elements per scene drops the extras and name
 });
 
 await test("G1.4 compose — served scenes swap elements, unserved scenes pass byte-identical", async () => {
-  const { normalizeGraphicsProposals, composeGraphicsDoc } = await import("../src/lib/tubeforge/graphics/llm-planner");
+  const { normalizeGraphicsProposals, composeGraphicsDoc } = await import("../src/lib/ibismuh/graphics/llm-planner");
   const native = g14Native();
   const { served } = normalizeGraphicsProposals(
     [{ scene: 2, elements: [{ kind: "counter", from: 0, to: 50, unit: "%", enter: "count" }] }],
@@ -18580,8 +18580,8 @@ await test("G1.4 compose — served scenes swap elements, unserved scenes pass b
 });
 
 await test("G1.4 wrapper — a good reply composes an LLM doc that validates clean", async () => {
-  const { scaffoldGraphicsDocLlm } = await import("../src/lib/tubeforge/graphics/llm-planner");
-  const passThrough: import("../src/lib/tubeforge/whiteboard/llm-planner").PlannerCall = (_service, _label, fn) => fn();
+  const { scaffoldGraphicsDocLlm } = await import("../src/lib/ibismuh/graphics/llm-planner");
+  const passThrough: import("../src/lib/ibismuh/whiteboard/llm-planner").PlannerCall = (_service, _label, fn) => fn();
   const goodAsk = async () =>
     JSON.stringify({
       scenes: [
@@ -18624,9 +18624,9 @@ await test("G1.4 wrapper — a good reply composes an LLM doc that validates cle
 });
 
 await test("G1.4 wrapper — every failure degrades to the native doc, byte-identical, honestly labeled", async () => {
-  const { scaffoldGraphicsDocLlm } = await import("../src/lib/tubeforge/graphics/llm-planner");
-  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
-  const passThrough: import("../src/lib/tubeforge/whiteboard/llm-planner").PlannerCall = (_service, _label, fn) => fn();
+  const { scaffoldGraphicsDocLlm } = await import("../src/lib/ibismuh/graphics/llm-planner");
+  const { scaffoldGraphicsDoc } = await import("../src/lib/ibismuh/graphics/planner");
+  const passThrough: import("../src/lib/ibismuh/whiteboard/llm-planner").PlannerCall = (_service, _label, fn) => fn();
   const native = scaffoldGraphicsDoc({ scenes: G14_SCENES, topic: "Growth" });
 
   // The gateway itself fails.
@@ -19116,7 +19116,7 @@ await test("S123 tracks — hand-authored scene ids carry no row linkage (null i
 suiteStart("S163 Phase B — the native graphics transition engine");
 
 await test("S163 Phase B: the fps-free law — frames are the unit of account, seconds derive once", async () => {
-  const t = await import("../src/lib/tubeforge/graphics/transitions");
+  const t = await import("../src/lib/ibismuh/graphics/transitions");
   // The opus DEFAULTS table numbers as FRAMES (the audit's provenance, read
   // at source — Phase A carries the same table): iris 8 / whiteout 42 /
   // zoom 14; the wipes and the crossfade ride the house 0.5s beat at the
@@ -19130,7 +19130,7 @@ await test("S163 Phase B: the fps-free law — frames are the unit of account, s
   // Seconds derived ONCE at module load at the pinned reference rate —
   // parity with Phase A's TRANSITION_PRESET_DEFAULTS (the two tables can
   // never disagree on a beat's length).
-  const { TRANSITION_PRESET_DEFAULTS } = await import("../src/lib/tubeforge/transitions");
+  const { TRANSITION_PRESET_DEFAULTS } = await import("../src/lib/ibismuh/transitions");
   eq(t.NATIVE_TRANSITION_REFERENCE_SECONDS.iris, TRANSITION_PRESET_DEFAULTS.iris, "iris seconds parity with Phase A (0.267)");
   eq(t.NATIVE_TRANSITION_REFERENCE_SECONDS.whiteout, TRANSITION_PRESET_DEFAULTS.whiteout, "whiteout seconds parity with Phase A (1.4)");
   eq(t.NATIVE_TRANSITION_REFERENCE_SECONDS.zoomthrough, TRANSITION_PRESET_DEFAULTS.zoomthrough, "zoomthrough seconds parity with Phase A (0.467)");
@@ -19150,12 +19150,12 @@ await test("S163 Phase B: the fps-free law — frames are the unit of account, s
   approx(plan24.windows[0]?.sec ?? 0, 15 / 24, 1e-9, "24 fps: 15f → 0.625s (the rate belongs to the doc)");
   // The reference table is the ONLY frames→seconds conversion outside the
   // plan — the module pins its own law with the S157 source-scan pattern.
-  const src = fs.readFileSync("src/lib/tubeforge/graphics/transitions.ts", "utf8");
+  const src = fs.readFileSync("src/lib/ibismuh/graphics/transitions.ts", "utf8");
   ok(src.includes("GRAPHICS_TRANSITION_REFERENCE_FPS = 30"), "the reference rate has ONE pinned home");
 });
 
 await test("S163 Phase B: the seeded geometry — hash01/axisFor/cornerR are pure, deterministic, stateless", async () => {
-  const { hash01, axisFor, cornerR, compositeTransitionFrame } = await import("../src/lib/tubeforge/graphics/transitions");
+  const { hash01, axisFor, cornerR, compositeTransitionFrame } = await import("../src/lib/ibismuh/graphics/transitions");
   // hash01 — a pure function of (seed, index): identical inputs → identical
   // outputs across calls, orders and interleavings (NO shared mutable
   // stream — the whiteboard roughen precedent).
@@ -19196,7 +19196,7 @@ await test("S163 Phase B: the seeded geometry — hash01/axisFor/cornerR are pur
 });
 
 await test("S163 Phase B: the compositor — every native type rides the transform/alpha/mask hooks", async () => {
-  const t = await import("../src/lib/tubeforge/graphics/transitions");
+  const t = await import("../src/lib/ibismuh/graphics/transitions");
   const ctx = { width: 640, height: 360 };
   const colorOf = (l: { source: "A" | "B" | { color: string } } | undefined): string | null =>
     l && typeof l.source === "object" ? l.source.color : null;
@@ -19264,7 +19264,7 @@ await test("S163 Phase B: the compositor — every native type rides the transfo
 });
 
 await test("S163 Phase B: the spec sanitizer — the closed native set, the walls, junk drops honestly", async () => {
-  const t = await import("../src/lib/tubeforge/graphics/transitions");
+  const t = await import("../src/lib/ibismuh/graphics/transitions");
   const w: string[] = [];
   // Junk shapes refuse (null), never throw.
   eq(t.sanitizeNativeTransitionSpec(null, "t", w), null, "null → null");
@@ -19386,7 +19386,7 @@ await test("S163 Phase B: the doc grammar — nativeTransitions rides additive; 
 });
 
 await test("S163 Phase B: the overlap accounting — Σ clips + Σ windows ≡ Σ legacy frames, exactly", async () => {
-  const { planNativeTransitions } = await import("../src/lib/tubeforge/graphics/transitions");
+  const { planNativeTransitions } = await import("../src/lib/ibismuh/graphics/transitions");
   const legacy = framePlanWindows([2000, 1500, 1000], 30);
   eq(legacy.scenes.map((s) => s.frames).join(","), "60,45,30", "the legacy frame truth");
   const plan = planNativeTransitions({
@@ -19452,8 +19452,8 @@ await test("S163 Phase B: the overlap accounting — Σ clips + Σ windows ≡ �
 });
 
 await test("S163 Phase B: byte-identity — absent transitions take the exact legacy path", async () => {
-  const { graphicsConcatEntries, graphicsWindowFile, renderFingerprint } = await import("../src/lib/tubeforge/graphics/render");
-  const { graphicsExpectedCuts } = await import("../src/lib/tubeforge/graphics/qc");
+  const { graphicsConcatEntries, graphicsWindowFile, renderFingerprint } = await import("../src/lib/ibismuh/graphics/render");
+  const { graphicsExpectedCuts } = await import("../src/lib/ibismuh/graphics/qc");
   // The concat list: an empty window map → the scene files VERBATIM (the
   // legacy list byte-identical); a window joins exactly after its own
   // outgoing scene; a plain boundary stays a hard cut.
@@ -19502,7 +19502,7 @@ await test("S163 Phase B: byte-identity — absent transitions take the exact le
 });
 
 await test("S163 Phase B: the sweep hash — same doc + seeds → identical frame plans across two computations", async () => {
-  const t = await import("../src/lib/tubeforge/graphics/transitions");
+  const t = await import("../src/lib/ibismuh/graphics/transitions");
   // The full frame-plan sweep: the plan plus every composited window frame
   // description, hashed. Two complete computations must agree BYTE for
   // BYTE (the determinism law extends to the transition window).
@@ -19536,7 +19536,7 @@ await test("S163 Phase B: the sweep hash — same doc + seeds → identical fram
 });
 
 await test("S163 Phase B: the window encode — the scene law mirrored, the carved VO tail continues", async () => {
-  const { graphicsWindowEncodeArgs } = await import("../src/lib/tubeforge/graphics/render");
+  const { graphicsWindowEncodeArgs } = await import("../src/lib/ibismuh/graphics/render");
   // A voiced window: the OUTGOING scene's slot rides OFFSET by the outgoing
   // clip's delivered seconds (-ss input-side) — narration spanning the seam
   // continues through the window (never clipped mid-word); apad + the
@@ -19574,7 +19574,7 @@ await test("S163 Phase B: the window encode — the scene law mirrored, the carv
 });
 
 await test("S163 Phase B: the applier + page — set-only, idempotent, the network-aborted page law", async () => {
-  const { APPLY_TRANSITION_FRAME_FN, transitionCompositorPage } = await import("../src/lib/tubeforge/graphics/transitions");
+  const { APPLY_TRANSITION_FRAME_FN, transitionCompositorPage } = await import("../src/lib/ibismuh/graphics/transitions");
   // The applier's construction laws — the compose.ts applier's list,
   // mirrored (the determinism law holds inside the page too).
   for (const banned of ["Date.now", "Math.random", "new Date", "createElement", "appendChild", "insertAdjacentHTML", "innerHTML", "getBBox"]) {
@@ -19585,7 +19585,7 @@ await test("S163 Phase B: the applier + page — set-only, idempotent, the netwo
   // The call site double-encodes the description into a quoted literal —
   // interpolating raw JSON passes an OBJECT where the applier parses a
   // string (the exact SyntaxError the live smoke caught).
-  const renderSrc = fs.readFileSync("src/lib/tubeforge/graphics/render.ts", "utf8");
+  const renderSrc = fs.readFileSync("src/lib/ibismuh/graphics/render.ts", "utf8");
   ok(renderSrc.includes("JSON.stringify(JSON.stringify(desc))"), "the window loop double-encodes the description (the P5 law, mirrored)");
   ok(APPLY_TRANSITION_FRAME_FN.includes("globalAlpha"), "the alpha hook rides");
   ok(APPLY_TRANSITION_FRAME_FN.includes("clip()"), "the mask hook rides");
@@ -19599,7 +19599,7 @@ await test("S163 Phase B: the applier + page — set-only, idempotent, the netwo
   ok(!/<script[^>]*src=/.test(page) && !page.includes("<link") && !page.includes("http://"), "the page renders only what the string carries");
   // The PURE module's own file: no wall clock, no randomness (the S157
   // source-pin pattern — the USAGE scan, not the law's own comment).
-  const src = fs.readFileSync("src/lib/tubeforge/graphics/transitions.ts", "utf8");
+  const src = fs.readFileSync("src/lib/ibismuh/graphics/transitions.ts", "utf8");
   ok(!/Math\.random\(/.test(src) && !/Date\.now\(/.test(src), "the transition module is frame-truth pure (no clock, no randomness)");
 });
 
@@ -20012,7 +20012,7 @@ import {
   writeRigDoc,
   writeRigParts,
   type RigPartArt,
-} from "../src/lib/tubeforge/characters/rig2d";
+} from "../src/lib/ibismuh/characters/rig2d";
 
 const RIG_STAGE = 1080;
 
@@ -20196,7 +20196,7 @@ await test("S125 the ease reader — the shared check for the doc and the timeli
 
 suiteStart("characters — S125 the rig frame truth (rig-frame)");
 
-import { classifySentence } from "../src/lib/tubeforge/whiteboard/beat-plan";
+import { classifySentence } from "../src/lib/ibismuh/whiteboard/beat-plan";
 import {
   MOUTH_MIN_OPEN_MS,
   POSE_TWEEN_MS,
@@ -20209,7 +20209,7 @@ import {
   wordSpansFromAnchors,
   type Matrix6,
   type WordSpan,
-} from "../src/lib/tubeforge/characters/rig-frame";
+} from "../src/lib/ibismuh/characters/rig-frame";
 
 const RIG_DOC = mustValidateDoc(rigDocInput(), ART, "frame-truth fixture");
 const RIG_POSES = new Map(RIG_DOC.poses.map((p) => [p.id, p]));
@@ -20446,15 +20446,15 @@ await test("S125 classifySentence is exported and unchanged — one classifier, 
 
 suiteStart("characters — S125 the contract seats (compose, tracks, preflight)");
 
-import { planFromTracks } from "../src/lib/tubeforge/composition-plan";
+import { planFromTracks } from "../src/lib/ibismuh/composition-plan";
 import {
   APPLY_RIG_FRAME_FN,
   composeRigScene,
   rigFramePayload,
   rigPartNodeId,
-} from "../src/lib/tubeforge/characters/rig-compose";
-import { characterTracks, type RigSceneSlot } from "../src/lib/tubeforge/characters/tracks";
-import { assertRigBudget, rigBudgetReport, rigBudgetRefusal } from "../src/lib/tubeforge/characters/preflight";
+} from "../src/lib/ibismuh/characters/rig-compose";
+import { characterTracks, type RigSceneSlot } from "../src/lib/ibismuh/characters/tracks";
+import { assertRigBudget, rigBudgetReport, rigBudgetRefusal } from "../src/lib/ibismuh/characters/preflight";
 
 await test("S125 the compose skeleton — z-ordered rp- groups at rest, the closed mouth visible, sanitize on every fragment", () => {
   const dirtyArt: RigPartArt[] = ART.map((a) =>
@@ -20562,8 +20562,8 @@ await test("S125 the preflight wall — the DELIVERED arithmetic is the truth (R
 
 suiteStart("characters — S125 the planner + the renderer contract");
 
-import { planRigTimeline } from "../src/lib/tubeforge/characters/rig-director";
-import { rigClipHash, rigEncodeArgs } from "../src/lib/tubeforge/characters/rig-render";
+import { planRigTimeline } from "../src/lib/ibismuh/characters/rig-director";
+import { rigClipHash, rigEncodeArgs } from "../src/lib/ibismuh/characters/rig-render";
 
 await test("S125 the planner is deterministic and compile-only — byte-identical timelines, speech rides", () => {
   const narration = "Imagine a world of ideas. Then the water flows to the sea. This is the crucial point!";
@@ -20671,7 +20671,7 @@ await test("S125 the clip hash — deterministic, sensitive to every render inpu
 
 suiteStart("characters — S125 the lane wiring (liveliness + the render hook)");
 
-import { selectChannels, type LivelinessInput } from "../src/lib/tubeforge/liveliness";
+import { selectChannels, type LivelinessInput } from "../src/lib/ibismuh/liveliness";
 
 function chanInput(overrides: Partial<LivelinessInput> = {}): LivelinessInput {
   return {
@@ -20735,10 +20735,10 @@ await test("S125 no rig → the byte-identical legacy path (the rollback law)", 
 });
 
 await test("S125 the lane is wired end-to-end — route/job/schema sources (the P3 source-pin pattern)", async () => {
-  const renderSrc = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
-  const jobsSrc = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const renderSrc = await fsp.readFile("src/lib/ibismuh/render.ts", "utf8");
+  const jobsSrc = await fsp.readFile("src/lib/ibismuh/video-jobs.ts", "utf8");
   const schemaSrc = await fsp.readFile("prisma/schema.prisma", "utf8");
-  const livelinessSrc = await fsp.readFile("src/lib/tubeforge/liveliness.ts", "utf8");
+  const livelinessSrc = await fsp.readFile("src/lib/ibismuh/liveliness.ts", "utf8");
   ok(renderSrc.includes('if (chan === "native-rig") {'), "the render hook carries the native-rig branch");
   ok(renderSrc.includes("parseRigDoc(opts.character.rigDoc"), "the rig columns parse at the orchestrator (additive)");
   ok(renderSrc.includes("rig: chan === \"native-rig\" ? rigInputs : null"), "the rig pair rides ONLY on the rig channel (the rollback law)");
@@ -20752,8 +20752,8 @@ await test("S125 the lane is wired end-to-end — route/job/schema sources (the 
 await test("S125 the admission routes — the validator is the gate, the pass degrades per-part (the source pins)", async () => {
   const rigRoute = await fsp.readFile("src/app/api/characters/[id]/rig/route.ts", "utf8");
   const autoRoute = await fsp.readFile("src/app/api/characters/[id]/rig/auto/route.ts", "utf8");
-  const charsSrc = await fsp.readFile("src/lib/tubeforge/characters.ts", "utf8");
-  const typesSrc = await fsp.readFile("src/lib/tubeforge/types.ts", "utf8");
+  const charsSrc = await fsp.readFile("src/lib/ibismuh/characters.ts", "utf8");
+  const typesSrc = await fsp.readFile("src/lib/ibismuh/types.ts", "utf8");
   ok(rigRoute.includes("validateRigParts(parts)"), "the PUT gates the parts library first");
   ok(rigRoute.includes("validateRigDoc(doc, partsResult.parts)"), "the doc's svgRefs resolve against the SAME payload");
   ok(rigRoute.includes("writeRigDoc(docResult.doc)"), "what lands in the columns is the validator's output (byte-stable)");
@@ -20784,9 +20784,9 @@ import {
   SPEECH_CYCLE,
   restSegmentsFromSpans,
   syllableChunks,
-} from "../src/lib/tubeforge/characters/rig-frame";
-import { RIG_MOUTH_LEGACY_SLOTS, RIG_MOUTH_NEW_SLOTS } from "../src/lib/tubeforge/characters/rig2d";
-import { evalEase } from "../src/lib/tubeforge/anim/easing";
+} from "../src/lib/ibismuh/characters/rig-frame";
+import { RIG_MOUTH_LEGACY_SLOTS, RIG_MOUTH_NEW_SLOTS } from "../src/lib/ibismuh/characters/rig2d";
+import { evalEase } from "../src/lib/ibismuh/anim/easing";
 
 /** The S166 legacy fixture — the S125 art/doc with the literal FIVE mouth
  *  shapes (the pre-S166 set), rebuilt here so the byte goldens stay honest
@@ -20999,7 +20999,7 @@ await test("S166 the additive-absent law — the legacy FK, doc, parts and sched
 });
 
 await test("S166 the parts pass asks for the two new art variants; the floor stays the S125 five (source pins)", async () => {
-  const charsSrc = await fsp.readFile("src/lib/tubeforge/characters.ts", "utf8");
+  const charsSrc = await fsp.readFile("src/lib/ibismuh/characters.ts", "utf8");
   ok(charsSrc.includes("the SEVEN mouth parts"), "the prompt asks for the two new art variants");
   ok(charsSrc.includes("closed | open | wide | oh | smile | mbp | rest"), "the variant menu lists the seven");
   ok(charsSrc.includes("RIG_MOUTH_LEGACY_SLOTS.every"), "the drop floor reads the legacy five (a five-shape proposal still lands)");
@@ -21257,7 +21257,7 @@ import {
   sniffImportKind,
   validateSequenceFrame,
   validateSheetImport,
-} from "../src/lib/tubeforge/graphics/import-validate";
+} from "../src/lib/ibismuh/graphics/import-validate";
 
 /** A minimal alpha PNG (IHDR color type 6) — the parser reads fixed
  *  offsets, so the fixture is synthetic bytes, not an encoded file. */
@@ -21432,11 +21432,11 @@ await test("S126 the pure gates — sniff, PNG/WebP headers, sheet law, sequence
 
 await test("S126 the lane wiring — the seven gates, the one-seam resolution, the fail-closed render (source pins)", async () => {
   const route = await fsp.readFile("src/app/api/videos/[id]/graphics/import/route.ts", "utf8");
-  const store = await fsp.readFile("src/lib/tubeforge/graphics/import-store.ts", "utf8");
-  const jobs = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
-  const gRender = await fsp.readFile("src/lib/tubeforge/graphics/render.ts", "utf8");
+  const store = await fsp.readFile("src/lib/ibismuh/graphics/import-store.ts", "utf8");
+  const jobs = await fsp.readFile("src/lib/ibismuh/video-jobs.ts", "utf8");
+  const gRender = await fsp.readFile("src/lib/ibismuh/graphics/render.ts", "utf8");
   const schema = await fsp.readFile("prisma/schema.prisma", "utf8");
-  const importValidate = await fsp.readFile("src/lib/tubeforge/graphics/import-validate.ts", "utf8");
+  const importValidate = await fsp.readFile("src/lib/ibismuh/graphics/import-validate.ts", "utf8");
   ok(importValidate.includes("Magic-byte sniff"), "gate 2 — the sniff is header law, never extension trust");
   ok(route.includes("alphaextract"), "gate 3 — the WebM alpha probe rides ffmpeg");
   ok(route.includes("snapFps"), "gate 5 — the fps snaps to the shared timebase");
@@ -21462,7 +21462,7 @@ await test("S126 the lane wiring — the seven gates, the one-seam resolution, t
 
 suiteStart("characters — S125-ext the BVH sidecar (K1-ext)");
 
-import { BVH_ADMISSION, buildMocapTimeline, mapJointToSlot, parseBvh } from "../src/lib/tubeforge/characters/bvh";
+import { BVH_ADMISSION, buildMocapTimeline, mapJointToSlot, parseBvh } from "../src/lib/ibismuh/characters/bvh";
 
 const BVH_FIXTURE = `HIERARCHY
 ROOT Hips
@@ -21639,8 +21639,8 @@ await test("S136 the mocap binding law — slot-keyed rows reach the parts they 
 
 await test("S125-ext the sidecar wiring — the clean-room boundary, the route, the hook ladder (source pins)", async () => {
   const route = await fsp.readFile("src/app/api/videos/[id]/character/mocap/route.ts", "utf8");
-  const hook = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
-  const bvhSrc = await fsp.readFile("src/lib/tubeforge/characters/bvh.ts", "utf8");
+  const hook = await fsp.readFile("src/lib/ibismuh/render.ts", "utf8");
+  const bvhSrc = await fsp.readFile("src/lib/ibismuh/characters/bvh.ts", "utf8");
   ok(bvhSrc.toLowerCase().includes("clean-room") && bvhSrc.includes("no linkage"), "the clean-room boundary is stated in the module");
   ok(!/import\s+[^;]*freemocap/i.test(bvhSrc), "the module names the boundary, never imports it");
   ok(!bvhSrc.includes("from \"freemocap\"") && !bvhSrc.includes("require('freemocap')"), "no FreeMoCap dependency, ever");
@@ -21731,9 +21731,9 @@ await test("S141 the wall's arithmetic — the walk stays linear under the walls
 suiteStart("motion — C2-ext the cinematic verbs");
 
 await test("C2-ext the verbs are wired through the tables — CAMERA_MOVES → CAMERA_TO_MOVE → MoveKind", async () => {
-  const { CAMERA_MOVES } = await import("../src/lib/tubeforge/director-plan");
-  const { CAMERA_TO_MOVE } = await import("../src/lib/tubeforge/shots.ts");
-  const { MOTION_MOVE_LABELS } = await import("../src/lib/tubeforge/motion");
+  const { CAMERA_MOVES } = await import("../src/lib/ibismuh/director-plan");
+  const { CAMERA_TO_MOVE } = await import("../src/lib/ibismuh/shots.ts");
+  const { MOTION_MOVE_LABELS } = await import("../src/lib/ibismuh/motion");
   for (const verb of ["shake", "push-follow", "drift-crawl"]) {
     ok((CAMERA_MOVES as readonly string[]).includes(verb), `the director vocabulary carries "${verb}"`);
     eq(CAMERA_TO_MOVE[verb], verb, `the mapping is verbatim for "${verb}"`);
@@ -21742,7 +21742,7 @@ await test("C2-ext the verbs are wired through the tables — CAMERA_MOVES → C
 });
 
 await test("C2-ext the shake — integer-cycle sinusoid (edge-pinned by construction), bounded amp", async () => {
-  const { sceneFilterGraph, SHAKE_AMP_FRAC_X, SHAKE_AMP_FRAC_Y, SHAKE_CYCLES_PER_SEC } = await import("../src/lib/tubeforge/motion");
+  const { sceneFilterGraph, SHAKE_AMP_FRAC_X, SHAKE_AMP_FRAC_Y, SHAKE_CYCLES_PER_SEC } = await import("../src/lib/ibismuh/motion");
   const settings = { mode: "on" as const, intensity: 12, curve: "smooth" as const };
   const shot = { kind: "shake" as const, zStart: 1.06, zEnd: 1.06, focal: { x: 0.5, y: 0.4 }, travel: 0, sec: 2.5 };
   const graph = sceneFilterGraph({
@@ -21761,7 +21761,7 @@ await test("C2-ext the shake — integer-cycle sinusoid (edge-pinned by construc
 });
 
 await test("C2-ext push-follow — the zoom and the travel compose in ONE shot (they were exclusive)", async () => {
-  const { sceneFilterGraph } = await import("../src/lib/tubeforge/motion");
+  const { sceneFilterGraph } = await import("../src/lib/ibismuh/motion");
   const settings = { mode: "on" as const, intensity: 12, curve: "smooth" as const };
   const shot = { kind: "push-follow" as const, zStart: 1, zEnd: 1.18, focal: { x: 0.4, y: 0.5 }, travel: 0.5, sec: 3 };
   const graph = sceneFilterGraph({ dur: 3, plan: { sceneType: "standard", move: "Push with follow", shots: [shot], staticImage: false }, settings, fps: 30 });
@@ -21773,7 +21773,7 @@ await test("C2-ext push-follow — the zoom and the travel compose in ONE shot (
 });
 
 await test("C2-ext drift-crawl — the LINEAR clock (constant velocity) and the tiny zoom creep", async () => {
-  const { sceneFilterGraph, DRIFT_CRAWL_ZOOM } = await import("../src/lib/tubeforge/motion");
+  const { sceneFilterGraph, DRIFT_CRAWL_ZOOM } = await import("../src/lib/ibismuh/motion");
   const settings = { mode: "on" as const, intensity: 8, curve: "smooth" as const };
   const shot = { kind: "drift-crawl" as const, zStart: 1.02, zEnd: 1.02, focal: { x: 0.5, y: 0.5 }, travel: 0.4, sec: 4 };
   const graph = sceneFilterGraph({ dur: 4, plan: { sceneType: "establishing", move: "Ambient drift", shots: [shot], staticImage: false }, settings, fps: 30 });
@@ -21786,7 +21786,7 @@ await test("C2-ext drift-crawl — the LINEAR clock (constant velocity) and the 
 });
 
 await test("C2-ext the shot joins stay kind-agnostic — a shake shot books its boundary like any shot", async () => {
-  const { shotGraphJoins } = await import("../src/lib/tubeforge/motion");
+  const { shotGraphJoins } = await import("../src/lib/ibismuh/motion");
   const shots = [
     { kind: "shake" as const, zStart: 1.05, zEnd: 1.05, focal: { x: 0.5, y: 0.5 }, travel: 0, sec: 1.5 },
     { kind: "push-follow" as const, zStart: 1, zEnd: 1.15, focal: { x: 0.45, y: 0.5 }, travel: 0.4, sec: 1.5 },
@@ -21804,7 +21804,7 @@ await test("C2-ext the shot joins stay kind-agnostic — a shake shot books its 
 suiteStart("director — Stage R the advisory engine pick");
 
 await test("Stage R the advisory field parses tolerantly — legal ids ride, junk drops, v2 plans read fine", async () => {
-  const { parsePlan, DIRECTOR_ENGINE_OPTIONS } = await import("../src/lib/tubeforge/director-plan");
+  const { parsePlan, DIRECTOR_ENGINE_OPTIONS } = await import("../src/lib/ibismuh/director-plan");
   const planJson = (engines: unknown[]) =>
     JSON.stringify({
       version: 2,
@@ -21837,7 +21837,7 @@ await test("Stage R the advisory field parses tolerantly — legal ids ride, jun
 });
 
 await test("Stage R the conflict report — unanimous vs mixed, the honest surface (no silent mode-flip)", async () => {
-  const { engineProposalReport } = await import("../src/lib/tubeforge/director-plan");
+  const { engineProposalReport } = await import("../src/lib/ibismuh/director-plan");
   const unanimous = engineProposalReport([{ engine: "graphics" }, { engine: "graphics" }]);
   eq(unanimous.unanimous, "graphics", "one lane across every scene");
   eq(unanimous.mixed, false, "no conflict");
@@ -21853,10 +21853,10 @@ await test("Stage R the conflict report — unanimous vs mixed, the honest surfa
 });
 
 await test("Stage R the D2 firewall — no routing logic reads the advisory field (the source pins)", async () => {
-  const renderSrc = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
-  const planSrc = await fsp.readFile("src/lib/tubeforge/composition-plan.ts", "utf8");
-  const livelinessSrc = await fsp.readFile("src/lib/tubeforge/liveliness.ts", "utf8");
-  const directorSrc = await fsp.readFile("src/lib/tubeforge/director.ts", "utf8");
+  const renderSrc = await fsp.readFile("src/lib/ibismuh/render.ts", "utf8");
+  const planSrc = await fsp.readFile("src/lib/ibismuh/composition-plan.ts", "utf8");
+  const livelinessSrc = await fsp.readFile("src/lib/ibismuh/liveliness.ts", "utf8");
+  const directorSrc = await fsp.readFile("src/lib/ibismuh/director.ts", "utf8");
   ok(!renderSrc.includes(".engine"), "render.ts never branches on the advisory pick");
   ok(!planSrc.includes(".engine"), "composition-plan.ts never branches on the advisory pick");
   ok(!livelinessSrc.includes(".engine"), "the liveliness selector never branches on the advisory pick");
@@ -21874,7 +21874,7 @@ await test("Stage R the D2 firewall — no routing logic reads the advisory fiel
 suiteStart("timeline — Stage X the schema-3 core");
 
 await test("Stage X schema 3 parses and round-trips — the stamp is a KNOWN one (the guard unblocks)", async () => {
-  const t = await import("../src/lib/tubeforge/timeline");
+  const t = await import("../src/lib/ibismuh/timeline");
   const scenes = [
     { index: 1, title: "a", narration: "two short words", visual: "v", startSec: 0, endSec: 4, durationSec: 4, transitionIn: "", transitionOut: "", caption: "c" },
     { index: 2, title: "b", narration: "two more words", visual: "v", startSec: 4, endSec: 8, durationSec: 4, transitionIn: "fade", transitionOut: "", caption: "c" },
@@ -21912,7 +21912,7 @@ await test("Stage X schema 3 parses and round-trips — the stamp is a KNOWN one
 });
 
 await test("Stage X the verifier refuses — junk grammar, bad windows, phantom scenes, clock disagreement", async () => {
-  const t = await import("../src/lib/tubeforge/timeline");
+  const t = await import("../src/lib/ibismuh/timeline");
   const scenes = [
     { index: 1, title: "a", narration: "two short words", visual: "v", startSec: 0, endSec: 4, durationSec: 4, transitionIn: "", transitionOut: "", caption: "c" },
   ];
@@ -21939,7 +21939,7 @@ await test("Stage X the verifier refuses — junk grammar, bad windows, phantom 
 });
 
 await test("Stage X the writer verifies before storing — a disagreeing payload drops and stamps 2", async () => {
-  const t = await import("../src/lib/tubeforge/timeline");
+  const t = await import("../src/lib/ibismuh/timeline");
   const scenes = [
     { index: 1, title: "a", narration: "two short words", visual: "v", startSec: 0, endSec: 4, durationSec: 4, transitionIn: "", transitionOut: "", caption: "c" },
   ];
@@ -21960,7 +21960,7 @@ await test("Stage X the writer verifies before storing — a disagreeing payload
 });
 
 await test("Stage X the builder registry — the multi-kind gate is a registry, not a hard-coded wall", async () => {
-  const cp = await import("../src/lib/tubeforge/composition-plan");
+  const cp = await import("../src/lib/ibismuh/composition-plan");
   eq(cp.COMPOSITOR_SEGMENT_KINDS.length, 2, "today's builders: video + image (the engine kinds land with their dispatch)");
   const okVerdict = cp.validatePlanKinds(["video", "image"]);
   ok(okVerdict.ok && okVerdict.unsupported.length === 0, "today's plans pass");
@@ -21969,13 +21969,13 @@ await test("Stage X the builder registry — the multi-kind gate is a registry, 
   const mixed = cp.validatePlanKinds(["whiteboard", "character"]);
   ok(!mixed.ok && mixed.unsupported.length === 2, "every unsupported kind is listed (the all-or-nothing law)");
   // The compositor's wall READS the S143 verdict now (the source pin).
-  const renderSrc = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  const renderSrc = await fsp.readFile("src/lib/ibismuh/render.ts", "utf8");
   ok(renderSrc.includes("engineSegmentVerdict("), "the wall consumes the registry through the S143 engine-segment verdict");
   ok(renderSrc.includes("visual kinds without a compositor segment builder"), "the refusal names the registry law");
 });
 
 await test("S143 Stage X-full (audit F5) — the engine-segment verdict: a mixed plan with its artifacts rides, one missing segment refuses whole", async () => {
-  const cp = await import("../src/lib/tubeforge/composition-plan");
+  const cp = await import("../src/lib/ibismuh/composition-plan");
   // A mixed plan with every engine segment staged: ADMITTED.
   const mixed = cp.engineSegmentVerdict(["whiteboard", "video", "graphics"], ["/tmp/wb1.mp4", null, "/tmp/gx3.mp4"]);
   ok(mixed.ok && mixed.missing.length === 0, "a mixed plan with every engine segment rides (Stage X-full's whole point)");
@@ -21990,11 +21990,11 @@ await test("S143 Stage X-full (audit F5) — the engine-segment verdict: a mixed
   const own = cp.engineSegmentVerdict(["video", "image"], [null, null]);
   ok(own.ok, "video/image scenes need no engine segment (the builders own them)");
   // The dispatcher + the staging transcode ride the sources (source pins).
-  const jobSrc = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const jobSrc = await fsp.readFile("src/lib/ibismuh/video-jobs.ts", "utf8");
   ok(jobSrc.includes("buildEngineSegments"), "the mixed-engine dispatcher rides the render job");
   ok(jobSrc.includes("stagedEngineSegments: engineSegments ?? undefined"), "the dispatcher's artifacts ride renderVideo");
   ok(jobSrc.includes("it cannot draw engine ink itself"), "the dispatcher's refusals name the S87 slice-3 law");
-  const r = await import("../src/lib/tubeforge/render");
+  const r = await import("../src/lib/ibismuh/render");
   const args = r.engineSegmentTranscodeArgs({ src: "a.mp4", out: "b.mp4", aspect: "16:9", fps: 30, quality: { crf: "20", preset: "veryfast" } });
   const flat = args.join(" ");
   ok(flat.includes("scale=1920:1080:force_original_aspect_ratio=decrease"), "the staging letterboxes into the render geometry (no crop — engine ink is never lost)");
@@ -22012,7 +22012,7 @@ await test("S135 the graphics applier string EXECUTES — camera leg, absent-cam
   // every real graphics render threw ReferenceError at the evaluate
   // boundary and the e2e lane died CI-wide. This pin EXECUTES the string
   // against a stub DOM so the failure class is structurally impossible.
-  const { APPLY_GRAPHICS_FRAME_FN } = await import("../src/lib/tubeforge/graphics/compose");
+  const { APPLY_GRAPHICS_FRAME_FN } = await import("../src/lib/ibismuh/graphics/compose");
 
   // The static half: inside the applier the ONLY payload name is the
   // `payloadJson` parameter (and its parsed `p`). A bare `payload.` is the
@@ -22079,7 +22079,7 @@ await test("S135 the graphics applier string EXECUTES — camera leg, absent-cam
 });
 
 await test("S135 pollScript watches the ARTIFACT — a flag-cleared unscripted row is a failure, not a pass", async () => {
-  const { pollScript } = await import("../src/lib/tubeforge/poll");
+  const { pollScript } = await import("../src/lib/ibismuh/poll");
   const realFetch = globalThis.fetch;
   // Two probes, then the trap: the job flag CLEARS while the row is still
   // "scripting" with NO video.error (the S69 engine-lane law + the
@@ -22118,12 +22118,12 @@ await test("S135 pollScript watches the ARTIFACT — a flag-cleared unscripted r
 
   // The landing write's budget is explicit (the S135 receipt) — a source
   // pin, because the default 5s was the whole bug.
-  const revSrc = await fsp.readFile("src/lib/tubeforge/scene-revisions.ts", "utf8");
+  const revSrc = await fsp.readFile("src/lib/ibismuh/scene-revisions.ts", "utf8");
   ok(revSrc.includes("timeout: 60_000"), "the scene-commit transaction carries an explicit 60s budget");
   ok(revSrc.includes("maxWait: 15_000"), "the transaction's acquisition window is bounded too");
 
   // The Auto-Pilot chain is mode-aware: engine lanes scaffold, art lanes paint.
-  const createSrc = await fsp.readFile("src/components/tubeforge/views/create-view.tsx", "utf8");
+  const createSrc = await fsp.readFile("src/components/ibismuh/views/create-view.tsx", "utf8");
   ok(createSrc.includes("startEngineDoc"), "the chain knows the engine-doc scaffold leg");
   ok(createSrc.includes("whiteboard/scaffold") && createSrc.includes("graphics/scaffold"), "both engine scaffold routes are wired");
   ok(createSrc.includes("Motion graphics (2D)"), "the 2D engine lane is a pickable type");
@@ -22138,7 +22138,7 @@ await test("S136 the receipt guard rides every money lane — the S135 ordering 
   // live incident class. The guard (video row FIRST with a bounded 500ms
   // retried second attempt, Activity best-effort AFTER it) now rides all
   // five money lanes: render, storyboard, scene, short, convert.
-  const src = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/video-jobs.ts", "utf8");
   const guards = src.match(/const writeFailureState = \(\) =>/g)?.length ?? 0;
   ok(guards >= 5, `the guarded writeFailureState closure rides all five money lanes (found ${guards}, need 5)`);
   const retried = src.match(/setTimeout\(r, 500\)/g)?.length ?? 0;
@@ -22163,7 +22163,7 @@ await test("S136 tenant-scope coverage — every organizationId model is scoped 
     if (/^\s*organizationId\s+String/m.test(m[2])) carriers.push(m[1].toLowerCase());
   }
   ok(carriers.includes("video") && carriers.includes("graphicsimport"), `the schema scan finds the carriers (${carriers.length} models with organizationId)`);
-  const { ORG_SCOPED_MODELS } = await import("../src/lib/tubeforge/tenant-db");
+  const { ORG_SCOPED_MODELS } = await import("../src/lib/ibismuh/tenant-db");
   // The documented exceptions: Session resolves its tenant BEFORE the
   // context exists; SpendReservation / StorageReservation / StorageUsage /
   // UsageRecord are deliberate global accounting tables (explicit
@@ -22185,7 +22185,7 @@ await test("S136 the PATCH concurrency gate fires BEFORE the sweep (the route's 
   ok(src.includes("status: 409"), "the up-front conflict maps to the SAME 409 shape");
   // The UI adopts the gate: the editor sends the version (Stage 7 closed
   // without adopting it — the Stabilisation Gate adopts it now).
-  const editor = await fsp.readFile("src/components/tubeforge/scene-editor.tsx", "utf8");
+  const editor = await fsp.readFile("src/components/ibismuh/scene-editor.tsx", "utf8");
   ok(editor.includes("expectedSceneVersion"), "the scene editor sends expectedSceneVersion (the 409 gate is reachable from the product)");
 });
 
@@ -22200,7 +22200,7 @@ await test("S138 the music bed resolution never hands ffmpeg a dead file — the
   // repair 500s, files never heal. The wall now lives at the resolution
   // boundary: verify, heal originals by re-synthesis, fall through to the
   // auto pick, and only then return null (the documented drone fallback).
-  const src = await fsp.readFile("src/lib/tubeforge/music.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/music.ts", "utf8");
   ok(
     !src.includes("data: { ...made"),
     "no seed/update lane spreads ...made raw into a Prisma data arg (the Unknown-argument bug is structurally banned)"
@@ -22228,12 +22228,12 @@ await test("S138 the music bed resolution never hands ffmpeg a dead file — the
 });
 
 await test("S139 the naturalist pen laws — eased lockstep, tremble, breathing, and the sketch pass (the animator worth the name)", async () => {
-  const timing = await import("../src/lib/tubeforge/whiteboard/timing");
-  const sketch = await import("../src/lib/tubeforge/whiteboard/sketch");
-  const textDraw = await import("../src/lib/tubeforge/whiteboard/text-draw");
-  const assetsMod = await import("../src/lib/tubeforge/whiteboard/assets");
-  const planner = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
-  const wbPage = await import("../src/lib/tubeforge/whiteboard/wb-page");
+  const timing = await import("../src/lib/ibismuh/whiteboard/timing");
+  const sketch = await import("../src/lib/ibismuh/whiteboard/sketch");
+  const textDraw = await import("../src/lib/ibismuh/whiteboard/text-draw");
+  const assetsMod = await import("../src/lib/ibismuh/whiteboard/assets");
+  const planner = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
+  const wbPage = await import("../src/lib/ibismuh/whiteboard/wb-page");
 
   // 1. Eased pen progress: exact endpoints, monotone, clock-free.
   eq(timing.penProgress(0), 0, "penProgress(0) is exact");
@@ -22294,8 +22294,8 @@ await test("S139 the naturalist pen laws — eased lockstep, tremble, breathing,
   } as never;
   void 0;
   const geo = new Map();
-  const segsA = (await import("../src/lib/tubeforge/whiteboard/svg")).pathSegments(stroke);
-  geo.set("asset-a", { paths: new Map([["p1", segsA], ["p1-od", segsA]]), totalLen: 2 * (await import("../src/lib/tubeforge/whiteboard/svg")).totalLength(segsA) });
+  const segsA = (await import("../src/lib/ibismuh/whiteboard/svg")).pathSegments(stroke);
+  geo.set("asset-a", { paths: new Map([["p1", segsA], ["p1-od", segsA]]), totalLen: 2 * (await import("../src/lib/ibismuh/whiteboard/svg")).totalLength(segsA) });
   // A 4s window keeps both raw ideals inside the clamps so the 0.45 cost
   // law is visible (a generous window saturates BOTH at MAX_PATH_MS and
   // the fill factor equalizes them — the window law outranks the cost law).
@@ -22327,8 +22327,8 @@ await test("S139 the naturalist pen laws — eased lockstep, tremble, breathing,
 });
 
 await test("S140 F1 — the import admission compensates every byte when it fails (nothing is admitted unless the row commits)", async () => {
-  const storeMod = await import("../src/lib/tubeforge/graphics/import-store");
-  const { UPLOAD_ROOT } = await import("../src/lib/tubeforge/storage");
+  const storeMod = await import("../src/lib/ibismuh/graphics/import-store");
+  const { UPLOAD_ROOT } = await import("../src/lib/ibismuh/storage");
   const videoId = `s140-f1-${crypto.randomBytes(4).toString("hex")}`;
   const importId = `imp-${crypto.randomBytes(6).toString("hex")}`;
   const importDir = path.join(UPLOAD_ROOT, videoId, "graphics", "imports", importId);
@@ -22397,7 +22397,7 @@ await test("S140 F1 — the import admission compensates every byte when it fail
 });
 
 await test("S140 F2 — the count wall rides the admission transaction (the S101 pattern mirrored for gate 6's count half)", async () => {
-  const store = fs.readFileSync("src/lib/tubeforge/graphics/import-store.ts", "utf8");
+  const store = fs.readFileSync("src/lib/ibismuh/graphics/import-store.ts", "utf8");
   // The walls and the create share ONE transaction client — the read-check-
   // write-write race is dead: the loser counts the winner's committed row.
   ok(store.includes("tx.graphicsImport.count({ where: { videoId: video.id } })"), "the video wall counts INSIDE the admission transaction");
@@ -22426,7 +22426,7 @@ await test("S140 F2 — the count wall rides the admission transaction (the S101
 suiteStart("S151 — the fleet-truth law (job status lives in the rows, not the instance) + the scene-count contract");
 
 await test("S151 ranges: the picker promises short 6–8, medium 12–14, long 16–20 — and the target is the range's top", async () => {
-  const { SCENE_COUNT_RANGES, SCENE_COUNTS } = await import("../src/lib/tubeforge/types");
+  const { SCENE_COUNT_RANGES, SCENE_COUNTS } = await import("../src/lib/ibismuh/types");
   ok(SCENE_COUNT_RANGES.short.min === 6 && SCENE_COUNT_RANGES.short.max === 8, "short promises 6–8 scenes");
   ok(SCENE_COUNT_RANGES.medium.min === 12 && SCENE_COUNT_RANGES.medium.max === 14, "medium promises 12–14 scenes");
   ok(SCENE_COUNT_RANGES.long.min === 16 && SCENE_COUNT_RANGES.long.max === 20, "long promises 16–20 scenes");
@@ -22437,7 +22437,7 @@ await test("S151 ranges: the picker promises short 6–8, medium 12–14, long 1
 });
 
 await test("S151 floor law: the script package enforces the range's minimum — a lazy model response cannot ship a thin board", async () => {
-  const src = await fsp.readFile("src/lib/tubeforge/story.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/story.ts", "utf8");
   ok(src.includes("SCENE_COUNT_RANGES[opts.length]?.min"), "generateSceneScriptPackage reads the length's floor");
   ok(src.includes("Script came back short"), "a below-floor package throws the honest retry error (aiCall re-asks)");
   // The old acceptance gate (>= 2 scenes) is gone — the floor replaced it.
@@ -22447,7 +22447,7 @@ await test("S151 floor law: the script package enforces the range's minimum — 
 });
 
 await test("S151 fleet law: jobFleetStatus reads the LATEST durable row — pending/running active, failed → its error", async () => {
-  const src = await fsp.readFile("src/lib/tubeforge/jobs.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/jobs.ts", "utf8");
   ok(/export async function jobFleetStatus\(/.test(src), "the fleet status reader is exported");
   const fn = src.slice(src.indexOf("export async function jobFleetStatus"));
   ok(fn.includes('orderBy: { createdAt: "desc" }'), "the LATEST row for (entityId, kind) is the truth");
@@ -22474,17 +22474,17 @@ await test("S151 fleet law: the poll-facing GETs read the rows — storyboard, r
 });
 
 await test("S151 scene flags: serializeScenes answers from the rows — no instance-memory per-scene probe survives", async () => {
-  const src = await fsp.readFile("src/lib/tubeforge/story.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/story.ts", "utf8");
   ok(!src.includes('isJobRunning(`${videoId}#scene'), "the per-scene generating flag no longer probes instance memory");
   ok(src.includes('entityId: { startsWith: `${videoId}#scene` }'), "the flags come from one grouped query over the composite entityIds");
   ok(src.includes("jobError: sceneJobErrors.get(s.index)"), "each scene carries its latest failed re-roll's error");
 });
 
 await test("S151 client honesty: the poller throws a failed re-roll's error; the dialog checks the start and counts what landed", async () => {
-  const poll = await fsp.readFile("src/lib/tubeforge/poll.ts", "utf8");
+  const poll = await fsp.readFile("src/lib/ibismuh/poll.ts", "utf8");
   ok(/jobError\)\s*throw new Error\(scene\.jobError\)/.test(poll), "pollScene refuses to toast success over a failed re-roll");
 
-  const dlg = await fsp.readFile("src/components/tubeforge/video-detail-dialog.tsx", "utf8");
+  const dlg = await fsp.readFile("src/components/ibismuh/video-detail-dialog.tsx", "utf8");
   ok(/Could not start the storyboard/.test(dlg), "the full-storyboard start is checked (an unchecked 400/409 used to lie)");
   ok(/Could not start the scene re-roll/.test(dlg), "the single-scene start is checked too");
   ok(dlg.includes("board.complete") && dlg.includes("Storyboard partially painted"), "the success toast requires the board to ACTUALLY be complete");
@@ -22496,8 +22496,8 @@ await test("S151 client honesty: the poller throws a failed re-roll's error; the
 suiteStart("S152 — the measured-narration clock: an unplanned graphics scene holds its narration, never truncates it");
 
 await test("S152 clock precedence: explicit durationMs > measured VO + tail > the house estimate — one rule, one tail", async () => {
-  const { graphicsSceneDurationsMs, GRAPHICS_VO_TAIL_MS } = await import("../src/lib/tubeforge/graphics/frame");
-  const { estimateNarrationMs } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { graphicsSceneDurationsMs, GRAPHICS_VO_TAIL_MS } = await import("../src/lib/ibismuh/graphics/frame");
+  const { estimateNarrationMs } = await import("../src/lib/ibismuh/whiteboard/timing");
   const doc = mustValidate(
     gDoc([
       gScene("scene-1", [gEl("h1", "headline")]), // no explicit duration
@@ -22520,7 +22520,7 @@ await test("S152 clock precedence: explicit durationMs > measured VO + tail > th
 });
 
 await test("S152 frameAt resolves scenes on the EXTENDED clock — the narration hold is real frames, not a label", async () => {
-  const { frameAt } = await import("../src/lib/tubeforge/graphics/frame");
+  const { frameAt } = await import("../src/lib/ibismuh/graphics/frame");
   const doc = mustValidate(
     gDoc([
       gScene("scene-1", [gEl("h1", "headline")], { narration: "one" }),
@@ -22538,10 +22538,10 @@ await test("S152 frameAt resolves scenes on the EXTENDED clock — the narration
 });
 
 await test("S152 the wall and the contract ride the SAME extended clock — admission judges the delivered program", async () => {
-  const { graphicsBudgetReport } = await import("../src/lib/tubeforge/graphics/preflight");
-  const { graphicsSceneDurationsMs } = await import("../src/lib/tubeforge/graphics/frame");
-  const { graphicsTracks } = await import("../src/lib/tubeforge/graphics/tracks");
-  const { graphicsExpectedCuts, graphicsHoldWindows } = await import("../src/lib/tubeforge/graphics/qc");
+  const { graphicsBudgetReport } = await import("../src/lib/ibismuh/graphics/preflight");
+  const { graphicsSceneDurationsMs } = await import("../src/lib/ibismuh/graphics/frame");
+  const { graphicsTracks } = await import("../src/lib/ibismuh/graphics/tracks");
+  const { graphicsExpectedCuts, graphicsHoldWindows } = await import("../src/lib/ibismuh/graphics/qc");
   const doc = mustValidate(
     gDoc([
       gScene("scene-1", [gEl("h1", "headline")]),
@@ -22572,8 +22572,8 @@ await test("S152 the wall and the contract ride the SAME extended clock — admi
 });
 
 await test("S152 measureGraphicsVoMs: the ONE probe — WAV header math, the scene-<n> mapping law, honest omissions", async () => {
-  const { measureGraphicsVoMs } = await import("../src/lib/tubeforge/graphics/vo-ms");
-  const { pcmToWav } = await import("../src/lib/tubeforge/wav");
+  const { measureGraphicsVoMs } = await import("../src/lib/ibismuh/graphics/vo-ms");
+  const { pcmToWav } = await import("../src/lib/ibismuh/wav");
   const doc = mustValidate(
     gDoc([
       gScene("scene-1", [gEl("h1", "headline")]),
@@ -22599,7 +22599,7 @@ await test("S152 measureGraphicsVoMs: the ONE probe — WAV header math, the sce
 });
 
 await test("S152 the renderer measures its own slots before the wall — the clock law is wired at every admission surface", async () => {
-  const eng = await fsp.readFile("src/lib/tubeforge/graphics/render.ts", "utf8");
+  const eng = await fsp.readFile("src/lib/ibismuh/graphics/render.ts", "utf8");
   ok(/assertGraphicsBudget\(doc, voMsBySceneId\)/.test(eng), "the engine's wall reads the measured clock");
   ok(eng.includes("wavDurationSec(fs.readFileSync(voPath))"), "the renderer measures its normalized slots (WAV math)");
   ok(/frameAt\(doc, tMs, voMsBySceneId\)/.test(eng), "every frame resolves on the extended clock");
@@ -22610,7 +22610,7 @@ await test("S152 the renderer measures its own slots before the wall — the clo
   ok(groute.includes("assertGraphicsBudget(doc, measureGraphicsVoMs(videoDir(id), doc))"), "the graphics route's admission wall reads the measured clock");
   const get = await fsp.readFile("src/app/api/videos/[id]/graphics/route.ts", "utf8");
   ok(get.includes("graphicsBudgetReport(doc, voMsMap)") && get.includes("graphicsQcMatrix(doc, Object.keys(voMs).length, voMsMap)"), "the GET's evidence rides the measured clock too");
-  const jobs = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const jobs = await fsp.readFile("src/lib/ibismuh/video-jobs.ts", "utf8");
   ok(jobs.includes("graphicsExpectedCuts(graphicsDoc, graphicsVoMs)"), "the QC battery's cut expectation rides the measured clock");
   ok(jobs.includes("graphicsHoldWindows(doc, voMs)"), "the lane's hold windows ride the measured clock");
 });
@@ -22620,8 +22620,8 @@ await test("S152 the renderer measures its own slots before the wall — the clo
 suiteStart("S153 — the keynote deck animates: kinetic typography is the render, the still deck is the honest fallback");
 
 await test("S153 frame truth: word stagger advances, the counter counts up, the sweep is byte-identical", async () => {
-  const { slideFrameAt, slideKineticSweepHash } = await import("../src/lib/tubeforge/slides-kinetic");
-  const { sanitizeSlideSpec } = await import("../src/lib/tubeforge/slides");
+  const { slideFrameAt, slideKineticSweepHash } = await import("../src/lib/ibismuh/slides-kinetic");
+  const { sanitizeSlideSpec } = await import("../src/lib/ibismuh/slides");
   const spec = sanitizeSlideSpec({
     layout: "counter",
     accent: "yellow",
@@ -22649,7 +22649,7 @@ await test("S153 frame truth: word stagger advances, the counter counts up, the 
 });
 
 await test("S153 the counter: parse + grouped format, never locale math", async () => {
-  const { parseCounterValue, formatCounterValue } = await import("../src/lib/tubeforge/slides-kinetic");
+  const { parseCounterValue, formatCounterValue } = await import("../src/lib/ibismuh/slides-kinetic");
   const big = parseCounterValue("29,239,000,000");
   ok(big !== null && formatCounterValue(big, big.value) === "29,239,000,000", "billions group deterministically");
   const dec = parseCounterValue("27.4");
@@ -22662,7 +22662,7 @@ await test("S153 the counter: parse + grouped format, never locale math", async 
 });
 
 await test("S153 the camera mirrors the zoompan endpoints: push/pull/punch/hold, rehook → punch, every third beat pulls", async () => {
-  const { kineticCameraKind, kineticCameraScale, kineticCameraAmp } = await import("../src/lib/tubeforge/slides-kinetic");
+  const { kineticCameraKind, kineticCameraScale, kineticCameraAmp } = await import("../src/lib/ibismuh/slides-kinetic");
   const settings = { mode: "on", intensity: 10 };
   ok(kineticCameraKind({ index: 1 }, settings) === "push", "a normal beat pushes");
   ok(kineticCameraKind({ index: 3 }, settings) === "pull", "every third beat breathes the other way");
@@ -22677,7 +22677,7 @@ await test("S153 the camera mirrors the zoompan endpoints: push/pull/punch/hold,
 });
 
 await test("S153 the composer: kinetic annotations are additive — the static output is byte-identical", async () => {
-  const { slideHtml, sanitizeSlideSpec } = await import("../src/lib/tubeforge/slides");
+  const { slideHtml, sanitizeSlideSpec } = await import("../src/lib/ibismuh/slides");
   const spec = sanitizeSlideSpec({
     layout: "counter",
     badge: "TIP",
@@ -22702,14 +22702,14 @@ await test("S153 the composer: kinetic annotations are additive — the static o
 });
 
 await test("S153 the seat: video-only clips, the sidecar cache, the honest fallback, cancellation never degrades", async () => {
-  const enc = (await import("../src/lib/tubeforge/slides-kinetic")).slideKineticEncodeArgs({
+  const enc = (await import("../src/lib/ibismuh/slides-kinetic")).slideKineticEncodeArgs({
     framesDir: "/d", fps: 30, durSec: 4.5, sceneFile: "/d/clip.mp4",
   });
   const encStr = enc.join(" ");
   ok(encStr.includes("-framerate") && encStr.includes("f%05d.jpg") && encStr.includes("-t ") && encStr.includes("lanczos"), "the clip encode: frame sequence, supersample downscale, -t bounded");
   ok(!encStr.includes(".wav") && !enc.includes("-c:a"), "the clip carries NO audio — buildSegment owns the mix (the rig law)");
 
-  const eng = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  const eng = await fsp.readFile("src/lib/ibismuh/render.ts", "utf8");
   ok(eng.includes("renderKineticSlideClips(dir, kineticItems"), "the deck block runs the kinetic pass");
   ok(eng.includes("SLIDES_KINETIC_FRAME_BUDGET") && eng.includes("totalKineticFrames > SLIDES_KINETIC_FRAME_BUDGET"), "the deck-total frame wall refuses the pass with a note");
   ok(eng.includes('err.name === "JobCancelledError") throw err'), "cancellation propagates — a cancel never degrades to the still deck");
@@ -22717,7 +22717,7 @@ await test("S153 the seat: video-only clips, the sidecar cache, the honest fallb
   ok(eng.includes("onKineticFallback"), "the per-scene fallback is visible (ledger + note)");
   ok(eng.includes("kinetic per-frame deck (camera:"), "the ledger records what actually played, per scene");
 
-  const kin = await fsp.readFile("src/lib/tubeforge/slides-kinetic.ts", "utf8");
+  const kin = await fsp.readFile("src/lib/ibismuh/slides-kinetic.ts", "utf8");
   ok(kin.includes("slide-anim-") && kin.includes(".hash"), "the cache: clip slot + sha256 sidecar (the rig law)");
   ok(kin.includes('e.name === "JobCancelledError"'), "the renderer rethrows cancellation instead of answering null");
   ok(kin.includes('route.abort()'), "chromium launches with ALL network routes aborted (the security posture)");
@@ -22729,7 +22729,7 @@ await test("S153 the seat: video-only clips, the sidecar cache, the honest fallb
 suiteStart("S154 — the character lane: mocap re-arms the render key, previews show the rig, the ledger is durable");
 
 await test("S154 previews render the SAME channel as the final — the rig pair rides both preview jobs", async () => {
-  const src = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/video-jobs.ts", "utf8");
   ok(!src.includes("scenes: [scene],\n    mode,\n    character: null,"), "the scene preview no longer hardcodes character: null");
   ok(!src.includes("scenes: pair,\n    mode,\n    character: null,"), "the boundary preview no longer hardcodes character: null");
   ok((src.match(/const rigCharacter = video\.characterId/g) ?? []).length >= 3, "all three renderVideo call sites fetch the rig pair");
@@ -22737,12 +22737,12 @@ await test("S154 previews render the SAME channel as the final — the rig pair 
 });
 
 await test("S154 the liveliness ledger is DURABLE — the completion activity carries the per-scene notes", async () => {
-  const src = await fsp.readFile("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/video-jobs.ts", "utf8");
   ok(src.includes("buildLedgerNotes(result.liveliness)"), "the completion message appends the ledger's notes");
   const fn = src.slice(src.indexOf("function buildLedgerNotes"));
   ok(fn.includes("d.reason && d.reason.length > 0"), "empty reasons add no noise");
   ok(fn.includes("+${noted.length - 6} more"), "the feed stays readable past six notes (capped, representative)");
-  const eng = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  const eng = await fsp.readFile("src/lib/ibismuh/render.ts", "utf8");
   ok(eng.includes("the stored rig columns did not parse"), "a corrupt rig degrade is LOGGED (visible, never silent)");
 });
 
@@ -22756,12 +22756,12 @@ await test("S154 mocap re-arms the render key — a capture upload can never aga
 });
 
 await test("S154 the engine ffmpeg seams all ride the zombie-aware runner", async () => {
-  const rig = await fsp.readFile("src/lib/tubeforge/characters/rig-render.ts", "utf8");
+  const rig = await fsp.readFile("src/lib/ibismuh/characters/rig-render.ts", "utf8");
   ok(rig.includes('runProcess("ffmpeg"'), "the rig encoder uses runProcess (was the one plain-execFile seam)");
   ok(!rig.includes("execFileP(\"ffmpeg\""), "no execFile ffmpeg call survives in the rig lane");
-  const gfx = await fsp.readFile("src/lib/tubeforge/graphics/render.ts", "utf8");
+  const gfx = await fsp.readFile("src/lib/ibismuh/graphics/render.ts", "utf8");
   ok(gfx.includes('runProcess("ffmpeg"') && !gfx.includes("execFileP(\"ffmpeg\""), "the graphics encoder uses runProcess");
-  const kin = await fsp.readFile("src/lib/tubeforge/slides-kinetic.ts", "utf8");
+  const kin = await fsp.readFile("src/lib/ibismuh/slides-kinetic.ts", "utf8");
   ok(kin.includes('runProcess("ffmpeg"') && !kin.includes("execFile)(\"ffmpeg\""), "the kinetic clip encoder uses runProcess");
 });
 
@@ -22770,7 +22770,7 @@ await test("S154 the engine ffmpeg seams all ride the zombie-aware runner", asyn
 suiteStart("S155 — the classic lane: a lazy script cannot ship thin, and the autopilot stages are independent toggles");
 
 await test("S155 the classic length contract: below the floor is a failed generation — aiCall re-asks, never ships thin", async () => {
-  const src = await fsp.readFile("src/lib/tubeforge/ai.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/ai.ts", "utf8");
   ok(src.includes("Script came back short") && src.includes("opts.length} video that promises about ${words}"), "the classic floor throws the honest retry error");
   ok(src.includes("Math.round(words * 0.55)"), "the floor is 55% of the promised words");
   ok(src.includes("LENGTH IS A CONTRACT"), "the prompt states the contract up front (the model gets the rule before the judge)");
@@ -22779,7 +22779,7 @@ await test("S155 the classic length contract: below the floor is a failed genera
 });
 
 await test("S155 the autopilot stages are independent toggles — voice, thumbnail and render key off their OWN switches", async () => {
-  const src = await fsp.readFile("src/components/tubeforge/views/create-view.tsx", "utf8");
+  const src = await fsp.readFile("src/components/ibismuh/views/create-view.tsx", "utf8");
   ok(src.includes("the stages are INDEPENDENT toggles"), "the S155 note marks the decoupling");
   ok(!/\$\{startThumbnail\(voiced\.id\)/.test(src), "the classic thumbnail no longer hangs off the voiced result");
   // The story branch: thumbnail + render must sit OUTSIDE the autoVoice block.
@@ -22805,21 +22805,21 @@ await test("S156 the title font is a RUNTIME ladder — a slim image degrades th
   // S157 — the ladder lives in ./title-font now: the studio-doc module rides
   // the browser chunk, and the S156 fs import there killed the production
   // build (Turbopack's browser chunking refuses node:fs externals).
-  const src = await fsp.readFile("src/lib/tubeforge/title-font.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/title-font.ts", "utf8");
   ok(src.includes("export function resolveTitleFontFile"), "the ladder is exported (the render consumes it)");
   ok(src.includes("TUBEFORGE_TITLE_FONT"), "the operator's explicit override wins first");
   ok(src.includes("LiberationSans-Regular.ttf") && src.includes("DejaVuSans.ttf"), "the shipped faces are candidates");
   ok(!src.includes('?? "/usr/share/fonts/truetype/chinese/NotoSansSC-Regular.ttf"'), "the hardcoded missing-font default is gone");
-  const eng = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  const eng = await fsp.readFile("src/lib/ibismuh/render.ts", "utf8");
   ok(eng.includes("title overlay skipped — no usable title font"), "the skip is a visible log note, not a dead encode");
   ok(eng.includes('from "./title-font"'), "the render consumes the server-only seam, not studio-doc");
   // The real ladder answers on this host (an executable receipt, not a source pin).
-  const { resolveTitleFontFile } = await import("../src/lib/tubeforge/title-font");
+  const { resolveTitleFontFile } = await import("../src/lib/ibismuh/title-font");
   ok(resolveTitleFontFile() !== null || process.env.CI === "true", "the ladder resolves a font on any host that carries one");
 });
 
 await test("S156 docScenes reads by POSITION — the preview's channel pick matches the final's", async () => {
-  const eng = await fsp.readFile("src/lib/tubeforge/render.ts", "utf8");
+  const eng = await fsp.readFile("src/lib/ibismuh/render.ts", "utf8");
   ok(eng.includes("docCameraKeys = scenes.map((_s, i) => docScenes?.[i]?.cameraKeys != null)"), "the doc camera-keys read is position-aligned");
   ok(!eng.includes("docScenes?.[s.index - 1]"), "the scene-number-indexed misalignment is gone");
 });
@@ -22834,11 +22834,11 @@ await test("S157 studio-doc rides the browser chunk — no node builtins may ent
   // (unknown) does not support external modules (request: node:fs)". The pin
   // guards the seam, not the incident: any node builtin in this module
   // detonates the production build the same way.
-  const src = await fsp.readFile("src/lib/tubeforge/studio-doc.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/studio-doc.ts", "utf8");
   ok(!src.includes("node:") && !src.includes("import fs"), "studio-doc imports no node builtins and no fs (the client graph reaches it)");
   // The moved seam keeps the S156 law: the ladder + the drawtext chain live
   // server-side, the null-skip degradation stays in the filter itself.
-  const font = await fsp.readFile("src/lib/tubeforge/title-font.ts", "utf8");
+  const font = await fsp.readFile("src/lib/ibismuh/title-font.ts", "utf8");
   ok(font.includes("import fs from \"node:fs\""), "the disk-touching seam imports fs (server-only)");
   ok(font.includes("if (!fontFile) return null;"), "a missing font degrades the overlay, never the render");
 });
@@ -22853,7 +22853,7 @@ await test("S159 switching providers never inherits the old provider's secret", 
   // wrote it into the NEW provider's credential row — provider B
   // authenticated as A. The guard resolves the NEW provider's OWN row (or
   // none) before the keep-current branch ever runs.
-  const src = await fsp.readFile("src/lib/tubeforge/providers/settings.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/providers/settings.ts", "utf8");
   ok(src.includes("THE NO-INHERIT LAW"), "the law is stated where the save happens");
   ok(
     src.includes('providerChanged && !(patch.apiKey ?? "").trim()'),
@@ -22876,7 +22876,7 @@ await test("S159 the settings GET serves every provider's saved-key state", asyn
 });
 
 await test("S159 the settings UI restores saved state on provider switch", async () => {
-  const src = await fsp.readFile("src/components/tubeforge/views/settings-view.tsx", "utf8");
+  const src = await fsp.readFile("src/components/ibismuh/views/settings-view.tsx", "utf8");
   ok(
     !src.includes("hasKey: false,\n                              maskedKey: \"\""),
     "the switch handler's hard-clear wipe is gone"
@@ -22952,7 +22952,7 @@ await test("S159 the elevenlabs lane is a REAL adapter — no more zai fallthrou
   // The receipt: TTS_PROVIDERS listed elevenlabs, but ttsSynthesize had no
   // branch for it — selecting ElevenLabs silently synthesized through the
   // Z.ai SDK and the ElevenLabs key never touched the wire.
-  const src = await fsp.readFile("src/lib/tubeforge/providers/tts.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/providers/tts.ts", "utf8");
   ok(src.includes("export async function elevenlabsTts"), "the adapter exists");
   ok(
     src.indexOf('config.provider === "elevenlabs"') < src.indexOf("return zaiTts(request, config)"),
@@ -22964,7 +22964,7 @@ await test("S159 the elevenlabs lane is a REAL adapter — no more zai fallthrou
 });
 
 await test("S159 gemini honors the picked voice, deepgram maps voice to the speak model", async () => {
-  const src = await fsp.readFile("src/lib/tubeforge/providers/tts.ts", "utf8");
+  const src = await fsp.readFile("src/lib/ibismuh/providers/tts.ts", "utf8");
   ok(
     src.includes('const voiceName = sanitizeVoice("gemini", req.voice)'),
     "geminiTts honors the request voice through the catalog"
@@ -22999,7 +22999,7 @@ await test("S159 the voices route overlays the live lists for every account-list
 suiteStart("S160 — the reference motion-and-light pass");
 
 await test("S160 the glide ease: the smootherstep joins the substrate, exact at the anchors", async () => {
-  const { EASE_CURVES, evalEase, isEaseName, zoomProgressExpr } = await import("../src/lib/tubeforge/anim/easing");
+  const { EASE_CURVES, evalEase, isEaseName, zoomProgressExpr } = await import("../src/lib/ibismuh/anim/easing");
   ok(isEaseName("glide"), "glide is a named curve");
   const glide = EASE_CURVES.glide;
   eq(glide(0), 0, "0 → 0");
@@ -23017,7 +23017,7 @@ await test("S160 the glide ease: the smootherstep joins the substrate, exact at 
 });
 
 await test("S160 scene3d: the destination-key ease — absent ⇒ linear (the historical evaluation), glide when shipped", async () => {
-  const { cameraAt, objectAt } = await import("../src/lib/tubeforge/scene3d");
+  const { cameraAt, objectAt } = await import("../src/lib/ibismuh/scene3d");
   const linearKeys = [
     { t: 0, position: [0, 0, 6] as [number, number, number], lookAt: [0, 0, 0] as [number, number, number] },
     { t: 1, position: [4, 2, 6] as [number, number, number], lookAt: [0, 1, 0] as [number, number, number] },
@@ -23039,7 +23039,7 @@ await test("S160 scene3d: the destination-key ease — absent ⇒ linear (the hi
 });
 
 await test("S160 scene3d: the look seam parses tolerantly, serializes strictly, round-trips byte-stable", async () => {
-  const { parseScene3D, serializeScene3D, scaffoldScene3D } = await import("../src/lib/tubeforge/scene3d");
+  const { parseScene3D, serializeScene3D, scaffoldScene3D } = await import("../src/lib/ibismuh/scene3d");
   const doc = scaffoldScene3D("s160 look");
   ok(doc.sky != null && doc.sky.top === "#3e7fd2" && doc.sky.horizon === "#b8d0ec", "the scaffold carries the day sky");
   ok(doc.fog != null && doc.fog.color === "#b8d0ec", "fog rides the horizon colour (the reference law)");
@@ -23067,7 +23067,7 @@ await test("S160 scene3d: the look seam parses tolerantly, serializes strictly, 
 });
 
 await test("S160 render3d: the page carries the gated look passes and the Neutral tone map", async () => {
-  const { pageHtml } = await import("../src/lib/tubeforge/render3d");
+  const { pageHtml } = await import("../src/lib/ibismuh/render3d");
   const src = pageHtml(1280, 720, "THREE_SRC", "CORE_SRC", "{}");
   ok(src.includes("THREE.NeutralToneMapping"), "the Neutral tone map rides the page (the reference post chain's terminal stage)");
   ok(src.includes("renderer.shadowMap.enabled = shadowsOn") && src.includes("doc.shadows === true"), "the shadow pass is gated on the doc flag");
@@ -23078,7 +23078,7 @@ await test("S160 render3d: the page carries the gated look passes and the Neutra
 });
 
 await test("S160 graphics: the hit kick — the KICKS grammar (flip-sign each frame, decay over 7, latest wins)", async () => {
-  const { hitKickOffset, GRAPHICS_MOTION_SEMANTICS } = await import("../src/lib/tubeforge/graphics/frame");
+  const { hitKickOffset, GRAPHICS_MOTION_SEMANTICS } = await import("../src/lib/ibismuh/graphics/frame");
   const S = GRAPHICS_MOTION_SEMANTICS;
   eq(S.hitKickFrames, 7, "the measured 6-7 frame window");
   eq(S.hitKickBasePx, 3, "the measured ~3 px at the 720p reference");
@@ -23101,7 +23101,7 @@ await test("S160 graphics: the hit kick — the KICKS grammar (flip-sign each fr
 });
 
 await test("S160 graphics frameAt: the camera folds the kick; no camera / no live window stays byte-identical", async () => {
-  const { frameAt, hitKickOffset } = await import("../src/lib/tubeforge/graphics/frame");
+  const { frameAt, hitKickOffset } = await import("../src/lib/ibismuh/graphics/frame");
   const scene = {
     id: "s1", narration: "one two three.", background: "#ffffff",
     camera: [{ tMs: 0, zoom: 2, tx: 0, ty: 0 }, { tMs: 3000, zoom: 2, tx: 100, ty: 0 }],
@@ -23128,7 +23128,7 @@ await test("S160 graphics frameAt: the camera folds the kick; no camera / no liv
 suiteStart("S162 — the measured vocabulary rides the substrate; the counter lands with craft");
 
 await test("S162 easing: the opus anchor sets pinned at their literals; the OT pair pinned at its exact laws", async () => {
-  const { EASE_CURVES } = await import("../src/lib/tubeforge/anim/easing");
+  const { EASE_CURVES } = await import("../src/lib/ibismuh/anim/easing");
   // The bezier solve is 40 fixed bisection iterations — the literals below
   // are its frozen output, independently cross-checked against a
   // 200-iteration solve (agreement ~1e-12; the symmetric sets' midpoint
@@ -23174,7 +23174,7 @@ await test("S162 easing: the opus anchor sets pinned at their literals; the OT p
 });
 
 await test("S162 easing: the zoompan compiler refuses the measured vocabulary loudly (S167 owns the compile)", async () => {
-  const { zoomProgressExpr } = await import("../src/lib/tubeforge/anim/easing");
+  const { zoomProgressExpr } = await import("../src/lib/ibismuh/anim/easing");
   for (const name of ["measured-out", "exponential", "parabolic-in-out"] as const) {
     let threw: unknown = null;
     try {
@@ -23187,13 +23187,13 @@ await test("S162 easing: the zoompan compiler refuses the measured vocabulary lo
 });
 
 await test("S162 graphics frame: the counter craft — tabular numerals baked, the landing pulse breathes once", async () => {
-  const { GRAPHICS_MOTION_SEMANTICS } = await import("../src/lib/tubeforge/graphics/frame");
+  const { GRAPHICS_MOTION_SEMANTICS } = await import("../src/lib/ibismuh/graphics/frame");
   eq(GRAPHICS_MOTION_SEMANTICS.counterTabularNums, true, "the tabular-nums flag is on (the glyph-jitter kill)");
   eq(GRAPHICS_MOTION_SEMANTICS.landingPulseMs, 267, "the pulse spans 267 ms (the opus 8 frames at the 30 fps reference — clock-invariant by the D3 law)");
   eq(GRAPHICS_MOTION_SEMANTICS.landingPulseDepth, 0.025, "the pulse breathes +2.5% at its midpoint");
   eq(GRAPHICS_MOTION_SEMANTICS.kineticStaggerMs, 150, "the kinetic stagger is the opus overlap offset");
 
-  const { composeGraphicsScene } = await import("../src/lib/tubeforge/graphics/compose");
+  const { composeGraphicsScene } = await import("../src/lib/ibismuh/graphics/compose");
   const counterEl = {
     id: "c", kind: "counter" as const, at: { x: 960, y: 470, scale: 2, rotateDeg: 0 },
     counter: { from: 0, to: 87, unit: "%" as const },
@@ -23206,7 +23206,7 @@ await test("S162 graphics frame: the counter craft — tabular numerals baked, t
   ok(composed.html.includes('style="font-variant-numeric:tabular-nums"'), "the counter text carries tabular numerals (the S162 attr)");
   ok(composed.html.includes("87%"), "the poster string is the FINAL value (sized from the final string)");
 
-  const { frameAt } = await import("../src/lib/tubeforge/graphics/frame");
+  const { frameAt } = await import("../src/lib/ibismuh/graphics/frame");
   const enterEnd = 300 + 1200;
   const at = (tMs: number): number => frameAt(doc, tMs).elements[0]?.scale ?? -1;
   eq(at(enterEnd), 2, "at the enter close the pulse has not begun (q = 0 → factor exactly 1)");
@@ -23229,7 +23229,7 @@ await test("S162 graphics frame: the counter craft — tabular numerals baked, t
 });
 
 await test("S162 planner: the native enter table rides the measured vocabulary; the stagger overlaps", async () => {
-  const { nativeEnterFor, scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
+  const { nativeEnterFor, scaffoldGraphicsDoc } = await import("../src/lib/ibismuh/graphics/planner");
   eq(nativeEnterFor("headline", 0).ease, "measured-out", "headlines settle on the measured entrance");
   eq(nativeEnterFor("counter", 0).ease, "expo-out", "counters land on the expo tail");
   eq(nativeEnterFor("barChart", 0).ease, "expo-out", "bar growth lands on the expo tail");
@@ -23257,15 +23257,15 @@ await test("S162 planner: the native enter table rides the measured vocabulary; 
   const delays = bullets.map((b) => b.enter.delayMs);
   ok(delays.every((d, i) => i === 0 || d - (delays[i - 1] ?? 0) === 150), `the cascade rides the kinetic stagger (${delays.join(", ")})`);
   // The LLM prompt teaches the vocabulary (source pin — the S157 pattern).
-  const llmSrc = fs.readFileSync("src/lib/tubeforge/graphics/llm-planner.ts", "utf8");
+  const llmSrc = fs.readFileSync("src/lib/ibismuh/graphics/llm-planner.ts", "utf8");
   ok(llmSrc.includes("measured-out, measured-in-out, measured-in, drift, measured-back, expo-out, expo-in-out, parabolic-in-out, exponential"), "the planner prompt lists the full measured menu");
   ok(llmSrc.includes("PREFER the measured vocabulary"), "the prompt prefers the measured set over the legacy names");
   ok(llmSrc.includes('let ease: EaseName = "measured-out"'), "the degradation floor is the measured entrance");
 });
 
 await test("S162 part 2: the measured exit table — tail-anchored, legal, the list clears first and the title completes last", async () => {
-  const { nativeExitFor, GRAPHICS_EXIT_STAGGER_MS } = await import("../src/lib/tubeforge/graphics/planner");
-  const { MOTION_KINDS_BY_ELEMENT } = await import("../src/lib/tubeforge/graphics/types");
+  const { nativeExitFor, GRAPHICS_EXIT_STAGGER_MS } = await import("../src/lib/ibismuh/graphics/planner");
+  const { MOTION_KINDS_BY_ELEMENT } = await import("../src/lib/ibismuh/graphics/types");
   const sceneMs = 4000; // the estimator's floor — the tightest case the scaffold can emit
   for (const kind of Object.keys(MOTION_KINDS_BY_ELEMENT) as Array<keyof typeof MOTION_KINDS_BY_ELEMENT>) {
     const exit = nativeExitFor(kind, 0, sceneMs, 3);
@@ -23297,7 +23297,7 @@ await test("S162 part 2: the measured exit table — tail-anchored, legal, the l
 });
 
 await test("S162 part 2: the camera breathe — two keys, the push completes AT the scene clock", async () => {
-  const { nativeCameraFor, GRAPHICS_CAMERA_PUSH_ZOOM } = await import("../src/lib/tubeforge/graphics/planner");
+  const { nativeCameraFor, GRAPHICS_CAMERA_PUSH_ZOOM } = await import("../src/lib/ibismuh/graphics/planner");
   const cam = nativeCameraFor(4000);
   eq(cam.length, 2, "two keys: the hold, then the push");
   eq(cam[0]?.tMs, 0, "the hold starts at the scene head");
@@ -23308,10 +23308,10 @@ await test("S162 part 2: the camera breathe — two keys, the push completes AT 
 });
 
 await test("S162 part 2: the scaffold stages the exit + the breathe — validator-clean, additive-absent", async () => {
-  const { scaffoldGraphicsDoc, GRAPHICS_CAMERA_PUSH_ZOOM } = await import("../src/lib/tubeforge/graphics/planner");
-  const { validateGraphicsDoc } = await import("../src/lib/tubeforge/graphics/types");
-  const { frameAt } = await import("../src/lib/tubeforge/graphics/frame");
-  const { estimateNarrationMs } = await import("../src/lib/tubeforge/whiteboard/timing");
+  const { scaffoldGraphicsDoc, GRAPHICS_CAMERA_PUSH_ZOOM } = await import("../src/lib/ibismuh/graphics/planner");
+  const { validateGraphicsDoc } = await import("../src/lib/ibismuh/graphics/types");
+  const { frameAt } = await import("../src/lib/ibismuh/graphics/frame");
+  const { estimateNarrationMs } = await import("../src/lib/ibismuh/whiteboard/timing");
   const doc = scaffoldGraphicsDoc({
     scenes: [
       { index: 1, title: "The opener", narration: "the setup takes minutes" },
@@ -23371,9 +23371,9 @@ await test("S162 part 2: the scaffold stages the exit + the breathe — validato
 suiteStart("S164 — the whiteboard hand-drawn geometry slice (the Rough.js native port)");
 
 await test("S164 (a) byte-identity — same doc + seeds → identical d strings across two independent computations", async () => {
-  const { roughenPath, minstd, roughnessGain } = await import("../src/lib/tubeforge/whiteboard/roughen");
-  const { buildFill } = await import("../src/lib/tubeforge/whiteboard/fills");
-  const sketch = await import("../src/lib/tubeforge/whiteboard/sketch");
+  const { roughenPath, minstd, roughnessGain } = await import("../src/lib/ibismuh/whiteboard/roughen");
+  const { buildFill } = await import("../src/lib/ibismuh/whiteboard/fills");
+  const sketch = await import("../src/lib/ibismuh/whiteboard/sketch");
 
   // The authored source: a curve chain, a closed square, an authored ellipse.
   const curve = "M 20 100 C 60 60, 140 140, 180 100";
@@ -23435,7 +23435,7 @@ await test("S164 (a) byte-identity — same doc + seeds → identical d strings 
 });
 
 await test("S164 (b) the banned-token source-pin — no ambient randomness in the whiteboard tree, no clock in the pure geometry", async () => {
-  const dir = "src/lib/tubeforge/whiteboard";
+  const dir = "src/lib/ibismuh/whiteboard";
   const files = fs.readdirSync(dir).filter((f) => f.endsWith(".ts"));
   ok(files.includes("roughen.ts") && files.includes("fills.ts"), "the scan INCLUDES the new modules (a stale scan cannot pass)");
   ok(files.length >= 22, `the tree is scanned whole (${files.length} files)`);
@@ -23453,9 +23453,9 @@ await test("S164 (b) the banned-token source-pin — no ambient randomness in th
 });
 
 await test("S164 (c) the command-cap guard — a too-large fill refuses loudly; every count is the expanded truth", async () => {
-  const fills = await import("../src/lib/tubeforge/whiteboard/fills");
-  const { roughenPath } = await import("../src/lib/tubeforge/whiteboard/roughen");
-  const svgMod = await import("../src/lib/tubeforge/whiteboard/svg");
+  const fills = await import("../src/lib/ibismuh/whiteboard/fills");
+  const { roughenPath } = await import("../src/lib/ibismuh/whiteboard/roughen");
+  const svgMod = await import("../src/lib/ibismuh/whiteboard/svg");
 
   // A 144-square field at gap 3 sweeps hundreds of rows × hundreds of
   // spans — far past the 512 budget. The raw API refuses LOUDLY.
@@ -23522,7 +23522,7 @@ await test("S164 (c) the command-cap guard — a too-large fill refuses loudly; 
 });
 
 await test("S164 (d) per-shape seed independence — changing ONE shape's assetId::pathId moves ONLY that shape's ink", async () => {
-  const sketch = await import("../src/lib/tubeforge/whiteboard/sketch");
+  const sketch = await import("../src/lib/ibismuh/whiteboard/sketch");
   // shapeSeed IS the fnv1a(assetId::pathId) derivation — one home, exact.
   eq(sketch.shapeSeed("asset-x", "p7"), sketch.fnv1a("asset-x::p7"), "the seed IS fnv1a(assetId::pathId)");
   ok(sketch.shapeSeed("asset-x", "p7") !== sketch.shapeSeed("asset-x", "p8"), "a different pathId derives a different seed");
@@ -23548,7 +23548,7 @@ await test("S164 (d) per-shape seed independence — changing ONE shape's assetI
 });
 
 await test("S164 (e) absent-knob byte-identity — the S139 legacy pass rides untouched, byte for byte", async () => {
-  const sketch = await import("../src/lib/tubeforge/whiteboard/sketch");
+  const sketch = await import("../src/lib/ibismuh/whiteboard/sketch");
   const stroke = "M 20 100 C 60 60, 140 140, 180 100";
   const doc =
     `<path id="a" d="${stroke}" fill="none" stroke="#1d3557" stroke-width="4" stroke-linecap="round"/>` +
@@ -23567,10 +23567,10 @@ await test("S164 (e) absent-knob byte-identity — the S139 legacy pass rides un
 });
 
 await test("S164 (f) fixed-decimal parity — every generator emits through svg.ts's ONE serializer", async () => {
-  const { fmt2, flattenSubpathPoints, bezierFlatPoints, rdp } = await import("../src/lib/tubeforge/whiteboard/svg");
-  const roughen = await import("../src/lib/tubeforge/whiteboard/roughen");
-  const fills = await import("../src/lib/tubeforge/whiteboard/fills");
-  const sketch = await import("../src/lib/tubeforge/whiteboard/sketch");
+  const { fmt2, flattenSubpathPoints, bezierFlatPoints, rdp } = await import("../src/lib/ibismuh/whiteboard/svg");
+  const roughen = await import("../src/lib/ibismuh/whiteboard/roughen");
+  const fills = await import("../src/lib/ibismuh/whiteboard/fills");
+  const sketch = await import("../src/lib/ibismuh/whiteboard/sketch");
 
   // fmt2 IS the glyph table's old discipline — the hoisted serializer must
   // behave identically at the function level.
@@ -23613,11 +23613,11 @@ await test("S164 (f) fixed-decimal parity — every generator emits through svg.
   // SOURCE: the serializer has ONE home; the generators import it and
   // define NO parallel rounding.
   for (const f of ["roughen.ts", "fills.ts", "sketch.ts"]) {
-    const src = fs.readFileSync(path.join("src/lib/tubeforge/whiteboard", f), "utf8");
+    const src = fs.readFileSync(path.join("src/lib/ibismuh/whiteboard", f), "utf8");
     ok(src.includes('from "./svg"'), `${f} imports the shared svg module`);
     ok(!/toFixed/.test(src), `${f} carries NO local toFixed rounding (no parallel serializer)`);
   }
-  const svgSrc = fs.readFileSync("src/lib/tubeforge/whiteboard/svg.ts", "utf8");
+  const svgSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/svg.ts", "utf8");
   ok(svgSrc.includes("export function fmt2"), "svg.ts is the ONE fmt2 home");
 
   // The authored-curve pipeline rides the same discipline: rdp keeps the
@@ -23639,8 +23639,8 @@ await test("S164 (f) fixed-decimal parity — every generator emits through svg.
 });
 
 await test("S164 the roughen primitives — the bowing double-stroke, the rough Catmull-Rom, the ellipse overshoot", async () => {
-  const roughen = await import("../src/lib/tubeforge/whiteboard/roughen");
-  const { fmt2 } = await import("../src/lib/tubeforge/whiteboard/svg");
+  const roughen = await import("../src/lib/ibismuh/whiteboard/roughen");
+  const { fmt2 } = await import("../src/lib/ibismuh/whiteboard/svg");
 
   // THE BOW LAW — the deterministic perpendicular formula verbatim: with
   // the endpoints pinned (chain interiors), a horizontal chord's control
@@ -23700,8 +23700,8 @@ await test("S164 the roughen primitives — the bowing double-stroke, the rough 
 });
 
 await test("S164 the fill styles — hachure inside by construction, the wrappers, the seeded-skip flourish, dots with the seeded jitter", async () => {
-  const fills = await import("../src/lib/tubeforge/whiteboard/fills");
-  const { minstd } = await import("../src/lib/tubeforge/whiteboard/roughen");
+  const fills = await import("../src/lib/ibismuh/whiteboard/fills");
+  const { minstd } = await import("../src/lib/ibismuh/whiteboard/roughen");
 
   // The even-odd inside test (the pin's own lens, independent of the module).
   const inside = (poly: { x: number; y: number }[], p: { x: number; y: number }): boolean => {
@@ -23766,7 +23766,7 @@ await test("S164 the fill styles — hachure inside by construction, the wrapper
 suiteStart("S165 — the render-farm determinism + throughput slice (golden harness, static dedup, the frame-truth scan)");
 
 await test("S165 (a) the static-dedup pure law — stretches, the plan's two-clock shape, the fail-closed decision", async () => {
-  const sd = await import("../src/lib/tubeforge/graphics/static-dedup");
+  const sd = await import("../src/lib/ibismuh/graphics/static-dedup");
   eq(sd.DEDUP_MIN_STRETCH_FRAMES, 8, "the stretch floor (the spot check must pay for itself)");
   eq(sd.DEDUP_PSNR_FLOOR_DB, 60, "the spot-check floor (identical pixels measure inf; a 1-value drift ≈48; motion <30)");
 
@@ -23835,7 +23835,7 @@ await test("S165 (a) the static-dedup pure law — stretches, the plan's two-clo
 });
 
 await test("S165 (b) the PSNR reading law — inf is a PASS (identical pixels), unparseable fails, one parser for both consumers", async () => {
-  const sd = await import("../src/lib/tubeforge/graphics/static-dedup");
+  const sd = await import("../src/lib/ibismuh/graphics/static-dedup");
   // The summary line (the render's spot check): last average wins.
   eq(
     sd.parsePsnrSummary("[Parsed_psnr_0 @ 0xdeadbeef] PSNR y:47.32 u:46.90 v:47.81 average:47.32"),
@@ -23883,7 +23883,7 @@ await test("S165 (b) the PSNR reading law — inf is a PASS (identical pixels), 
 });
 
 await test("S165 (c) the render wiring — the dedup lane rides the graphics render, default ON, fail-closed (the S157 usage-scan pattern)", async () => {
-  const src = fs.readFileSync("src/lib/tubeforge/graphics/render.ts", "utf8");
+  const src = fs.readFileSync("src/lib/ibismuh/graphics/render.ts", "utf8");
   ok(src.includes('from "./static-dedup"'), "the render imports the pure dedup law");
   ok(
     src.includes("opts.staticFrameDedup === false ? [] : findStaticStretches(applierKeys)"),
@@ -23894,9 +23894,9 @@ await test("S165 (c) the render wiring — the dedup lane rides the graphics ren
   // a hold's clock moves while its picture does not. The applier never
   // reads the provenance fields (grep the applier string itself); equal
   // effective input ⇒ equal DOM ⇒ equal pixels (the idempotence law).
-  const composeSrc = fs.readFileSync("src/lib/tubeforge/graphics/compose.ts", "utf8");
+  const composeSrc = fs.readFileSync("src/lib/ibismuh/graphics/compose.ts", "utf8");
   ok(composeSrc.includes("export function graphicsFrameApplierKey"), "compose exports the applier key (the scan's comparison basis)");
-  const { APPLY_GRAPHICS_FRAME_FN, graphicsFramePayload, graphicsFrameApplierKey } = await import("../src/lib/tubeforge/graphics/compose");
+  const { APPLY_GRAPHICS_FRAME_FN, graphicsFramePayload, graphicsFrameApplierKey } = await import("../src/lib/ibismuh/graphics/compose");
   ok(!APPLY_GRAPHICS_FRAME_FN.includes("sceneTMs") && !APPLY_GRAPHICS_FRAME_FN.includes("sceneId"), "the ONE applier never reads the provenance clock/scene fields");
   const frameAt = (sceneTMs: number) => ({
     sceneId: "s1",
@@ -23920,7 +23920,7 @@ await test("S165 (c) the render wiring — the dedup lane rides the graphics ren
   );
   // The pure law module itself: no fs, no clock, no randomness (it rides the
   // S165 (e) walk too — this pin names the promise, that walk enforces it).
-  const law = fs.readFileSync("src/lib/tubeforge/graphics/static-dedup.ts", "utf8");
+  const law = fs.readFileSync("src/lib/ibismuh/graphics/static-dedup.ts", "utf8");
   ok(!/Math\.random\(/.test(law) && !/Date\.now\(/.test(law) && !/performance\.now\(/.test(law) && !/\bnew Date\(/.test(law), "static-dedup.ts is pure");
   ok(!/\bfrom "node:fs"/.test(law) && !/\bfs\.\b/.test(law), "static-dedup.ts never touches fs");
 });
@@ -23963,7 +23963,7 @@ await test("S165 (d) the golden-video harness — committed baselines + the tole
 });
 
 await test("S165 (e) THE FRAME-TRUTH SCAN — the real tree is green, the planted nondeterminism fixture is CAUGHT", async () => {
-  const ft = await import("../src/lib/tubeforge/frame-truth-scan");
+  const ft = await import("../src/lib/ibismuh/frame-truth-scan");
   // The rule table is the SUPERSET: every token class the existing pins ban,
   // generalized (the existing pins stay green untouched — this ADDS coverage).
   eq(
@@ -24032,7 +24032,7 @@ await test("S165 (e) THE FRAME-TRUTH SCAN — the real tree is green, the plante
 suiteStart("S167 — the cinematic finisher (the fBM shake, the CDL grade, the duck lanes, the 3D admission)");
 
 await test("S167 fBM shake: zero at strength 0, bounded by ±strength/2, seeded (same seed → same shake), channels distinct", async () => {
-  const { cameraShakeAt, fbmShake01, perlinShake2, CAMERA_SHAKE_DEFAULTS } = await import("../src/lib/tubeforge/anim/camera");
+  const { cameraShakeAt, fbmShake01, perlinShake2, CAMERA_SHAKE_DEFAULTS } = await import("../src/lib/ibismuh/anim/camera");
   // The measured constants ride (the audit's Part 2.6 octave pair).
   eq(CAMERA_SHAKE_DEFAULTS.octaves, 4, "the default octave count");
   approx(CAMERA_SHAKE_DEFAULTS.frequency, 2.1, 1e-15, "the default base frequency (the handheld band)");
@@ -24083,8 +24083,8 @@ await test("S167 fBM shake: zero at strength 0, bounded by ±strength/2, seeded 
 });
 
 await test("S167 cameraPoseAt: the exponential push-in rides S162's curve; the shake composes; absent fields are byte-identical", async () => {
-  const { cameraPoseAt, cameraAt, parseScene3D, serializeScene3D } = await import("../src/lib/tubeforge/scene3d");
-  const { cameraShakeAt } = await import("../src/lib/tubeforge/anim/camera");
+  const { cameraPoseAt, cameraAt, parseScene3D, serializeScene3D } = await import("../src/lib/ibismuh/scene3d");
+  const { cameraShakeAt } = await import("../src/lib/ibismuh/anim/camera");
   const keys = [{ t: 0, position: [0, 0, 6] as [number, number, number], lookAt: [0, 0, 0] as [number, number, number] }];
   const objects = [{ id: "a", kind: "box" as const, position: [0, 0, 0] as [number, number, number], material: { color: "#888888", metalness: 0, roughness: 0.6, opacity: 1 } }];
   const baseDoc = {
@@ -24129,7 +24129,7 @@ await test("S167 cameraPoseAt: the exponential push-in rides S162's curve; the s
 });
 
 await test("S167 grade: the SOP/CDL scalars compile to curves args; absent ⇒ the exact legacy arg stream", async () => {
-  const { gradeFilter, cdlCurvesFilter, sanitizeGrade } = await import("../src/lib/tubeforge/studio-doc");
+  const { gradeFilter, cdlCurvesFilter, sanitizeGrade } = await import("../src/lib/ibismuh/studio-doc");
   // THE COMPILE IS PINNED (the args are the law's text): out =
   // (in·slope + offset)^power sampled at the fixed anchors, the power on
   // the exact-sqrt ladder (1/1024 grid — byte-stable across every engine).
@@ -24156,7 +24156,7 @@ await test("S167 grade: the SOP/CDL scalars compile to curves args; absent ⇒ t
 });
 
 await test("S167 duck lanes: attack 0.15 / release 0.4 / depth 0.25 — the keyframed envelope is pinned at its shape", async () => {
-  const { duckGainAt, duckEnvelopeKeyframes, duckAutomationChain, DUCK_AUTOMATION } = await import("../src/lib/tubeforge/audiomix");
+  const { duckGainAt, duckEnvelopeKeyframes, duckAutomationChain, DUCK_AUTOMATION } = await import("../src/lib/ibismuh/audiomix");
   // THE NUMBERS' PROVENANCE (the audit's Part 2.4 — the HyperFrames
   // transcript-driven automation constants, adopted as written numbers).
   eq(DUCK_AUTOMATION.attackSec, 0.15, "the attack ramp (seconds)");
@@ -24208,7 +24208,7 @@ await test("S167 duck lanes: attack 0.15 / release 0.4 / depth 0.25 — the keyf
 });
 
 await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuses without its segment, rides as an engine segment with one", async () => {
-  const { planFromTracks, validatePlanKinds, engineSegmentVerdict, COMPOSITOR_SEGMENT_KINDS } = await import("../src/lib/tubeforge/composition-plan");
+  const { planFromTracks, validatePlanKinds, engineSegmentVerdict, COMPOSITOR_SEGMENT_KINDS } = await import("../src/lib/ibismuh/composition-plan");
   const tracks = {
     tracks: [
       {
@@ -24235,14 +24235,14 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
   eq(engineSegmentVerdict(["3d"], ["/x"]), { ok: true, missing: [] }, "a single 3d scene rides the same law");
   // The dispatcher wiring (the S157 usage-scan pattern — the compile reads
   // the source so the wiring cannot silently rot).
-  const vj = fs.readFileSync("src/lib/tubeforge/video-jobs.ts", "utf8");
+  const vj = fs.readFileSync("src/lib/ibismuh/video-jobs.ts", "utf8");
   ok(vj.includes('s.kind === "3d"'), "the mixed-engine dispatcher gate admits the 3d kind");
   ok(vj.includes('kindAt(i) === "3d"'), "the dispatcher builds 3d scenes through the 3D lane");
   ok(vj.includes("renderScene3D(doc,"), "the 3D engine render rides the dispatcher");
   ok(vj.includes("scene3d: video.scene3d"), "the video's scene3d doc rides into the dispatcher");
   ok(vj.includes("the video has no 3D scene doc"), "a 3d plan without the doc refuses loudly (fail-closed)");
   // The renderer consumes the finisher path (the pose channels are live).
-  const r3 = fs.readFileSync("src/lib/tubeforge/render3d.ts", "utf8");
+  const r3 = fs.readFileSync("src/lib/ibismuh/render3d.ts", "utf8");
   ok(r3.includes("cameraPoseAt(doc, t)"), "the render loop evaluates the S167 camera pose path");
   ok(r3.includes("rollDeg"), "the page carries the roll channel (the shake's view-axis rotation)");
 });
@@ -24254,7 +24254,7 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
 // the engines' sanitizers' job — one writer each).
 // ---------------------------------------------------------------------------
 {
-  const dv = await import("../src/lib/tubeforge/director-vocabulary");
+  const dv = await import("../src/lib/ibismuh/director-vocabulary");
 
   await test("s168: the decision domains are the closed nine from the roadmap ask", () => {
     eq([...dv.DIRECTOR_DECISION_DOMAINS], [
@@ -24268,7 +24268,7 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
     // set (same module-level reference), the enters ARE the union of the
     // doc validator's own compatibility table, the eases ARE the ONE
     // curve table's keys.
-    const tr = await import("../src/lib/tubeforge/graphics/transitions");
+    const tr = await import("../src/lib/ibismuh/graphics/transitions");
     ok(dv.DIRECTOR_TRANSITIONS === tr.NATIVE_TRANSITION_TYPES, "transitions derive from graphics/transitions (same reference, not a copy)");
     ok(dv.DIRECTOR_GRAPHICS_ENTERS.length >= 8 && dv.DIRECTOR_GRAPHICS_ENTERS.includes("count") && dv.DIRECTOR_GRAPHICS_ENTERS.includes("draw"),
       "the enter vocabulary covers the measured grammar");
@@ -24350,7 +24350,7 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
 // directive gate, and the ONE mapping onto the S87 timeline.
 // ---------------------------------------------------------------------------
 {
-  const us = await import("../src/lib/tubeforge/universal-scene");
+  const us = await import("../src/lib/ibismuh/universal-scene");
 
   const goodScene = () => ({
     version: 1,
@@ -24474,7 +24474,7 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
 // import graph carries zero provider modules (pinned by source scan).
 // ---------------------------------------------------------------------------
 {
-  const ac = await import("../src/lib/tubeforge/animation-compiler");
+  const ac = await import("../src/lib/ibismuh/animation-compiler");
 
   const threeModeProject = () => ({
     version: 1,
@@ -24563,7 +24563,7 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
   });
 
   await test("s170: THE acceptance — the import graph carries zero provider modules (the AI can be disconnected)", () => {
-    const src = fs.readFileSync("src/lib/tubeforge/animation-compiler.ts", "utf8");
+    const src = fs.readFileSync("src/lib/ibismuh/animation-compiler.ts", "utf8");
     const imports = [...src.matchAll(/from "\.\/([^"]+)"/g)].map((m) => m[1]);
     ok(imports.length >= 2, "the module declares its imports");
     for (const imp of imports) {
@@ -24580,8 +24580,8 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
 // (borrow through the ONE implementor, honest wiring statuses).
 // ---------------------------------------------------------------------------
 {
-  const prim = await import("../src/lib/tubeforge/anim/primitives");
-  const cm = await import("../src/lib/tubeforge/cross-mode");
+  const prim = await import("../src/lib/ibismuh/anim/primitives");
+  const cm = await import("../src/lib/ibismuh/cross-mode");
 
   await test("s171: the primitive set is the closed fourteen from the roadmap ask", () => {
     eq([...prim.PRIMITIVE_NAMES], [
@@ -24662,9 +24662,9 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
 // regeneration — all pure.
 // ---------------------------------------------------------------------------
 {
-  const vr = await import("../src/lib/tubeforge/voice-router");
-  const vm = await import("../src/lib/tubeforge/voice-manager");
-  const reg = await import("../src/lib/tubeforge/providers/registry");
+  const vr = await import("../src/lib/ibismuh/voice-router");
+  const vm = await import("../src/lib/ibismuh/voice-manager");
+  const reg = await import("../src/lib/ibismuh/providers/registry");
 
   await test("s173: Kokoro is adopted in the registry (the lightweight local candidate)", () => {
     const kokoro = reg.TTS_PROVIDERS.find((p) => p.id === "kokoro");
@@ -24763,11 +24763,11 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
 // repair proposals that must survive the S168 validator.
 // ---------------------------------------------------------------------------
 {
-  const ai = await import("../src/lib/tubeforge/asset-intelligence");
-  const sp = await import("../src/lib/tubeforge/sound-plan");
-  const pi = await import("../src/lib/tubeforge/production-intelligence");
-  const dv = await import("../src/lib/tubeforge/director-vocabulary");
-  const ac = await import("../src/lib/tubeforge/animation-compiler");
+  const ai = await import("../src/lib/ibismuh/asset-intelligence");
+  const sp = await import("../src/lib/ibismuh/sound-plan");
+  const pi = await import("../src/lib/ibismuh/production-intelligence");
+  const dv = await import("../src/lib/ibismuh/director-vocabulary");
+  const ac = await import("../src/lib/ibismuh/animation-compiler");
 
   const sceneOf = (over: Record<string, unknown>): never =>
     ({ version: 1, sceneId: "scene_001", kind: "graphics", durationMs: 8000, assets: [], directives: [], ...over }) as never;
@@ -24851,10 +24851,10 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
 // anti-cripple law.
 // ---------------------------------------------------------------------------
 {
-  const cx = await import("../src/lib/tubeforge/creator-experience");
-  const ci = await import("../src/lib/tubeforge/cost-intelligence");
-  const ac = await import("../src/lib/tubeforge/animation-compiler");
-  const us = await import("../src/lib/tubeforge/universal-scene");
+  const cx = await import("../src/lib/ibismuh/creator-experience");
+  const ci = await import("../src/lib/ibismuh/cost-intelligence");
+  const ac = await import("../src/lib/ibismuh/animation-compiler");
+  const us = await import("../src/lib/ibismuh/universal-scene");
 
   const baseProject = () => ({
     version: 1, title: "The edit target", mode: "free",

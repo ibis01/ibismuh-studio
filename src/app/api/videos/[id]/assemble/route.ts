@@ -18,10 +18,10 @@
 // exactly instead of estimating from doc durations (which drift on trims).
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { parsePlan } from "@/lib/tubeforge/director-plan";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { parsePlan } from "@/lib/ibismuh/director-plan";
 import {
   assembleTimeline,
   serializeTimeline,
@@ -30,11 +30,11 @@ import {
   guardTimelineOverwrite,
   TIMELINE_OVERWRITE_ERROR,
   type AssembledTimeline,
-} from "@/lib/tubeforge/timeline";
-import { parseJson, assembleSaveSchema, ApiValidationError } from "@/lib/tubeforge/validation";
-import { sceneWavDurations } from "@/lib/tubeforge/clip-ops";
-import { videoDir } from "@/lib/tubeforge/ai";
-import { commitSceneChanges } from "@/lib/tubeforge/scene-revisions";
+} from "@/lib/ibismuh/timeline";
+import { parseJson, assembleSaveSchema, ApiValidationError } from "@/lib/ibismuh/validation";
+import { sceneWavDurations } from "@/lib/ibismuh/clip-ops";
+import { videoDir } from "@/lib/ibismuh/ai";
+import { commitSceneChanges } from "@/lib/ibismuh/scene-revisions";
 
 type Ctx = { params: Promise<{ id: string }> };
 

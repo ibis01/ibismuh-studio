@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { serializeCharacter, buildAnchorFallback } from "@/lib/tubeforge/characters";
-import { errorText } from "@/lib/tubeforge/redact";
-import type { CharacterDTO } from "@/lib/tubeforge/types";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { serializeCharacter, buildAnchorFallback } from "@/lib/ibismuh/characters";
+import { errorText } from "@/lib/ibismuh/redact";
+import type { CharacterDTO } from "@/lib/ibismuh/types";
 
 export async function GET(req: NextRequest) {
   const auth = await requireUser(req);

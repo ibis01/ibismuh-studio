@@ -46,16 +46,16 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "util";
 import { PrismaClient } from "@prisma/client";
-import { withCtx, hashPassword } from "../src/lib/tubeforge/tenant";
-import { runDirectorPass, setDirectorState, parsePlan } from "../src/lib/tubeforge/director";
+import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
+import { runDirectorPass, setDirectorState, parsePlan } from "../src/lib/ibismuh/director";
 import {
   runStoryboardJob,
   runSceneJob,
   runRenderJob,
   runQcJob,
-} from "../src/lib/tubeforge/video-jobs";
-import { saveCapability } from "../src/lib/tubeforge/providers/settings";
-import { parseQcReport, applyQcPolicy, qcEnforcementMode } from "../src/lib/tubeforge/qc-policy";
+} from "../src/lib/ibismuh/video-jobs";
+import { saveCapability } from "../src/lib/ibismuh/providers/settings";
+import { parseQcReport, applyQcPolicy, qcEnforcementMode } from "../src/lib/ibismuh/qc-policy";
 import {
   scanRestrictedSubjects,
   policyNegativeClause,
@@ -63,8 +63,8 @@ import {
   extractDenseGrid,
   runFaceTripwire,
   FACE_TRIPWIRE_PY,
-} from "../src/lib/tubeforge/restricted-subjects";
-import { probeDuration } from "../src/lib/tubeforge/render";
+} from "../src/lib/ibismuh/restricted-subjects";
+import { probeDuration } from "../src/lib/ibismuh/render";
 import {
   startStandinGateway,
   type StandinGateway,

@@ -108,7 +108,7 @@ async function phase1(): Promise<void> {
   // plain PUT /bucket in S3 — done here through the PRODUCTION SigV4 signer
   // from inside the container (also proves the host-gateway route). Works on
   // MinIO AND SeaweedFS; 409 = already exists on a re-run. ---
-  const { s3Config, s3Fetch } = await import("../src/lib/tubeforge/storage-s3");
+  const { s3Config, s3Fetch } = await import("../src/lib/ibismuh/storage-s3");
   const s3cfg = s3Config();
   if (!s3cfg) throw new Error("the s3 driver env is missing in the smoke container");
   const mkBucket = await s3Fetch("PUT", "", s3cfg);
@@ -127,8 +127,8 @@ async function phase1(): Promise<void> {
   const bytes = readFileSync(scratch);
   check("ffmpeg (in-image) rendered a real mp4", bytes.length > 0, `${bytes.length} bytes`);
 
-  const { put, get, usageBytes } = await import("../src/lib/tubeforge/storage");
-  const { withCtx } = await import("../src/lib/tubeforge/tenant");
+  const { put, get, usageBytes } = await import("../src/lib/ibismuh/storage");
+  const { withCtx } = await import("../src/lib/ibismuh/tenant");
   await withCtx(ctx, () => put("smoke/smoke-render.mp4", bytes));
   const back = await withCtx(ctx, () => get("smoke/smoke-render.mp4"));
   check("the artifact round-tripped put→get through MinIO (s3 driver)", back.equals(bytes), `${back.length} bytes back`);
@@ -167,7 +167,7 @@ async function phase1(): Promise<void> {
   // — every layer of §5.1's launch-args + per-scene-memory contract on the
   // real image. ---
   const { scaffoldWhiteboardProject, serializeWhiteboardDoc, parseWhiteboardDoc } =
-    await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
+    await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
   const wbTopic = "Docker smoke whiteboard";
   const wbProject = scaffoldWhiteboardProject({
     scenes: [{ index: 1, title: "The smoke", narration: "the container renders this whiteboard scene" }],
@@ -192,7 +192,7 @@ async function phase1(): Promise<void> {
     parseWhiteboardDoc(wbVideo.whiteboardProject) !== null,
   );
 
-  const { createPendingJob } = await import("../src/lib/tubeforge/queue");
+  const { createPendingJob } = await import("../src/lib/ibismuh/queue");
   await createPendingJob({
     organizationId: ctx.organizationId,
     userId: ctx.userId,

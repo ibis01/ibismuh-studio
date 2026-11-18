@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { applyPerformanceBoost, getAnalyticsOverview } from "@/lib/tubeforge/analytics";
-import { serializeSession } from "@/lib/tubeforge/research";
-import type { ResearchIdea } from "@/lib/tubeforge/types";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { applyPerformanceBoost, getAnalyticsOverview } from "@/lib/ibismuh/analytics";
+import { serializeSession } from "@/lib/ibismuh/research";
+import type { ResearchIdea } from "@/lib/ibismuh/types";
 
 /**
  * POST — re-apply the performance boost to a Topic Radar session using the

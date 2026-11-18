@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { serializeScenes, storyboardComplete, parseScenes } from "@/lib/tubeforge/story";
-import { startJob, isJobRunning, lastJobError, jobFleetStatus } from "@/lib/tubeforge/jobs";
-import { runStoryboardJob, runSceneJob } from "@/lib/tubeforge/video-jobs";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { serializeScenes, storyboardComplete, parseScenes } from "@/lib/ibismuh/story";
+import { startJob, isJobRunning, lastJobError, jobFleetStatus } from "@/lib/ibismuh/jobs";
+import { runStoryboardJob, runSceneJob } from "@/lib/ibismuh/video-jobs";
 
 type Ctx = { params: Promise<{ id: string }> };
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { requestJobCancel, type JobKind } from "@/lib/tubeforge/jobs";
-import { resumableKinds } from "@/lib/tubeforge/queue-handlers";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { requestJobCancel, type JobKind } from "@/lib/ibismuh/jobs";
+import { resumableKinds } from "@/lib/ibismuh/queue-handlers";
 
 /**
  * POST — stop a running background job (user-facing Stop button).

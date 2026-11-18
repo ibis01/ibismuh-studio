@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
-import { ServiceWorkerRegister } from "@/components/tubeforge/pwa";
+import { ServiceWorkerRegister } from "@/components/ibismuh/pwa";
 
 // S104 CSP regression fix — the middleware stamps a FRESH per-request nonce
 // into the Content-Security-Policy it attaches to every document

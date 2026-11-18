@@ -23,12 +23,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "util";
 
-import { loadLibrary } from "../src/lib/tubeforge/whiteboard/assets";
-import { buildGeometry, estimateNarrationMs, scheduleScene } from "../src/lib/tubeforge/whiteboard/timing";
-import { validateWhiteboardProject } from "../src/lib/tubeforge/whiteboard/storyboard";
-import { renderWhiteboard, probeDurationSec } from "../src/lib/tubeforge/whiteboard/render";
-import { bedExpression, ORIGINAL_LIBRARY } from "../src/lib/tubeforge/music";
-import { runQcReport } from "../src/lib/tubeforge/qc";
+import { loadLibrary } from "../src/lib/ibismuh/whiteboard/assets";
+import { buildGeometry, estimateNarrationMs, scheduleScene } from "../src/lib/ibismuh/whiteboard/timing";
+import { validateWhiteboardProject } from "../src/lib/ibismuh/whiteboard/storyboard";
+import { renderWhiteboard, probeDurationSec } from "../src/lib/ibismuh/whiteboard/render";
+import { bedExpression, ORIGINAL_LIBRARY } from "../src/lib/ibismuh/music";
+import { runQcReport } from "../src/lib/ibismuh/qc";
 
 const execFileP = promisify(execFile);
 const OUT_DIR = path.join(process.cwd(), "validation", "s64");
@@ -222,7 +222,7 @@ async function main(): Promise<void> {
   // The manifest.
   const manifest = {
     renderedAt: new Date().toISOString(),
-    engine: "src/lib/tubeforge/whiteboard (S64 P0)",
+    engine: "src/lib/ibismuh/whiteboard (S64 P0)",
     title: project.title,
     durationSec: Number(dur.toFixed(2)),
     scenes: scenes.map((s, i) => ({

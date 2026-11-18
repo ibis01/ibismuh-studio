@@ -19,22 +19,22 @@ export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
   const g = globalThis as typeof globalThis & {
-    __tfInstrumentation?: { ok: boolean; error?: string; at: string };
+    __ibismuhInstrumentation?: { ok: boolean; error?: string; at: string };
   };
 
   try {
-    const { registerDefaultHandlers } = await import("./lib/tubeforge/queue-handlers");
-    const { initQueue } = await import("./lib/tubeforge/queue");
+    const { registerDefaultHandlers } = await import("./lib/ibismuh/queue-handlers");
+    const { initQueue } = await import("./lib/ibismuh/queue");
 
     registerDefaultHandlers();
     initQueue("web"); // starts the claim loop (TUBEFORGE_NO_CLAIM=1 → enqueue-only)
 
     // Release holds orphaned by dead processes (best-effort, never throws,
     // timer is unref'd — see startStaleHoldSweeper).
-    const { startStaleHoldSweeper } = await import("./lib/tubeforge/billing");
+    const { startStaleHoldSweeper } = await import("./lib/ibismuh/billing");
     startStaleHoldSweeper();
 
-    const { log } = await import("./lib/tubeforge/log");
+    const { log } = await import("./lib/ibismuh/log");
     log.info("queue initialized", {
       role: "web",
       noClaim: process.env.TUBEFORGE_NO_CLAIM === "1",
@@ -48,7 +48,7 @@ export async function register(): Promise<void> {
     if (process.env.TUBEFORGE_SPAWN_VOICE_SERVER === "1") {
       try {
         const { spawnSharedVoiceServer, startVoiceServerWatchdog } = await import(
-          "./lib/tubeforge/spawn-voice-server"
+          "./lib/ibismuh/spawn-voice-server"
         );
         const result = await spawnSharedVoiceServer();
         startVoiceServerWatchdog();
@@ -61,7 +61,7 @@ export async function register(): Promise<void> {
       }
     }
 
-    g.__tfInstrumentation = { ok: true, at: new Date().toISOString() };
+    g.__ibismuhInstrumentation = { ok: true, at: new Date().toISOString() };
 
     // S61 — the encryption-key watchlight (the S60 record's owner-side
     // finding #1: the Vercel deployment ran without TUBEFORGE_ENCRYPTION_KEY,
@@ -74,7 +74,7 @@ export async function register(): Promise<void> {
       process.env.NODE_ENV === "production" &&
       (process.env.TUBEFORGE_ENCRYPTION_KEY ?? "").length < 16
     ) {
-      const encLog = (await import("./lib/tubeforge/log").catch(() => ({ log: null as null }))).log;
+      const encLog = (await import("./lib/ibismuh/log").catch(() => ({ log: null as null }))).log;
       const message =
         "TUBEFORGE_ENCRYPTION_KEY is missing or too short (<16 chars) — provider " +
         "credentials cannot be encrypted or read (they fail closed). Fix: set a " +
@@ -91,7 +91,7 @@ export async function register(): Promise<void> {
       .slice(1, 4)
       .join(" | ")
       .slice(0, 300);
-    g.__tfInstrumentation = {
+    g.__ibismuhInstrumentation = {
       ok: false,
       error: `${message} :: ${stackLines}`,
       at: new Date().toISOString(),
@@ -100,7 +100,7 @@ export async function register(): Promise<void> {
     // defensively here TOO: this catch is the app's "why did boot degrade"
     // line, so it must speak even when the failing import was the logger's
     // own module — the raw console is the last-resort sink for exactly that.
-    const { log } = await import("./lib/tubeforge/log").catch(() => ({ log: null as null }));
+    const { log } = await import("./lib/ibismuh/log").catch(() => ({ log: null as null }));
     if (log) log.error("queue boot FAILED (app continues without background jobs)", { err: message });
     // eslint-disable-next-line no-console -- last-resort sink (logger module failed to load)
     else console.error("[instrumentation] queue boot FAILED (app continues without background jobs):", message);

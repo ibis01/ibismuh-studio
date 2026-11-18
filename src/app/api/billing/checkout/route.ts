@@ -20,15 +20,15 @@
 //   * POST body: unknown fields are stripped, not rejected (house law).
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser, sessionIdFromRequest } from "@/lib/tubeforge/tenant";
+import { requireUser, sessionIdFromRequest } from "@/lib/ibismuh/tenant";
 import {
   isCheckoutTier,
   checkoutReady,
   stripeGate,
   stripeCreate,
   checkoutParams,
-} from "@/lib/tubeforge/stripe";
-import { resolveUserPlan } from "@/lib/tubeforge/billing";
+} from "@/lib/ibismuh/stripe";
+import { resolveUserPlan } from "@/lib/ibismuh/billing";
 
 export async function POST(req: NextRequest) {
   const auth = await requireUser(req);

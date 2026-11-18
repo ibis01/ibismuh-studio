@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { serializeSession, runResearchScan } from "@/lib/tubeforge/research";
-import { startJob } from "@/lib/tubeforge/jobs";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { serializeSession, runResearchScan } from "@/lib/ibismuh/research";
+import { startJob } from "@/lib/ibismuh/jobs";
 
 /** GET — recent research sessions (newest first). */
 export async function GET(req: NextRequest) {

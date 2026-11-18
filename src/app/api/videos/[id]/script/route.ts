@@ -1,20 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { generateScriptPackage } from "@/lib/tubeforge/ai";
-import { generateSceneScriptPackage, parseScenes } from "@/lib/tubeforge/story";
-import { deriveStatus } from "@/lib/tubeforge/status";
-import { startJob, isJobRunning } from "@/lib/tubeforge/jobs";
-import { serializeVideo } from "@/lib/tubeforge/serialize";
-import { commitSceneChanges } from "@/lib/tubeforge/scene-revisions";
-import { parseTimeline } from "@/lib/tubeforge/timeline";
-import { errorText } from "@/lib/tubeforge/redact";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { generateScriptPackage } from "@/lib/ibismuh/ai";
+import { generateSceneScriptPackage, parseScenes } from "@/lib/ibismuh/story";
+import { deriveStatus } from "@/lib/ibismuh/status";
+import { startJob, isJobRunning } from "@/lib/ibismuh/jobs";
+import { serializeVideo } from "@/lib/ibismuh/serialize";
+import { commitSceneChanges } from "@/lib/ibismuh/scene-revisions";
+import { parseTimeline } from "@/lib/ibismuh/timeline";
+import { errorText } from "@/lib/ibismuh/redact";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-import { scratchDir } from "@/lib/tubeforge/storage";
+import { scratchDir } from "@/lib/ibismuh/storage";
 const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).length;
 
 /**

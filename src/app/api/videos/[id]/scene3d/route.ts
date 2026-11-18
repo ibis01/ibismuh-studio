@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { isJobRunning, startJob } from "@/lib/tubeforge/jobs";
-import * as storage from "@/lib/tubeforge/storage";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { isJobRunning, startJob } from "@/lib/ibismuh/jobs";
+import * as storage from "@/lib/ibismuh/storage";
 import {
   parseScene3D,
   runScene3DJob,
@@ -10,7 +10,7 @@ import {
   scene3dClipKey,
   serializeScene3D,
   type Scene3DAspect,
-} from "@/lib/tubeforge/scene3d";
+} from "@/lib/ibismuh/scene3d";
 
 type Ctx = { params: Promise<{ id: string }> };
 

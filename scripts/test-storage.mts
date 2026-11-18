@@ -48,8 +48,8 @@ async function main(): Promise<void> {
     StorageQuotaError,
     storageQuotaBytes,
     put,
-  } = await import("../src/lib/tubeforge/storage");
-  const { withCtx } = await import("../src/lib/tubeforge/tenant");
+  } = await import("../src/lib/ibismuh/storage");
+  const { withCtx } = await import("../src/lib/ibismuh/tenant");
 
   // A 1 GiB ceiling for the battery (storageQuotaBytes reads env per call).
   process.env.TUBEFORGE_STORAGE_QUOTA_GB = "1";

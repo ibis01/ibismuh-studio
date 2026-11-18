@@ -34,35 +34,35 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "util";
-import { withCtx, hashPassword } from "../src/lib/tubeforge/tenant";
-import { must } from "../src/lib/tubeforge/must";
+import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
+import { must } from "../src/lib/ibismuh/must";
 import {
   runDirectorPass,
   setDirectorState,
   parsePlan,
-} from "../src/lib/tubeforge/director";
+} from "../src/lib/ibismuh/director";
 import {
   generateSceneImage,
   parseScenes,
   sceneImageFile,
   sceneWavFile,
-} from "../src/lib/tubeforge/story";
-import { renderVideo } from "../src/lib/tubeforge/render";
-import { runPortraitJob } from "../src/lib/tubeforge/character-jobs";
-import { readPortrait } from "../src/lib/tubeforge/characters";
-import { runQcReport } from "../src/lib/tubeforge/qc";
-import { saveCapability } from "../src/lib/tubeforge/providers/settings";
-import * as storage from "../src/lib/tubeforge/storage";
+} from "../src/lib/ibismuh/story";
+import { renderVideo } from "../src/lib/ibismuh/render";
+import { runPortraitJob } from "../src/lib/ibismuh/character-jobs";
+import { readPortrait } from "../src/lib/ibismuh/characters";
+import { runQcReport } from "../src/lib/ibismuh/qc";
+import { saveCapability } from "../src/lib/ibismuh/providers/settings";
+import * as storage from "../src/lib/ibismuh/storage";
 import {
   parseSceneCuts,
   parseYavgLog,
   detectSceneCuts,
   alignCuts,
   CUT_TOL_SEC,
-} from "../src/lib/tubeforge/render-qc";
-import { buildSceneShots } from "../src/lib/tubeforge/shots";
-import { transitionOffsetsMulti } from "../src/lib/tubeforge/transitions";
-import { R_LEAD_SEC, R_TAIL_SEC, R_MIN_SEG_SEC } from "../src/lib/tubeforge/preview-lanes";
+} from "../src/lib/ibismuh/render-qc";
+import { buildSceneShots } from "../src/lib/ibismuh/shots";
+import { transitionOffsetsMulti } from "../src/lib/ibismuh/transitions";
+import { R_LEAD_SEC, R_TAIL_SEC, R_MIN_SEG_SEC } from "../src/lib/ibismuh/preview-lanes";
 
 const execFileAsync = promisify(execFile);
 const prisma = new PrismaClient();

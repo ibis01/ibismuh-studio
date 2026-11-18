@@ -20,8 +20,8 @@
 //   9. everything is cleaned up — videos, accounts.
 // Run: node --import tsx scripts/s10-route-e2e.mjs
 import { PrismaClient } from "@prisma/client";
-import { assembleTimeline, serializeTimeline } from "../src/lib/tubeforge/timeline";
-import { parseScenes } from "../src/lib/tubeforge/story";
+import { assembleTimeline, serializeTimeline } from "../src/lib/ibismuh/timeline";
+import { parseScenes } from "../src/lib/ibismuh/story";
 
 const db = new PrismaClient();
 const BASE = "http://localhost:3000";

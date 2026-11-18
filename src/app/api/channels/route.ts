@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import type { ChannelDTO } from "@/lib/tubeforge/types";
-import { errorText } from "@/lib/tubeforge/redact";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import type { ChannelDTO } from "@/lib/ibismuh/types";
+import { errorText } from "@/lib/ibismuh/redact";
 
 export async function GET(req: NextRequest) {
   const auth = await requireUser(req);

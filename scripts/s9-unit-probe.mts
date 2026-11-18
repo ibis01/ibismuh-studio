@@ -14,11 +14,11 @@ import {
   sanitizePosterPick,
   docPosterPick,
   sanitizeRenderPrefs,
-} from "../src/lib/tubeforge/studio-doc";
-import { assembleSaveSchema } from "../src/lib/tubeforge/validation";
-import { assembleTimeline, parseTimeline, serializeTimeline } from "../src/lib/tubeforge/timeline";
-import { parseScenes } from "../src/lib/tubeforge/story";
-import { posterSceneFor } from "../src/lib/tubeforge/video-jobs";
+} from "../src/lib/ibismuh/studio-doc";
+import { assembleSaveSchema } from "../src/lib/ibismuh/validation";
+import { assembleTimeline, parseTimeline, serializeTimeline } from "../src/lib/ibismuh/timeline";
+import { parseScenes } from "../src/lib/ibismuh/story";
+import { posterSceneFor } from "../src/lib/ibismuh/video-jobs";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail?: unknown) => {

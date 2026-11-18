@@ -43,9 +43,9 @@ function ok(cond: unknown, msg: string): asserts cond {
 async function main(): Promise<void> {
   console.log("S170 — the offline-compile proof (the AI-disconnect acceptance)");
 
-  const { compileUniversalProject } = await import("../src/lib/tubeforge/animation-compiler");
-  const { serializeUniversalProject, validateUniversalProject } = await import("../src/lib/tubeforge/universal-scene");
-  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
+  const { compileUniversalProject } = await import("../src/lib/ibismuh/animation-compiler");
+  const { serializeUniversalProject, validateUniversalProject } = await import("../src/lib/ibismuh/universal-scene");
+  const { scaffoldGraphicsDoc } = await import("../src/lib/ibismuh/graphics/planner");
 
   // The graphics scene rides a REAL native doc — scaffolded by the pure
   // planner (the AI-free path that has been the graphics lane's floor
@@ -145,7 +145,7 @@ async function main(): Promise<void> {
   console.log(`  plan sha256 (stable form): ${sha}`);
 
   // 3. the import graph — the provider surface structurally absent.
-  const src = fs.readFileSync(path.join(REPO_ROOT, "src/lib/tubeforge/animation-compiler.ts"), "utf8");
+  const src = fs.readFileSync(path.join(REPO_ROOT, "src/lib/ibismuh/animation-compiler.ts"), "utf8");
   const imports = [...src.matchAll(/from "\.\/([^"]+)"/g)].map((m) => m[1]);
   ok(
     imports.length > 0 && imports.every((imp) => !/(zai|llm|provider|voice|openai|research|ai\.ts)/.test(imp)),

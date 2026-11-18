@@ -23,7 +23,7 @@ process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 process.env.TUBEFORGE_PRICING_VERIFIED ??= "1";
 
 import { PrismaClient } from "@prisma/client";
-import { withCtx, hashPassword } from "../src/lib/tubeforge/tenant";
+import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
 import {
   PRICING_VERSION,
   PRICING_STATUS,
@@ -34,7 +34,7 @@ import {
   SpendBlockedError,
   SpendPricingUnverifiedError,
   SpendBootFailedError,
-} from "../src/lib/tubeforge/spend";
+} from "../src/lib/ibismuh/spend";
 
 const prisma = new PrismaClient();
 const SUFFIX = Date.now().toString(36);
@@ -61,15 +61,15 @@ const req = <T,>(label: string, v: T | undefined | null): T => {
 
 // The gate's global state — the probe resets it between sections.
 const spendState = req(
-  "spend gate global (__tfSpend)",
+  "spend gate global (__ibismuhSpend)",
   (globalThis as typeof globalThis & {
-    __tfSpend?: {
+    __ibismuhSpend?: {
       bootFailed: boolean;
       recordedMicro: number;
       holds: Map<string, number>;
       localOnly: Set<string>;
     };
-  }).__tfSpend,
+  }).__ibismuhSpend,
 );
 
 // S47 — the gate's decision input is the DATABASE (a serialized per-admit

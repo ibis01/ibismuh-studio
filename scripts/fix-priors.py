@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fix the a2eabd8 registry-sync miss: add priors rows for heygen (tts)
-and magichour (video) to src/lib/tubeforge/provider-score.ts.
+and magichour (video) to src/lib/ibismuh/provider-score.ts.
 
 The S90 sync law (priorsComplete) requires every PROVIDERS_BY_CAPABILITY
 entry to have a priors row. a2eabd8 added groq (already covered in
@@ -10,7 +10,7 @@ Idempotent: skips if the rows already exist.
 """
 import sys
 
-PATH = "src/lib/tubeforge/provider-score.ts"
+PATH = "src/lib/ibismuh/provider-score.ts"
 
 TTS_ANCHOR = "  zhipu: { quality: 0.88, latency: 0.75, fit: 0.95 }, // the cloning lane\n"
 TTS_ROW = (

@@ -49,16 +49,16 @@ import {
   W1_ASPECT_IDS,
   W1_FPS,
   type W1AspectId,
-} from "../src/lib/tubeforge/whiteboard/benchmark-scenarios";
-import { loadLibrary } from "../src/lib/tubeforge/whiteboard/assets";
-import { validateWhiteboardProject, type WhiteboardProject, type WhiteboardScene } from "../src/lib/tubeforge/whiteboard/storyboard";
-import { buildGeometry, frameAt, TEXT_ANCHORS, type AssetGeometry } from "../src/lib/tubeforge/whiteboard/timing";
-import { checkReadability } from "../src/lib/tubeforge/whiteboard/text-draw";
-import { beatSceneEvents } from "../src/lib/tubeforge/whiteboard/beat-plan";
-import { composeScene, framePayload, APPLY_FRAME_FN } from "../src/lib/tubeforge/whiteboard/wb-page";
-import { renderWhiteboard, probeDurationSec, WB_CHROMIUM_LAUNCH_ARGS } from "../src/lib/tubeforge/whiteboard/render";
-import { runQcReport } from "../src/lib/tubeforge/qc";
-import { bedExpression, ORIGINAL_LIBRARY } from "../src/lib/tubeforge/music";
+} from "../src/lib/ibismuh/whiteboard/benchmark-scenarios";
+import { loadLibrary } from "../src/lib/ibismuh/whiteboard/assets";
+import { validateWhiteboardProject, type WhiteboardProject, type WhiteboardScene } from "../src/lib/ibismuh/whiteboard/storyboard";
+import { buildGeometry, frameAt, TEXT_ANCHORS, type AssetGeometry } from "../src/lib/ibismuh/whiteboard/timing";
+import { checkReadability } from "../src/lib/ibismuh/whiteboard/text-draw";
+import { beatSceneEvents } from "../src/lib/ibismuh/whiteboard/beat-plan";
+import { composeScene, framePayload, APPLY_FRAME_FN } from "../src/lib/ibismuh/whiteboard/wb-page";
+import { renderWhiteboard, probeDurationSec, WB_CHROMIUM_LAUNCH_ARGS } from "../src/lib/ibismuh/whiteboard/render";
+import { runQcReport } from "../src/lib/ibismuh/qc";
+import { bedExpression, ORIGINAL_LIBRARY } from "../src/lib/ibismuh/music";
 
 const execFileP = promisify(execFile);
 const OUT_DIR = path.resolve("validation/w4");

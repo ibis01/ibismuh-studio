@@ -3,8 +3,8 @@
 // uploads/<id>/ are listed by path, not inlined).
 
 import { NextRequest, NextResponse } from "next/server";
-import { db, rawDatabase as rawDb } from "@/lib/tubeforge/tenant-db";
-import { requireUser, sessionIdFromRequest } from "@/lib/tubeforge/tenant";
+import { db, rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { requireUser, sessionIdFromRequest } from "@/lib/ibismuh/tenant";
 
 export async function GET(req: NextRequest) {
   const auth = await requireUser(req);

@@ -142,7 +142,7 @@ function stripeSign(secret: string, body: string): string {
   return `t=${t},v1=${v1}`;
 }
 
-const billing = await import("../src/lib/tubeforge/billing");
+const billing = await import("../src/lib/ibismuh/billing");
 const {
   processStripeEvent,
   creditsToMicro,
@@ -1054,8 +1054,8 @@ await test("starter and canceled-subscription users never reserve (unmetered ove
 
 // ---- END-TO-END through the REAL aiCall (reserve before, settle/release after) ----
 
-const { withCtx } = await import("../src/lib/tubeforge/tenant");
-const budget = await import("../src/lib/tubeforge/budget");
+const { withCtx } = await import("../src/lib/ibismuh/tenant");
+const budget = await import("../src/lib/ibismuh/budget");
 
 /** A real org row — UsageRecord.organizationId is an FK. */
 async function makeOrg(memberId: string) {
@@ -1213,7 +1213,7 @@ await test("startJob refuses while a pending OR running row exists for the same 
   const { user } = await makePaidUser(`${MARK}.p10dedupe@t.test`, "active");
   const org = await makeOrg(user.id);
   const videoId = `s72dedupe-${MARK}-1`;
-  const jobs = await import("../src/lib/tubeforge/jobs");
+  const jobs = await import("../src/lib/ibismuh/jobs");
 
   // A running row claimed by ANOTHER process (the worker) — invisible to
   // this process's in-memory state, and previously to the dedupe too.

@@ -4,9 +4,9 @@
 // TTS) — this route backs the "hear the clone" replay in the clone panel.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { getAuditionWav } from "@/lib/tubeforge/voice-clone";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { getAuditionWav } from "@/lib/ibismuh/voice-clone";
 
 type Ctx = { params: Promise<{ id: string }> };
 

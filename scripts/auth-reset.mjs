@@ -1,4 +1,4 @@
-// TubeForge auth reset — Stage 2 edition (ARCHITECTURE.md §6.3).
+// Ibismuh Studio auth reset — Stage 2 edition (ARCHITECTURE.md §6.3).
 //
 // The old global lock toggle is gone with multi-user auth. This is now a
 // server-side CLI that resets ONE USER's password by email: it prints a

@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { latestStatsMap } from "@/lib/tubeforge/analytics";
-import { serializeVideo } from "@/lib/tubeforge/serialize";
-import { startJob } from "@/lib/tubeforge/jobs";
-import { runScriptJob } from "@/lib/tubeforge/script-job";
-import { FORMATS, RENDER_MODES, type VideoDTO } from "@/lib/tubeforge/types";
-import { TRANSITIONS, sanitizeTransitionDuration } from "@/lib/tubeforge/transitions";
-import { isDuckIntensity } from "@/lib/tubeforge/audiomix";
-import { isMusicMoodId } from "@/lib/tubeforge/music";
-import { errorText } from "@/lib/tubeforge/redact";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { latestStatsMap } from "@/lib/ibismuh/analytics";
+import { serializeVideo } from "@/lib/ibismuh/serialize";
+import { startJob } from "@/lib/ibismuh/jobs";
+import { runScriptJob } from "@/lib/ibismuh/script-job";
+import { FORMATS, RENDER_MODES, type VideoDTO } from "@/lib/ibismuh/types";
+import { TRANSITIONS, sanitizeTransitionDuration } from "@/lib/ibismuh/transitions";
+import { isDuckIntensity } from "@/lib/ibismuh/audiomix";
+import { isMusicMoodId } from "@/lib/ibismuh/music";
+import { errorText } from "@/lib/ibismuh/redact";
 
 const TRANSITION_IDS = new Set<string>(TRANSITIONS.map((t) => t.id));
 

@@ -20,11 +20,11 @@ import path from "path";
 import { promisify } from "util";
 import { execFile } from "child_process";
 import { PrismaClient } from "@prisma/client";
-import { withCtx } from "../src/lib/tubeforge/tenant.ts";
-import { runRenderJob } from "../src/lib/tubeforge/video-jobs.ts";
-import { buildSmartSrt } from "../src/lib/tubeforge/captions.ts";
-import { probeDuration } from "../src/lib/tubeforge/render.ts";
-import { parseScenes } from "../src/lib/tubeforge/story.ts";
+import { withCtx } from "../src/lib/ibismuh/tenant.ts";
+import { runRenderJob } from "../src/lib/ibismuh/video-jobs.ts";
+import { buildSmartSrt } from "../src/lib/ibismuh/captions.ts";
+import { probeDuration } from "../src/lib/ibismuh/render.ts";
+import { parseScenes } from "../src/lib/ibismuh/story.ts";
 
 const execFileAsync = promisify(execFile);
 const db = new PrismaClient();

@@ -41,9 +41,9 @@ function headers(map: Record<string, string>): { get(name: string): string | nul
 
 async function main(): Promise<void> {
   console.log("◆ S102 / P0.4 — shared rate limiter + trusted proxy (spoofing + multi-instance battery)");
-  const { trustedClientIp, isTrustedProxyIp } = await import("../src/lib/tubeforge/proxy-trust");
+  const { trustedClientIp, isTrustedProxyIp } = await import("../src/lib/ibismuh/proxy-trust");
   const { hitSharedBucket, sweepRateLimitCounters } = await import(
-    "../src/lib/tubeforge/shared-rate-limit"
+    "../src/lib/ibismuh/shared-rate-limit"
   );
 
   // ---- 1. THE SPOOFING LAW -------------------------------------------------
@@ -104,7 +104,7 @@ async function main(): Promise<void> {
     ok(fresh.ok, "the NEXT window admits again");
 
     // ---- 3. SPOOF RESISTANCE OF THE LIMITER — forged chains converge on the victim
-    const { enforceSharedRateLimit } = await import("../src/lib/tubeforge/shared-rate-limit");
+    const { enforceSharedRateLimit } = await import("../src/lib/ibismuh/shared-rate-limit");
     const forge1 = headers({ "x-forwarded-for": `9.9.9.9, ${victim}` });
     const forge2 = headers({ "x-forwarded-for": `8.8.8.8, ${victim}` });
     const r1 = await enforceSharedRateLimit(forge1, true);

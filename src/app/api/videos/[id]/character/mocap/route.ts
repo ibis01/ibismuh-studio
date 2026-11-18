@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { StorageQuotaError } from "@/lib/tubeforge/storage";
-import * as storage from "@/lib/tubeforge/storage";
-import { invalidateRenderedArtifacts } from "@/lib/tubeforge/render";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { estimateNarrationSec } from "@/lib/tubeforge/timeline";
-import { parseBvh, buildMocapTimeline } from "@/lib/tubeforge/characters/bvh";
-import { RIG_BUDGETS } from "@/lib/tubeforge/characters/rig2d";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { StorageQuotaError } from "@/lib/ibismuh/storage";
+import * as storage from "@/lib/ibismuh/storage";
+import { invalidateRenderedArtifacts } from "@/lib/ibismuh/render";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { estimateNarrationSec } from "@/lib/ibismuh/timeline";
+import { parseBvh, buildMocapTimeline } from "@/lib/ibismuh/characters/bvh";
+import { RIG_BUDGETS } from "@/lib/ibismuh/characters/rig2d";
 
 type Ctx = { params: Promise<{ id: string }> };
 

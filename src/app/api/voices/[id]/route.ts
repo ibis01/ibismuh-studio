@@ -3,10 +3,10 @@
 // a 4xx from the platform must not strand the profile in the UI).
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { deleteVoiceProfile } from "@/lib/tubeforge/voice-clone";
-import { errorText } from "@/lib/tubeforge/redact";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { deleteVoiceProfile } from "@/lib/ibismuh/voice-clone";
+import { errorText } from "@/lib/ibismuh/redact";
 
 type Ctx = { params: Promise<{ id: string }> };
 

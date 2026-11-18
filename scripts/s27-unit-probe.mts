@@ -43,10 +43,10 @@ process.env.TUBEFORGE_PRICING_VERIFIED ??= "1";
 import { PrismaClient } from "@prisma/client";
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
-import { withCtx, hashPassword } from "../src/lib/tubeforge/tenant";
-import { saveCapability } from "../src/lib/tubeforge/providers/settings";
-import { chatComplete } from "../src/lib/tubeforge/providers/chat";
-import { aiCall, } from "../src/lib/tubeforge/budget";import {
+import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
+import { saveCapability } from "../src/lib/ibismuh/providers/settings";
+import { chatComplete } from "../src/lib/ibismuh/providers/chat";
+import { aiCall, } from "../src/lib/ibismuh/budget";import {
   PRICING_VERSION,
   priceForModel,
   computeCostMicroUsd,
@@ -59,7 +59,7 @@ import { aiCall, } from "../src/lib/tubeforge/budget";import {
   emitUsage,
   drainUsage,
   MAX_OUTPUT_TOKENS,
-} from "../src/lib/tubeforge/spend";
+} from "../src/lib/ibismuh/spend";
 
 const prisma = new PrismaClient();
 // S28 — the studio has a REAL tenant now (the owner's account lives in
@@ -95,15 +95,15 @@ orgId = org.id;
 
 // The gate's global state — the probe resets it between sections.
 const spendState = req(
-  "spend gate global (__tfSpend)",
+  "spend gate global (__ibismuhSpend)",
   (globalThis as typeof globalThis & {
-    __tfSpend?: {
+    __ibismuhSpend?: {
       bootFailed: boolean;
       recordedMicro: number;
       holds: Map<string, number>;
       localOnly: Set<string>;
     };
-  }).__tfSpend,
+  }).__ibismuhSpend,
 );
 // S47 — the gate's decision input is the DATABASE (a serialized per-admit
 // read), so resetting the world now means wiping SpendReservation and — for
@@ -410,7 +410,7 @@ try {
 console.log("\n§7 the knobs");
 {
   const script = `
-    const { admitDispatch } = await import("${process.cwd()}/src/lib/tubeforge/spend.ts");
+    const { admitDispatch } = await import("${process.cwd()}/src/lib/ibismuh/spend.ts");
     try {
       const hold = await admitDispatch({ provider: "openai", model: "gpt-6.1-sol", estimatedMicro: 81_944 });
       console.log(hold === null ? "UNGATED" : "ADMITTED");

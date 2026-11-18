@@ -25,20 +25,20 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "util";
 
-import { aiCall } from "../src/lib/tubeforge/budget";
+import { aiCall } from "../src/lib/ibismuh/budget";
 import {
   resolveContentPolicy,
   sanitizePromptForPolicy,
-} from "../src/lib/tubeforge/restricted-subjects";
+} from "../src/lib/ibismuh/restricted-subjects";
 import {
   VIDEO_DEFAULT_MODEL,
   getCapability,
-} from "../src/lib/tubeforge/providers/settings";
-import { zaiClientFor } from "../src/lib/tubeforge/zai-client";
-import { zaiVideoViaClient } from "../src/lib/tubeforge/providers/zai-video-core";
-import { i2vMotionPrompt } from "../src/lib/tubeforge/liveliness";
-import { runQcReport } from "../src/lib/tubeforge/qc";
-import type { DirectorPlan } from "../src/lib/tubeforge/director-plan";
+} from "../src/lib/ibismuh/providers/settings";
+import { zaiClientFor } from "../src/lib/ibismuh/zai-client";
+import { zaiVideoViaClient } from "../src/lib/ibismuh/providers/zai-video-core";
+import { i2vMotionPrompt } from "../src/lib/ibismuh/liveliness";
+import { runQcReport } from "../src/lib/ibismuh/qc";
+import type { DirectorPlan } from "../src/lib/ibismuh/director-plan";
 import { BRIEFS } from "./s-profile-briefs.mts";
 
 const execFileP = promisify(execFile);

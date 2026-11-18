@@ -34,7 +34,7 @@ async function main() {
   // The pipeline under test (storage calls run against the local driver).
   process.env.DATABASE_URL ||= "file:./db/custom.db";
   const { analyzeReferenceVideo, serializeReferenceAnalysis, parseReferenceAnalysis } =
-    await import("../src/lib/tubeforge/reference-video.ts");
+    await import("../src/lib/ibismuh/reference-video.ts");
   const analysis = await analyzeReferenceVideo("s88-smoke-video", src, {
     fileName: "ref.mp4",
     onProgress: (l) => console.log("  …", l),

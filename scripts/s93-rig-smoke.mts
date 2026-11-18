@@ -50,14 +50,14 @@ async function probeDurationSec(file: string): Promise<number | null> {
 
 async function main() {
   process.env.DATABASE_URL ||= "file:./db/custom.db";
-  const { videoDir } = await import("../src/lib/tubeforge/ai.ts");
-  const { sceneImageFile, sceneWavFile } = await import("../src/lib/tubeforge/story.ts");
+  const { videoDir } = await import("../src/lib/ibismuh/ai.ts");
+  const { sceneImageFile, sceneWavFile } = await import("../src/lib/ibismuh/story.ts");
   const videoId = "s93-rig-smoke";
   const dir = videoDir(videoId);
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
 
-  type Scene = import("../src/lib/tubeforge/types.ts").Scene;
+  type Scene = import("../src/lib/ibismuh/types.ts").Scene;
   const scene: Scene = {
     index: 1,
     title: "The host speaks",
@@ -78,9 +78,9 @@ async function main() {
   await ffmpeg(["-f", "lavfi", "-i", "sine=frequency=440:duration=4", "-ar", "48000", "-ac", "1", wav]);
 
   // ---- the pure layer: the rig plan vs the auto plan, as filter graphs ----
-  const { rigPlan } = await import("../src/lib/tubeforge/character-rig.ts");
+  const { rigPlan } = await import("../src/lib/ibismuh/character-rig.ts");
   const { sceneFilterGraph, planSceneMovements, sanitizeMotion } = await import(
-    "../src/lib/tubeforge/motion.ts"
+    "../src/lib/ibismuh/motion.ts"
   );
   const motion = sanitizeMotion({ mode: "smart", intensity: 12, curve: "smooth", vary: false });
   const rig = rigPlan({ sceneIndex: 1, durationSec: 4, intensity: 12, motionMode: "smart" });
@@ -101,7 +101,7 @@ async function main() {
   void autoGraph;
 
   // ---- the real render: rig ON (character present) ----
-  const { renderVideo } = await import("../src/lib/tubeforge/render.ts");
+  const { renderVideo } = await import("../src/lib/ibismuh/render.ts");
   const result = await renderVideo({
     videoId,
     scenes: [scene],

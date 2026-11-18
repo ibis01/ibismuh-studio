@@ -34,8 +34,8 @@ import {
   createSessionRecord,
   createSessionToken,
   hashPassword,
-} from "../src/lib/tubeforge/tenant";
-import { SESSION_COOKIE } from "../src/lib/tubeforge/auth-token";
+} from "../src/lib/ibismuh/tenant";
+import { SESSION_COOKIE } from "../src/lib/ibismuh/auth-token";
 import { POST as checkoutPost } from "../src/app/api/billing/checkout/route";
 import { POST as portalPost } from "../src/app/api/billing/portal/route";
 import { GET as planGet } from "../src/app/api/billing/plan/route";

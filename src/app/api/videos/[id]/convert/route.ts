@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { startJob, isJobRunning, lastJobError } from "@/lib/tubeforge/jobs";
-import { runConvertJob } from "@/lib/tubeforge/video-jobs";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { startJob, isJobRunning, lastJobError } from "@/lib/ibismuh/jobs";
+import { runConvertJob } from "@/lib/ibismuh/video-jobs";
 
 type Ctx = { params: Promise<{ id: string }> };
 

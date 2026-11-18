@@ -43,11 +43,11 @@ import {
   validateGraphicsDoc,
   GRAPHICS_VERSION,
   type GraphicsDoc,
-} from "../src/lib/tubeforge/graphics/types";
-import { renderGraphics, readRenderManifest } from "../src/lib/tubeforge/graphics/render";
-import { graphicsReadcheck, graphicsDeterminismSweep, readcheckMinMs } from "../src/lib/tubeforge/graphics/qc";
-import { frameAt } from "../src/lib/tubeforge/graphics/frame";
-import { objectAt, type Scene3DObject } from "../src/lib/tubeforge/scene3d";
+} from "../src/lib/ibismuh/graphics/types";
+import { renderGraphics, readRenderManifest } from "../src/lib/ibismuh/graphics/render";
+import { graphicsReadcheck, graphicsDeterminismSweep, readcheckMinMs } from "../src/lib/ibismuh/graphics/qc";
+import { frameAt } from "../src/lib/ibismuh/graphics/frame";
+import { objectAt, type Scene3DObject } from "../src/lib/ibismuh/scene3d";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const STATE_DIR = path.join(REPO_ROOT, "validation", "pae-phase3");

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rawDatabase as rawDb } from "@/lib/tubeforge/tenant-db";
-import { resolveRequestUser } from "@/lib/tubeforge/tenant";
-import { pendingLegacyRows } from "@/lib/tubeforge/claim";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { resolveRequestUser } from "@/lib/ibismuh/tenant";
+import { pendingLegacyRows } from "@/lib/ibismuh/claim";
 
 /**
  * GET — session state for the client gate:

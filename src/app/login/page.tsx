@@ -6,7 +6,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ForgeMark } from "@/components/tubeforge/brand";
+import { ForgeMark } from "@/components/ibismuh/brand";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, LockKeyhole } from "lucide-react";

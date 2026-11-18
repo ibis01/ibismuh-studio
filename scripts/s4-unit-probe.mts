@@ -9,17 +9,17 @@ import {
   replaceSceneImage,
   sniffImageFormat,
   parseScenes,
-} from "../src/lib/tubeforge/story";
+} from "../src/lib/ibismuh/story";
 import {
   sanitizeStockQuery,
-} from "../src/lib/tubeforge/stock";
-import { sceneQueries } from "../src/lib/tubeforge/stock-query";
-import { parseStockScenePayload } from "../src/lib/tubeforge/queue-handlers";
+} from "../src/lib/ibismuh/stock";
+import { sceneQueries } from "../src/lib/ibismuh/stock-query";
+import { parseStockScenePayload } from "../src/lib/ibismuh/queue-handlers";
 import {
   assembleTimeline,
   parseTimeline,
   serializeTimeline,
-} from "../src/lib/tubeforge/timeline";
+} from "../src/lib/ibismuh/timeline";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail?: unknown) => {

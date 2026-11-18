@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { requestJobCancel } from "@/lib/tubeforge/jobs";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { requestJobCancel } from "@/lib/ibismuh/jobs";
 
 type Ctx = { params: Promise<{ id: string }> };
 

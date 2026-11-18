@@ -6,10 +6,10 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import crypto from "node:crypto";
 
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { StorageQuotaError } from "@/lib/tubeforge/storage";
-import { parseGraphicsDoc } from "@/lib/tubeforge/graphics/types";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { StorageQuotaError } from "@/lib/ibismuh/storage";
+import { parseGraphicsDoc } from "@/lib/ibismuh/graphics/types";
 import {
   IMPORT_WALLS,
   importIdShape,
@@ -18,7 +18,7 @@ import {
   sniffImportKind,
   validateSequenceFrame,
   validateSheetImport,
-} from "@/lib/tubeforge/graphics/import-validate";
+} from "@/lib/ibismuh/graphics/import-validate";
 import {
   ImportCountRefusal,
   deleteVideoImport,
@@ -27,8 +27,8 @@ import {
   importObjectNames,
   listVideoImports,
   saveImport,
-} from "@/lib/tubeforge/graphics/import-store";
-import { get } from "@/lib/tubeforge/storage";
+} from "@/lib/ibismuh/graphics/import-store";
+import { get } from "@/lib/ibismuh/storage";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -91,7 +91,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   // Org-scoped by the video row; spriteless studios pay nothing (the
   // resolution runs only when asked).
   if (new URL(req.url).searchParams.get("resolve") === "1") {
-    const { resolveSpriteAssets } = await import("@/lib/tubeforge/graphics/import-store");
+    const { resolveSpriteAssets } = await import("@/lib/ibismuh/graphics/import-store");
     const { assets, missing } = await resolveSpriteAssets(
       id,
       rows.map((r) => r.importId)

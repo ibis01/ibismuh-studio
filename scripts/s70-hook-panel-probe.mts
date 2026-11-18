@@ -13,7 +13,7 @@
  *
  *   node --import tsx scripts/s70-hook-panel-probe.mts
  */
-const { generateHookPanel } = await import("../src/lib/tubeforge/hook-score");
+const { generateHookPanel } = await import("../src/lib/ibismuh/hook-score");
 
 const t0 = Date.now();
 try {

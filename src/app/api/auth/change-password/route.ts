@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { rawDatabase as rawDb } from "@/lib/tubeforge/tenant-db";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
 import {
   MIN_PASSWORD_LEN,
   clientIp,
@@ -11,12 +11,12 @@ import {
   sessionIdFromRequest,
   sessionCookie,
   verifyPassword,
-} from "@/lib/tubeforge/tenant";
+} from "@/lib/ibismuh/tenant";
 import {
   checkLoginAllowed,
   recordLoginFailure,
   recordLoginSuccess,
-} from "@/lib/tubeforge/auth-throttle";
+} from "@/lib/ibismuh/auth-throttle";
 
 // POST /api/auth/change-password — rotate the account password from the
 // studio (S16). The security card has promised "you can change it later from

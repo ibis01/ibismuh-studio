@@ -22,14 +22,14 @@ process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { NextRequest } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import { createSignedToken, } from "../src/lib/tubeforge/auth-token";import { randomToken } from "../src/lib/tubeforge/crypto";
+import { createSignedToken, } from "../src/lib/ibismuh/auth-token";import { randomToken } from "../src/lib/ibismuh/crypto";
 import {
   createApiToken,
   hashPassword,
   listApiTokens,
   resolveRequestUser,
   revokeApiToken,
-} from "../src/lib/tubeforge/tenant";
+} from "../src/lib/ibismuh/tenant";
 
 const prisma = new PrismaClient();
 // S28 — the studio has a REAL tenant now (the owner's account lives in

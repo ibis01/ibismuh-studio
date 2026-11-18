@@ -5,11 +5,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { scaffoldWhiteboardProject } from "../src/lib/tubeforge/whiteboard/whiteboard-planner";
-import { validateWhiteboardProject } from "../src/lib/tubeforge/whiteboard/storyboard";
-import { loadLibrary } from "../src/lib/tubeforge/whiteboard/assets";
-import { renderWhiteboard, normalizeVoSlot, probeDurationSec } from "../src/lib/tubeforge/whiteboard/render";
-import { measureLoudness, LUFS_PASS_WINDOW } from "../src/lib/tubeforge/audiomix";
+import { scaffoldWhiteboardProject } from "../src/lib/ibismuh/whiteboard/whiteboard-planner";
+import { validateWhiteboardProject } from "../src/lib/ibismuh/whiteboard/storyboard";
+import { loadLibrary } from "../src/lib/ibismuh/whiteboard/assets";
+import { renderWhiteboard, normalizeVoSlot, probeDurationSec } from "../src/lib/ibismuh/whiteboard/render";
+import { measureLoudness, LUFS_PASS_WINDOW } from "../src/lib/ibismuh/audiomix";
 
 const execFileP = promisify(execFile);
 const OUT = path.resolve("scratch/wb-vo-check");

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import type { VideoStatus } from "@/lib/tubeforge/types";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import type { VideoStatus } from "@/lib/ibismuh/types";
 import {
   serializeSlot,
   parseDay,
   type SlotWithRelations,
-} from "@/lib/tubeforge/schedule";
+} from "@/lib/ibismuh/schedule";
 import type { Prisma } from "@prisma/client";
 
 const VIDEO_INCLUDE = {

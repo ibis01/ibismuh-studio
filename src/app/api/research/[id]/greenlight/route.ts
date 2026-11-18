@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { serializeVideo } from "@/lib/tubeforge/serialize";
-import { serializeSession } from "@/lib/tubeforge/research";
-import { startJob } from "@/lib/tubeforge/jobs";
-import { runScriptJob } from "@/lib/tubeforge/script-job";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { serializeVideo } from "@/lib/ibismuh/serialize";
+import { serializeSession } from "@/lib/ibismuh/research";
+import { startJob } from "@/lib/ibismuh/jobs";
+import { runScriptJob } from "@/lib/ibismuh/script-job";
 import {
   FORMATS,
   LENGTHS,
   RENDER_MODES,
   TONES,
   type VideoDTO,
-} from "@/lib/tubeforge/types";
-import type { ResearchIdea } from "@/lib/tubeforge/types";
-import { errorText } from "@/lib/tubeforge/redact";
+} from "@/lib/ibismuh/types";
+import type { ResearchIdea } from "@/lib/ibismuh/types";
+import { errorText } from "@/lib/ibismuh/redact";
 
 type Ctx = { params: Promise<{ id: string }> };
 

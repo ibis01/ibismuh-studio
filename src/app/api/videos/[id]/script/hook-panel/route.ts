@@ -15,16 +15,16 @@
 // Every score carries `heuristic: true` — the honesty doctrine.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes } from "@/lib/tubeforge/story";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes } from "@/lib/ibismuh/story";
 import {
   generateHookPanel,
   markRetentionBeats,
   scoreHookHeuristic,
   verifyTitlePromise,
-} from "@/lib/tubeforge/hook-score";
-import { errorText } from "@/lib/tubeforge/redact";
+} from "@/lib/ibismuh/hook-score";
+import { errorText } from "@/lib/ibismuh/redact";
 
 type Ctx = { params: Promise<{ id: string }> };
 

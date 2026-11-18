@@ -111,7 +111,7 @@ try {
   fs.copyFileSync(dbFile, backupDbPath);
   fs.writeFileSync(
     path.join(fallbackDir, "MANIFEST.txt"),
-    `TubeForge backup (fallback snapshot via fs.copyFileSync — sqlite3 CLI missing)\nCreated: ${new Date().toISOString()}\n`
+    `Ibismuh Studio backup (fallback snapshot via fs.copyFileSync — sqlite3 CLI missing)\nCreated: ${new Date().toISOString()}\n`
   );
   ok(`fallback snapshot created: tubeforge-${stamp}`);
 }

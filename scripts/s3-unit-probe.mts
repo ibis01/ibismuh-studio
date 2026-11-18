@@ -10,15 +10,15 @@ import {
   pipOverlayFilter,
   EXPORT_PRESETS,
   QUALITY_ENCODING,
-} from "../src/lib/tubeforge/studio-doc";
+} from "../src/lib/ibismuh/studio-doc";
 import {
   assembleTimeline,
   docSceneSettings,
   parseTimeline,
   serializeTimeline,
-} from "../src/lib/tubeforge/timeline";
-import { applyRevoiceToDoc } from "../src/lib/tubeforge/clip-ops";
-import { assembleSaveSchema, clipOpSchema } from "../src/lib/tubeforge/validation";
+} from "../src/lib/ibismuh/timeline";
+import { applyRevoiceToDoc } from "../src/lib/ibismuh/clip-ops";
+import { assembleSaveSchema, clipOpSchema } from "../src/lib/ibismuh/validation";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail?: unknown) => {

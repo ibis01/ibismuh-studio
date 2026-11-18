@@ -103,13 +103,13 @@ function deepEq(a: unknown, b: unknown): boolean {
 // ===========================================================================
 async function partA(): Promise<void> {
   console.log("\nPart A — the Whiteboard lane (real chromium render, $0 AI spend)");
-  const { renderWhiteboard } = await import("../src/lib/tubeforge/whiteboard/render");
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
-  const { estimateProjectFrames } = await import("../src/lib/tubeforge/whiteboard/timing");
-  const { whiteboardTracks } = await import("../src/lib/tubeforge/whiteboard/tracks");
-  const { planFromTracks } = await import("../src/lib/tubeforge/composition-plan");
+  const { renderWhiteboard } = await import("../src/lib/ibismuh/whiteboard/render");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
+  const { estimateProjectFrames } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const { whiteboardTracks } = await import("../src/lib/ibismuh/whiteboard/tracks");
+  const { planFromTracks } = await import("../src/lib/ibismuh/composition-plan");
 
   const dir = path.join(OUT_DIR, "whiteboard");
   fs.mkdirSync(dir, { recursive: true });
@@ -203,12 +203,12 @@ async function partA(): Promise<void> {
 // ===========================================================================
 async function partB(): Promise<void> {
   console.log("\nPart B — the compositor lane (real kenburns render, the plan feed)");
-  const { renderVideo } = await import("../src/lib/tubeforge/render");
-  const { assembleTimeline, serializeTimeline, parseTimeline } = await import("../src/lib/tubeforge/timeline");
-  const { compositionPlan } = await import("../src/lib/tubeforge/composition-plan");
-  const { videoDir } = await import("../src/lib/tubeforge/ai");
-  const { sceneImageFile, sceneWavFile } = await import("../src/lib/tubeforge/story");
-  type Scene = import("../src/lib/tubeforge/types").Scene;
+  const { renderVideo } = await import("../src/lib/ibismuh/render");
+  const { assembleTimeline, serializeTimeline, parseTimeline } = await import("../src/lib/ibismuh/timeline");
+  const { compositionPlan } = await import("../src/lib/ibismuh/composition-plan");
+  const { videoDir } = await import("../src/lib/ibismuh/ai");
+  const { sceneImageFile, sceneWavFile } = await import("../src/lib/ibismuh/story");
+  type Scene = import("../src/lib/ibismuh/types").Scene;
 
   const videoId = "s87-battery-compositor";
   const dir = videoDir(videoId);
@@ -317,11 +317,11 @@ async function partB(): Promise<void> {
 // ===========================================================================
 async function partC(): Promise<void> {
   console.log("\nPart C — the Graphics lane (real chromium render, $0 AI spend)");
-  const { renderGraphics } = await import("../src/lib/tubeforge/graphics/render");
-  const { scaffoldGraphicsDocLlm } = await import("../src/lib/tubeforge/graphics/llm-planner");
-  const { graphicsTracks } = await import("../src/lib/tubeforge/graphics/tracks");
-  const { planFromTracks } = await import("../src/lib/tubeforge/composition-plan");
-  const { wavDurationSec } = await import("../src/lib/tubeforge/wav");
+  const { renderGraphics } = await import("../src/lib/ibismuh/graphics/render");
+  const { scaffoldGraphicsDocLlm } = await import("../src/lib/ibismuh/graphics/llm-planner");
+  const { graphicsTracks } = await import("../src/lib/ibismuh/graphics/tracks");
+  const { planFromTracks } = await import("../src/lib/ibismuh/composition-plan");
+  const { wavDurationSec } = await import("../src/lib/ibismuh/wav");
 
   const dir = path.join(OUT_DIR, "graphics");
   fs.mkdirSync(dir, { recursive: true });
@@ -448,7 +448,7 @@ async function countVideoFrames(file: string): Promise<number | null> {
 
 /** Per-frame PSNR between two videos via the psnr filter's stats_file —
  *  parsed by the ONE reading law in graphics/static-dedup.ts. */
-async function psnrRunStats(fresh: string, baseline: string, floorDb: number): Promise<import("../src/lib/tubeforge/graphics/static-dedup").PsnrRunStats | null> {
+async function psnrRunStats(fresh: string, baseline: string, floorDb: number): Promise<import("../src/lib/ibismuh/graphics/static-dedup").PsnrRunStats | null> {
   const statsPath = path.join(OUT_DIR, "golden-psnr-stats.txt");
   try {
     await execFileP("ffmpeg", [
@@ -456,7 +456,7 @@ async function psnrRunStats(fresh: string, baseline: string, floorDb: number): P
       "-filter_complex", `[0:v][1:v]psnr=stats_file=${statsPath}`,
       "-f", "null", "-",
     ], { maxBuffer: 32 * 1024 * 1024 });
-    const { parsePsnrFrameStats } = await import("../src/lib/tubeforge/graphics/static-dedup");
+    const { parsePsnrFrameStats } = await import("../src/lib/ibismuh/graphics/static-dedup");
     return parsePsnrFrameStats(fs.readFileSync(statsPath, "utf8"), floorDb);
   } catch {
     return null;
@@ -501,14 +501,14 @@ async function audioCorrelation(a: string, b: string): Promise<number | null> {
 // re-baseline (deliberate, via --write-golden).
 
 async function renderGoldenGraphics(dir: string): Promise<string> {
-  const { renderGraphics } = await import("../src/lib/tubeforge/graphics/render");
+  const { renderGraphics } = await import("../src/lib/ibismuh/graphics/render");
   // THE PURE NATIVE SCAFFOLD — deliberately NOT scaffoldGraphicsDocLlm:
   // without a provided `call` that planner dials the REAL gateway when the
   // environment carries keys (temperature 0.3 — different plan every run),
   // and a golden fixture must be bit-deterministic BY CONSTRUCTION, not
   // deterministic-when-the-gateway-is-down. The rule-table base IS the
   // production degradation floor — the same shape Part C renders in CI.
-  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
+  const { scaffoldGraphicsDoc } = await import("../src/lib/ibismuh/graphics/planner");
   const doc = scaffoldGraphicsDoc({
     scenes: [{ index: 1, title: "The golden frame", narration: "one two three four five" }],
     topic: "s165 golden graphics",
@@ -523,10 +523,10 @@ async function renderGoldenGraphics(dir: string): Promise<string> {
 }
 
 async function renderGoldenWhiteboard(dir: string): Promise<string> {
-  const { renderWhiteboard } = await import("../src/lib/tubeforge/whiteboard/render");
-  const { scaffoldWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/whiteboard-planner");
-  const { loadLibrary } = await import("../src/lib/tubeforge/whiteboard/assets");
-  const { validateWhiteboardProject } = await import("../src/lib/tubeforge/whiteboard/storyboard");
+  const { renderWhiteboard } = await import("../src/lib/ibismuh/whiteboard/render");
+  const { scaffoldWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/whiteboard-planner");
+  const { loadLibrary } = await import("../src/lib/ibismuh/whiteboard/assets");
+  const { validateWhiteboardProject } = await import("../src/lib/ibismuh/whiteboard/storyboard");
   const project = scaffoldWhiteboardProject({
     scenes: [{ index: 1, title: "The golden board", narration: "one two three four five" }],
     topic: "s165 golden whiteboard",
@@ -545,12 +545,12 @@ async function renderGoldenWhiteboard(dir: string): Promise<string> {
 }
 
 async function renderGoldenScene3d(dir: string): Promise<string> {
-  const { renderScene3D } = await import("../src/lib/tubeforge/render3d");
+  const { renderScene3D } = await import("../src/lib/ibismuh/render3d");
   // 640x360 + the S160 look seam (sky, shadows, several lit objects): the
   // first frame must carry real raster detail — the engine's blank-frame
   // guard refuses a sub-4KB first JPEG, and a tiny dark canvas can duck
   // under it while rendering perfectly.
-  const doc: import("../src/lib/tubeforge/scene3d").Scene3D = {
+  const doc: import("../src/lib/ibismuh/scene3d").Scene3D = {
     version: 1,
     aspect: "16:9",
     width: 640,
@@ -681,9 +681,9 @@ async function partD(): Promise<void> {
 
 async function partE(): Promise<void> {
   console.log("\nPart E — the S165 dedup throughput benchmark (a 30s hold scene)");
-  const { renderGraphics } = await import("../src/lib/tubeforge/graphics/render");
-  const { scaffoldGraphicsDoc } = await import("../src/lib/tubeforge/graphics/planner");
-  const { parsePsnrSummary } = await import("../src/lib/tubeforge/graphics/static-dedup");
+  const { renderGraphics } = await import("../src/lib/ibismuh/graphics/render");
+  const { scaffoldGraphicsDoc } = await import("../src/lib/ibismuh/graphics/planner");
+  const { parsePsnrSummary } = await import("../src/lib/ibismuh/graphics/static-dedup");
 
   // THE PURE NATIVE SCAFFOLD — deliberately NOT scaffoldGraphicsDocLlm: the
   // benchmark renders the SAME doc TWICE and compares the arms; without a
@@ -691,7 +691,7 @@ async function partE(): Promise<void> {
   // carries keys (temperature 0.3 — the two arms could get two different
   // docs and the comparison would be a lie). The rule-table base is
   // deterministic by construction, $0 AI spend, same shape Part D baselines.
-  const makeDoc = (): import("../src/lib/tubeforge/graphics/types").GraphicsDoc => {
+  const makeDoc = (): import("../src/lib/ibismuh/graphics/types").GraphicsDoc => {
     const doc = scaffoldGraphicsDoc({
       scenes: [{ index: 1, title: "The long hold", narration: "one two three four five" }],
       topic: "s165 dedup benchmark",

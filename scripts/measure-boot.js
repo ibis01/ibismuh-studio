@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Measure the real boot payload of the TubeForge root page in dev mode:
+// Measure the real boot payload of the Ibismuh Studio root page in dev mode:
 // fetch the HTML, extract every asset it references, download each,
 // and report total bytes (raw + gzipped as the wire would carry them).
 const BASE = process.env.TF_BASE || "http://localhost:3000/";

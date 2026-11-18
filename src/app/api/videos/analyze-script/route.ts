@@ -9,8 +9,8 @@
 // (the approval is the user's signal they accept the analysis verdict).
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { analyzeScript } from "@/lib/tubeforge/script-analysis";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { analyzeScript } from "@/lib/ibismuh/script-analysis";
 
 const MAX_SCRIPT = 50000;
 const MAX_TOPIC = 300;

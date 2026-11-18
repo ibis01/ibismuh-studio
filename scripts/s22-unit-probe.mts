@@ -26,8 +26,8 @@ import {
   createSessionRecord,
   createSessionToken,
   hashPassword,
-} from "../src/lib/tubeforge/tenant";
-import { SESSION_COOKIE } from "../src/lib/tubeforge/auth-token";
+} from "../src/lib/ibismuh/tenant";
+import { SESSION_COOKIE } from "../src/lib/ibismuh/auth-token";
 import {
   GET as locGet,
   POST as locPost,

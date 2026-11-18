@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { listVariants, promoteVariant } from "@/lib/tubeforge/ai";
-import { isJobRunning, lastJobError, startJob } from "@/lib/tubeforge/jobs";
-import { runVariantsJob } from "@/lib/tubeforge/video-jobs";
-import { THUMB_STYLES, type VariantDTO } from "@/lib/tubeforge/types";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { listVariants, promoteVariant } from "@/lib/ibismuh/ai";
+import { isJobRunning, lastJobError, startJob } from "@/lib/ibismuh/jobs";
+import { runVariantsJob } from "@/lib/ibismuh/video-jobs";
+import { THUMB_STYLES, type VariantDTO } from "@/lib/ibismuh/types";
 
 type Ctx = { params: Promise<{ id: string }> };
 

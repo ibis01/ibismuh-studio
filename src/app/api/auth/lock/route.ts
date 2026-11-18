@@ -6,8 +6,8 @@ import {
   checkPassword,
   createSessionToken,
   sessionCookie,
-} from "@/lib/tubeforge/auth";
-import { getAuthSecret } from "@/lib/tubeforge/auth-token";
+} from "@/lib/ibismuh/auth";
+import { getAuthSecret } from "@/lib/ibismuh/auth-token";
 
 /**
  * POST — owner control for password protection (Settings → Studio access).

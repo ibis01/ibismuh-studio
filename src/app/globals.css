@@ -43,7 +43,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* TubeForge — forced dark premium theme (YouTube-inspired) */
+/* Ibismuh Studio — forced dark premium theme (YouTube-inspired) */
 :root,
 .dark {
   --radius: 0.75rem;
@@ -342,7 +342,7 @@ audio::-webkit-media-controls-panel {
 }
 
 /* ============================================================
-   Ken Burns motion preview (mirrors src/lib/tubeforge/motion.ts)
+   Ken Burns motion preview (mirrors src/lib/ibismuh/motion.ts)
    One photographic frame animated the way the renderer actually
    moves storyboard art: zooms scale from 1, pans ride a pre-zoom
    so translated edges stay off-frame. The inline CSS vars map

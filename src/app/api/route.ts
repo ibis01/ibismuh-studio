@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
+import { requireUser } from "@/lib/ibismuh/tenant";
 
 export async function GET(req: NextRequest) {
   const auth = await requireUser(req);

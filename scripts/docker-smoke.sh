@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# TubeForge — P0.6 production-topology smoke (docs/production-readiness.md).
+# Ibismuh Studio — P0.6 production-topology smoke (docs/production-readiness.md).
 #
 #   bash scripts/docker-smoke.sh
 #

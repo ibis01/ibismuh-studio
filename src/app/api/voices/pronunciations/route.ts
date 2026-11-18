@@ -8,16 +8,16 @@
 //      single TTS choke point (providers/tts.ts) — never client-side.
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { errorText } from "@/lib/tubeforge/redact";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { errorText } from "@/lib/ibismuh/redact";
 import {
   MAX_PRONUNCIATIONS,
   PRONUNCIATION_KEY,
   parseStoredPronunciations,
   savePronunciations,
   type PronunciationEntry,
-} from "@/lib/tubeforge/pronounce";
-import { getUserSetting } from "@/lib/tubeforge/settings";
+} from "@/lib/ibismuh/pronounce";
+import { getUserSetting } from "@/lib/ibismuh/settings";
 
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
 

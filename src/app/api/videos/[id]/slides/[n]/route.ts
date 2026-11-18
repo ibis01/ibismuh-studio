@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { readSlideImage } from "@/lib/tubeforge/slides";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { readSlideImage } from "@/lib/ibismuh/slides";
 
 type Ctx = { params: Promise<{ id: string; n: string }> };
 

@@ -14,16 +14,16 @@ import {
   isVoiceSwapStale,
   applyRevoiceToDoc,
   sceneSegmentSec,
-} from "../src/lib/tubeforge/clip-ops";
-import { voiceSwapSchema } from "../src/lib/tubeforge/validation";
+} from "../src/lib/ibismuh/clip-ops";
+import { voiceSwapSchema } from "../src/lib/ibismuh/validation";
 import {
   assembleTimeline,
   serializeTimeline,
   type AssembledTimeline,
-} from "../src/lib/tubeforge/timeline";
-import { parseScenes } from "../src/lib/tubeforge/story";
-import { voiceCatalog } from "../src/lib/tubeforge/providers/tts";
-import { LEAD_SEC, TAIL_SEC, MIN_SEG_SEC } from "../src/lib/tubeforge/render";
+} from "../src/lib/ibismuh/timeline";
+import { parseScenes } from "../src/lib/ibismuh/story";
+import { voiceCatalog } from "../src/lib/ibismuh/providers/tts";
+import { LEAD_SEC, TAIL_SEC, MIN_SEG_SEC } from "../src/lib/ibismuh/render";
 import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 
@@ -246,7 +246,7 @@ const expectRefusal = async (
   needle: string
 ) => {
   try {
-    const { performVoiceSwap } = await import("../src/lib/tubeforge/clip-ops");
+    const { performVoiceSwap } = await import("../src/lib/ibismuh/clip-ops");
     await performVoiceSwap(video as never, "kazi");
     check(name, false, "the swap PROCEEDED — guard missing");
   } catch (err) {

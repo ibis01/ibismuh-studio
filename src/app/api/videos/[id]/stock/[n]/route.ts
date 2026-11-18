@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { readSceneStock, readStockKeys, sanitizeStockQuery } from "@/lib/tubeforge/stock";
-import { startJob, isJobRunning, lastJobError, jobFleetStatus } from "@/lib/tubeforge/jobs";
-import { runStockSceneJob } from "@/lib/tubeforge/queue-handlers";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { readSceneStock, readStockKeys, sanitizeStockQuery } from "@/lib/ibismuh/stock";
+import { startJob, isJobRunning, lastJobError, jobFleetStatus } from "@/lib/ibismuh/jobs";
+import { runStockSceneJob } from "@/lib/ibismuh/queue-handlers";
 
 type Ctx = { params: Promise<{ id: string; n: string }> };
 

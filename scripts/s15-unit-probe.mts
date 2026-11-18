@@ -35,7 +35,7 @@ import {
   MOTION_INTENSITY_MIN,
   MOTION_INTENSITY_MAX,
   sanitizeMotion,
-} from "../src/lib/tubeforge/motion";
+} from "../src/lib/ibismuh/motion";
 import {
   TRANSITIONS,
   TRANSITION_IDS,
@@ -43,9 +43,9 @@ import {
   TRANSITION_DURATION_MIN,
   TRANSITION_DURATION_MAX,
   resolveTransition,
-} from "../src/lib/tubeforge/transitions";
-import { previewSettingsFrom } from "../src/lib/tubeforge/preview-lanes";
-import { serializeVideo } from "../src/lib/tubeforge/serialize";
+} from "../src/lib/ibismuh/transitions";
+import { previewSettingsFrom } from "../src/lib/ibismuh/preview-lanes";
+import { serializeVideo } from "../src/lib/ibismuh/serialize";
 import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 

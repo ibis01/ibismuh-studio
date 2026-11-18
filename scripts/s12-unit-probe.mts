@@ -17,9 +17,9 @@
 //      gate's membership law (the same THUMB_STYLES the route imports)
 //      refuses every junk id while admitting every legal one.
 // Run: node --import tsx scripts/s12-unit-probe.mts
-import { THUMB_STYLES } from "../src/lib/tubeforge/types";
-import { pickVariantStyles } from "../src/lib/tubeforge/ai";
-import { serializeVideo } from "../src/lib/tubeforge/serialize";
+import { THUMB_STYLES } from "../src/lib/ibismuh/types";
+import { pickVariantStyles } from "../src/lib/ibismuh/ai";
+import { serializeVideo } from "../src/lib/ibismuh/serialize";
 import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 

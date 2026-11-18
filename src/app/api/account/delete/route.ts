@@ -10,8 +10,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { db, rawDatabase as rawDb } from "@/lib/tubeforge/tenant-db";
-import { requireUser, sessionIdFromRequest, clearedSessionCookie } from "@/lib/tubeforge/tenant";
+import { db, rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { requireUser, sessionIdFromRequest, clearedSessionCookie } from "@/lib/ibismuh/tenant";
 
 export async function POST(req: NextRequest) {
   const auth = await requireUser(req);

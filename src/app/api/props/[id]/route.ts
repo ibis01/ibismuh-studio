@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import * as storage from "@/lib/tubeforge/storage";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import * as storage from "@/lib/ibismuh/storage";
 
 /**
  * Stage 5 (module C) — the World library, PROPS half, the [id] half.

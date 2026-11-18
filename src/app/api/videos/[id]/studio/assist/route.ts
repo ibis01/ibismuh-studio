@@ -18,15 +18,15 @@
 // provider the Director uses) through aiCall for budget accounting.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { aiCall } from "@/lib/tubeforge/budget";
-import { chatComplete } from "@/lib/tubeforge/providers/chat";
-import { parseJsonLoose } from "@/lib/tubeforge/ai";
-import { parseTimeline } from "@/lib/tubeforge/timeline";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { TRANSITIONS, TRANSITION_IDS } from "@/lib/tubeforge/transitions";
-import { GRADE_PRESETS } from "@/lib/tubeforge/studio-doc";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { aiCall } from "@/lib/ibismuh/budget";
+import { chatComplete } from "@/lib/ibismuh/providers/chat";
+import { parseJsonLoose } from "@/lib/ibismuh/ai";
+import { parseTimeline } from "@/lib/ibismuh/timeline";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { TRANSITIONS, TRANSITION_IDS } from "@/lib/ibismuh/transitions";
+import { GRADE_PRESETS } from "@/lib/ibismuh/studio-doc";
 
 type Ctx = { params: Promise<{ id: string }> };
 

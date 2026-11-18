@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rawDatabase as rawDb } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
 
 /** POST — revoke the stored channel connection (credentials are kept). */
 export async function POST(req: NextRequest) {

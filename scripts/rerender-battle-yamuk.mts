@@ -5,8 +5,8 @@
 //
 //   node --import tsx scripts/rerender-battle-yamuk.mts
 
-import { withCtx } from "../src/lib/tubeforge/tenant.ts";
-import { runRenderJob } from "../src/lib/tubeforge/video-jobs.ts";
+import { withCtx } from "../src/lib/ibismuh/tenant.ts";
+import { runRenderJob } from "../src/lib/ibismuh/video-jobs.ts";
 
 const VIDEO_ID = "cmvya1qnk0031np0well7rjm5";
 const CTX = {

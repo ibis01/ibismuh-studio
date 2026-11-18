@@ -30,7 +30,7 @@ import { PrismaClient } from "@prisma/client";
 import {
   createSignedToken,
   SESSION_COOKIE,
-} from "../src/lib/tubeforge/auth-token";
+} from "../src/lib/ibismuh/auth-token";
 import {
   MIN_PASSWORD_LEN,
   createApiToken,
@@ -39,12 +39,12 @@ import {
   sessionIdFromRequest,
   createSessionToken,
   verifyPassword,
-} from "../src/lib/tubeforge/tenant";
+} from "../src/lib/ibismuh/tenant";
 import {
   checkLoginAllowed,
   recordLoginFailure,
   recordLoginSuccess,
-} from "../src/lib/tubeforge/auth-throttle";
+} from "../src/lib/ibismuh/auth-throttle";
 import { POST as changePassword } from "../src/app/api/auth/change-password/route";
 
 const prisma = new PrismaClient();
@@ -173,7 +173,7 @@ const reqWith = (opts: RequestInit) => new NextRequest(URL_, { method: "POST", .
     },
   });
 
-  const { createSessionRecord } = await import("../src/lib/tubeforge/tenant");
+  const { createSessionRecord } = await import("../src/lib/ibismuh/tenant");
   const sessionA = await createSessionRecord({ userId: user.id, organizationId: org.id, userAgent: "probe-A" });
   const sessionB = await createSessionRecord({ userId: user.id, organizationId: org.id, userAgent: "probe-B" });
   const tokenA = await createSessionToken(user.id, sessionA.id);

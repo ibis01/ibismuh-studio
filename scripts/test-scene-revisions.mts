@@ -48,21 +48,21 @@ import {
   RevisionConflict,
   parseRevisionContent,
   type SceneRevisionContent,
-} from "../src/lib/tubeforge/scene-revisions";
+} from "../src/lib/ibismuh/scene-revisions";
 import {
   beginSceneArtifact,
   finalizeSceneArtifact,
   registerSceneArtifact,
   accumulateArtifactCost,
-} from "../src/lib/tubeforge/scene-artifacts";
-import { planSceneInvalidation, sweepInvalidArtifacts } from "../src/lib/tubeforge/scene-deps";
-import { invalidateRenderedArtifacts } from "../src/lib/tubeforge/render";
-import * as storage from "../src/lib/tubeforge/storage";
-import { videoDir } from "../src/lib/tubeforge/ai";
-import { withCtx } from "../src/lib/tubeforge/tenant";
-import { must } from "../src/lib/tubeforge/must";
-import type { Scene } from "../src/lib/tubeforge/types";
-import type { AssembledTimeline, TimelineScene } from "../src/lib/tubeforge/timeline";
+} from "../src/lib/ibismuh/scene-artifacts";
+import { planSceneInvalidation, sweepInvalidArtifacts } from "../src/lib/ibismuh/scene-deps";
+import { invalidateRenderedArtifacts } from "../src/lib/ibismuh/render";
+import * as storage from "../src/lib/ibismuh/storage";
+import { videoDir } from "../src/lib/ibismuh/ai";
+import { withCtx } from "../src/lib/ibismuh/tenant";
+import { must } from "../src/lib/ibismuh/must";
+import type { Scene } from "../src/lib/ibismuh/types";
+import type { AssembledTimeline, TimelineScene } from "../src/lib/ibismuh/timeline";
 
 let passed = 0;
 let failed = 0;
@@ -720,7 +720,7 @@ await test("previewing scene 2 lands scene-preview-02.mp4 and touches NOTHING el
   }
   const seededFiles = ["scene-01.png", "scene-02.png", "scene-03.png", "scene-01.wav", "scene-02.wav", "scene-03.wav"];
 
-  const { renderVideo } = await import("../src/lib/tubeforge/render");
+  const { renderVideo } = await import("../src/lib/ibismuh/render");
   const scenes = parseScenesOf(v);
   const result = await renderVideo({
     videoId: v.id,
@@ -769,7 +769,7 @@ await test("the preview artifact registers with its built-from revision (stale l
   const head = must("head", await headRevision(v.id, sceneId));
 
   // A preview built from the head: current.
-  const { registerSceneArtifact, artifactStaleness } = await import("../src/lib/tubeforge/scene-artifacts");
+  const { registerSceneArtifact, artifactStaleness } = await import("../src/lib/ibismuh/scene-artifacts");
   const current = await registerSceneArtifact({
     video: afterRow, sceneIndex: 1, type: "preview",
     storageKey: `${v.id}/scene-preview-01.mp4`, input: "look-v2", prompt: "v", bytes: 100,
@@ -799,7 +799,7 @@ await test("the preview artifact registers with its built-from revision (stale l
 suiteStart("S115 · repair + cost authorization + idempotency");
 
 await test("the double-bill killer: a keyed enqueue resolves to ONE job row, done included", async () => {
-  const { createPendingJob } = await import("../src/lib/tubeforge/queue.ts");
+  const { createPendingJob } = await import("../src/lib/ibismuh/queue.ts");
   const org = CLEANUP_ORG_IDS[0];
   const key = `test-dblbill:${MARK}`;
   const first = await createPendingJob({
@@ -831,7 +831,7 @@ await test("the double-bill killer: a keyed enqueue resolves to ONE job row, don
 });
 
 await test("the repair ladder: propose (no cost, no job) → approve (job + stamp) → re-approve refused", async () => {
-  const { proposeSceneRepair, approveSceneRepair, rejectSceneRepair } = await import("../src/lib/tubeforge/scene-repairs.ts");
+  const { proposeSceneRepair, approveSceneRepair, rejectSceneRepair } = await import("../src/lib/ibismuh/scene-repairs.ts");
   const v = await makeVideo([mkScene(1), mkScene(2)], { renderMode: "kenburns" });
   // A REAL user row — Job.userId carries an FK; the approval stamp reads it.
   const approver = await rawDb.user.create({
@@ -845,7 +845,7 @@ await test("the repair ladder: propose (no cost, no job) → approve (job + stam
   });
   ok(proposed.ok, "proposal created");
   if (!proposed.ok) throw new Error("unreachable");
-  const { ESTIMATED_COST_MICRO } = await import("../src/lib/tubeforge/billing.ts");
+  const { ESTIMATED_COST_MICRO } = await import("../src/lib/ibismuh/billing.ts");
   eq(proposed.estimateMicroUsd, ESTIMATED_COST_MICRO.image, "the estimate is the image call");
   ok(proposed.affectedAssets.sceneKeys.includes(`${v.id}/scene-02.png`), "the affected list names what regenerates");
   ok(proposed.affectedAssets.videoRenders, "and the renders rebuild");
@@ -903,7 +903,7 @@ await test("the repair ladder: propose (no cost, no job) → approve (job + stam
 });
 
 await test("the per-project ceiling: the admission refuses at the line (402 shape)", async () => {
-  const costGuard = await import("../src/lib/tubeforge/cost-guard.ts");
+  const costGuard = await import("../src/lib/ibismuh/cost-guard.ts");
   const { assertWithinVideoCeiling, videoSpendMicroUsd } = costGuard;
   type CeilingError = InstanceType<typeof costGuard.CostCeilingExceededError>;
   const v = await makeVideo([mkScene(1)], { spendCeilingMicro: 10_000 });
@@ -966,9 +966,9 @@ async function seedSceneMedia(v: Video, sources: string[]) {
 }
 
 await test("the recheck runs the scene battery on the standing preview and stores the verdict on the head revision", async () => {
-  const { runSceneRecheck, parseRecheckReport } = await import("../src/lib/tubeforge/scene-qc.ts");
-  const { registerSceneArtifact } = await import("../src/lib/tubeforge/scene-artifacts.ts");
-  const { serializeTimeline } = await import("../src/lib/tubeforge/timeline.ts");
+  const { runSceneRecheck, parseRecheckReport } = await import("../src/lib/ibismuh/scene-qc.ts");
+  const { registerSceneArtifact } = await import("../src/lib/ibismuh/scene-artifacts.ts");
+  const { serializeTimeline } = await import("../src/lib/ibismuh/timeline.ts");
   const v0 = await makeVideo([mkScene(1), mkScene(2), mkScene(3)], { renderMode: "kenburns" });
   // A REAL user row — the recheck's Activity writes carry the userId FK
   // (the S115 fixture precedent).
@@ -1002,7 +1002,7 @@ await test("the recheck runs the scene battery on the standing preview and store
 
   // The preview (renderVideo directly — the S114 lane) + its provenance row
   // (registered from the head, so freshness reads current).
-  const { renderVideo } = await import("../src/lib/tubeforge/render");
+  const { renderVideo } = await import("../src/lib/ibismuh/render");
   const scenes = parseScenesOf(v);
   await renderVideo({
     videoId: v.id,
@@ -1067,9 +1067,9 @@ await test("the recheck runs the scene battery on the standing preview and store
 });
 
 await test("the boundary lane renders the pair and the recheck measures the seam through the render's own fold", async () => {
-  const { runSceneRecheck } = await import("../src/lib/tubeforge/scene-qc.ts");
-  const { serializeTimeline, docSceneSettings } = await import("../src/lib/tubeforge/timeline.ts");
-  const { resolveTransition } = await import("../src/lib/tubeforge/transitions.ts");
+  const { runSceneRecheck } = await import("../src/lib/ibismuh/scene-qc.ts");
+  const { serializeTimeline, docSceneSettings } = await import("../src/lib/ibismuh/timeline.ts");
+  const { resolveTransition } = await import("../src/lib/ibismuh/transitions.ts");
   const v0 = await makeVideo([mkScene(1), mkScene(2), mkScene(3)], { renderMode: "kenburns" });
   // DIFFERENT art per scene, so the seam is a real visual change.
   const dir = await seedSceneMedia(v0, ["testsrc=s=640x360:d=1", "smptebars=s=640x360", "testsrc=s=640x360:d=1"]);
@@ -1083,7 +1083,7 @@ await test("the boundary lane renders the pair and the recheck measures the seam
 
   // The boundary lane's exact inputs: the PAIR, the doc's slice, the doc's
   // durations (10s each — the fold caps them at 3× the 2.2s narration).
-  const { renderVideo } = await import("../src/lib/tubeforge/render");
+  const { renderVideo } = await import("../src/lib/ibismuh/render");
   const result = await renderVideo({
     videoId: v.id,
     scenes: [must("s1", scenes.find((s) => s.index === 1)), must("s2", scenes.find((s) => s.index === 2))],
@@ -1131,9 +1131,9 @@ await test("the boundary lane renders the pair and the recheck measures the seam
 });
 
 await test("the approval gate: verdict-gated, idempotent, and the approved revision survives newer drafts", async () => {
-  const { runSceneRecheck, approveSceneRevision } = await import("../src/lib/tubeforge/scene-qc.ts");
-  const { registerSceneArtifact } = await import("../src/lib/tubeforge/scene-artifacts.ts");
-  const { approvedRevision } = await import("../src/lib/tubeforge/scene-revisions.ts");
+  const { runSceneRecheck, approveSceneRevision } = await import("../src/lib/ibismuh/scene-qc.ts");
+  const { registerSceneArtifact } = await import("../src/lib/ibismuh/scene-artifacts.ts");
+  const { approvedRevision } = await import("../src/lib/ibismuh/scene-revisions.ts");
   const v0 = await makeVideo([mkScene(1)], { renderMode: "kenburns" });
   const dir = await seedSceneMedia(v0, ["testsrc=s=640x360:d=1"]);
   const seededFiles = ["scene-01.png", "scene-01.wav"];
@@ -1155,7 +1155,7 @@ await test("the approval gate: verdict-gated, idempotent, and the approved revis
   });
   const v = await reload(v0.id);
   const sceneId = sceneIdOf(v, 1);
-  const { renderVideo } = await import("../src/lib/tubeforge/render");
+  const { renderVideo } = await import("../src/lib/ibismuh/render");
   const scenes = parseScenesOf(v);
   await renderVideo({
     videoId: v.id,
@@ -1235,8 +1235,8 @@ await test("the approval gate: verdict-gated, idempotent, and the approved revis
 suiteStart("S117 · assembly from approved revisions + the render manifest");
 
 await test("the assembly: drafts never leak — baseline fallback, approved wins, the union slice at the current position", async () => {
-  const { resolveRenderAssembly } = await import("../src/lib/tubeforge/render-assembly.ts");
-  const { serializeTimeline } = await import("../src/lib/tubeforge/timeline.ts");
+  const { resolveRenderAssembly } = await import("../src/lib/ibismuh/render-assembly.ts");
+  const { serializeTimeline } = await import("../src/lib/ibismuh/timeline.ts");
   const v0 = await makeVideo([mkScene(1), mkScene(2)], { renderMode: "kenburns" });
   const doc = docOf(parseScenesOf(v0));
   const v = await rawDb.video.update({
@@ -1292,9 +1292,9 @@ await test("the assembly: drafts never leak — baseline fallback, approved wins
 });
 
 await test("the manifest + the staleness ladder: a real render records its assembly; movement stales it", async () => {
-  const { runRenderJob } = await import("../src/lib/tubeforge/video-jobs.ts");
-  const { renderStaleness, parseRenderManifest } = await import("../src/lib/tubeforge/render-assembly.ts");
-  const { serializeTimeline } = await import("../src/lib/tubeforge/timeline.ts");
+  const { runRenderJob } = await import("../src/lib/ibismuh/video-jobs.ts");
+  const { renderStaleness, parseRenderManifest } = await import("../src/lib/ibismuh/render-assembly.ts");
+  const { serializeTimeline } = await import("../src/lib/ibismuh/timeline.ts");
   const v0 = await makeVideo([mkScene(1), mkScene(2)], {
     renderMode: "kenburns",
     hasStoryboard: true,
@@ -1375,8 +1375,8 @@ await test("the manifest + the staleness ladder: a real render records its assem
 suiteStart("S118 · the VCE proposal persistence + the hardening closures");
 
 await test("persistVceProposals: proposals become durable repairs with estimates, and the dedup guard holds", async () => {
-  const { persistVceProposals } = await import("../src/lib/tubeforge/scene-repairs.ts");
-  const { ESTIMATED_COST_MICRO } = await import("../src/lib/tubeforge/billing.ts");
+  const { persistVceProposals } = await import("../src/lib/ibismuh/scene-repairs.ts");
+  const { ESTIMATED_COST_MICRO } = await import("../src/lib/ibismuh/billing.ts");
   const v = await makeVideo([mkScene(1), mkScene(2)], { renderMode: "kenburns" });
 
   const proposals = [

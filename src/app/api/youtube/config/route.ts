@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { getPublishDefaults, savePublishDefaults } from "@/lib/tubeforge/youtube";
-import { setUserSetting } from "@/lib/tubeforge/settings";
-import { errorText } from "@/lib/tubeforge/redact";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { getPublishDefaults, savePublishDefaults } from "@/lib/ibismuh/youtube";
+import { setUserSetting } from "@/lib/ibismuh/settings";
+import { errorText } from "@/lib/ibismuh/redact";
 
 /**
  * PUT — save the OAuth client credentials + upload defaults.

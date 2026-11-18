@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { rawDatabase as rawDb } from "@/lib/tubeforge/tenant-db";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
 import {
   createSessionRecord,
   createSessionToken,
@@ -8,12 +8,12 @@ import {
   sweepExpiredSessions,
   verifyPassword,
   clientIp,
-} from "@/lib/tubeforge/tenant";
+} from "@/lib/ibismuh/tenant";
 import {
   checkLoginAllowed,
   recordLoginFailure,
   recordLoginSuccess,
-} from "@/lib/tubeforge/auth-throttle";
+} from "@/lib/ibismuh/auth-throttle";
 
 const bodySchema = z.object({
   email: z.string().trim().toLowerCase().email(),

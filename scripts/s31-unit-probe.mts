@@ -22,9 +22,9 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 
 const { TOPIC_FIDELITY_AUDIT_RULE, TOPIC_FIDELITY_RULES, topicWorldClause } =
-  await import("../src/lib/tubeforge/story");
+  await import("../src/lib/ibismuh/story");
 const { directorSystemPrompt, resolveProfile } = await import(
-  "../src/lib/tubeforge/director"
+  "../src/lib/ibismuh/director"
 );
 
 let pass = 0;
@@ -35,8 +35,8 @@ const check = (name: string, ok: boolean, detail?: unknown) => {
 };
 
 const src = {
-  story: await fsp.readFile(path.join(process.cwd(), "src/lib/tubeforge/story.ts"), "utf8"),
-  shots: await fsp.readFile(path.join(process.cwd(), "src/lib/tubeforge/shots.ts"), "utf8"),
+  story: await fsp.readFile(path.join(process.cwd(), "src/lib/ibismuh/story.ts"), "utf8"),
+  shots: await fsp.readFile(path.join(process.cwd(), "src/lib/ibismuh/shots.ts"), "utf8"),
 };
 
 // ---- A. topicWorldClause (the paint-time anchor, pure) ----

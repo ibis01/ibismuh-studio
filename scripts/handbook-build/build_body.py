@@ -402,7 +402,7 @@ make_table(story,
     ['Metric', 'Value at d03bed9'],
     [
         ['Source files under src/', '356'],
-        ['Library modules (src/lib/tubeforge)', '132'],
+        ['Library modules (src/lib/ibismuh)', '132'],
         ['Provider layer files', '11'],
         ['API route files (src/app/api, route.ts)', '123'],
         ['Prisma models (schema.prisma)', '32'],
@@ -442,7 +442,7 @@ body(story,
      'route files under src/app/api are tenant-scoped through async-local-storage '
      '(ALS): tenant-db.ts, a Prisma $extends client, injects the organizationId of '
      'the requesting membership into every query. The 132 modules of '
-     'src/lib/tubeforge carry the domain logic, including the 11 provider files that '
+     'src/lib/ibismuh carry the domain logic, including the 11 provider files that '
      'wrap external AI services. A separate worker process (scripts/worker.mts) '
      'consumes the durable job queue in Postgres; Compose and Fly run web and worker '
      'from the same image.')
@@ -481,7 +481,7 @@ make_table(story,
         ['world', 'The world bible - locations and props (Stage 5).'],
     ],
     [0.20, 0.80],
-    caption='Table 2 - The eleven frontend views under src/components/tubeforge/views.',
+    caption='Table 2 - The eleven frontend views under src/components/ibismuh/views.',
     font_size=8.8)
 h2(story, '2.3 Process model and shared state')
 body(story,
@@ -684,7 +684,7 @@ body(story,
      '--with-deps chromium (the pinned playwright 1.57.0 resolves browser build '
      'chromium-1200 from the image\'s own node_modules), and launch with '
      '--no-sandbox --disable-dev-shm-usage - encoded as WB_CHROMIUM_LAUNCH_ARGS in '
-     'src/lib/tubeforge/whiteboard/render.ts and used at both launch sites. The '
+     'src/lib/ibismuh/whiteboard/render.ts and used at both launch sites. The '
      'measured reason: on a 4 GB worker with the default 64 MB /dev/shm, a bare '
      'launch is SIGKILLed mid-scene by the OOM killer. The Dockerfile lines have '
      'landed and the dependency closure is verified statically, but the image '
@@ -768,7 +768,7 @@ body(story,
 h1(story, '7. AI Providers and Intelligent Engines')
 h2(story, '7.1 The provider layer')
 body(story,
-     'Eleven files under src/lib/tubeforge/providers wrap every external AI '
+     'Eleven files under src/lib/ibismuh/providers wrap every external AI '
      'capability - chat, text-to-speech, image, video, ASR and vision - behind one '
      'registry with shared HTTP handling, configuration and per-user settings. The '
      'zai-video-core module carries the video gateway core. Because every call goes '
@@ -786,7 +786,7 @@ make_table(story,
         ['video.ts / zai-video-core.ts', 'Video generation and the gateway core.'],
     ],
     [0.34, 0.66],
-    caption='Table 7 - The 11-file provider layer under src/lib/tubeforge/providers.')
+    caption='Table 7 - The 11-file provider layer under src/lib/ibismuh/providers.')
 h2(story, '7.2 Provider selection intelligence (S90)')
 body(story,
      'provider-score.ts is a pure, advisory scoring engine. The production-calibrated '
@@ -1005,7 +1005,7 @@ make_table(story,
     [
         ['API route files (ARCHITECTURE.md 1.1)', '116', '123 route.ts files'],
         ['Prisma migrations (ARCHITECTURE.md 1.2)', '22', '23 (s94_scene3d added)'],
-        ['Library modules (ARCHITECTURE.md 1.1)', '117', '132 under src/lib/tubeforge'],
+        ['Library modules (ARCHITECTURE.md 1.1)', '117', '132 under src/lib/ibismuh'],
         ['Prisma models', '32', '32 (in agreement)'],
         ['ROADMAP 2.0 items', '13 planned', '13 / 13 landed at v1'],
         ['Worklog coverage', 'through S75', 'through S94 (THE LAST ROW)'],
@@ -1019,7 +1019,7 @@ body(story,
      '(docs/audits/s75-architecture-reconciliation-record.md) defines the practice '
      'and it should be re-run after every engine-level landing: re-derive the '
      'counts from the four sources of truth (prisma/schema.prisma, '
-     'prisma/migrations/, src/app/api/ and src/lib/tubeforge/), update the '
+     'prisma/migrations/, src/app/api/ and src/lib/ibismuh/), update the '
      'headline numbers in ARCHITECTURE.md, and record the reconciliation in '
      'docs/audits/. Two companion laws from the worklog: when a job kind is added, '
      'every kind ledger moves in the same slice (the S88 lesson, applied '

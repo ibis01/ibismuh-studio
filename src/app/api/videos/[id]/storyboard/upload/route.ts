@@ -17,15 +17,15 @@
 // re-check (an upload IS a repaint).
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes, replaceSceneImage, sceneImageFile, storyboardComplete } from "@/lib/tubeforge/story";
-import { invalidateRenderedArtifacts } from "@/lib/tubeforge/render";
-import { registerSceneArtifact, hashArtifactInput } from "@/lib/tubeforge/scene-artifacts";
-import { startJob } from "@/lib/tubeforge/jobs";
-import { runConsistencyJob } from "@/lib/tubeforge/video-jobs";
-import { normalizeConsistencyCheckMode } from "@/lib/tubeforge/visual-consistency";
-import { getUserSetting } from "@/lib/tubeforge/settings";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes, replaceSceneImage, sceneImageFile, storyboardComplete } from "@/lib/ibismuh/story";
+import { invalidateRenderedArtifacts } from "@/lib/ibismuh/render";
+import { registerSceneArtifact, hashArtifactInput } from "@/lib/ibismuh/scene-artifacts";
+import { startJob } from "@/lib/ibismuh/jobs";
+import { runConsistencyJob } from "@/lib/ibismuh/video-jobs";
+import { normalizeConsistencyCheckMode } from "@/lib/ibismuh/visual-consistency";
+import { getUserSetting } from "@/lib/ibismuh/settings";
 
 type Ctx = { params: Promise<{ id: string }> };
 

@@ -29,14 +29,14 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { promisify } from "node:util";
 
-import { renderGraphics } from "../src/lib/tubeforge/graphics/render";
-import { frameAt, graphicsSceneDurationsMs } from "../src/lib/tubeforge/graphics/frame";
-import { graphicsQcMatrix, graphicsHoldWindows, graphicsExpectedCuts } from "../src/lib/tubeforge/graphics/qc";
-import { graphicsBudgetReport } from "../src/lib/tubeforge/graphics/preflight";
-import { graphicsDraftDoc } from "../src/lib/tubeforge/graphics/draft";
-import { framePlanWindows } from "../src/lib/tubeforge/anim/clock";
-import { validateGraphicsDoc, writeGraphicsDoc, GRAPHICS_VERSION, type GraphicsDoc } from "../src/lib/tubeforge/graphics/types";
-import { runQcReport } from "../src/lib/tubeforge/qc";
+import { renderGraphics } from "../src/lib/ibismuh/graphics/render";
+import { frameAt, graphicsSceneDurationsMs } from "../src/lib/ibismuh/graphics/frame";
+import { graphicsQcMatrix, graphicsHoldWindows, graphicsExpectedCuts } from "../src/lib/ibismuh/graphics/qc";
+import { graphicsBudgetReport } from "../src/lib/ibismuh/graphics/preflight";
+import { graphicsDraftDoc } from "../src/lib/ibismuh/graphics/draft";
+import { framePlanWindows } from "../src/lib/ibismuh/anim/clock";
+import { validateGraphicsDoc, writeGraphicsDoc, GRAPHICS_VERSION, type GraphicsDoc } from "../src/lib/ibismuh/graphics/types";
+import { runQcReport } from "../src/lib/ibismuh/qc";
 
 const execFileP = promisify(execFile);
 

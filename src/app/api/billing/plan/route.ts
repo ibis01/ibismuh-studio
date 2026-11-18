@@ -6,9 +6,9 @@
 // webhook is public (Stripe can't auth); the plan endpoint requires auth.
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { resolveUserPlan, microToCredits } from "@/lib/tubeforge/billing";
-import { stripeGate, CHECKOUT_TIERS } from "@/lib/tubeforge/stripe";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { resolveUserPlan, microToCredits } from "@/lib/ibismuh/billing";
+import { stripeGate, CHECKOUT_TIERS } from "@/lib/ibismuh/stripe";
 
 export async function GET(req: NextRequest) {
   const auth = await requireUser(req);

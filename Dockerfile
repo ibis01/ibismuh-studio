@@ -12,7 +12,7 @@
 # slides engines' rasterizer, DEPLOYMENT.md §5) are runtime requirements
 # and ship in the image.
 #
-# Build:  docker build -t tubeforge .
+# Build:  docker build -t ibismuh .
 # Run:    see docker-compose.yml
 #
 # The node base is a CONTRACT, not a taste (S185 config-truth scan pins it):
@@ -66,41 +66,41 @@ ENV NODE_ENV=production \
     TINI_SUBREAPER=1
 
 # Non-root user.
-RUN groupadd -g 1001 tubeforge && useradd -u 1001 -g tubeforge -m tubeforge
+RUN groupadd -g 1001 ibismuh && useradd -u 1001 -g ibismuh -m ibismuh
 
 # Prisma engines + runtime node_modules (runtime deps only; prisma CLI stays
 # for `migrate deploy` at container start).
-COPY --from=build --chown=tubeforge:tubeforge /app/node_modules ./node_modules
+COPY --from=build --chown=ibismuh:ibismuh /app/node_modules ./node_modules
 # Prune dev-only weight that survives npm ci in the deps stage.
-COPY --from=build --chown=tubeforge:tubeforge /app/package.json ./package.json
-COPY --from=build --chown=tubeforge:tubeforge /app/package-lock.json ./package-lock.json
+COPY --from=build --chown=ibismuh:ibismuh /app/package.json ./package.json
+COPY --from=build --chown=ibismuh:ibismuh /app/package-lock.json ./package-lock.json
 
 # Whiteboard/slides Chromium (DEPLOYMENT.md §5.1 — as root, before
-# USER tubeforge). Runs AFTER the node_modules COPY so npx resolves the
+# USER ibismuh). Runs AFTER the node_modules COPY so npx resolves the
 # pinned playwright from the image's own node_modules (1.57.0 → browser
 # build chromium-1200); `--with-deps` apt-installs the OS library
 # closure for THIS base (bookworm — playwright emits the matching
 # package names per distro at build time) including CJK/emoji fallback
 # fonts; the tree is chowned so the non-root worker can execute it.
 RUN npx playwright install --with-deps chromium \
-  && chown -R tubeforge:tubeforge /opt/ms-playwright
+  && chown -R ibismuh:ibismuh /opt/ms-playwright
 
 # Application code: standalone server (web role)…
-COPY --from=build --chown=tubeforge:tubeforge /app/.next/standalone ./.next/standalone
-COPY --from=build --chown=tubeforge:tubeforge /app/.next/static ./.next/standalone/.next/static
-COPY --from=build --chown=tubeforge:tubeforge /app/public ./.next/standalone/public
+COPY --from=build --chown=ibismuh:ibismuh /app/.next/standalone ./.next/standalone
+COPY --from=build --chown=ibismuh:ibismuh /app/.next/static ./.next/standalone/.next/static
+COPY --from=build --chown=ibismuh:ibismuh /app/public ./.next/standalone/public
 # …and the worker role sources.
-COPY --from=build --chown=tubeforge:tubeforge /app/src ./src
-COPY --from=build --chown=tubeforge:tubeforge /app/scripts ./scripts
-COPY --from=build --chown=tubeforge:tubeforge /app/prisma ./prisma
-COPY --from=build --chown=tubeforge:tubeforge /app/tsconfig.json ./tsconfig.json
-COPY --from=build --chown=tubeforge:tubeforge /app/next.config.ts ./next.config.ts
+COPY --from=build --chown=ibismuh:ibismuh /app/src ./src
+COPY --from=build --chown=ibismuh:ibismuh /app/scripts ./scripts
+COPY --from=build --chown=ibismuh:ibismuh /app/prisma ./prisma
+COPY --from=build --chown=ibismuh:ibismuh /app/tsconfig.json ./tsconfig.json
+COPY --from=build --chown=ibismuh:ibismuh /app/next.config.ts ./next.config.ts
 
 # Scratch + uploads roots (mount a volume at /app/uploads on local storage).
-RUN mkdir -p /app/uploads /app/db && chown -R tubeforge:tubeforge /app/uploads /app/db
+RUN mkdir -p /app/uploads /app/db && chown -R ibismuh:ibismuh /app/uploads /app/db
 VOLUME ["/app/uploads"]
 
-USER tubeforge
+USER ibismuh
 EXPOSE 3000
 
 # Web role by default; the worker overrides the command in compose/fly.

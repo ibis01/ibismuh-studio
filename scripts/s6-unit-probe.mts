@@ -14,10 +14,10 @@ import {
   docCaptionStyle,
   sanitizeCaptionStyle,
   sanitizeRenderPrefs,
-} from "../src/lib/tubeforge/studio-doc";
-import { assembleSaveSchema } from "../src/lib/tubeforge/validation";
-import { assembleTimeline, docSceneSettings, parseTimeline, serializeTimeline } from "../src/lib/tubeforge/timeline";
-import { parseScenes } from "../src/lib/tubeforge/story";
+} from "../src/lib/ibismuh/studio-doc";
+import { assembleSaveSchema } from "../src/lib/ibismuh/validation";
+import { assembleTimeline, docSceneSettings, parseTimeline, serializeTimeline } from "../src/lib/ibismuh/timeline";
+import { parseScenes } from "../src/lib/ibismuh/story";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail?: unknown) => {

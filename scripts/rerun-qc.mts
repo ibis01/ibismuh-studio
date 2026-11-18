@@ -1,8 +1,8 @@
 // Re-run the QC battery for one video (owner ctx) — updates Video.qcReport.
 //   node --import tsx scripts/rerun-qc.mts <videoId>
 
-import { withCtx } from "../src/lib/tubeforge/tenant.ts";
-import { qcForVideo } from "../src/lib/tubeforge/qc.ts";
+import { withCtx } from "../src/lib/ibismuh/tenant.ts";
+import { qcForVideo } from "../src/lib/ibismuh/qc.ts";
 
 const videoId = process.argv[2] ?? "cmvya1qnk0031np0well7rjm5";
 const CTX = {

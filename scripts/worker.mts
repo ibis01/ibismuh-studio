@@ -19,16 +19,16 @@
 //                  (share the DB; same host so claim-liveness checks work)
 
 async function main(): Promise<void> {
-  const { registerDefaultHandlers } = await import("@/lib/tubeforge/queue-handlers");
-  const { initQueue, queueWorkerId } = await import("@/lib/tubeforge/queue");
-  const { ensureRecovered } = await import("@/lib/tubeforge/jobs");
-  const { log } = await import("@/lib/tubeforge/log");
+  const { registerDefaultHandlers } = await import("@/lib/ibismuh/queue-handlers");
+  const { initQueue, queueWorkerId } = await import("@/lib/ibismuh/queue");
+  const { ensureRecovered } = await import("@/lib/ibismuh/jobs");
+  const { log } = await import("@/lib/ibismuh/log");
 
   registerDefaultHandlers();
   initQueue("worker");
 
   // Release holds orphaned by dead processes (best-effort, never throws).
-  const { startStaleHoldSweeper } = await import("@/lib/tubeforge/billing");
+  const { startStaleHoldSweeper } = await import("@/lib/ibismuh/billing");
   startStaleHoldSweeper();
 
   // Adopt orphaned rows from processes that died while we were down.

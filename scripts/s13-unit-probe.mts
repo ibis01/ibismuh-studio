@@ -24,9 +24,9 @@ import {
   RENDER_FRAME_RATES,
   RENDER_ASPECT_IDS,
   RENDER_FPS,
-} from "../src/lib/tubeforge/types";
-import { previewSettingsFrom, formatTimecode } from "../src/lib/tubeforge/preview-lanes";
-import { serializeVideo } from "../src/lib/tubeforge/serialize";
+} from "../src/lib/ibismuh/types";
+import { previewSettingsFrom, formatTimecode } from "../src/lib/ibismuh/preview-lanes";
+import { serializeVideo } from "../src/lib/ibismuh/serialize";
 import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 

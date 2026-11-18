@@ -31,10 +31,10 @@
 // seam media is missing with the exact command that renders it.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { headRevision } from "@/lib/tubeforge/scene-revisions";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { headRevision } from "@/lib/ibismuh/scene-revisions";
 import {
   approvalBlocker,
   approveSceneRevision,
@@ -42,9 +42,9 @@ import {
   runSceneRecheckJob,
   seamsOfScene,
   sceneBoundaryKey,
-} from "@/lib/tubeforge/scene-qc";
-import { startJob } from "@/lib/tubeforge/jobs";
-import * as storage from "@/lib/tubeforge/storage";
+} from "@/lib/ibismuh/scene-qc";
+import { startJob } from "@/lib/ibismuh/jobs";
+import * as storage from "@/lib/ibismuh/storage";
 
 type Ctx = { params: Promise<{ id: string; n: string }> };
 

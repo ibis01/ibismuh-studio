@@ -4,7 +4,7 @@
  *
  *   node --import tsx scripts/test-voicestudio-adapter.mts
  *
- * What this proves: TubeForge's REAL adapters (providers/tts.ts
+ * What this proves: Ibismuh Studio's REAL adapters (providers/tts.ts
  * ttsSynthesize and providers/asr.ts asrTranscribeDetailed) speak the
  * VoiceStudio wire contract end-to-end — through the actual providerFetch
  * path (timeouts, headers, form building, parsing), not a mocked adapter.
@@ -34,15 +34,15 @@
  */
 
 import http from "node:http";
-import { ttsSynthesize } from "../src/lib/tubeforge/providers/tts";
-import { asrTranscribeDetailed, type AsrWord } from "../src/lib/tubeforge/providers/asr";
+import { ttsSynthesize } from "../src/lib/ibismuh/providers/tts";
+import { asrTranscribeDetailed, type AsrWord } from "../src/lib/ibismuh/providers/asr";
 import {
   mouthBeatsFromSpans,
   mouthSchedule,
   wordSpansFromAnchors,
   type WordSpan,
-} from "../src/lib/tubeforge/characters/rig-frame";
-import type { WordAnchors } from "../src/lib/tubeforge/whiteboard/timing";
+} from "../src/lib/ibismuh/characters/rig-frame";
+import type { WordAnchors } from "../src/lib/ibismuh/whiteboard/timing";
 
 let passed = 0;
 let failed = 0;

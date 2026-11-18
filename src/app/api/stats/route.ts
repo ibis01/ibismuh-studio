@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import type { ActivityDTO, StatsDTO } from "@/lib/tubeforge/types";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import type { ActivityDTO, StatsDTO } from "@/lib/ibismuh/types";
 
 export async function GET(req: NextRequest) {
   const auth = await requireUser(req);
@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
   // Latest snapshot per video = that video's current totals. The 7-day delta
   // uses the STABLE COHORT only (videos with a snapshot ≥7 days old), so a
   // freshly-synced back catalog can't masquerade as a week of growth.
-  let performance: import("@/lib/tubeforge/types").PerformanceDTO | null = null;
+  let performance: import("@/lib/ibismuh/types").PerformanceDTO | null = null;
   if (statRows.length > 0) {
     const byVideo = new Map<string, typeof statRows>();
     for (const row of statRows) {

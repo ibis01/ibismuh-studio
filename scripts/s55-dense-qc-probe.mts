@@ -43,7 +43,7 @@ import {
   RESTRICTED_VLM_BATCH,
   RESTRICTED_VLM_MAX_FRAMES,
   FACE_TRIPWIRE_PY,
-} from "../src/lib/tubeforge/restricted-subjects";
+} from "../src/lib/ibismuh/restricted-subjects";
 
 const execFileAsync = promisify(execFile);
 const DATA_PATH = process.env.S55_PROBE_DATA ?? "docs/audits/s55-dense-qc-data.json";

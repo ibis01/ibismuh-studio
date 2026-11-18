@@ -11,10 +11,10 @@
 // 400 when there is no final.mp4 to QC (the user must render first).
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { isJobRunning, lastJobError, jobProgress, startJob } from "@/lib/tubeforge/jobs";
-import { runQcJob } from "@/lib/tubeforge/video-jobs";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { isJobRunning, lastJobError, jobProgress, startJob } from "@/lib/ibismuh/jobs";
+import { runQcJob } from "@/lib/ibismuh/video-jobs";
 
 type Ctx = { params: Promise<{ id: string }> };
 

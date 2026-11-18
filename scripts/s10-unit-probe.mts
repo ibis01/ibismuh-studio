@@ -20,12 +20,12 @@ import {
   sanitizeShortPick,
   docShortPick,
   sanitizeRenderPrefs,
-} from "../src/lib/tubeforge/studio-doc";
-import { assembleSaveSchema } from "../src/lib/tubeforge/validation";
-import { assembleTimeline, parseTimeline, serializeTimeline } from "../src/lib/tubeforge/timeline";
-import { parseScenes } from "../src/lib/tubeforge/story";
-import { shortSceneIndexFor } from "../src/lib/tubeforge/video-jobs";
-import { pickBestScene } from "../src/lib/tubeforge/shorts";
+} from "../src/lib/ibismuh/studio-doc";
+import { assembleSaveSchema } from "../src/lib/ibismuh/validation";
+import { assembleTimeline, parseTimeline, serializeTimeline } from "../src/lib/ibismuh/timeline";
+import { parseScenes } from "../src/lib/ibismuh/story";
+import { shortSceneIndexFor } from "../src/lib/ibismuh/video-jobs";
+import { pickBestScene } from "../src/lib/ibismuh/shorts";
 
 let failures = 0;
 const check = (name: string, ok: boolean, detail?: unknown) => {

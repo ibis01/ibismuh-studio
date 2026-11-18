@@ -8,7 +8,7 @@
  *
  *   node --import tsx scripts/s71-cold-start-probe.mts
  */
-const { draftColdStartOpener } = await import("../src/lib/tubeforge/shorts");
+const { draftColdStartOpener } = await import("../src/lib/ibismuh/shorts");
 
 const t0 = Date.now();
 const line = await draftColdStartOpener({

@@ -31,7 +31,7 @@ import {
   QC_ENFORCEMENT_MATRIX,
   QC_POLICY_VERSION,
   type QcReportLike,
-} from "../src/lib/tubeforge/qc-policy";
+} from "../src/lib/ibismuh/qc-policy";
 
 let passed = 0;
 const failures: string[] = [];

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import { Readable } from "stream";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { statScenePreviewFile, statSceneBoundaryFile, statVideoFile } from "@/lib/tubeforge/render";
-import { statShortFile } from "@/lib/tubeforge/shorts";
-import { materialize, presign } from "@/lib/tubeforge/storage";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { statScenePreviewFile, statSceneBoundaryFile, statVideoFile } from "@/lib/ibismuh/render";
+import { statShortFile } from "@/lib/ibismuh/shorts";
+import { materialize, presign } from "@/lib/ibismuh/storage";
 
 type Ctx = { params: Promise<{ id: string }> };
 

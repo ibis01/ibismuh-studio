@@ -1,7 +1,7 @@
 // Reproduce scene 5's motion plan + filter graph exactly as renderVideo does,
 // then render a 3s probe with it to measure inter-frame motion.
-import { planSceneMovements, sceneFilterGraph, sanitizeMotion } from "../src/lib/tubeforge/motion.ts";
-import { parseScenes } from "../src/lib/tubeforge/story.ts";
+import { planSceneMovements, sceneFilterGraph, sanitizeMotion } from "../src/lib/ibismuh/motion.ts";
+import { parseScenes } from "../src/lib/ibismuh/story.ts";
 
 // Motion settings as stored on the video row: smart/16
 const motion = sanitizeMotion({ mode: "smart", intensity: 16 } as never);

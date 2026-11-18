@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rawDatabase as rawDb } from "@/lib/tubeforge/tenant-db";
-import { withCtx, type TenantCtx } from "@/lib/tubeforge/tenant";
-import { exchangeCode, fetchChannelInfo, verifyOAuthState } from "@/lib/tubeforge/youtube";
-import { errorText } from "@/lib/tubeforge/redact";
-import { requestLog } from "@/lib/tubeforge/log";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { withCtx, type TenantCtx } from "@/lib/ibismuh/tenant";
+import { exchangeCode, fetchChannelInfo, verifyOAuthState } from "@/lib/ibismuh/youtube";
+import { errorText } from "@/lib/ibismuh/redact";
+import { requestLog } from "@/lib/ibismuh/log";
 
 /**
  * GET — OAuth consent callback. Google redirects here with ?code & state.

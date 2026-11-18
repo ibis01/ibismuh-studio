@@ -2,7 +2,7 @@
 
 **Status:** reconciled against the live source at S75 (2026-11-10 UTC).
 **Last updated:** 2026-11-10 (S75 reconciliation; §2–§8 remain the S47-era target designs)
-**Source for current state:** `prisma/schema.prisma`, `prisma/migrations/`, `src/lib/tubeforge/`, `src/app/api/`
+**Source for current state:** `prisma/schema.prisma`, `prisma/migrations/`, `src/lib/ibismuh/`, `src/app/api/`
 **S75 assignment:** the reconciliation record lives in `docs/audits/s75-architecture-reconciliation-record.md`
 
 ---
@@ -10,7 +10,7 @@
 ## 1. Current architecture (reconciled at S75, 2026-11-10 UTC — baseline §1.1–1.8 from the S47 reconciliation)
 
 **Source of truth:** `prisma/schema.prisma` (38 models), `prisma/migrations/`
-(22 migrations), `src/lib/tubeforge/` (117 modules), `src/app/api/` (116 route
+(22 migrations), `src/lib/ibismuh/` (117 modules), `src/app/api/` (116 route
 files). §1.1–1.8 were rewritten from those sources during S47 and stay
 accurate for what they describe; §1.9 is the S48→S74 delta that the S47
 reconciliation could not know about. The Stage-1-era snapshot that lived
@@ -31,7 +31,7 @@ exists anywhere in the repo.
 │   ├─ src/middleware.ts — DEFAULT-DENY gatekeeper                   │
 │   │     (6 public auth endpoints + YouTube OAuth callback)         │
 │   ├─ src/app/api/* — 116 route files, tenant-scoped via ALS        │
-│   ├─ src/lib/tubeforge/* — 117 modules, 11 provider files          │
+│   ├─ src/lib/ibismuh/* — 117 modules, 11 provider files          │
 │   └─ scripts/worker.mts — DB-backed queue consumer                 │
 │         (Compose/Fly run web and worker from one image)            │
 └────────────────────────────────────────────────────────────────────┘
@@ -252,7 +252,7 @@ no parallel budget — the reconciliation's §11 law, held):
 │   ├─ src/middleware.ts — required API gatekeeper                    │
 │   │     (auth required by default; public allow-list only)         │
 │   ├─ src/app/api/* — endpoints with zod validation + tenant scoping │
-│   └─ src/lib/tubeforge/* — provider abstraction, services          │
+│   └─ src/lib/ibismuh/* — provider abstraction, services          │
 └────────────────────────────────────────────────────────────────────┘
                 │
         ┌───────┼───────┬────────────┬─────────────┐
@@ -440,8 +440,8 @@ Worker process
 Each consumer:
 
 - Pulls a job from its queue with visibility timeout.
-- Runs the job body (the existing `lib/tubeforge/<stage>.ts` modules, unchanged in behavior).
-- Saves outputs to object storage (S3/R2/GCS via `lib/tubeforge/storage.ts` abstraction — same interface as today's `videoDir()`, different backend).
+- Runs the job body (the existing `lib/ibismuh/<stage>.ts` modules, unchanged in behavior).
+- Saves outputs to object storage (S3/R2/GCS via `lib/ibismuh/storage.ts` abstraction — same interface as today's `videoDir()`, different backend).
 - Updates the `Job` row with progress + label.
 - On failure: retries with exponential backoff (BullMQ built-in); after max attempts, marks `failed` and surfaces to the user.
 - On worker shutdown (SIGTERM): in-flight jobs are requeued by BullMQ; resumed by another worker (or the same one on restart).
@@ -452,7 +452,7 @@ The existing `startJob` API becomes a thin wrapper that enqueues a BullMQ job an
 
 ## 5. Object storage migration (Stage 3 preview)
 
-A new `lib/tubeforge/storage.ts` module provides the same interface as today's filesystem helpers, backed by S3/R2/GCS:
+A new `lib/ibismuh/storage.ts` module provides the same interface as today's filesystem helpers, backed by S3/R2/GCS:
 
 ```
 // today

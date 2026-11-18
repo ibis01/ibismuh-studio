@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { videoDir } from "@/lib/tubeforge/ai";
-import { sceneWavFile } from "@/lib/tubeforge/story";
-import { wavDurationSec } from "@/lib/tubeforge/wav";
-import { invalidateRenderedArtifacts } from "@/lib/tubeforge/render";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { videoDir } from "@/lib/ibismuh/ai";
+import { sceneWavFile } from "@/lib/ibismuh/story";
+import { wavDurationSec } from "@/lib/ibismuh/wav";
+import { invalidateRenderedArtifacts } from "@/lib/ibismuh/render";
 import {
   GRAPHICS_BUDGETS,
   GRAPHICS_FRAME_BUDGET,
@@ -14,10 +14,10 @@ import {
   parseGraphicsDoc,
   validateGraphicsDoc,
   writeGraphicsDoc,
-} from "@/lib/tubeforge/graphics/types";
-import { graphicsBudgetReport } from "@/lib/tubeforge/graphics/preflight";
-import { graphicsQcMatrix } from "@/lib/tubeforge/graphics/qc";
-import { GRAPHICS_DRAFT_SCALES } from "@/lib/tubeforge/graphics/draft";
+} from "@/lib/ibismuh/graphics/types";
+import { graphicsBudgetReport } from "@/lib/ibismuh/graphics/preflight";
+import { graphicsQcMatrix } from "@/lib/ibismuh/graphics/qc";
+import { GRAPHICS_DRAFT_SCALES } from "@/lib/ibismuh/graphics/draft";
 
 type Ctx = { params: Promise<{ id: string }> };
 

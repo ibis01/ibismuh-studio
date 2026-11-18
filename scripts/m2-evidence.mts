@@ -4,8 +4,8 @@
  *  (frame-hash evidence attached to the worklog)".
  *
  * What is REAL here (production code, imported from src/):
- *   - buildSceneShots / shotPrompt / shotImageFile  (src/lib/tubeforge/shots.ts)
- *   - multiShotSceneGraph                          (src/lib/tubeforge/motion.ts)
+ *   - buildSceneShots / shotPrompt / shotImageFile  (src/lib/ibismuh/shots.ts)
+ *   - multiShotSceneGraph                          (src/lib/ibismuh/motion.ts)
  *   - the exact ffmpeg command shape render.ts buildSegment assembles
  *     for the multi-image branch (input order, per-still -loop demuxer,
  *     filter_complex, -map) — mirrored line for line.
@@ -37,9 +37,9 @@ import path from "node:path";
 const execFileAsync = promisify(execFile);
 
 const { buildSceneShots, shotImageFile } = await import(
-  "../src/lib/tubeforge/shots.ts"
+  "../src/lib/ibismuh/shots.ts"
 );
-const { multiShotSceneGraph } = await import("../src/lib/tubeforge/motion.ts");
+const { multiShotSceneGraph } = await import("../src/lib/ibismuh/motion.ts");
 
 const FFMPEG_COMMON = [
   "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30", "-pix_fmt", "yuv420p",

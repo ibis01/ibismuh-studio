@@ -3,27 +3,27 @@ import fs from "fs";
 import path from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { errorText } from "@/lib/tubeforge/redact";
-import { ensureSfx } from "@/lib/tubeforge/sfx";
-import { ensureAmbience } from "@/lib/tubeforge/ambience";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { errorText } from "@/lib/ibismuh/redact";
+import { ensureSfx } from "@/lib/ibismuh/sfx";
+import { ensureAmbience } from "@/lib/ibismuh/ambience";
 import {
   resolveSoundBank,
   sanitizeSfxKind,
   sanitizeAmbienceKind,
-} from "@/lib/tubeforge/studio-sound";
-import { parseTimeline } from "@/lib/tubeforge/timeline";
-import { docMusicPick } from "@/lib/tubeforge/studio-doc";
-import { getApprovedAudioMap } from "@/lib/tubeforge/director-plan";
+} from "@/lib/ibismuh/studio-sound";
+import { parseTimeline } from "@/lib/ibismuh/timeline";
+import { docMusicPick } from "@/lib/ibismuh/studio-doc";
+import { getApprovedAudioMap } from "@/lib/ibismuh/director-plan";
 import {
   resolveMusicForVideo,
   isMusicEnabledForVideo,
   musicBedActive,
   trackAbsolutePath,
-} from "@/lib/tubeforge/music";
-import { droneSource, musicProfileForNiche } from "@/lib/tubeforge/render";
-import { videoDir } from "@/lib/tubeforge/ai";
+} from "@/lib/ibismuh/music";
+import { droneSource, musicProfileForNiche } from "@/lib/ibismuh/render";
+import { videoDir } from "@/lib/ibismuh/ai";
 
 const execFileAsync = promisify(execFile);
 

@@ -4,7 +4,7 @@
 import fs from "fs";
 
 const { PrismaClient } = await import("@prisma/client");
-const tenant = await import("../src/lib/tubeforge/tenant");
+const tenant = await import("../src/lib/ibismuh/tenant");
 
 const db = new PrismaClient();
 try {

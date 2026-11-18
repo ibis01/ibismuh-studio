@@ -5,8 +5,8 @@
 import fs from "fs";
 
 const { PrismaClient } = await import("@prisma/client");
-const _tenant = await import("../src/lib/tubeforge/tenant");
-const { cloneVoice } = await import("../src/lib/tubeforge/voice-clone");
+const _tenant = await import("../src/lib/ibismuh/tenant");
+const { cloneVoice } = await import("../src/lib/ibismuh/voice-clone");
 
 const db = new PrismaClient();
 try {
@@ -30,6 +30,6 @@ try {
 }
 
 async function withCtxSafe<T>(ctx: { userId: string; organizationId: string; role: string }, fn: () => Promise<T>): Promise<T> {
-  const { withCtx } = await import("../src/lib/tubeforge/tenant");
+  const { withCtx } = await import("../src/lib/ibismuh/tenant");
   return withCtx(ctx as Parameters<typeof withCtx>[0], fn);
 }

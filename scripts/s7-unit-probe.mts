@@ -14,12 +14,12 @@ import {
   docMusicPick,
   sanitizeRenderPrefs,
   type MusicPick,
-} from "../src/lib/tubeforge/studio-doc";
-import { assembleSaveSchema } from "../src/lib/tubeforge/validation";
-import { assembleTimeline, parseTimeline, serializeTimeline } from "../src/lib/tubeforge/timeline";
-import { parseScenes } from "../src/lib/tubeforge/story";
-import { resolveMusicForVideo, musicBedActive } from "../src/lib/tubeforge/music";
-import { withCtx } from "../src/lib/tubeforge/tenant";
+} from "../src/lib/ibismuh/studio-doc";
+import { assembleSaveSchema } from "../src/lib/ibismuh/validation";
+import { assembleTimeline, parseTimeline, serializeTimeline } from "../src/lib/ibismuh/timeline";
+import { parseScenes } from "../src/lib/ibismuh/story";
+import { resolveMusicForVideo, musicBedActive } from "../src/lib/ibismuh/music";
+import { withCtx } from "../src/lib/ibismuh/tenant";
 import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 

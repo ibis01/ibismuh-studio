@@ -27,15 +27,15 @@
 // row so the picker shows the new narrator.
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseJson, voiceSwapSchema, ApiValidationError } from "@/lib/tubeforge/validation";
-import { performVoiceSwap, sceneWavDurations } from "@/lib/tubeforge/clip-ops";
-import { parseScenes } from "@/lib/tubeforge/story";
-import { resolvePreviewVoice } from "@/lib/tubeforge/voice-preview";
-import { parseTimeline, serializeTimeline, guardTimelineOverwrite, TIMELINE_OVERWRITE_ERROR } from "@/lib/tubeforge/timeline";
-import { commitSceneChanges } from "@/lib/tubeforge/scene-revisions";
-import { videoDir } from "@/lib/tubeforge/ai";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseJson, voiceSwapSchema, ApiValidationError } from "@/lib/ibismuh/validation";
+import { performVoiceSwap, sceneWavDurations } from "@/lib/ibismuh/clip-ops";
+import { parseScenes } from "@/lib/ibismuh/story";
+import { resolvePreviewVoice } from "@/lib/ibismuh/voice-preview";
+import { parseTimeline, serializeTimeline, guardTimelineOverwrite, TIMELINE_OVERWRITE_ERROR } from "@/lib/ibismuh/timeline";
+import { commitSceneChanges } from "@/lib/ibismuh/scene-revisions";
+import { videoDir } from "@/lib/ibismuh/ai";
 
 type Ctx = { params: Promise<{ id: string }> };
 

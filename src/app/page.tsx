@@ -7,9 +7,9 @@ import {
   AppSidebar,
   MOBILE_NAV_ITEMS,
   NAV_ITEMS,
-} from "@/components/tubeforge/app-sidebar";
-import { AuthGate } from "@/components/tubeforge/auth-gate";
-import { DashboardView } from "@/components/tubeforge/views/dashboard-view";
+} from "@/components/ibismuh/app-sidebar";
+import { AuthGate } from "@/components/ibismuh/auth-gate";
+import { DashboardView } from "@/components/ibismuh/views/dashboard-view";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -18,8 +18,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Loader2, Menu, Plus, Search } from "lucide-react";
-import { IbismuhLogo, IbismuhWordmark } from "@/components/tubeforge/logo";
-import { CommandPalette } from "@/components/tubeforge/command-palette";
+import { IbismuhLogo, IbismuhWordmark } from "@/components/ibismuh/logo";
+import { CommandPalette } from "@/components/ibismuh/command-palette";
 
 // Code splitting (boot-payload fix, 2026-11): statically importing all 11
 // views forced every phone to download the whole studio (~10 MB gz in dev)
@@ -49,61 +49,61 @@ const lazyView = (loader: () => Promise<{ default: ComponentType }>) =>
 // function" the first time the view is visited.
 const AnalyticsView = lazyView(
   () =>
-    import("@/components/tubeforge/views/analytics-view").then((m) => ({
+    import("@/components/ibismuh/views/analytics-view").then((m) => ({
       default: m.AnalyticsView,
     })),
 );
 const ResearchView = lazyView(
   () =>
-    import("@/components/tubeforge/views/research-view").then((m) => ({
+    import("@/components/ibismuh/views/research-view").then((m) => ({
       default: m.ResearchView,
     })),
 );
 const CreateView = lazyView(
   () =>
-    import("@/components/tubeforge/views/create-view").then((m) => ({
+    import("@/components/ibismuh/views/create-view").then((m) => ({
       default: m.CreateView,
     })),
 );
 const LibraryView = lazyView(
   () =>
-    import("@/components/tubeforge/views/library-view").then((m) => ({
+    import("@/components/ibismuh/views/library-view").then((m) => ({
       default: m.LibraryView,
     })),
 );
 const CastView = lazyView(
   () =>
-    import("@/components/tubeforge/views/cast-view").then((m) => ({
+    import("@/components/ibismuh/views/cast-view").then((m) => ({
       default: m.CastView,
     })),
 );
 const WorldView = lazyView(
   () =>
-    import("@/components/tubeforge/views/world-view").then((m) => ({
+    import("@/components/ibismuh/views/world-view").then((m) => ({
       default: m.WorldView,
     })),
 );
 const VoiceView = lazyView(
   () =>
-    import("@/components/tubeforge/views/voice-view").then((m) => ({
+    import("@/components/ibismuh/views/voice-view").then((m) => ({
       default: m.VoiceView,
     })),
 );
 const CalendarView = lazyView(
   () =>
-    import("@/components/tubeforge/views/calendar-view").then((m) => ({
+    import("@/components/ibismuh/views/calendar-view").then((m) => ({
       default: m.CalendarView,
     })),
 );
 const ChannelsView = lazyView(
   () =>
-    import("@/components/tubeforge/views/channels-view").then((m) => ({
+    import("@/components/ibismuh/views/channels-view").then((m) => ({
       default: m.ChannelsView,
     })),
 );
 const SettingsView = lazyView(
   () =>
-    import("@/components/tubeforge/views/settings-view").then((m) => ({
+    import("@/components/ibismuh/views/settings-view").then((m) => ({
       default: m.SettingsView,
     })),
 );

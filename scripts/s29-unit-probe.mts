@@ -19,14 +19,14 @@ import {
   parseScenes,
   sceneImageFile,
   sceneWavFile,
-} from "../src/lib/tubeforge/story";
+} from "../src/lib/ibismuh/story";
 import {
   buildZip,
   safeZipName,
   zipMethodFor,
-} from "../src/lib/tubeforge/zip";
+} from "../src/lib/ibismuh/zip";
 import crypto from "crypto";
-import { parseSrt } from "../src/lib/tubeforge/qc";
+import { parseSrt } from "../src/lib/ibismuh/qc";
 
 let pass = 0;
 let fail = 0;

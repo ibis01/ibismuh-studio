@@ -15,14 +15,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "node:fs";
 import path from "node:path";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { videoDir } from "@/lib/tubeforge/ai";
-import { parseScenes, sceneWavFile } from "@/lib/tubeforge/story";
-import { wavDurationSec } from "@/lib/tubeforge/wav";
-import { youtubeIdFromUrl, fetchRetentionCurve } from "@/lib/tubeforge/youtube";
-import { analyzeRetentionCurve, parseRetentionReport } from "@/lib/tubeforge/retention";
-import { errorText } from "@/lib/tubeforge/redact";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { videoDir } from "@/lib/ibismuh/ai";
+import { parseScenes, sceneWavFile } from "@/lib/ibismuh/story";
+import { wavDurationSec } from "@/lib/ibismuh/wav";
+import { youtubeIdFromUrl, fetchRetentionCurve } from "@/lib/ibismuh/youtube";
+import { analyzeRetentionCurve, parseRetentionReport } from "@/lib/ibismuh/retention";
+import { errorText } from "@/lib/ibismuh/redact";
 
 type Ctx = { params: Promise<{ id: string }> };
 

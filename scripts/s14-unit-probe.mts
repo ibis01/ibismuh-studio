@@ -27,8 +27,8 @@ import {
   sanitizeRenderPrefs,
   QUALITY_ENCODING,
   type ExportQuality,
-} from "../src/lib/tubeforge/studio-doc";
-import { serializeVideo } from "../src/lib/tubeforge/serialize";
+} from "../src/lib/ibismuh/studio-doc";
+import { serializeVideo } from "../src/lib/ibismuh/serialize";
 import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 

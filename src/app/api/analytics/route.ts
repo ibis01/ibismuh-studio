@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { getAnalyticsOverview } from "@/lib/tubeforge/analytics";
-import { errorText } from "@/lib/tubeforge/redact";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { getAnalyticsOverview } from "@/lib/ibismuh/analytics";
+import { errorText } from "@/lib/ibismuh/redact";
 
 /** GET — aggregated channel performance + feedback-loop state (Phase 5). */
 export async function GET(req: NextRequest) {

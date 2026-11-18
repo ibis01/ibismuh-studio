@@ -42,12 +42,12 @@ import {
   w1SeamPlan,
   w1TotalDurationMs,
   type W1AspectId,
-} from "../src/lib/tubeforge/whiteboard/benchmark-scenarios";
-import { loadLibrary } from "../src/lib/tubeforge/whiteboard/assets";
-import { validateWhiteboardProject } from "../src/lib/tubeforge/whiteboard/storyboard";
-import { renderWhiteboard, probeDurationSec } from "../src/lib/tubeforge/whiteboard/render";
-import { runQcReport } from "../src/lib/tubeforge/qc";
-import { bedExpression, ORIGINAL_LIBRARY } from "../src/lib/tubeforge/music";
+} from "../src/lib/ibismuh/whiteboard/benchmark-scenarios";
+import { loadLibrary } from "../src/lib/ibismuh/whiteboard/assets";
+import { validateWhiteboardProject } from "../src/lib/ibismuh/whiteboard/storyboard";
+import { renderWhiteboard, probeDurationSec } from "../src/lib/ibismuh/whiteboard/render";
+import { runQcReport } from "../src/lib/ibismuh/qc";
+import { bedExpression, ORIGINAL_LIBRARY } from "../src/lib/ibismuh/music";
 
 const execFileP = promisify(execFile);
 const OUT_DIR = path.resolve("validation/w1");
@@ -422,7 +422,7 @@ async function main(): Promise<void> {
     stage: "W1",
     what: "whiteboard perceptual baseline — five fixed scene types × three aspects",
     definition: {
-      module: "src/lib/tubeforge/whiteboard/benchmark-scenarios.ts",
+      module: "src/lib/ibismuh/whiteboard/benchmark-scenarios.ts",
       projectHashes,
       fps: W1_FPS,
       totalDurationMs: w1TotalDurationMs(),

@@ -12,10 +12,10 @@
 // 400/409/502 → { error } with a human-readable reason.
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { getCapability } from "@/lib/tubeforge/providers/settings";
-import { cloneVoice, isCloneProvider, parseCloneConsent, pickCloneProvider } from "@/lib/tubeforge/voice-clone";
-import { errorText } from "@/lib/tubeforge/redact";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { getCapability } from "@/lib/ibismuh/providers/settings";
+import { cloneVoice, isCloneProvider, parseCloneConsent, pickCloneProvider } from "@/lib/ibismuh/voice-clone";
+import { errorText } from "@/lib/ibismuh/redact";
 
 export async function POST(req: NextRequest) {
   const auth = await requireUser(req);

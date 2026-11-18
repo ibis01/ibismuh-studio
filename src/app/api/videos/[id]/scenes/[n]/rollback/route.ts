@@ -16,11 +16,11 @@
 // the scene is already at that content (nothing to restore).
 
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/tubeforge/tenant-db";
-import { requireUser } from "@/lib/tubeforge/tenant";
-import { parseJson, sceneRollbackSchema, ApiValidationError } from "@/lib/tubeforge/validation";
-import { serializeScenes } from "@/lib/tubeforge/story";
-import { rollbackScene } from "@/lib/tubeforge/scene-revisions";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { requireUser } from "@/lib/ibismuh/tenant";
+import { parseJson, sceneRollbackSchema, ApiValidationError } from "@/lib/ibismuh/validation";
+import { serializeScenes } from "@/lib/ibismuh/story";
+import { rollbackScene } from "@/lib/ibismuh/scene-revisions";
 
 type Ctx = { params: Promise<{ id: string; n: string }> };
 

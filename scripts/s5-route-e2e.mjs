@@ -16,8 +16,8 @@
 //      removed from the database (the factory leaves no litter).
 // Run: node --import tsx scripts/s5-route-e2e.mjs
 import { PrismaClient } from "@prisma/client";
-import { assembleTimeline, serializeTimeline } from "../src/lib/tubeforge/timeline";
-import { parseScenes } from "../src/lib/tubeforge/story";
+import { assembleTimeline, serializeTimeline } from "../src/lib/ibismuh/timeline";
+import { parseScenes } from "../src/lib/ibismuh/story";
 
 const db = new PrismaClient();
 const BASE = "http://localhost:3000";

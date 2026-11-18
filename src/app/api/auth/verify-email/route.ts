@@ -18,11 +18,11 @@
 //                 S20 set for the keyring).
 
 import { NextRequest, NextResponse } from "next/server";
-import { rawDatabase as rawDb } from "@/lib/tubeforge/tenant-db";
-import { randomToken, sha256Hex } from "@/lib/tubeforge/crypto";
-import { requireUser, sessionIdFromRequest } from "@/lib/tubeforge/tenant";
-import { sendMail, linkInResponse } from "@/lib/tubeforge/email";
-import { requestLog } from "@/lib/tubeforge/log";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { randomToken, sha256Hex } from "@/lib/ibismuh/crypto";
+import { requireUser, sessionIdFromRequest } from "@/lib/ibismuh/tenant";
+import { sendMail, linkInResponse } from "@/lib/ibismuh/email";
+import { requestLog } from "@/lib/ibismuh/log";
 
 const VERIFY_TTL_H = 24;
 
@@ -95,9 +95,9 @@ export async function POST(req: NextRequest) {
   try {
     await sendMail({
       to: user.email,
-      subject: "Confirm your TubeForge email",
+      subject: "Confirm your Ibismuh Studio email",
       text: [
-        "Confirm your email address for TubeForge:",
+        "Confirm your email address for Ibismuh Studio:",
         verifyUrl.toString(),
         "",
         `This link expires in ${VERIFY_TTL_H} hours. It replaces any earlier link.`,

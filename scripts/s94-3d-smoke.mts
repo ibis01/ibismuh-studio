@@ -49,12 +49,12 @@ async function probeDurationSec(file: string): Promise<number | null> {
 
 async function main() {
   process.env.DATABASE_URL ||= "file:./db/custom.db";
-  const { videoDir } = await import("../src/lib/tubeforge/ai.ts");
-  const { sceneWavFile, sceneImageFile } = await import("../src/lib/tubeforge/story.ts");
+  const { videoDir } = await import("../src/lib/ibismuh/ai.ts");
+  const { sceneWavFile, sceneImageFile } = await import("../src/lib/ibismuh/story.ts");
 
   // ---------- 1. the contract: scaffold → serialize → parse ----------
   const { scaffoldScene3D, serializeScene3D, parseScene3D, cameraAt, scene3dClipKey } =
-    await import("../src/lib/tubeforge/scene3d.ts");
+    await import("../src/lib/ibismuh/scene3d.ts");
   const doc = scaffoldScene3D("the orbital mechanics of exoplanets", { fps: 24, durationSec: 4 });
   const stored = serializeScene3D(doc);
   const reopened = parseScene3D(stored);
@@ -70,7 +70,7 @@ async function main() {
   const dir = videoDir(videoId);
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
-  const { renderScene3D } = await import("../src/lib/tubeforge/render3d.ts");
+  const { renderScene3D } = await import("../src/lib/ibismuh/render3d.ts");
   const result = await renderScene3D(doc, {
     outDir: dir,
     onProgress: (label) => console.log("  …", label),
@@ -81,7 +81,7 @@ async function main() {
   ok(Math.abs(dur3d - 4) <= 0.2, `the delivered duration is the contract duration (${dur3d?.toFixed(2)}s ≈ 4)`);
 
   // ---------- 3. THE GOVERNING RULE: the clip rides the shared timeline ----
-  type Scene = import("../src/lib/tubeforge/types.ts").Scene;
+  type Scene = import("../src/lib/ibismuh/types.ts").Scene;
   const scene: Scene = {
     index: 1,
     title: "The flyover",
@@ -101,8 +101,8 @@ async function main() {
   await ffmpeg(["-f", "lavfi", "-i", "sine=frequency=440:duration=4", "-ar", "48000", "-ac", "1", path.join(dir, sceneWavFile(1))]);
   await ffmpeg(["-f", "lavfi", "-i", "testsrc2=s=1280x720:d=0.04", "-frames:v", "1", path.join(dir, sceneImageFile(1))]);
 
-  const { assembleTimeline } = await import("../src/lib/tubeforge/timeline.ts");
-  const { compositionPlan } = await import("../src/lib/tubeforge/composition-plan.ts");
+  const { assembleTimeline } = await import("../src/lib/ibismuh/timeline.ts");
+  const { compositionPlan } = await import("../src/lib/ibismuh/composition-plan.ts");
   const docTl = assembleTimeline([scene], { ttsSpeed: 1, renderMode: "stock", wavDurations: { 1: 4 } });
   // The studio-style boundary edit (the S2 seniority law, pinned by the
   // S87 battery too): the assembled default blend extends the window with
@@ -122,7 +122,7 @@ async function main() {
   );
 
   // The compositor plays the 3D clip to a delivered cut (the shared assembly).
-  const { renderVideo } = await import("../src/lib/tubeforge/render.ts");
+  const { renderVideo } = await import("../src/lib/ibismuh/render.ts");
   const result2 = await renderVideo({
     videoId,
     scenes: [scene],
