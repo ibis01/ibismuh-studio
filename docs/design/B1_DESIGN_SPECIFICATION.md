@@ -363,7 +363,19 @@ Implemented 2026-11 (B1 + B2, single pass). Receipts per the §9 acceptance crit
    session artifact). Caught and fixed during the pass: hub root landing rendered a bare
    tab strip (HubTabs now resolves the first tab's panel); "Open Library" relabelled
    "Open Projects"; no horizontal overflow at 390px (scrollWidth 390).
-8. **CI**: pending — poll after push.
+8. **CI**: 8/8 green on f334a4b. The road there produced three receipts of
+   its own (all infra, none product): db2241e died twice on the ffmpeg apt
+   step (azure mirror starvation — zero output inside the 10-minute step
+   budget); 473db65 raised the budget and starved again; 87599d3 added the
+   pinned static ffmpeg outage net (BtbN immutable dated tag + asset-digest
+   sha256) whose first real exercise EXPOSED a product bug — ffmpeg 8's
+   `[Parsed_silencedetect_N @ …]` log prefix evaded qc.ts's bracket-anchored
+   regexes, blind-passing dead-air/black-frames/frozen-frames on every
+   ffmpeg-8 render (f334a4b fixes the regexes to be version-agnostic; the
+   battery was verified against BOTH the 7.1.5 sandbox binary and the exact
+   pinned 8.1.3 CI binary). 4ca159b hardened the apt attempt itself (one
+   hard-walled `timeout 240` attempt — the probe-and-swap already pre-swaps
+   the mirror; the static net replaces the old second attempt).
 
 New assets: `public/formats/{classic,story,whiteboard,graphics2d,character,slides}.jpg`
 (generated via the Z.ai image API, navy/cyan-graded), `public/icons/*` regenerated from the
