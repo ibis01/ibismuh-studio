@@ -57,3 +57,12 @@ BLOCKED — this sandbox session has no GitHub credentials (`git push` fails wit
 
 - `7185c7c` — R1 spec
 - `966b007` — R1 implementation
+
+## Post-merge addendum (2026-11-19, credentialed session)
+
+- **Push status: RESOLVED** — a session with credentials pushed the branch and fast-forwarded main `b2fd3f3..3164e6f` (plan doc, spec, implementation, release record, and the settings-first AI fix that R1 branched from).
+- **CI receipts**: branch dispatch run 44465691687 — 7/7 jobs green (E2E skipped by the event contract; it runs on main pushes) → main push run 44466102550 — **8/8 green including E2E (Playwright)**.
+- **Gitleaks dispatch note**: workflow_dispatch scans FULL history, which surfaced 9 historic-class findings at 4 SHAs the 2026-11-15 baseline predates — `764a7bc` (the post-wipe re-land of already-receipted e2e fixtures), `5f4d30a` (b4-test literal, root-killed by `1e546a2`), `fdd76722`/`6d45ec1` (tool-result dumps, untracked by `cc24e05`). None in the R1 commits. Baseline extended with per-commit receipts in `3164e6f`, per this file's own receipt law; reproduced with the exact CI binary (gitleaks 8.24.3: 9 leaks before, 0 after, 644 commits).
+- **Fresh visual evidence (this session)**: desktop 1440×900 Home/Projects/Settings; ⌘K palette keyboard-opened (11 items, group kickers, `tf-elev-3` depth); tablet 768; mobile 390×844 with `scrollWidth == clientWidth` (no horizontal overflow); sidebar kickers "Destinations"/"Studio" and the single active-rail accent verified via DOM probes. Artifacts in the session's evidence folder (session-scoped, like the original `/tmp/r1-evidence` set).
+- **Reduced motion**: verified in the original local battery (above). Not re-emulated in this session (no CLI emulation hook) — the behavior remains covered continuously by `premium-ux` inside the CI E2E suite.
+- **Deployment**: unchanged — no production claim from a frontend build; Fly picks releases up through the repository's own deployment flow after merge.
