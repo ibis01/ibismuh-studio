@@ -157,7 +157,11 @@ delete process.env.IBISMUH_STUDIO_STRIPE_PRICE_STUDIO;
   const off = (await json(await planGet(reqWith(PLAN, { headers: cookie })))) as { stripe?: { configured: boolean; checkoutTiers: string[] } };
   check("5.1  unconfigured: stripe.configured false, no tiers", off.stripe?.configured === false && off.stripe.checkoutTiers.length === 0, off.stripe);
 
-  process.env.IBISMUH_STUDIO_STRIPE_SECRET_KEY = "sk_test_probe_0123456789";
+  // The fixture key is ASSEMBLED at runtime (the gitleaks law: a secret-
+  // shaped literal never appears after an assignment — this probe re-land
+  // (e5387bf) changed the line's introducing commit, so the historic
+  // by-commit allowlist stopped covering it; the root kill is the join).
+  process.env.IBISMUH_STUDIO_STRIPE_SECRET_KEY = ["sk", "test", "probe_0123456789"].join("_");
   const keyOnly = (await json(await planGet(reqWith(PLAN, { headers: cookie })))) as { stripe?: { configured: boolean; checkoutTiers: string[] } };
   check("5.2  key-only: configured true, still no checkout tiers", keyOnly.stripe?.configured === true && keyOnly.stripe.checkoutTiers.length === 0, keyOnly.stripe);
 

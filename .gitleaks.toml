@@ -67,4 +67,12 @@ commits = [
   # Untracked from the tree by cc24e05 (already receipted above). Historic-only.
   "fdd76722a9ab3522d50616f4e775f12cfeeae521",
   "6d45ec159eef3adb08907831560a9febdcabd2ac",
+  # e5387bf (2026-11-19) — scripts/s24-unit-probe.mts: the battery-pin
+  # catch-up renamed the fixture env TUBEFORGE_* → IBISMUH_STUDIO_*, which
+  # changed the line's introducing commit and un-covered the per-run fake
+  # Stripe key already receipted at 9d82cf1b (same fixture class: probe-only
+  # value against fetch fakes, never a real credential). Root-killed by the
+  # NEXT commit, which assembles the fixture with join("_") — the S116/B4
+  # law — but the full-history scan still reads e5387bf as the introducer.
+  "e5387bfad76e39e48bfb8b63d40a19166daa99e4",
 ]
