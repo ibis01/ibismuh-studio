@@ -85,10 +85,10 @@ const sessionToken = await createSessionToken(user.id, session.id);
 const cookie = { cookie: `${SESSION_COOKIE}=${sessionToken}` } as unknown as HeadersInit;
 
 // make sure the deployment's real env never leaks into the probe
-const savedEnv = { key: process.env.TUBEFORGE_STRIPE_SECRET_KEY, c: process.env.TUBEFORGE_STRIPE_PRICE_CREATOR, s: process.env.TUBEFORGE_STRIPE_PRICE_STUDIO };
-delete process.env.TUBEFORGE_STRIPE_SECRET_KEY;
-delete process.env.TUBEFORGE_STRIPE_PRICE_CREATOR;
-delete process.env.TUBEFORGE_STRIPE_PRICE_STUDIO;
+const savedEnv = { key: process.env.IBISMUH_STUDIO_STRIPE_SECRET_KEY, c: process.env.IBISMUH_STUDIO_STRIPE_PRICE_CREATOR, s: process.env.IBISMUH_STUDIO_STRIPE_PRICE_STUDIO };
+delete process.env.IBISMUH_STUDIO_STRIPE_SECRET_KEY;
+delete process.env.IBISMUH_STUDIO_STRIPE_PRICE_CREATOR;
+delete process.env.IBISMUH_STUDIO_STRIPE_PRICE_STUDIO;
 
 // =====================================================================
 // 1. the door law
@@ -131,7 +131,7 @@ delete process.env.TUBEFORGE_STRIPE_PRICE_STUDIO;
   const p = await portalPost(post(PORTAL, {}, cookie));
   check("3.2  unconfigured portal -> 503", p.status === 503, p.status);
   const d = (await json(c)) as { error?: string };
-  check("3.3  the 503 says what the operator must set", typeof d.error === "string" && d.error.includes("TUBEFORGE_STRIPE_SECRET_KEY"), d);
+  check("3.3  the 503 says what the operator must set", typeof d.error === "string" && d.error.includes("IBISMUH_STUDIO_STRIPE_SECRET_KEY"), d);
 }
 
 // =====================================================================
@@ -157,15 +157,15 @@ delete process.env.TUBEFORGE_STRIPE_PRICE_STUDIO;
   const off = (await json(await planGet(reqWith(PLAN, { headers: cookie })))) as { stripe?: { configured: boolean; checkoutTiers: string[] } };
   check("5.1  unconfigured: stripe.configured false, no tiers", off.stripe?.configured === false && off.stripe.checkoutTiers.length === 0, off.stripe);
 
-  process.env.TUBEFORGE_STRIPE_SECRET_KEY = "sk_test_probe_0123456789";
+  process.env.IBISMUH_STUDIO_STRIPE_SECRET_KEY = "sk_test_probe_0123456789";
   const keyOnly = (await json(await planGet(reqWith(PLAN, { headers: cookie })))) as { stripe?: { configured: boolean; checkoutTiers: string[] } };
   check("5.2  key-only: configured true, still no checkout tiers", keyOnly.stripe?.configured === true && keyOnly.stripe.checkoutTiers.length === 0, keyOnly.stripe);
 
-  process.env.TUBEFORGE_STRIPE_PRICE_CREATOR = "price_creator_probe";
+  process.env.IBISMUH_STUDIO_STRIPE_PRICE_CREATOR = "price_creator_probe";
   const half = (await json(await planGet(reqWith(PLAN, { headers: cookie })))) as { stripe?: { checkoutTiers: string[] } };
   check("5.3  creator price only: exactly [creator]", JSON.stringify(half.stripe?.checkoutTiers) === JSON.stringify(["creator"]), half.stripe);
 
-  process.env.TUBEFORGE_STRIPE_PRICE_STUDIO = "price_studio_probe";
+  process.env.IBISMUH_STUDIO_STRIPE_PRICE_STUDIO = "price_studio_probe";
 }
 
 // =====================================================================
@@ -250,12 +250,12 @@ globalThis.fetch = realFetch;
 // =====================================================================
 // teardown — the end-state law
 // =====================================================================
-delete process.env.TUBEFORGE_STRIPE_SECRET_KEY;
-delete process.env.TUBEFORGE_STRIPE_PRICE_CREATOR;
-delete process.env.TUBEFORGE_STRIPE_PRICE_STUDIO;
-if (savedEnv.key) process.env.TUBEFORGE_STRIPE_SECRET_KEY = savedEnv.key;
-if (savedEnv.c) process.env.TUBEFORGE_STRIPE_PRICE_CREATOR = savedEnv.c;
-if (savedEnv.s) process.env.TUBEFORGE_STRIPE_PRICE_STUDIO = savedEnv.s;
+delete process.env.IBISMUH_STUDIO_STRIPE_SECRET_KEY;
+delete process.env.IBISMUH_STUDIO_STRIPE_PRICE_CREATOR;
+delete process.env.IBISMUH_STUDIO_STRIPE_PRICE_STUDIO;
+if (savedEnv.key) process.env.IBISMUH_STUDIO_STRIPE_SECRET_KEY = savedEnv.key;
+if (savedEnv.c) process.env.IBISMUH_STUDIO_STRIPE_PRICE_CREATOR = savedEnv.c;
+if (savedEnv.s) process.env.IBISMUH_STUDIO_STRIPE_PRICE_STUDIO = savedEnv.s;
 
 await prisma.apiToken.deleteMany({ where: { userId: user.id } });
 await prisma.session.deleteMany({ where: { userId: user.id } });

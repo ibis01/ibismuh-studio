@@ -87,8 +87,8 @@ check("4.4  the storage block answers", typeof usageBody.storage?.usedBytes === 
 
 const exp = await fetch(`${BASE}/api/account/export`, { headers: H() });
 check("4.5  a signed-in export GET -> 200", exp.status === 200, exp.status);
-check("4.6  the bundle downloads as tubeforge-export.json",
-  (exp.headers.get("content-disposition") ?? "").includes("tubeforge-export.json"));
+check("4.6  the bundle downloads as ibismuh-export.json",
+  (exp.headers.get("content-disposition") ?? "").includes("ibismuh-export.json"));
 const expBody = await json(exp);
 check("4.7  the bundle names the account", expBody.account?.email === email, expBody.account?.email);
 

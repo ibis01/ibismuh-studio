@@ -150,7 +150,7 @@ const suffix = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   const layout = fs.readFileSync("src/app/layout.tsx", "utf8");
   check("3.4  the layout mounts the registrar", layout.includes("<ServiceWorkerRegister />"));
   check("3.5  the metadata links the manifest", layout.includes('manifest: "/manifest.webmanifest"'));
-  check("3.6  the theme color rides the viewport export", layout.includes('themeColor: "#0a0a0a"'));
+  check("3.6  the theme color rides the viewport export", layout.includes('themeColor: "#0b1220"'));
 
   const settings = fs.readFileSync("src/components/ibismuh/views/settings-view.tsx", "utf8");
   check("3.7  the Settings page mounts the install card", settings.includes("<InstallAppButton />") && settings.includes("<ManualInstallHint />"));

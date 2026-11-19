@@ -168,8 +168,8 @@ await prisma.usageRecord.create({ data: { userId: stranger.id, organizationId: s
 
   const res = await exportGet(reqWith(EXPORT, { headers: cookie }));
   check("4.1  a signed-in export GET -> 200", res.status === 200, res.status);
-  check("4.2  the bundle downloads as tubeforge-export.json",
-    (res.headers.get("content-disposition") ?? "").includes("tubeforge-export.json"), res.headers.get("content-disposition"));
+  check("4.2  the bundle downloads as ibismuh-export.json",
+    (res.headers.get("content-disposition") ?? "").includes("ibismuh-export.json"), res.headers.get("content-disposition"));
   const d = (await json(res)) as {
     account: { email: string };
     data: { videos: unknown[]; settings: { key: string }[]; providerCredentials: Record<string, unknown>[] };

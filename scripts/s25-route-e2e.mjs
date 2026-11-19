@@ -66,10 +66,10 @@ const authed = { "content-type": "application/json", cookie };
 {
   const sw = await fetch(`${BASE}/sw.js`);
   const swText = await sw.text();
-  check("4.1  /sw.js -> 200 + registers offline + network-first", sw.status === 200 && swText.includes("offline.html") && swText.includes("tubeforge-v1"), sw.status);
+  check("4.1  /sw.js -> 200 + registers offline + network-first", sw.status === 200 && swText.includes("offline.html") && swText.includes("ibismuh-studio-v2"), sw.status);
   const man = await fetch(`${BASE}/manifest.webmanifest`);
   const md = await j(man);
-  check("4.2  manifest -> 200, standalone, TubeForge", man.status === 200 && md.display === "standalone" && String(md.name).includes("TubeForge"), md.name);
+  check("4.2  manifest -> 200, standalone, Ibismuh Studio", man.status === 200 && md.display === "standalone" && String(md.name).includes("Ibismuh Studio"), md.name);
   const off = await fetch(`${BASE}/offline.html`);
   check("4.3  /offline.html -> 200", off.status === 200, off.status);
   const icon = await fetch(`${BASE}/icons/icon-192.png`);
@@ -80,7 +80,7 @@ const authed = { "content-type": "application/json", cookie };
   const page = await fetch(`${BASE}/`);
   const html = await page.text();
   check("4.6  the root HTML links the manifest", html.includes("/manifest.webmanifest"), undefined);
-  check("4.7  the root HTML carries the theme color", html.includes("#0a0a0a"), undefined);
+  check("4.7  the root HTML carries the theme color", html.includes("#0b1220"), undefined);
   check("4.8  the root HTML links the apple touch icon", html.includes("/icons/apple-touch-icon.png"), undefined);
 }
 

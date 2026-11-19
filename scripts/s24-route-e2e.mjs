@@ -85,7 +85,7 @@ const authed = { "content-type": "application/json", cookie };
   });
   check("4.1  session checkout unconfigured -> 503", c.status === 503, c.status);
   const d = await j(c);
-  check("4.2  the 503 names the missing env", typeof d.error === "string" && d.error.includes("TUBEFORGE_STRIPE_SECRET_KEY"), d);
+  check("4.2  the 503 names the missing env", typeof d.error === "string" && d.error.includes("IBISMUH_STUDIO_STRIPE_SECRET_KEY"), d);
   const po = await fetch(`${BASE}/api/billing/portal`, { method: "POST", headers: authed, body: "{}" });
   check("4.3  session portal unconfigured -> 503", po.status === 503, po.status);
 }
