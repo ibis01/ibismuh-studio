@@ -50,4 +50,21 @@ commits = [
   # S118 (2026-11-13) — worklog.md §S116 QUOTES that same flagged line as the
   # fix's receipt: the false positive echoing itself in prose.
   "29411aeb7d4306d2a781b31266e82bb8607ded34",
+  # 2026-11-16 sandbox restore — "restore TubeForge (S128 tip 60a87e4) as the
+  # app": the post-wipe re-land that re-introduced the SAME fixture content
+  # already receipted above at a NEW commit SHA (gitleaks allowlists match the
+  # introducing commit, so the re-land needed its own entry): e2e/isolation
+  # (89ce85bb), s24 (9d82cf1b), s25 (a9873799), s28 (28cd69cb). Content
+  # byte-identical to the receipts; dev-only per-run fixtures, unchanged at HEAD.
+  "764a7bc5841b6622a1e0bd8eb98f3444fddd315e",
+  # B4 (2026-11-18) — scripts/b4-production-test.mts: the pre-fix `password:`
+  # literal. Killed AT THE ROOT by 1e546a2 the same day (the S116 lesson — the
+  # password is now built via join(); HEAD carries no literal). Historic-only.
+  "5f4d30aac30bce47991f5fe3856756c906d5b6b0",
+  # 2026-11-14 sandbox tool-result dumps (commit subjects are UUIDs) —
+  # tool-results/bash_*.txt holding the seededKeys generic-api-key FALSE
+  # POSITIVE class (the S116 shape: a filename heuristic-read as a key).
+  # Untracked from the tree by cc24e05 (already receipted above). Historic-only.
+  "fdd76722a9ab3522d50616f4e775f12cfeeae521",
+  "6d45ec159eef3adb08907831560a9febdcabd2ac",
 ]
