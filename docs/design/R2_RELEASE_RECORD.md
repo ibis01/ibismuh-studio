@@ -59,6 +59,14 @@ Not deployed. Per the plan: no production claim from a frontend build; Fly picks
 - `5360e9e` — R2 implementation
 - `551bd63` — production-gate fix (Postgres quiet door), separate track, rides the same branch for one CI verdict
 
+## CI receipts (post-merge addendum, 2026-11-19, credentialed session)
+
+- **Push status: RESOLVED** — main fast-forwarded `a9b24e2..b6a9be2` (spec, implementation, production fix, this record); branch `r2-home-projects-create` pushed alongside.
+- **Run #37 (b6a9be2)**: 7/8 jobs green (gitleaks, typecheck/lint/unit 1026, money-path, clean-clone, build, docker smoke, PostgreSQL integration) — but the E2E (Playwright) job was **cancelled** by its own 28-minute budget: azure's apt mirror starved again (the documented flake class), canonical starved too, the pinned-ffmpeg outage net rescued the render toolchain, and `playwright install --with-deps` burned 17.4 minutes in apt retries — the suite got ~3 minutes and was cancelled mid-battery with zero test failures. **Infra flake, not an R2 regression.**
+- **CI hardening**: e2e budget 28 → 40 minutes with the full receipt in the workflow (`7bf860f`, the repo's outage-net law — same shape as 473db65/87599d3).
+- **Run #38 (7bf860f): 8/8 GREEN, including E2E (Playwright) in 10.2 minutes** — the R2 tree passes the full suite on CI, and premium-ux T-4.4 passes there too, confirming the sandbox-only classification in the table above.
+- The local claim above ("PASS pending CI run") is now upgraded: **R2 is CI-verified green on main** (`7bf860f`).
+
 ## Production-gate note (separate track, landed here)
 
 `readLegacyRows` now probes table presence provider-aware: SQLite keeps `sqlite_master`; Postgres uses `to_regclass('public."LegacySetting"')` (NULL, never an error, on a missing table) — killing the per-auth-status-poll 42703 error-log noise a fresh Postgres install would have produced. The migration/raw-SQL compatibility finding was otherwise already covered: S60/S61 portability law + the CI `postgres` job (migrations wedge self-heal, constraint names, portability battery) verified in `.github/workflows/ci.yml`. Worker availability, email delivery, live storage and render delivery remain Fly-runtime findings needing deployment access — unchanged by this release.
