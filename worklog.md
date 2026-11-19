@@ -7190,3 +7190,71 @@ presign + object paths byte-identical to pre-patch behavior; s3List does the
 cause lives in the deployment's IBISMUH_STUDIO_S3_* secrets (token/key,
 bucket scope, endpoint host, clock) — the code fixes make the failure mode
 survivable and self-diagnosing, they cannot mint valid credentials.
+
+---
+
+## 2026-11-19 — wb(P0) receipt + the benchmark-stage fill + P5 profiles + the provider-friendliness overhaul
+
+**Receipt first (the wb(P0) commit, 9e11e89 — landed on main with CI 8/8).**
+The whiteboard production-system audit + P0 plan's Part II, implemented end
+to end on branch and CI-proven: the raster-to-stroke engine (PNG/JPEG enter
+the EXISTING seven-gate upload law, trace rides between sniff and sanitize),
+the same extractAsset → validateAsset → buildGeometry → scheduleScene/
+beatSceneEvents → frameAt chain, the SAME Chromium + FFmpeg pipeline (no
+second renderer, no new frame clock), the thin AI-illustration bridge with
+the Islamic-content guard on BOTH raster entries, the traced benchmark seed,
+25-pin trace battery, live golden-path proof (PNG → 24 strokes, quality
+"icon"). CI run 44624499188: 8/8 green including Docker production smoke and
+Playwright e2e. The previously-standing production failures were already
+rooted and receipted in ddeeee5 (zai-config materializes ANY active zai
+ProviderCredential; s3 endpoints fail at config time naming the env var) —
+this session's live re-verify watched the AI Script + Metadata pipeline run
+END TO END on a fresh probe video (title + script + 14 scenes), the old
+"Invalid URL" toast is dead.
+
+**The benchmark stage — the five-subject suite FILLED.** The four
+placeholder slots now carry authored five-scene sets on the frozen W1 TYPES
+(same per-kind durations, same two design spaces, same fit math): "How a
+Suspension Bridge Holds" (eng-*), "The House of Wisdom, Baghdad" (isl-*,
+OBJECTS ONLY — ISLAMIC_SUBJECT_ASSET_ALLOWLIST enforced at build time, the
+narrations pass scanRestrictedSubjects clean; the I.8 constraint as an
+authoring law, not an afterthought), "Why Startups Run Out of Cash" (biz-*),
+"How Rivers Shape the Land" (edu-*). Science rides the frozen W1 set
+byte-identically (project-hash pins). The W1 runner gained `--subject <id>`
+(shared gate lenses) and `--traced` (the committed fixture traced at run
+time — the "after" half of the before/after pair). Receipts: ALL GREEN
+(912/912 frames per subject, QC pass, seams clean) —
+docs/audits/w1-five-subject-benchmark.md is the committed record; dated
+JSONs stay in gitignored validation/ (the 535c90e law).
+
+**P5 — the production profiles.** The audit's §I.6 configuration layer,
+implemented honestly: five recipes (Classic Whiteboard / Storytelling /
+Mathematical & Scientific / Technical & Engineering / Modern Motion) over
+the knobs the pipeline ALREADY reads (hand style/scale/side, sfxOn, the two
+house papers, board defaults) — no new grammar, no frame-clock touch. The
+applier is pure (input never mutated; authored choices survive; the report
+names what changed); unknown ids are validation ERRORS; the scaffolds take
+profileId (the recipe survives regeneration); the Studio carries a selector.
+The profiles battery (22 pins) rides CI.
+
+**The AI-provider friendliness overhaul.** The settings AI Providers card
+now speaks affordability and setup: every registry row carries tier
+(free/local/budget/premium) + a pricing hint + a full setup walkthrough
+(console/docs/pricing links, key format, numbered steps) shown the moment a
+provider is selected — Z.ai flows through the SAME panel (first-class peer,
+"nothing to configure — the built-in gateway" honesty). The Shared AI
+credentials block gained a real explainer (what it is: the built-in Z.ai
+gateway account every default-riding capability, background job and platform
+fallback reads; what it is not: per-team sharing — credentials stay
+per-user). Groq joined ASR (OpenAI-compatible adapter, word timestamps, free
+tier), ideogram + recraft rejoined the image registry (their adapters never
+left). Rough edges closed: the settings + score routes' capability lists
+include asr; VIDEO_DEFAULT_MODEL is cogvideox-3 and the default video
+provider is zai (was the stale fal pairing); the zai-only SCENE-ANIMATION
+wall is GONE — the render lane dispatches through the SAME generic
+imageToVideo adapter the settings test proves (Z.ai simply the default peer,
+exactly the "leveled with other providers" order); providers/config.ts is a
+barrel over zai-config.ts (ONE syncZaiConfigFile — the ProviderCredential
+fallback rides for every importer). The registry battery (16 pins: catalog
+integrity, the no-blank-setup-panel law, the $0 lanes per capability, groq
+ASR, the leveled video lane, the dedupe, the capability language) rides CI.

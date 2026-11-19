@@ -55,7 +55,7 @@ import { imageEdit, imageGenerate } from "@/lib/ibismuh/providers/image";
 import { errorText } from "@/lib/ibismuh/redact";
 import { imageToVideo } from "@/lib/ibismuh/providers/video";
 
-const CAPABILITIES: CapabilityId[] = ["chat", "tts", "image", "video"];
+const CAPABILITIES: CapabilityId[] = ["chat", "tts", "asr", "image", "video"];
 
 /** Stored preference rows restricted to the public allow-list (defaults merged).
  * The multi-provider rewrite (a2eabd8) dropped this read path; five UI
