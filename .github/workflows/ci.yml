@@ -84,6 +84,16 @@ jobs:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # Pull-request mode enumerates the PR's commits (GET /pulls/{n}/commits)
+    # BEFORE it can scan — an app-token call that the default workflow
+    # permissions (pull-requests: NONE) refuse with "Resource not accessible
+    # by integration" (runs 44678395569 + 44679114429; comments were NOT the
+    # failing call — the scan never started). This grants exactly the two
+    # READ categories the scanner needs; no write anywhere, and GITLEAKS_
+    # ENABLE_COMMENTS=false (below) keeps it from ever wanting one.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
