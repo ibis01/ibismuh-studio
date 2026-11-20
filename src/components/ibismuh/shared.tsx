@@ -236,7 +236,10 @@ export function Sparkline({
   values,
   width = 96,
   height = 28,
-  stroke = "rgb(255 92 60 / 85%)",
+  // Brand cyan (B1 identity) — the old default was a coral orange-red that
+  // read as an error tint next to the KPI accents and sat outside the
+  // navy/blue/cyan palette.
+  stroke = "rgb(34 211 238 / 85%)",
   fill = true,
   className,
 }: {

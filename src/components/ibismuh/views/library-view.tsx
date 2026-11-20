@@ -7,6 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+import {
   StatusBadge,
   EmptyState,
   ErrorState,
@@ -38,6 +50,7 @@ export function LibraryView() {
   const refreshKey = useAppStore((s) => s.refreshKey);
   const setFocusVideoId = useAppStore((s) => s.setFocusVideoId);
   const setView = useAppStore((s) => s.setView);
+  const { toast } = useToast();
   const setPrefillTopic = useAppStore((s) => s.setPrefillTopic);
 
   const [videos, setVideos] = useState<VideoDTO[]>([]);
@@ -73,11 +86,34 @@ export function LibraryView() {
     setView("workspace");
   };
 
-  const quickDelete = async (id: string) => {
-    const res = await fetch(`/api/videos/${id}`, { method: "DELETE" });
-    if (res.ok) {
+  // Deleting a project is irreversible (script, storyboard, renders all go)
+  // — the trash icon only ARMS the AlertDialog; the request fires on explicit
+  // confirm, and a failed delete keeps the card and says so (silent loss was
+  // the pre-pass behavior).
+  const [deleting, setDeleting] = useState(false);
+  const quickDelete = async (id: string, label: string) => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/videos/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error ?? `The studio refused the delete (HTTP ${res.status})`);
+      }
       setVideos((vs) => vs.filter((v) => v.id !== id));
       useAppStore.getState().bumpRefresh();
+      toast({
+        title: "Project deleted",
+        description: `“${label}” and its production files are gone.`,
+      });
+    } catch (e) {
+      toast({
+        title: "Delete failed",
+        description:
+          e instanceof Error ? e.message : "Unknown error — the project was kept.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -97,11 +133,13 @@ export function LibraryView() {
             ))}
           </TabsList>
         </Tabs>
-        <p className="text-xs text-muted-foreground shrink-0">
-          {videos.length === 0
-            ? "Nothing here yet"
-            : `${videos.length} project${videos.length === 1 ? "" : "s"}`}
-        </p>
+        {!loadError && (
+          <p className="text-xs text-muted-foreground shrink-0">
+            {videos.length === 0
+              ? "Nothing here yet"
+              : `${videos.length} project${videos.length === 1 ? "" : "s"}`}
+          </p>
+        )}
       </div>
 
       {loadError ? (
@@ -204,22 +242,52 @@ export function LibraryView() {
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-white/8"
-                        onClick={() =>
-                          setPrefillTopic(v.topic)
-                        }
+                        onClick={() => {
+                          // Mirror the Home reuse flow: prefill + land on
+                          // Create, or the wand looks like it does nothing.
+                          setPrefillTopic(v.topic);
+                          setView("create");
+                        }}
                         aria-label="Reuse this topic"
                       >
                         <Wand2 className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-red-300 hover:bg-red-500/10"
-                        onClick={() => quickDelete(v.id)}
-                        aria-label="Delete video"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-red-300 hover:bg-red-500/10"
+                            aria-label="Delete video"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="glass-strong rounded-2xl border-white/10">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>
+                              Delete “{v.title ?? v.topic}”?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This permanently removes the script, storyboard,
+                              voiceover and any rendered video. There is no undo.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Keep it</AlertDialogCancel>
+                            <AlertDialogAction
+                              disabled={deleting}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                void quickDelete(v.id, v.title ?? v.topic);
+                              }}
+                              className="bg-destructive text-white hover:bg-destructive/90"
+                            >
+                              Delete project
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </div>
                 </div>

@@ -1238,8 +1238,13 @@ export function CreateView() {
 
   return (
     <div className="grid lg:grid-cols-12 gap-5">
-      {/* Left — configuration (guided brief, T-4.3) */}
-      <Card className="glass rounded-2xl p-5 lg:col-span-5 h-fit lg:sticky lg:top-24">
+      {/* Left — configuration (guided brief, T-4.3). Sticky only when the
+          column actually fits the viewport: step 3 stacks narration + art
+          direction + review + destination ≈ 1300px, so a pinned card would
+          push the Run/Next controls out of reach on a laptop. The scroll
+          clamp keeps it reachable while preserving the pinned feel when it
+          fits (R2 GUI audit, defect 4). */}
+      <Card className="glass rounded-2xl p-5 lg:col-span-5 h-fit lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto tf-scroll-bar">
         <div className="flex items-center gap-2 mb-4">
           <div className="h-9 w-9 rounded-xl bg-brand-gradient flex items-center justify-center glow-brand-soft shrink-0">
             <Wand2 className="h-4.5 w-4.5 text-white" />
@@ -1254,7 +1259,7 @@ export function CreateView() {
 
         {/* Step rail — click a completed step to revisit it */}
         <nav aria-label="Brief steps" className="mb-4">
-          <ol className="grid grid-cols-4 gap-1.5">
+          <ol className="grid grid-cols-5 gap-1.5">
             {STEPS.map((s, i) => {
               const state = i === step ? "current" : i < step ? "done" : "todo";
               return (
@@ -1700,7 +1705,7 @@ export function CreateView() {
               <p className="text-[10px] text-muted-foreground leading-relaxed">
                 Tap the <span className="text-primary">▶</span> next to a voice
                 to hear how it sounds before picking. Not feeling these voices?
-                After creating, open the video&apos;s Package tab →{" "}
+                After creating, open the video&apos;s Inspector area →{" "}
                 <span className="text-foreground/80">Change the voice</span> to
                 upload your own audio or paste a voice link from the internet.
               </p>
@@ -1904,7 +1909,7 @@ export function CreateView() {
                   {characters.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name}
-                      {c.hasPortrait ? " ●" : ""}
+                      {c.hasPortrait ? " ✦" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2225,7 +2230,7 @@ export function CreateView() {
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
                     Storyboard · {video.sceneCount} scenes
                   </p>
-                  <div className="flex gap-2 overflow-x-auto scroll-area-bar pb-2">
+                  <div className="flex gap-2 overflow-x-auto tf-scroll-bar pb-2">
                     {(video.scenes ?? []).map((s) => (
                       <div
                         key={s.index}
@@ -2400,7 +2405,7 @@ export function CreateView() {
                   </div>
                 </div>
               ) : (
-                <div className="max-h-72 overflow-y-auto scroll-area-bar pr-3 text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
+                <div className="max-h-72 overflow-y-auto tf-scroll-bar pr-3 text-sm leading-relaxed whitespace-pre-wrap text-foreground/90">
                   {video.script}
                 </div>
               )}

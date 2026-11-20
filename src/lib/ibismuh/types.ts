@@ -425,7 +425,10 @@ export const STATUS_META: Record<
   },
   published: {
     label: "Published",
-    color: "text-red-300 bg-red-500/15 border-red-500/25",
+    // The color law (globals.css): red is reserved for destructive/failed
+    // states only — a shipped video is a success, so it wears the brand
+    // cyan (matching the dashboard's published KPI + pipeline chart).
+    color: "text-cyan-200 bg-primary/12 border-primary/25",
     step: 4,
   },
   failed: {

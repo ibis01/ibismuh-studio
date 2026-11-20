@@ -78,6 +78,7 @@ import {
   useVoices,
   VoiceSelectWithPreview,
 } from "@/components/ibismuh/shared";
+import clsx from "clsx";
 import {
   PROVIDERS_BY_CAPABILITY,
   CHAT_PROVIDERS,
@@ -86,6 +87,77 @@ import {
   type CapabilityId,
   type ProviderTier,
 } from "@/lib/ibismuh/providers/registry";
+
+// R2 GUI pass — the settings page is a ~13-card form in one 672px column.
+// These ids anchor the sticky section rail rendered above the cards: one
+// tap jumps to the section, the scroll listener keeps the active pill lit.
+// Anchors touch no form state — zero risk to the save flows.
+const SETTINGS_SECTIONS = [
+  { id: "plan", label: "Plan" },
+  { id: "production", label: "Production" },
+  { id: "security", label: "Security" },
+  { id: "account", label: "Account" },
+  { id: "app-device", label: "App" },
+  { id: "providers", label: "AI Providers" },
+  { id: "stock", label: "Stock" },
+  { id: "music", label: "Music" },
+  { id: "youtube", label: "YouTube" },
+  { id: "content", label: "Content" },
+  { id: "pipeline", label: "Pipeline" },
+  { id: "jobs", label: "Jobs" },
+] as const;
+
+function SettingsSectionNav() {
+  const [active, setActive] = useState<string>(SETTINGS_SECTIONS[0].id);
+
+  useEffect(() => {
+    const onScroll = () => {
+      let current: string = SETTINGS_SECTIONS[0].id;
+      for (const s of SETTINGS_SECTIONS) {
+        const el = document.getElementById(s.id);
+        if (el && el.getBoundingClientRect().top <= 132) current = s.id;
+      }
+      setActive(current);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
+  return (
+    <nav
+      aria-label="Settings sections"
+      className="sticky top-16 z-20 -mx-1 px-1 py-1.5 glass-strong rounded-xl overflow-x-auto tf-scroll-bar"
+    >
+      <div className="flex items-center gap-1">
+        {SETTINGS_SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() =>
+              document
+                .getElementById(s.id)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+            aria-current={active === s.id ? "true" : undefined}
+            className={clsx(
+              "tf-focusable shrink-0 rounded-full px-3 py-1.5 text-[11px] font-medium border transition-colors",
+              active === s.id
+                ? "border-primary/50 bg-primary/15 text-cyan-200"
+                : "border-white/10 bg-white/4 text-muted-foreground hover:text-foreground hover:border-white/25"
+            )}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
+}
 
 const KIND_META: Record<string, { label: string; icon: typeof Mic }> = {
   voiceover: { label: "Voiceover", icon: Mic },
@@ -176,7 +248,6 @@ function SecretInput({
       />
       <button
         type="button"
-        tabIndex={-1}
         onClick={() => setReveal((r) => !r)}
         aria-label={reveal ? "Hide secret" : "Show secret"}
         className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground rounded-md transition-colors"
@@ -870,8 +941,11 @@ export function SettingsView() {
 
   return (
     <div className="max-w-2xl space-y-5">
-      <PlanCard />
-      <Card className="glass rounded-2xl p-5 sm:p-6">
+      <SettingsSectionNav />
+      <div id="plan" className="scroll-mt-24">
+        <PlanCard />
+      </div>
+      <Card id="production" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
         <div className="flex items-center gap-2.5 mb-5">
           <div className="h-9 w-9 rounded-xl bg-brand-gradient flex items-center justify-center glow-brand-soft shrink-0">
             <Zap className="h-4.5 w-4.5 text-white" />
@@ -925,10 +999,14 @@ export function SettingsView() {
         </div>
       </Card>
 
-      <SecurityAccessCard />
-      <AccountDataCard />
+      <div id="security" className="scroll-mt-24">
+        <SecurityAccessCard />
+      </div>
+      <div id="account" className="scroll-mt-24">
+        <AccountDataCard />
+      </div>
 
-      <Card className="glass rounded-2xl p-5 sm:p-6">
+      <Card id="app-device" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
         <div className="flex items-center gap-2.5 mb-4">
           <div className="h-9 w-9 rounded-xl bg-emerald-500/90 flex items-center justify-center shrink-0 shadow-[0_0_18px_rgba(16,185,129,0.25)]">
             <Smartphone className="h-4.5 w-4.5 text-white" />
@@ -947,7 +1025,7 @@ export function SettingsView() {
       </Card>
 
       {/* AI providers — mix and match: one provider per task, shared creds */}
-      <Card className="glass rounded-2xl p-5 sm:p-6">
+      <Card id="providers" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
         <div className="flex items-center gap-2.5 mb-1">
           <div className="h-9 w-9 rounded-xl bg-indigo-500/90 flex items-center justify-center shrink-0 shadow-[0_0_18px_rgba(99,102,241,0.25)]">
             <Bot className="h-4.5 w-4.5 text-white" />
@@ -1182,7 +1260,10 @@ export function SettingsView() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium">{meta.label}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">
+                      <p
+                        className="text-[11px] text-muted-foreground truncate"
+                        title={meta.desc}
+                      >
                         {meta.desc}
                       </p>
                     </div>
@@ -1204,7 +1285,13 @@ export function SettingsView() {
                       value={row.provider}
                       onValueChange={(v) => changeProvider(v)}
                     >
-                      <SelectTrigger className="bg-white/5 border-white/10 text-xs h-9 w-[230px] max-w-full">
+                      {/* title — the trigger truncates long registry labels
+                          ("Zhipu GLM-TTS (voice cloning)"); the tooltip tells
+                          the whole name (R2 GUI audit D8). */}
+                      <SelectTrigger
+                        title={providers.find((p) => p.id === row.provider)?.label}
+                        className="bg-white/5 border-white/10 text-xs h-9 w-[230px] max-w-full"
+                      >
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1224,7 +1311,7 @@ export function SettingsView() {
 
                 {/* The selected provider's pricing, in one honest line */}
                 {active.pricing && (
-                  <p className="text-[11px] text-white/40 leading-relaxed">
+                  <p className="text-[11px] text-white/55 leading-relaxed">
                     {active.pricing}
                   </p>
                 )}
@@ -1250,7 +1337,9 @@ export function SettingsView() {
                             : "border-white/10 bg-white/4 text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        {p.id}
+                        {/* Human label ("Z.ai (GLM)") — the machine id read
+                            like debug output on a user-facing chip. */}
+                        {p.label.split(" (")[0]}
                       </button>
                     ))}
                   </div>
@@ -1708,10 +1797,14 @@ export function SettingsView() {
         </div>
       </Card>
 
-      <StockFootageSection />
-      <MusicLibrarySection />
+      <div id="stock" className="scroll-mt-24">
+        <StockFootageSection />
+      </div>
+      <div id="music" className="scroll-mt-24">
+        <MusicLibrarySection />
+      </div>
 
-      <Card className="glass rounded-2xl p-5 sm:p-6">
+      <Card id="youtube" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
         <div className="flex items-center gap-2.5 mb-1">
           <div className="h-9 w-9 rounded-xl bg-red-600/90 flex items-center justify-center shrink-0 shadow-[0_0_18px_rgba(239,43,70,0.25)]">
             <Youtube className="h-4.5 w-4.5 text-white" />
@@ -1882,7 +1975,7 @@ export function SettingsView() {
         )}
       </Card>
 
-      <Card className="glass rounded-2xl p-5 sm:p-6">
+      <Card id="content" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
         <h3 className="font-semibold">Content Defaults</h3>
         <p className="text-xs text-muted-foreground mb-5">
           Pre-fills the Create studio every time
@@ -1998,7 +2091,7 @@ export function SettingsView() {
         </div>
       </Card>
 
-      <Card className="glass rounded-2xl p-5 sm:p-6">
+      <Card id="pipeline" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
         <div className="flex items-center gap-2.5 mb-5">
           <div className="h-9 w-9 rounded-xl bg-brand-gradient flex items-center justify-center glow-brand-soft shrink-0">
             <ShieldCheck className="h-4.5 w-4.5 text-white" />
@@ -2140,7 +2233,7 @@ export function SettingsView() {
         </div>
       </Card>
 
-      <Card className="glass rounded-2xl p-5 sm:p-6">
+      <Card id="jobs" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
         <div className="flex items-center justify-between gap-3 mb-1">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
@@ -2210,7 +2303,7 @@ export function SettingsView() {
           ))}
         </div>
 
-        <div className="mt-3 space-y-2 max-h-96 overflow-y-auto scroll-area-bar pr-1">
+        <div className="mt-3 space-y-2 max-h-96 overflow-y-auto tf-scroll-bar pr-1">
           {(() => {
             const filtered =
               kindFilter === "all"
@@ -2328,7 +2421,7 @@ export function SettingsView() {
           card still exists for quick iteration, but users no longer need to
           remember two save buttons. */}
       <div className="sticky bottom-4 z-20">
-        <div className="glass-strong rounded-2xl border border-white/10 shadow-2xl px-4 py-3 flex items-center justify-between gap-3">
+        <div className="glass-strong rounded-2xl border border-white/10 tf-elev-3 px-4 py-3 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground hidden sm:block leading-relaxed">
             Saves content defaults <em>and</em> AI providers together.
           </p>

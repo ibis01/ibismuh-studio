@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +99,7 @@ import {
   Play,
   Square,
   Package,
+  Film,
   ShieldAlert,
   ShieldCheck,
   Unlock,
@@ -120,6 +122,18 @@ const QC_GROUPS: { title: string; ids: string[] }[] = [
 function qcCheckStatus(c: { status?: "pass" | "fail" | "unmeasured"; pass: boolean }) {
   return c.status ?? (c.pass ? "pass" : "fail");
 }
+
+/** R2 GUI pass — the five workspace areas get identity (icon per area) so a
+ *  newcomer can tell Canvas from Timeline at a glance, and the row stops
+ *  reading as five anonymous text chips. Shared by the wide layout and the
+ *  <1024px stacked layout so both mount the same triggers. */
+const AREA_TABS = [
+  { value: "director", label: "Director", icon: Clapperboard },
+  { value: "storyboard", label: "Storyboard", icon: LayoutGrid },
+  { value: "canvas", label: "Canvas", icon: Brush },
+  { value: "timeline", label: "Timeline", icon: Film },
+  { value: "inspector", label: "Inspector", icon: Package },
+] as const;
 
 interface StoryboardResponse {
   scenes: SceneDTO[];
@@ -233,6 +247,13 @@ export function ProductionWorkspace({
   // Stage 4a (T-4.5) — storyboard density: comfortable grid ↔ filmstrip.
   const [boardDensity, setBoardDensity] = useState<"grid" | "film">("grid");
   const [renderLabel, setRenderLabel] = useState<string | null>(null);
+  // R2 GUI pass — numeric render progress so the poll's (current/total) can
+  // drive a real progress bar under the area tabs (visible from every tab,
+  // not just the Render panel that hosts the text line).
+  const [renderProgress, setRenderProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
 
   // Narration check state (Phase 3 — ASR proofreading)
   const [verifyReport, setVerifyReport] = useState<VerifyReportDTO | null>(null);
@@ -1598,6 +1619,7 @@ export function ProductionWorkspace({
     if (busy) return;
     setBusy(sceneLimit ? "preview" : "render");
     setRenderLabel(sceneLimit ? "Rendering preview…" : "Composing the video…");
+    setRenderProgress(null);
     try {
       const res = await fetch(`/api/videos/${video.id}/render`, {
         method: "POST",
@@ -1622,9 +1644,16 @@ export function ProductionWorkspace({
       }
       await pollRender(
         video.id,
-        (s) =>
-          s.progress &&
-          setRenderLabel(`${s.progress.label} (${s.progress.current}/${s.progress.total})`),
+        (s) => {
+          if (!s.progress) return;
+          setRenderLabel(
+            `${s.progress.label} (${s.progress.current}/${s.progress.total})`
+          );
+          setRenderProgress({
+            current: s.progress.current,
+            total: s.progress.total,
+          });
+        },
         { timeoutMs: mode === "animated" ? 60 * 60 * 1000 : 15 * 60 * 1000 }
       );
       await refreshVideo(video.id);
@@ -1644,6 +1673,7 @@ export function ProductionWorkspace({
       await refreshVideo(video.id);
     } finally {
       setRenderLabel(null);
+      setRenderProgress(null);
       setBusy(null);
     }
   };
@@ -4378,8 +4408,53 @@ export function ProductionWorkspace({
 
       {/* S91 — the living production board: stages, checkpoints, costs,
           history — one glance at where the project stands (the visible
-          approval line: every stage the human has driven stays on record) */}
-      <ProductionBoard videoId={video.id} />
+          approval line: every stage the human has driven stays on record).
+          R2 GUI pass: the stage chips are the pipeline's navigation spine —
+          clicking one jumps to the area that owns the stage. */}
+      <ProductionBoard
+        videoId={video.id}
+        onStageClick={(stage) =>
+          setActiveTab(
+            stage === "script"
+              ? "director"
+              : stage === "storyboard"
+                ? "storyboard"
+                : stage === "render"
+                  ? "timeline"
+                  : /* voiceover + publish live in the Inspector area */
+                    "inspector"
+          )
+        }
+      />
+
+      {/* R2 GUI pass — render progress under the board: the longest operation
+          in the product gets a real bar visible from every area tab, not a
+          12px line buried in the Render panel. */}
+      {(busy === "render" || busy === "preview") && (
+        <div
+          className="mt-2 rounded-xl border border-primary/25 bg-primary/8 px-3 py-2.5 space-y-1.5"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-primary/90 flex items-center gap-1.5 font-medium">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {renderLabel ?? "Rendering…"}
+            </p>
+            {renderProgress && (
+              <span className="text-[11px] text-primary/80 tf-num shrink-0">
+                {renderProgress.current}/{renderProgress.total}
+              </span>
+            )}
+          </div>
+          {renderProgress && (
+            <Progress
+              value={(renderProgress.current / Math.max(1, renderProgress.total)) * 100}
+              className="h-1.5 bg-white/8"
+            />
+          )}
+        </div>
+      )}
 
       {isStory ? (
         isWide ? (
@@ -4391,33 +4466,30 @@ export function ProductionWorkspace({
              value — never two mounted Inspector instances). */
           <div className="mt-4 space-y-3">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="flex w-full overflow-x-auto scroll-area-bar bg-white/5 sm:grid sm:grid-cols-5">
-                <TabsTrigger value="director" className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs">
-                  Director
-                </TabsTrigger>
-                <TabsTrigger value="storyboard" className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs">
-                  Storyboard
-                </TabsTrigger>
-                <TabsTrigger value="canvas" className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs">
-                  Canvas
-                </TabsTrigger>
-                <TabsTrigger value="timeline" className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs">
-                  Timeline
-                </TabsTrigger>
-                <TabsTrigger value="inspector" className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs">
-                  Inspector
-                </TabsTrigger>
+              <TabsList className="flex w-full overflow-x-auto tf-scroll-bar bg-white/5 sm:grid sm:grid-cols-5">
+                {AREA_TABS.map((t) => (
+                  <TabsTrigger
+                    key={t.value}
+                    value={t.value}
+                    className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs"
+                  >
+                    <span className="flex items-center justify-center gap-1.5">
+                      <t.icon className="h-3.5 w-3.5 shrink-0" />
+                      {t.label}
+                    </span>
+                  </TabsTrigger>
+                ))}
               </TabsList>
             </Tabs>
             <ResizablePanelGroup direction="vertical" className="h-[calc(100vh-16rem)] min-h-[640px]">
-              <ResizablePanel defaultSize={64} minSize={25} id="ws-main" order={1}>
+              <ResizablePanel defaultSize={56} minSize={22} id="ws-main" order={1}>
                 <ResizablePanelGroup direction="horizontal" className="h-full">
                   <ResizablePanel
                     defaultSize={70}
                     minSize={40}
                     id="ws-center"
                     order={1}
-                    className="h-full overflow-y-auto scroll-area-bar pr-1"
+                    className="h-full overflow-y-auto tf-scroll-bar pr-1"
                   >
                     {activeTab === "director"
                       ? scriptTab
@@ -4437,7 +4509,7 @@ export function ProductionWorkspace({
                       minSize={16}
                       id="ws-inspector"
                       order={2}
-                      className="h-full overflow-y-auto scroll-area-bar pl-1"
+                      className="h-full overflow-y-auto tf-scroll-bar pl-1"
                     >
                       {inspectorArea}
                     </ResizablePanel>
@@ -4446,11 +4518,11 @@ export function ProductionWorkspace({
               </ResizablePanel>
               <ResizableHandle withHandle />
               <ResizablePanel
-                defaultSize={36}
-                minSize={12}
+                defaultSize={44}
+                minSize={20}
                 id="ws-timeline"
                 order={2}
-                className="overflow-y-auto scroll-area-bar"
+                className="overflow-y-auto tf-scroll-bar"
               >
                 {timelineStrip}
               </ResizablePanel>
@@ -4459,22 +4531,19 @@ export function ProductionWorkspace({
         ) : (
           /* <1024px — the B3 stacked tabs, unchanged (mobile law). */
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="flex w-full overflow-x-auto scroll-area-bar bg-white/5 sm:grid sm:grid-cols-5">
-              <TabsTrigger value="director" className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs">
-                Director
-              </TabsTrigger>
-              <TabsTrigger value="storyboard" className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs">
-                Storyboard
-              </TabsTrigger>
-              <TabsTrigger value="canvas" className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs">
-                Canvas
-              </TabsTrigger>
-              <TabsTrigger value="timeline" className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs">
-                Timeline
-              </TabsTrigger>
-              <TabsTrigger value="inspector" className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs">
-                Inspector
-              </TabsTrigger>
+            <TabsList className="flex w-full overflow-x-auto tf-scroll-bar bg-white/5 sm:grid sm:grid-cols-5">
+              {AREA_TABS.map((t) => (
+                <TabsTrigger
+                  key={t.value}
+                  value={t.value}
+                  className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs"
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <t.icon className="h-3.5 w-3.5 shrink-0" />
+                    {t.label}
+                  </span>
+                </TabsTrigger>
+              ))}
             </TabsList>
             <TabsContent value="director" className="mt-4">
               {scriptTab}

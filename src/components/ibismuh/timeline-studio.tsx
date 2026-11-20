@@ -175,6 +175,7 @@ import {
 } from "@/components/ui/select";
 import { clsx } from "clsx";
 import { useToast } from "@/hooks/use-toast";
+import { Kbd, SkeletonRows } from "@/components/ibismuh/shared";
 import type {
   VideoDTO,
   SceneDTO,
@@ -3414,9 +3415,23 @@ export function TimelineStudio({
       )}
 
       {!timeline ? (
-        <div className="py-8 text-center text-xs text-muted-foreground">
-          {loading ? "Loading the timeline…" : 'No timeline yet. Click "Re-assemble" to build one.'}
-        </div>
+        loading ? (
+          /* R2 GUI pass — the shared skeleton rows instead of a bare text line:
+             the giant header above no longer scrolls over an empty body. */
+          <div className="py-6 space-y-3">
+            <SkeletonRows rows={3} rowClassName="h-14" />
+          </div>
+        ) : (
+          <div className="py-8 text-center text-xs text-muted-foreground">
+            No timeline yet — scenes + narration build one automatically.
+            <div className="mt-3">
+              <Button size="sm" onClick={() => void assemble()} disabled={!canAssemble}>
+                <Sparkles className="h-3.5 w-3.5" />
+                Build the timeline
+              </Button>
+            </div>
+          </div>
+        )
       ) : timeline.scenes.length === 0 ? (
         <div className="py-8 text-center text-xs text-muted-foreground">
           The timeline has no scenes. Generate the script + storyboard first.
@@ -3438,6 +3453,22 @@ export function TimelineStudio({
                 }
               >
                 <canvas ref={canvasRef} className="block h-full w-full" aria-label="Timeline preview" />
+                {renderInFlight && (
+                  /* R2 GUI pass — a render is minutes-long; without this overlay
+                     the studio looks idle while ffmpeg works. The live preview
+                     keeps running underneath (it is approximation, not truth). */
+                  <div className="absolute inset-0 grid place-items-center bg-black/55 backdrop-blur-[1px]">
+                    <div className="flex flex-col items-center gap-2 text-center px-4">
+                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      <p className="text-xs text-white/85 font-medium">
+                        Render in progress — the live preview keeps working
+                      </p>
+                      <p className="text-[10px] text-white/55">
+                        The rendered MP4 replaces this approximation when it lands.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <div className="flex items-center gap-1">
@@ -3554,6 +3585,18 @@ export function TimelineStudio({
                 Split re-voices both halves with the video's own voice; duplicate/delete move the row,
                 the merged voiceover and the doc together.
                 {brokenVo.size > 0 && " Some scene voiceovers are missing — those scenes preview silently."}
+              </p>
+              {/* R2 GUI pass — the keyboard layer exists (Space/S/D/⌫/←→/Home/End/⌘Z/⌘S
+                  + ⌘-wheel zoom) but was invisible. One hint row, pro-timeline standard. */}
+              <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1"><Kbd>Space</Kbd> play</span>
+                <span className="inline-flex items-center gap-1"><Kbd>S</Kbd> split</span>
+                <span className="inline-flex items-center gap-1"><Kbd>D</Kbd> duplicate</span>
+                <span className="inline-flex items-center gap-1"><Kbd>⌫</Kbd> delete</span>
+                <span className="inline-flex items-center gap-1"><Kbd>←→</Kbd> nudge</span>
+                <span className="inline-flex items-center gap-1"><Kbd>⌘Z</Kbd> undo</span>
+                <span className="inline-flex items-center gap-1"><Kbd>⌘S</Kbd> save</span>
+                <span className="inline-flex items-center gap-1"><Kbd>⌘</Kbd>+wheel zoom</span>
               </p>
             </div>
 
