@@ -203,8 +203,12 @@ export function LibraryView() {
                       className="absolute inset-0 h-full w-full object-cover"
                     />
                   ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Film className="h-8 w-8 text-white/15" />
+                    /* R3 pass — no-art slots get a cinematic "unexposed frame"
+                       wash instead of a flat dark rectangle, so an empty
+                       library still reads designed. */
+                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-cyan-400/[0.08] via-transparent to-blue-600/[0.12]">
+                      <div className="bg-grid absolute inset-0 opacity-40" aria-hidden="true" />
+                      <Film className="relative h-8 w-8 text-white/25 drop-shadow-[0_0_12px_rgb(34_211_238/35%)]" />
                     </div>
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />

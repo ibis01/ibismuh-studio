@@ -159,13 +159,11 @@ export function DashboardView() {
 
   return (
     <div className="space-y-6">
-      {/* Quick-start hero (T-4.2) — actions + one-tap topic chips */}
-      <Card className="glass rounded-2xl overflow-hidden relative">
-        <div className="absolute inset-0 bg-grid opacity-60" aria-hidden="true" />
-        <div
-          className="absolute -top-24 -right-16 h-56 w-56 rounded-full bg-primary/15 blur-3xl"
-          aria-hidden="true"
-        />
+      {/* Quick-start hero (T-4.2) — actions + one-tap topic chips.
+          R3 pass: the two inline ambient layers (grid + blur blob) are
+          replaced by the single .brand-aurora wash — same composition,
+          richer depth, one source of truth. */}
+      <Card className="glass brand-aurora rounded-2xl overflow-hidden relative">
         <div className="relative p-5 sm:p-7">
           <div className="flex flex-col md:flex-row md:items-center gap-5">
             <div className="flex-1 min-w-0">
