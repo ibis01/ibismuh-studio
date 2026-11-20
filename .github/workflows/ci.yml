@@ -94,6 +94,14 @@ jobs:
           # Free for personal (user-owned) repositories; if this repo ever
           # moves to an org, GITLEAKS_LICENSE becomes required.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PR mode (pull_request events) defaults to POSTING findings as PR
+          # comments — a write the read-only default GITHUB_TOKEN cannot do,
+          # so the JOB died with "Resource not accessible by integration"
+          # (run 44678395569) while the scan itself was never the problem.
+          # Comments off keeps the scanner read-only like the rest of CI;
+          # a real leak still fails the job (non-zero exit) — it just no
+          # longer needs comment rights to say so.
+          GITLEAKS_ENABLE_COMMENTS: "false"
 
   check:
     name: Typecheck · Lint · Unit
