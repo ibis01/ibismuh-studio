@@ -206,7 +206,7 @@ export function CommandPalette() {
             <Kbd>Esc</Kbd>
           </div>
 
-          <div ref={listRef} className="max-h-[46vh] overflow-y-auto scroll-area-bar py-2">
+          <div ref={listRef} className="max-h-[46vh] overflow-y-auto tf-scroll-bar py-2">
             {filtered.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-white/45">
                 Nothing matches “{query}”.

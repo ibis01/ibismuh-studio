@@ -593,7 +593,7 @@ export function SceneStudioPanel({
               />
               {narration !== scene.narration && (
                 <p className="text-[10px] text-amber-300/90 leading-snug">
-                  Saving this clears the stale voiceover — re-render it from the Package tab.
+                  Saving this clears the stale voiceover — re-render it from the Inspector area.
                 </p>
               )}
             </div>

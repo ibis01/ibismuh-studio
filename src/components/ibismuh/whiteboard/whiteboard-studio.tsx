@@ -17,6 +17,7 @@
 // GET route returns (`voMs`) already time scene playback like the render.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { LoadingState } from "@/components/ibismuh/shared";
 import type { AnimationEvent, CameraEvent, WhiteboardProject } from "@/lib/ibismuh/whiteboard/storyboard";
 import type { Placement } from "@/lib/ibismuh/whiteboard/svg";
 import { sceneDurationMs } from "@/lib/ibismuh/whiteboard/timing";
@@ -489,7 +490,12 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
   };
 
   if (loading) {
-    return <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-8 text-center text-sm text-white/50">Loading the whiteboard…</div>;
+    return (
+      <LoadingState
+        label="Loading the whiteboard…"
+        className="rounded-xl border border-white/10 bg-white/5"
+      />
+    );
   }
 
   if (error && !project) {
@@ -544,8 +550,9 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
 
   return (
     <div className="space-y-3">
-      {/* scene tabs + edit toggle */}
-      <div className="flex flex-wrap items-center gap-1.5">
+      {/* scene tabs + edit toggle — R2 GUI pass: a horizontal rail (one row,
+          scrollable) instead of a pill wall that pushed the canvas down. */}
+      <div className="flex items-center gap-1.5 overflow-x-auto tf-scroll pb-1">
         {project.scenes.map((s, i) => (
           <button
             key={s.id}
@@ -554,9 +561,10 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
               setPlaying(false);
               setTMs(0);
             }}
-            className={`rounded-md px-2.5 py-1 text-xs ${
+            className={`shrink-0 max-w-[13rem] truncate rounded-md px-2.5 py-1 text-xs ${
               i === sceneIndex ? "bg-white/20 font-medium text-white" : "bg-white/5 text-white/60 hover:bg-white/10"
             }`}
+            title={s.narration || s.id}
           >
             {i + 1}. {s.narration.slice(0, 22) || s.id}
             {s.narration.length > 22 ? "…" : ""}
@@ -576,6 +584,22 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
         </button>
       </div>
 
+      {/* R2 GUI pass — edit mode becomes a TWO-COLUMN studio: the canvas
+          (what renders) stays pinned on the left while the nine editor
+          groups scroll in a bounded rail on the right, instead of appending
+          ~700px of panels below the canvas and scrolling the video away. */}
+      <div
+        className={
+          editing
+            ? "lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-3 lg:items-start"
+            : "space-y-3"
+        }
+      >
+        <div
+          className={`space-y-3 min-w-0 ${
+            editing ? "lg:sticky lg:top-20 lg:self-start" : ""
+          }`}
+        >
       <WbCanvas
         project={project}
         sceneIndex={sceneIndex}
@@ -616,10 +640,14 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
           {(tMs / 1000).toFixed(1)}s / {(sceneMs / 1000).toFixed(1)}s
         </span>
       </div>
+        </div>
 
-      {/* ---- Phase B editor panels ---- */}
-      {editing && (
-        <div className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-3">
+        {/* ---- Phase B editor panels (the right rail in edit mode) ---- */}
+        {editing && (
+          <aside
+            aria-label="Board editor panels"
+            className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-3 lg:max-h-[calc(100vh-9.5rem)] lg:overflow-y-auto tf-scroll-bar"
+          >
           {/* library palette — built-ins (client bundle) + uploads (wire) */}
           <div>
             <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-white/40">
@@ -1128,8 +1156,9 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
               </button>
             )}
           </div>
-        </div>
-      )}
+          </aside>
+        )}
+      </div>
 
       {/* render actions */}
       <div className="flex flex-wrap items-center gap-2">

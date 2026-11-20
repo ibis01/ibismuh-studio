@@ -24,6 +24,18 @@
 // -law z-order) and are unit-pinned there.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { LoadingState } from "@/components/ibismuh/shared";
 import GraphicsCanvas from "./graphics-canvas";
 import { graphicsGroupClaims } from "@/lib/ibismuh/graphics/compose";
 import { GRAPHICS_VO_TAIL_MS } from "@/lib/ibismuh/graphics/frame";
@@ -473,9 +485,10 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/3 p-6 text-sm text-white/60">
-        Loading the graphics doc…
-      </div>
+      <LoadingState
+        label="Loading the graphics doc"
+        className="rounded-xl border border-white/10 bg-white/3"
+      />
     );
   }
 
@@ -818,6 +831,18 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
                       onChange={(e) => patchScene(i, { background: e.target.value })}
                     />
                   </label>
+                  {/* Per-scene draft preview — moved here from the footer's
+                      button row (R2 GUI audit D4): the footer was one
+                      unbounded row of 10+ buttons; the per-scene action
+                      belongs to the scene it renders. */}
+                  <button
+                    type="button"
+                    className={btnGhost}
+                    disabled={busy !== null}
+                    onClick={() => void render({ sceneId: scene.id })}
+                  >
+                    {busy === `draft:${scene.id}` ? "Rendering…" : `Draft ${scene.id}`}
+                  </button>
                 </div>
                 {scene.elements
                   .filter((el) => el.kind === "headline" || el.kind === "subhead" || el.kind === "bullet" || el.kind === "callout")
@@ -859,16 +884,6 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
         <button className={btnGhost} disabled={busy !== null} onClick={() => void render({ draft: true })}>
           {busy === "draft" ? "Rendering…" : `Draft look (${scale}×)`}
         </button>
-        {buffer.scenes.map((s) => (
-          <button
-            key={s.id}
-            className={btnFaint}
-            disabled={busy !== null}
-            onClick={() => void render({ sceneId: s.id })}
-          >
-            {busy === `draft:${s.id}` ? "…" : `draft ${s.id}`}
-          </button>
-        ))}
         <span className="text-white/30">|</span>
         <button
           className={btnSolid}
@@ -879,16 +894,36 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
           {busy === "render" ? "Rendering…" : "Render full video"}
         </button>
         {hasVideo && <span className="text-xs text-white/40">a standing final exists — a doc edit or re-render stales it</span>}
-        <button
-          className={btnFaint}
-          disabled={busy !== null}
-          onClick={() => {
-            if (confirm("Regenerate the graphics doc from the story? The current doc is discarded."))
-              void scaffold(true);
-          }}
-        >
-          Re-scaffold
-        </button>
+        <span className="text-white/30">|</span>
+        {/* Re-scaffold destroys the doc — it now sits behind an AlertDialog
+            instead of a browser confirm(), visibly separated from the render
+            controls so a misclick adjacent to "Render full video" can't wipe
+            the document (R2 GUI audit D4). */}
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button className={btnFaint} disabled={busy !== null}>
+              Re-scaffold
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className="glass-strong rounded-2xl border-white/10">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Re-scaffold the graphics doc?</AlertDialogTitle>
+              <AlertDialogDescription>
+                The doc is regenerated from the story and the current layout,
+                motion and placements are discarded. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep the doc</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-white hover:bg-destructive/90"
+                onClick={() => void scaffold(true)}
+              >
+                Re-scaffold
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {notice && <p className="text-xs text-emerald-300">{notice}</p>}

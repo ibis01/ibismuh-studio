@@ -32,7 +32,7 @@ export function HubTabs({
       <div
         role="tablist"
         aria-label="Workspace sections"
-        className="flex items-center gap-1.5 overflow-x-auto scroll-area-bar -mx-1 px-1 pb-1"
+        className="flex items-center gap-1.5 overflow-x-auto tf-scroll-bar -mx-1 px-1 pb-1"
       >
         {tabs.map((tab) => {
           const isActive = effective === tab.id;

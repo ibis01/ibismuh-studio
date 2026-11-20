@@ -21,7 +21,7 @@ import type { StatsDTO, VideoDTO } from "@/lib/ibismuh/types";
 import {
   Film,
   Rocket,
-  Loader2,
+  Clapperboard,
   Wand2,
   FileText,
   Mic,
@@ -235,14 +235,14 @@ export function DashboardView() {
           accent
         />
         <StatCard
-          icon={Loader2}
+          icon={Clapperboard}
           label="In production"
           value={String(stats.inPipeline)}
           sub="Script / scenes / voice"
         />
         <StatCard
           icon={Rocket}
-          label="Ready to Upload"
+          label="Ready to upload"
           value={String(stats.ready)}
           sub="Packaged & waiting"
         />

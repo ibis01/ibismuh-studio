@@ -258,7 +258,7 @@ export function CastView() {
               character bible — or fill everything by hand.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-1 max-h-[60vh] overflow-y-auto pr-1 scroll-area-bar">
+          <div className="space-y-4 py-1 max-h-[60vh] overflow-y-auto pr-1 tf-scroll-bar">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="char-name">Name</Label>
@@ -763,7 +763,7 @@ function CharacterStudio({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid md:grid-cols-[260px_1fr] gap-5 max-h-[62vh] overflow-y-auto pr-1 scroll-area-bar">
+        <div className="grid md:grid-cols-[260px_1fr] gap-5 max-h-[62vh] overflow-y-auto pr-1 tf-scroll-bar">
           {/* Portrait studio column */}
           <div className="space-y-3">
             <div className="relative aspect-square rounded-xl overflow-hidden bg-white/5 border border-white/10">

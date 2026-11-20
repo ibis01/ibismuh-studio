@@ -17,6 +17,14 @@ import {
   Loader2,
   MinusCircle,
 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+
+export type BoardStageId =
+  | "script"
+  | "storyboard"
+  | "voiceover"
+  | "render"
+  | "publish";
 
 interface BoardStage {
   state: "done" | "partial" | "preview" | "running" | "missing";
@@ -64,7 +72,16 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-export function ProductionBoard({ videoId }: { videoId: string }) {
+export function ProductionBoard({
+  videoId,
+  onStageClick,
+}: {
+  videoId: string;
+  /** R2 GUI pass — the stage strip is the pipeline's navigation spine:
+   *  clicking a stage jumps to the workspace area that owns it. Optional
+   *  so the board stays a pure read-only card anywhere else. */
+  onStageClick?: (stage: BoardStageId) => void;
+}) {
   const [data, setData] = useState<BoardData | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -97,9 +114,19 @@ export function ProductionBoard({ videoId }: { videoId: string }) {
     return () => clearInterval(t);
   }, [anyRunning, load]);
 
-  if (!data) return null;
+  // While the board loads, hold the layout so the workspace header doesn't
+  // jump when the card pops in (audit: the vanishing-card defect).
+  if (!data)
+    return (
+      <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+        <Skeleton className="h-8 w-full max-w-2xl bg-white/5" />
+      </div>
+    );
 
-  const stages = Object.values(data.stages);
+  const stages = Object.entries(data.stages) as [
+    BoardStageId,
+    BoardStage,
+  ][];
   const attention = data.checkpoints.filter((c) => c.state === "attention");
   const visibleCheckpoints = data.checkpoints.filter((c) => c.state !== "na");
   const dollars = (micro: number) =>
@@ -112,13 +139,17 @@ export function ProductionBoard({ videoId }: { videoId: string }) {
 
   return (
     <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-2.5">
-      {/* the stage strip */}
+      {/* the stage strip — clickable when the workspace wires onStageClick */}
       <div className="flex items-center gap-1 flex-wrap">
-        {stages.map((s, i) => (
+        {stages.map(([stageId, s], i) => (
           <div key={s.label} className="flex items-center gap-1">
             {i > 0 && <ChevronRight className="h-3 w-3 text-zinc-600" />}
-            <span
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] border border-white/8 px-2 py-1"
+            <button
+              type="button"
+              onClick={() => onStageClick?.(stageId)}
+              className={onStageClick
+                ? "tf-focusable inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] border border-white/8 px-2 py-1 hover:border-white/25 hover:bg-white/[0.08] transition-colors"
+                : "inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] border border-white/8 px-2 py-1"}
               title={s.detail ?? s.state}
             >
               <span className={`h-1.5 w-1.5 rounded-full ${STAGE_DOT[s.state]}`} />
@@ -127,7 +158,7 @@ export function ProductionBoard({ videoId }: { videoId: string }) {
               {s.detail && (
                 <span className="text-[10px] text-muted-foreground">{s.detail}</span>
               )}
-            </span>
+            </button>
           </div>
         ))}
       </div>

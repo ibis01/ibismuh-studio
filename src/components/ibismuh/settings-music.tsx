@@ -274,7 +274,7 @@ export function MusicLibrarySection() {
         {loading ? (
           <p className="text-xs text-muted-foreground py-2">Loading library…</p>
         ) : (
-          <div className="max-h-96 overflow-y-auto scroll-area-bar rounded-xl border border-white/10 divide-y divide-white/5">
+          <div className="max-h-96 overflow-y-auto tf-scroll-bar rounded-xl border border-white/10 divide-y divide-white/5">
             {tracks.map((t) => (
               <div key={t.id} className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-white/[0.03]">
                 <TrackPreviewButton track={t} />

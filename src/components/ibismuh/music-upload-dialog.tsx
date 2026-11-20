@@ -88,7 +88,7 @@ export function MusicUploadDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto scroll-area-bar">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto tf-scroll-bar">
         <DialogHeader>
           <DialogTitle>Add a licensed track</DialogTitle>
           <DialogDescription>
