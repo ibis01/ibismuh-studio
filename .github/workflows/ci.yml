@@ -50,6 +50,11 @@ name: CI
 
 on:
   push:
+    # The file's own header contract: check on every push/PR. This line
+    # shipped corrupted as `branches: ain]` since the 83ef064 restore — an
+    # invalid glob that silently narrowed push coverage (branch pushes never
+    # fired the battery; main kept working only because the PR lane and the
+    # coincidental glob behavior aligned). Restored to the documented list.
     branches: [main]
   pull_request:
   # S128 (the PR #24 integration review, 2026-11-15): the Docker production
