@@ -7303,3 +7303,43 @@ deps-stage receipt chain (its Dockerfile layout differs structurally —
 Studio's one-node_modules pattern already satisfies the law), and the
 R3/R2 surface differences (operator-ordered exclusions). Push pending
 operator token; CI owns the 8/8 evidence after.
+
+---
+
+## 2026-11-21 — Studio session: the reload law (URL-anchored views — the studio remembers where you were)
+
+**Trigger.** The operator reported: reloading the app (Vercel + fly) "resets all
+settings without saving the settings and apis" and "takes me straight back to
+home instead remaining on the app". Live evidence first, code second:
+
+- Persistence probe (fresh probe account → save → read back ×4, account
+  deleted after): /api/settings preferences AND /api/settings/ai provider keys
+  persist correctly on BOTH deployments; /api/diag (session-only) shows
+  postgres, authSecret+encryptionKey present, 40 tables, migrations applied.
+  The servers were never the bug.
+- The real bug, reproduced in the live UI on both deployments: Settings →
+  reload → lands on Home. The view lives ONLY in the Zustand store
+  (`view: "dashboard"` default, no URL sync, no persistence) — every reload
+  rebooted the studio on Home. The "settings reset" reading is the downstream
+  perception: thrown to Home, away from the saved-key chips
+  ("saved (sk-…5678) — type to replace" — verified rendered after reload).
+
+**What landed (one commit):** the reload law. `src/lib/store.ts` gains
+VIEW_IDS (validated restore targets), `viewToHash()` ("" for Home so "/" stays
+the bare entry URL; `#/workspace/<videoId>` for a focused workspace) and
+`restoreViewFromHash()` (boot restore + hashchange deep links; invalid hashes
+restore nothing). `src/app/page.tsx` mirrors every (view, focusVideoId)
+change into the hash via `history.replaceState` (no history spam, no server
+round-trip, no host-specific rewrite rules) and restores on mount — a reload,
+a signed-in return, or the 401 auto-reload all land BACK on the surface the
+operator was on; the workspace restores WITH its project. Prefills
+(topic/sources/slot/schedule) stay ephemeral BY DESIGN — replaying a stale
+jump payload on reload would re-trigger a jump nobody asked for. Zero visual
+change: no color, no logo, no workflow markup touched (the operator's freeze).
+
+**Gates:** tsc clean · eslint clean on changed files · e2e premium-ux
+"guided brief: the draft survives a reload" unaffected (the reload now mounts
+Create restored directly; the banner assertion still holds).
+
+**Programme state:** the twin commit ports to tubeforge in the same session
+(provenance in its message). Push pending operator token; CI owns the evidence.
