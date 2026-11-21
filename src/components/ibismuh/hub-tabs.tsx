@@ -45,7 +45,7 @@ export function HubTabs({
               className={cn(
                 "tf-focusable shrink-0 rounded-full px-4 py-2 text-sm transition-colors min-h-[36px] border",
                 isActive
-                  ? "bg-primary/15 text-primary border-primary/30 font-medium shadow-[0_0_16px_rgb(34_211_238/12%),inset_0_1px_0_rgb(255_255_255/6%)]"
+                  ? "bg-primary/15 text-primary border-primary/30 font-medium"
                   : "text-muted-foreground border-white/10 bg-white/3 hover:bg-white/6 hover:text-foreground",
               )}
             >

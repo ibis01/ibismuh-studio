@@ -112,7 +112,7 @@ export function AppSidebar() {
                   title={item.hint}
                   className={`tf-focusable relative w-full group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 ${
                     isActive
-                      ? "bg-primary/15 text-primary font-medium shadow-[inset_0_0_0_1px_rgb(34_211_238/22%),0_0_20px_rgb(34_211_238/10%)]"
+                      ? "bg-primary/15 text-primary font-medium shadow-[inset_0_0_0_1px_rgb(34_211_238/20%)]"
                       : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
                   }`}
                 >

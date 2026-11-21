@@ -40,7 +40,7 @@ export function IbismuhWordmark() {
   return (
     <div>
       <p className="font-semibold leading-tight">
-        Ibismuh <span className="text-gradient text-glow">Studio</span>
+        Ibismuh <span className="text-gradient">Studio</span>
       </p>
       <p className="text-[11px] text-muted-foreground">AI Video Studio</p>
     </div>

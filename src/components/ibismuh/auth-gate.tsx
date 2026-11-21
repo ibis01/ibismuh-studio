@@ -330,7 +330,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         {/* S18 — the recovery flow replaces the card (only from LOGIN mode:
             a register-mode gate has no accounts, nothing to recover). */}
         {flow === "recover" && recoverStep === 1 && (
-          <form onSubmit={requestReset} className="glass brand-aurora rounded-2xl border border-white/10 p-6 space-y-4">
+          <form onSubmit={requestReset} className="glass rounded-2xl border border-white/10 p-6 space-y-4">
             <p className="text-xs text-muted-foreground leading-relaxed">
               Enter the account's email — the recovery link is sent there. Single-owner
               installs without a mail relay get the link right here instead.
@@ -393,7 +393,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         )}
 
         {flow === "recover" && recoverStep === 2 && !recoverDone && (
-          <form onSubmit={confirmReset} className="glass brand-aurora rounded-2xl border border-white/10 p-6 space-y-4">
+          <form onSubmit={confirmReset} className="glass rounded-2xl border border-white/10 p-6 space-y-4">
             {recoverLink ? (
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Single-owner mode — the link is{" "}
@@ -474,7 +474,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         {flow === "signin" && (
         <form
           onSubmit={submit}
-          className="glass brand-aurora rounded-2xl border border-white/10 p-6 space-y-4"
+          className="glass rounded-2xl border border-white/10 p-6 space-y-4"
         >
           {mode === "register" && (
             <Input
