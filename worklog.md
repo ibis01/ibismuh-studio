@@ -7337,9 +7337,13 @@ operator was on; the workspace restores WITH its project. Prefills
 jump payload on reload would re-trigger a jump nobody asked for. Zero visual
 change: no color, no logo, no workflow markup touched (the operator's freeze).
 
-**Gates:** tsc clean · eslint clean on changed files · e2e premium-ux
-"guided brief: the draft survives a reload" unaffected (the reload now mounts
-Create restored directly; the banner assertion still holds).
+**Gates:** tsc clean · eslint clean on changed files · battery 1026/1026 ·
+e2e premium-ux "guided brief: the draft survives a reload" UPDATED to the new
+contract — the old spec clicked header 'New Project' AFTER the reload, which
+the restore law makes impossible (Create mounts restored directly, and the
+header hides the button on Create); the corrected spec reloads and asserts
+the draft banner + topic straight away (verified against the twin's local
+run — the spec is byte-identical modulo the draft key).
 
 **Programme state:** the twin commit ports to tubeforge in the same session
 (provenance in its message). Push pending operator token; CI owns the evidence.
