@@ -12,14 +12,20 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //   arc 5  cleanup through the front door + the end-state law
 // Run: node scripts/s25-route-e2e.mjs   (daemon on :3000, S25 build)
 
-const BASE = "http://localhost:3000";
+const BASE = process.env.BASE_URL ?? "http://localhost:3000";
 // S28 — baseline-relative end state, captured BEFORE the suite creates
 // anything (the owner's real account lives in this DB now).
-const { PrismaClient: __PC25 } = await import("@prisma/client");
+// U2 (Prisma 7): the client takes a DRIVER ADAPTER — the baseline probe rides
+// the ONE factory (the raw `new PrismaClient()` died the moment U2 landed;
+// the U2 codemod's 85-site sweep missed this renamed top-level block —
+// `PrismaClient: __PC25` matches neither the static-import nor the plain
+// dynamic-import pattern; found by the nightly, the same way tubeforge's
+// own U2 codemod found its copy of this exact block).
+const __baselinePrisma = createPrisma();
 const BASELINE = {
-  users: await new __PC25().user.count(),
-  orgs: await new __PC25().organization.count(),
-  settings: await new __PC25().userSetting.count(),
+  users: await __baselinePrisma.user.count(),
+  orgs: await __baselinePrisma.organization.count(),
+  settings: await __baselinePrisma.userSetting.count(),
 };
 let failures = 0;
 const check = (name, ok, detail) => {
