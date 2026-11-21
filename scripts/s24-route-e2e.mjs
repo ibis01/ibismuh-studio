@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S24 route e2e — the money door over real HTTP: register → sign in → the
 // full law matrix against the running server (middleware, CSRF, limiter and
 // all), then the end-state law (the battery leaves NOTHING).
@@ -18,12 +20,15 @@
 const BASE = "http://localhost:3000";
 // S28 — baseline-relative end state, captured BEFORE the suite creates
 // anything (the owner's real account lives in this DB now).
-const { PrismaClient: __PC24 } = await import("@prisma/client");
+// U2 (Prisma 7): the client takes a DRIVER ADAPTER — the baseline probe rides
+// the ONE factory (the raw `new PrismaClient()` died the moment U2 landed;
+// the U2 codemod's 85-site sweep missed this top-level block).
+const __baselinePrisma = createPrisma();
 const BASELINE = {
-  users: await new __PC24().user.count(),
-  orgs: await new __PC24().organization.count(),
-  tokens: await new __PC24().apiToken.count(),
-  subs: await new __PC24().subscription.count(),
+  users: await __baselinePrisma.user.count(),
+  orgs: await __baselinePrisma.organization.count(),
+  tokens: await __baselinePrisma.apiToken.count(),
+  subs: await __baselinePrisma.subscription.count(),
 };
 let failures = 0;
 const check = (name, ok, detail) => {
@@ -136,8 +141,7 @@ const authed = { "content-type": "application/json", cookie };
 }
 
 // ---- verify zero residue (direct DB) ----
-const { PrismaClient } = await import("@prisma/client");
-const prisma = new PrismaClient();
+const prisma = createPrisma();
 {
   const u = await prisma.user.findUnique({ where: { email } });
   check("7.3  the user row is gone", u === null);

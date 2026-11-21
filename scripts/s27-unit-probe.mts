@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S27 unit probe — "the $5 door": the external review's verdict was that
 // TubeForge's credit ledger is app-credit bookkeeping, not a USD meter —
 // UsageRecord rows wrote inputTokens/outputTokens/costMicroUsd as zeros
@@ -40,7 +42,6 @@ process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 // operator uses for a pre-activation sanity check.
 process.env.TUBEFORGE_PRICING_VERIFIED ??= "1";
 
-import { PrismaClient } from "@prisma/client";
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
@@ -61,7 +62,7 @@ import { aiCall, } from "../src/lib/ibismuh/budget";import {
   MAX_OUTPUT_TOKENS,
 } from "../src/lib/ibismuh/spend";
 
-const prisma = new PrismaClient();
+const prisma = createPrisma();
 // S28 — the studio has a REAL tenant now (the owner's account lives in
 // this DB): teardown asserts NOTHING-BEHIND against the starting baseline.
 const __BASELINE = { users: await prisma.user.count(), orphanOrgs: await prisma.organization.count({ where: { memberships: { none: {} } } }) };

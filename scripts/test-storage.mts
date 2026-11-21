@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S101 / P0.3 — the storage reservation battery (docs/production-readiness.md).
 //
 //   npm run test:storage     (needs the local SQLite DB)
@@ -22,9 +24,8 @@
 //      → settle; delta accounting on overwrite.
 
 import fs from "node:fs/promises";
-import { PrismaClient } from "@prisma/client";
 
-const db = new PrismaClient();
+const db = createPrisma();
 const MB = 1024 * 1024;
 const GiB = 1024 * MB;
 

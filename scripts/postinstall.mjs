@@ -19,9 +19,6 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const envPath = join(root, '.env');
 const prismaBin = join(root, 'node_modules', '.bin', 'prisma');
 
-const run = (args) =>
-  execFileSync(prismaBin, args, { stdio: 'inherit', cwd: root });
-
 // 1. Resolve DATABASE_URL. Precedence: platform env var FIRST (Vercel/CI
 //    inject it there and ship no .env file — reading only .env made this
 //    script pick SQLite mode on Vercel and crash `prisma db push` with P1012
@@ -35,8 +32,11 @@ if (!url && existsSync(envPath)) {
   url = m ? m[1].trim() : '';
 }
 if (!url) {
-  // Relative file: paths are resolved by Prisma against the schema directory
-  // (prisma/), so ../db/custom.db lands in <project>/db/custom.db.
+  // The sandbox contract (pinned verbatim by the clean-clone verifier):
+  // the SQLite path is SCHEMA-DIR-relative — '../db/custom.db' means
+  // <project>/db/custom.db. Prisma 6 resolved it against the schema dir;
+  // under v7 the CLI resolves against the CWD, so the CLI children below
+  // get the schema-ANCHORED ABSOLUTE form instead.
   url = 'file:../db/custom.db';
   try {
     writeFileSync(envPath, `DATABASE_URL=${url}\n`, { flag: 'wx' });
@@ -45,6 +45,30 @@ if (!url) {
     /* read-only fs (e.g. Vercel) — platform env vars are used instead */
   }
 }
+
+// Prisma 7 resolves relative file: URLs against the process CWD — the v6
+// connector resolved them against the SCHEMA directory (prisma/), and
+// restore-drill.mts + test-backup.mts still do exactly that. Keep ONE
+// convention: anchor every relative file: URL at <root>/prisma/ so the CLI
+// children push <project>/db/custom.db regardless of the v7 CWD rule.
+if (url.startsWith('file:')) {
+  const p = url.slice('file:'.length);
+  if (p && !p.startsWith('/')) url = `file:${join(root, 'prisma', p)}`;
+}
+
+// Prisma 7 (the U2 migration): the CLI no longer auto-loads .env —
+// prisma.config.ts's env("DATABASE_URL") reads the PROCESS env only. This
+// script is the component that resolved the URL above (platform env → .env
+// → SQLite fallback), so it must HAND it to every CLI child. Without this,
+// a fresh clone / CI runner (no platform env var) crashed `prisma generate`
+// with PrismaConfigEnvError: "Cannot resolve environment variable:
+// DATABASE_URL" — five of eight CI jobs died in this one step.
+const run = (args) =>
+  execFileSync(prismaBin, args, {
+    stdio: 'inherit',
+    cwd: root,
+    env: { ...process.env, DATABASE_URL: url },
+  });
 
 // 1b. Stage 2 — provision the signing + encryption secrets when missing so a
 // fresh clone / CI checkout boots usable (the middleware fails CLOSED without
@@ -102,7 +126,7 @@ run(['generate', '--schema', schema]);
 //    (Idempotent — a no-op when the database is already in sync.)
 if (isSqlite) {
   console.log('[postinstall] prisma db push (sqlite) — creates db file if missing');
-  run(['db', 'push', '--schema', 'prisma/schema.sqlite.prisma', '--skip-generate']);
+  run(['db', 'push', '--schema', 'prisma/schema.sqlite.prisma']);
 }
 
 // 4. Stage 2+ transition — BOTH providers, idempotent. On SQLite this is the
@@ -119,7 +143,14 @@ console.log('[postinstall] running scripts/migrate-stage2.mjs (idempotent)');
 try {
   // 150s cap — a hung database connection (unreachable host, blackholed TCP)
   // must not wedge the install until the platform's build timeout kills it.
-  execFileSync('node', ['scripts/migrate-stage2.mjs'], { stdio: 'inherit', cwd: root, timeout: 150_000 });
+  // DATABASE_URL is injected so the child's prisma.config.ts resolves the
+  // same URL this script resolved (Prisma 7 reads the process env only).
+  execFileSync('node', ['scripts/migrate-stage2.mjs'], {
+    stdio: 'inherit',
+    cwd: root,
+    timeout: 150_000,
+    env: { ...process.env, DATABASE_URL: url },
+  });
 } catch (err) {
   if (isSqlite) throw err; // local dev wants loud failures
   console.warn(

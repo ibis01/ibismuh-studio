@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S13 unit probe — "the frame": the picture's shape + smoothness contract
 // through REAL modules. The last render-frame decisions that lived outside
 // the studio (aspect + fps rode the dialog's export presets or the row
@@ -27,7 +29,6 @@ import {
 } from "../src/lib/ibismuh/types";
 import { previewSettingsFrom, formatTimecode } from "../src/lib/ibismuh/preview-lanes";
 import { serializeVideo } from "../src/lib/ibismuh/serialize";
-import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 
 let failures = 0;
@@ -154,7 +155,7 @@ check(
 // 5. DB-backed — the DTO round-trip
 // =====================================================================
 const MARK = crypto.randomBytes(4).toString("hex");
-const raw = new PrismaClient();
+const raw = createPrisma();
 
 try {
   const org = await raw.organization.create({

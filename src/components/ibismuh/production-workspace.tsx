@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Youtube } from "@/components/ibismuh/icons";
 import { useAppStore } from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -86,7 +87,6 @@ import {
   ScanText,
   MessageCircle,
   Copy,
-  Youtube,
   ExternalLink,
   Captions,
   Smartphone,
@@ -4482,13 +4482,12 @@ export function ProductionWorkspace({
               </TabsList>
             </Tabs>
             <ResizablePanelGroup direction="vertical" className="h-[calc(100vh-16rem)] min-h-[640px]">
-              <ResizablePanel defaultSize={56} minSize={22} id="ws-main" order={1}>
+              <ResizablePanel defaultSize="56" minSize="22" id="ws-main">
                 <ResizablePanelGroup direction="horizontal" className="h-full">
                   <ResizablePanel
-                    defaultSize={70}
-                    minSize={40}
+                    defaultSize="70"
+                    minSize="40"
                     id="ws-center"
-                    order={1}
                     className="h-full overflow-y-auto tf-scroll-bar pr-1"
                   >
                     {activeTab === "director"
@@ -4505,10 +4504,9 @@ export function ProductionWorkspace({
                   {activeTab !== "inspector" && <ResizableHandle withHandle />}
                   {activeTab !== "inspector" && (
                     <ResizablePanel
-                      defaultSize={30}
-                      minSize={16}
+                      defaultSize="30"
+                      minSize="16"
                       id="ws-inspector"
-                      order={2}
                       className="h-full overflow-y-auto tf-scroll-bar pl-1"
                     >
                       {inspectorArea}
@@ -4518,10 +4516,9 @@ export function ProductionWorkspace({
               </ResizablePanel>
               <ResizableHandle withHandle />
               <ResizablePanel
-                defaultSize={44}
-                minSize={20}
+                defaultSize="44"
+                minSize="20"
                 id="ws-timeline"
-                order={2}
                 className="overflow-y-auto tf-scroll-bar"
               >
                 {timelineStrip}

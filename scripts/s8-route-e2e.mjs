@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S8 route e2e — the narrator pick against the LIVE server. Self-contained:
 // it builds its OWN fixture (two fresh accounts + a story video seeded
 // through the REAL doc modules), so a recycled database can never stale it.
@@ -20,13 +22,12 @@
 //   6. the factory cleans up: rows removed, the storage prefixes deleted —
 //      the probe leaves no litter.
 // Run: node --import tsx scripts/s8-route-e2e.mjs
-import { PrismaClient } from "@prisma/client";
 import { assembleTimeline, serializeTimeline } from "../src/lib/ibismuh/timeline";
 import { parseScenes } from "../src/lib/ibismuh/story";
 import fs from "node:fs";
 import path from "node:path";
 
-const db = new PrismaClient();
+const db = createPrisma();
 const BASE = "http://localhost:3000";
 let cookie = "";
 

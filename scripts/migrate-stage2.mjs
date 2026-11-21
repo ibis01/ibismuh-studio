@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // Stage 2 — multi-user transition. Idempotent; safe to run repeatedly.
 //
 // WHAT IT DOES
@@ -48,18 +50,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const prismaBin = join(root, "node_modules", ".bin", "prisma");
 
-const run = (args, opts = {}) =>
-  execFileSync(prismaBin, args, { stdio: "inherit", cwd: root, ...opts });
-
-const execSql = (schemaFile, sql) => {
-  const child = execFileSync(
-    prismaBin,
-    ["db", "execute", "--schema", schemaFile, "--stdin"],
-    { cwd: root, input: sql, stdio: ["pipe", "inherit", "inherit"] }
-  );
-  return child;
-};
-
 // --- resolve DATABASE_URL the same way postinstall.mjs does: platform env
 // var FIRST (Vercel/CI inject it there and ship no .env file), then the local
 // .env file, then the SQLite fallback. Reading only .env made this script
@@ -74,7 +64,46 @@ if (!url && existsSync(envPath)) {
   url = m ? m[1].trim() : "";
 }
 if (!url) url = "file:../db/custom.db";
+// Prisma 7 resolves relative file: URLs against the CWD; the repo's one
+// convention anchors them at the SCHEMA directory (restore-drill.mts and
+// test-backup.mts join the same way) — '../db/custom.db' = <root>/db.
+// Children get the schema-anchored ABSOLUTE form (see postinstall.mjs).
+if (url.startsWith("file:") && !url.slice("file:".length).startsWith("/")) {
+  url = `file:${join(root, "prisma", url.slice("file:".length))}`;
+}
 const isSqlite = url.startsWith("file:");
+
+// Prisma 7 (U2): the CLI reads the datasource URL from prisma.config.ts's
+// env("DATABASE_URL") — the PROCESS env only, .env is no longer auto-loaded.
+// This script resolved the URL above, so EVERY CLI child gets it injected.
+// The old "the caller's env already points at the right database" assumption
+// broke on fresh clones/CI (no platform env var → PrismaConfigEnvError —
+// five of eight CI jobs died at postinstall on 2026-11-20).
+const run = (args, opts = {}) =>
+  execFileSync(prismaBin, args, {
+    stdio: "inherit",
+    cwd: root,
+    env: { ...process.env, DATABASE_URL: url },
+    ...opts,
+  });
+
+const execSql = (schemaFile, sql) => {
+  // Prisma 7: `db execute` no longer accepts --schema — the datasource URL
+  // comes from prisma.config.ts (env DATABASE_URL), injected below from the
+  // URL this script resolved. schemaFile stays in the signature for the log
+  // line / future per-schema configs.
+  const child = execFileSync(
+    prismaBin,
+    ["db", "execute", "--stdin"],
+    {
+      cwd: root,
+      input: sql,
+      stdio: ["pipe", "inherit", "inherit"],
+      env: { ...process.env, DATABASE_URL: url },
+    }
+  );
+  return child;
+};
 
 // --- content tables that gain organizationId in phase 1 ---
 const TENANT_TABLES = [
@@ -351,8 +380,9 @@ async function pgRepairMissingInitTables(prisma) {
 }
 
 async function main() {
-  const { PrismaClient } = await import(join(root, "node_modules", "@prisma/client", "index.js"));
-  const prisma = new PrismaClient();
+  // Prisma 7: the client needs a driver adapter — the shared factory picks
+  // better-sqlite3 vs pg per DATABASE_URL protocol (the P1012 migration).
+  const prisma = createPrisma();
 
   try {
     if (!isSqlite) {
@@ -408,7 +438,7 @@ async function main() {
 
     // ---------- phase 2: db push (idempotent) ----------
     log("phase 2: prisma db push (sqlite)");
-    run(["db", "push", "--schema", "prisma/schema.sqlite.prisma", "--skip-generate"]);
+    run(["db", "push", "--schema", "prisma/schema.sqlite.prisma"]);
 
     // ---------- phase 3: bootstrap org + one-owner-per-org index ----------
     // Only rows still parked under 'default' count as legacy content — rows

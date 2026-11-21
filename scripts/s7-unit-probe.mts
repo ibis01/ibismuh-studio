@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S7 unit probe — "the score": the music-pick contract through REAL modules.
 // Two layers, mirroring the sprint's evidence pattern:
 //   1. PURE boundaries (no I/O): the MusicPick sanitizer at the doc choke
@@ -20,7 +22,6 @@ import { assembleTimeline, parseTimeline, serializeTimeline } from "../src/lib/i
 import { parseScenes } from "../src/lib/ibismuh/story";
 import { resolveMusicForVideo, musicBedActive } from "../src/lib/ibismuh/music";
 import { withCtx } from "../src/lib/ibismuh/tenant";
-import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 
 let failures = 0;
@@ -193,7 +194,7 @@ check(
 // 2. the resolver precedence (real DB rows, real resolver)
 // =====================================================================
 const MARK = crypto.randomBytes(4).toString("hex");
-const raw = new PrismaClient();
+const raw = createPrisma();
 let orgA = "";
 let orgB = "";
 let userId = "";

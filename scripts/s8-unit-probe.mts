@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S8 unit probe — "the voice": the narrator-swap contract through REAL
 // modules. Two layers, mirroring the sprint's evidence pattern:
 //   1. PURE boundaries (no I/O): which artifacts a swap invalidates (the
@@ -24,7 +26,6 @@ import {
 import { parseScenes } from "../src/lib/ibismuh/story";
 import { voiceCatalog } from "../src/lib/ibismuh/providers/tts";
 import { LEAD_SEC, TAIL_SEC, MIN_SEG_SEC } from "../src/lib/ibismuh/render";
-import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 
 let failures = 0;
@@ -238,7 +239,7 @@ check(
 //    The happy path with real synthesis is the route e2e's job.
 // =====================================================================
 const MARK = crypto.randomBytes(4).toString("hex");
-const raw = new PrismaClient();
+const raw = createPrisma();
 
 const expectRefusal = async (
   name: string,

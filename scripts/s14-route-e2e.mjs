@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S14 route e2e — "the delivery": the grade + the captions' shipping form
 // through the LIVE daemon. The studio's picks: the grade rides the doc
 // (PUT /assemble, the same surface the autosave writes), the burn rides
@@ -25,11 +27,10 @@
 //      safely behind the gates, no accidental job starts);
 //   8. the factory cleans up: rows removed — the probe leaves no litter.
 // Run: node --import tsx scripts/s14-route-e2e.mjs   (daemon on the S14 build)
-import { PrismaClient } from "@prisma/client";
 import { parseScenes } from "../src/lib/ibismuh/story";
 import { assembleTimeline, serializeTimeline } from "../src/lib/ibismuh/timeline";
 
-const db = new PrismaClient();
+const db = createPrisma();
 const BASE = "http://localhost:3000";
 let cookie = "";
 

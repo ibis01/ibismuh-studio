@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S10 route e2e — "the short" against the LIVE server. Self-contained: it
 // builds its OWN fixture (two fresh accounts + a story video seeded through
 // the REAL doc modules), so a recycled database can never stale it.
@@ -19,11 +21,10 @@
 //      dialog's per-request channel is unchanged);
 //   9. everything is cleaned up — videos, accounts.
 // Run: node --import tsx scripts/s10-route-e2e.mjs
-import { PrismaClient } from "@prisma/client";
 import { assembleTimeline, serializeTimeline } from "../src/lib/ibismuh/timeline";
 import { parseScenes } from "../src/lib/ibismuh/story";
 
-const db = new PrismaClient();
+const db = createPrisma();
 const BASE = "http://localhost:3000";
 let cookie = "";
 

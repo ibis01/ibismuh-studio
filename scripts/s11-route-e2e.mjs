@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S11 route e2e — "the pace": the studio's pacing control through the LIVE
 // daemon. Layers:
 //   1. the auth gate (no session → 401);
@@ -22,13 +24,12 @@
 //   8. the factory cleans up: rows removed, the storage prefixes deleted —
 //      the probe leaves no litter.
 // Run: node --import tsx scripts/s11-route-e2e.mjs
-import { PrismaClient } from "@prisma/client";
 import { assembleTimeline, serializeTimeline } from "../src/lib/ibismuh/timeline";
 import { parseScenes } from "../src/lib/ibismuh/story";
 import fs from "node:fs";
 import path from "node:path";
 
-const db = new PrismaClient();
+const db = createPrisma();
 const BASE = "http://localhost:3000";
 let cookie = "";
 

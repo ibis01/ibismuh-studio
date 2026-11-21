@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S49 — Islamic visual protection: LIVE pipeline probe (L1 → L2 → L3).
 //
 // What this proves against the REAL services (Z.ai gateway, glm + CogView):
@@ -23,7 +25,6 @@
 process.env.TUBEFORGE_DB ??= "file:./db/custom.db";
 process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
-import { PrismaClient } from "@prisma/client";
 import fs from "node:fs";
 import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
 import {
@@ -41,7 +42,7 @@ import { scanRestrictedSubjects } from "../src/lib/ibismuh/restricted-subjects";
 import * as storage from "../src/lib/ibismuh/storage";
 import type { DirectorPlan } from "../src/lib/ibismuh/director";
 
-const prisma = new PrismaClient();
+const prisma = createPrisma();
 const SUFFIX = `${Date.now().toString(36)}-${process.pid.toString(36)}`;
 const UTC_DAY = new Date().toISOString().slice(0, 10);
 const BASELINE_PATH = `docs/baselines/s49-policy-probe-${UTC_DAY}.txt`;

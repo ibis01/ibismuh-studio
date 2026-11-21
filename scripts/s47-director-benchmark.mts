@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S47 unit benchmark — the Director's audition (T-47.7).
 //
 // The external audit's open item: "director acceptance benchmark — repeated
@@ -29,7 +31,6 @@
 
 process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
-import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
@@ -46,7 +47,7 @@ import { visionComplete } from "../src/lib/ibismuh/providers/vision";
 import { getCapability, saveCapability } from "../src/lib/ibismuh/providers/settings";
 import * as storage from "../src/lib/ibismuh/storage";
 
-const prisma = new PrismaClient();
+const prisma = createPrisma();
 const SUFFIX = `${Date.now().toString(36)}-${process.pid.toString(36)}`;
 const UTC_DAY = new Date().toISOString().slice(0, 10);
 const BASELINE_PATH = `docs/baselines/s47-director-benchmark-${UTC_DAY}.txt`;

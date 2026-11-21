@@ -77,11 +77,16 @@ COPY --from=build --chown=ibismuh:ibismuh /app/package-lock.json ./package-lock.
 
 # Whiteboard/slides Chromium (DEPLOYMENT.md §5.1 — as root, before
 # USER ibismuh). Runs AFTER the node_modules COPY so npx resolves the
-# pinned playwright from the image's own node_modules (1.57.0 → browser
-# build chromium-1200); `--with-deps` apt-installs the OS library
-# closure for THIS base (bookworm — playwright emits the matching
-# package names per distro at build time) including CJK/emoji fallback
-# fonts; the tree is chowned so the non-root worker can execute it.
+# pinned playwright from the image's OWN node_modules — the ONE
+# node_modules law: the browser revision is whatever that pinned
+# playwright declares, so a dependency bump can never leave the
+# downloaded browsers and the runtime's expectation at odds (the
+# U3-port lesson: 1.65.0 → 1.65.1 moves chromium-1254 → 1255, and a
+# stale hard-coded revision dies as 'Executable doesn't exist').
+# `--with-deps` apt-installs the OS library closure for THIS base
+# (bookworm — playwright emits the matching package names per distro
+# at build time) including CJK/emoji fallback fonts; the tree is
+# chowned so the non-root worker can execute it.
 RUN npx playwright install --with-deps chromium \
   && chown -R ibismuh:ibismuh /opt/ms-playwright
 
@@ -93,6 +98,11 @@ COPY --from=build --chown=ibismuh:ibismuh /app/public ./.next/standalone/public
 COPY --from=build --chown=ibismuh:ibismuh /app/src ./src
 COPY --from=build --chown=ibismuh:ibismuh /app/scripts ./scripts
 COPY --from=build --chown=ibismuh:ibismuh /app/prisma ./prisma
+# Prisma 7: the CLI reads its datasource from the config file — the
+# compose CMD's migrate-stage2 → `migrate deploy` dies with 'The
+# datasource.url property is required in your Prisma config file'
+# without it (the U2-port receipt, tubeforge 66606af).
+COPY --from=build --chown=ibismuh:ibismuh /app/prisma.config.ts ./prisma.config.ts
 COPY --from=build --chown=ibismuh:ibismuh /app/tsconfig.json ./tsconfig.json
 COPY --from=build --chown=ibismuh:ibismuh /app/next.config.ts ./next.config.ts
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * S99 / P0.1 — the clean-clone verifier (docs/production-readiness.md).
  *
@@ -138,6 +139,10 @@ try {
   );
   shInherit("npm", ["ci", "--no-audit", "--no-fund"], { cwd: work, env: freshEnv });
 
+  // The .env contract is VERBATIM and unchanged by the v7 migration: the
+  // SQLite path is schema-dir-relative ('../db' = <root>/db). postinstall
+  // and the adapter factory translate it explicitly under Prisma 7's
+  // CWD-resolution rule (see both files' anchor comments).
   const envText = readFileSync(join(work, ".env"), "utf8");
   check(".env was created with the SQLite DATABASE_URL", /DATABASE_URL=file:\.\.\/db\/custom\.db/.test(envText), "file:../db/custom.db");
   check("IBISMUH_STUDIO_AUTH_SECRET was provisioned", /^IBISMUH_STUDIO_AUTH_SECRET=.+/m.test(envText));
@@ -161,7 +166,8 @@ try {
     [
       "-e",
       `const { PrismaClient } = require("@prisma/client");
-const db = new PrismaClient({ log: ["error"] });
+const { PrismaBetterSqlite3 } = require("@prisma/adapter-better-sqlite3");
+const db = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: process.env.DATABASE_URL, timeout: 10000 }), log: ["error"] });
 db.organization.count()
   .then((n) => { console.log("PROBE_OK organizations=" + n); process.exit(0); })
   .catch((e) => { console.error("PROBE_FAIL " + ((e && e.message) || String(e))); process.exit(1); });`,
@@ -178,7 +184,7 @@ db.organization.count()
   //    for BOTH dialects, and the dialects must produce DIFFERENT artifacts.
   const sqliteHash1 = manifestDigest(clientManifest(work));
   console.log("[clean-clone] prisma generate (sqlite, regenerate for determinism)");
-  shInherit("npx", ["--no-install", "prisma", "generate", "--schema", "prisma/schema.sqlite.prisma"], { cwd: work, env: freshEnv });
+  shInherit("npx", ["--no-install", "prisma", "generate", "--schema", "prisma/schema.sqlite.prisma"], { cwd: work, env: probeEnv });
   const sqliteHash2 = manifestDigest(clientManifest(work));
   check(
     "SQLite client generation is deterministic (regenerate → byte-identical manifest)",
@@ -187,11 +193,11 @@ db.organization.count()
   );
 
   console.log("[clean-clone] prisma generate (postgres, regenerate for determinism)");
-  shInherit("npx", ["--no-install", "prisma", "generate", "--schema", "prisma/schema.prisma"], { cwd: work, env: freshEnv });
+  shInherit("npx", ["--no-install", "prisma", "generate", "--schema", "prisma/schema.prisma"], { cwd: work, env: probeEnv });
   const pgHash1 = manifestDigest(clientManifest(work));
   const pgSchema = readFileSync(join(work, "node_modules", ".prisma", "client", "schema.prisma"), "utf8");
   check('POSTGRES client generates cleanly in the fresh clone (provider = "postgresql")', /provider\s*=\s*"postgresql"/.test(pgSchema));
-  shInherit("npx", ["--no-install", "prisma", "generate", "--schema", "prisma/schema.prisma"], { cwd: work, env: freshEnv });
+  shInherit("npx", ["--no-install", "prisma", "generate", "--schema", "prisma/schema.prisma"], { cwd: work, env: probeEnv });
   const pgHash2 = manifestDigest(clientManifest(work));
   check(
     "Postgres client generation is deterministic (regenerate → byte-identical manifest)",

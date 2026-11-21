@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 # Stage 3 live smoke (T-3.5): the full HTTP → queue → handler path.
 # Registers a probe account, kicks an AI script job via POST /api/videos,
 # then watches the Job row transition pending → running → done and the video
@@ -29,8 +31,7 @@ for i in $(seq 1 40); do
   sleep 3
   STATUS=$(curl -s -b "$JAR" "$BASE/api/videos/$VID" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('status','?'))" 2>/dev/null || echo "?")
   JOB=$(node --input-type=module -e "
-import { PrismaClient } from '@prisma/client';
-const p = new PrismaClient();
+const p = createPrisma();
 const rows = await p.job.findMany({ where: { entityId: process.argv[1] }, orderBy: { startedAt: 'desc' }, select: { kind: true, status: true, claimedBy: true, attempts: true, error: true } });
 console.log(JSON.stringify(rows));
 await p.\$disconnect();

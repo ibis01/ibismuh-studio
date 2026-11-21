@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // Stage 7 (T-7.2) — backup + restore roundtrip smoke.
 //
 // The ROADMAP §7 list includes "Backup restoration" — this script verifies
@@ -16,7 +18,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 
@@ -44,8 +46,8 @@ function readDbUrl(): string {
 // with a file: URL. The client is generated against schema.sqlite.prisma
 // (the SQLite mirror), so a file: URL is the right shape.
 async function countRows(dbFilePath: string): Promise<{ videos: number; users: number; orgs: number }> {
-  const client = new PrismaClient({
-    datasources: { db: { url: `file:${dbFilePath}` } },
+  const client = createPrisma({
+    adapter: new PrismaBetterSqlite3({ url: `file:${dbFilePath}`, timeout: 10000 }),
   });
   try {
     const [videos, users, orgs] = await Promise.all([
@@ -111,7 +113,7 @@ try {
   fs.copyFileSync(dbFile, backupDbPath);
   fs.writeFileSync(
     path.join(fallbackDir, "MANIFEST.txt"),
-    `Ibismuh Studio backup (fallback snapshot via fs.copyFileSync — sqlite3 CLI missing)\nCreated: ${new Date().toISOString()}\n`
+    `Studio backup (fallback snapshot via fs.copyFileSync — sqlite3 CLI missing)\nCreated: ${new Date().toISOString()}\n`
   );
   ok(`fallback snapshot created: ibismuh-${stamp}`);
 }

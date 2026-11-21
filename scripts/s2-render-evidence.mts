@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S2-a render evidence — the honest mix against the real ffmpeg pipeline.
 //
 // Uses the "Hidden Empire" fixture (12 scenes, art + WAVs on disk, aligned
@@ -19,7 +21,6 @@ import fs from "fs";
 import path from "path";
 import { promisify } from "util";
 import { execFile } from "child_process";
-import { PrismaClient } from "@prisma/client";
 import { withCtx } from "../src/lib/ibismuh/tenant.ts";
 import { runRenderJob } from "../src/lib/ibismuh/video-jobs.ts";
 import { buildSmartSrt } from "../src/lib/ibismuh/captions.ts";
@@ -27,7 +28,7 @@ import { probeDuration } from "../src/lib/ibismuh/render.ts";
 import { parseScenes } from "../src/lib/ibismuh/story.ts";
 
 const execFileAsync = promisify(execFile);
-const db = new PrismaClient();
+const db = createPrisma();
 
 const VIDEO_ID = "cmw084tkl0009mcl90xrpwefq";
 const CTX = { userId: "cmw064izz0000mcflzz96grfq", organizationId: "cmw064j000001mcflab5gax1n", role: "owner" };

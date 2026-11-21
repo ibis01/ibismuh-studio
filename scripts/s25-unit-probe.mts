@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S25 unit probe — "the excavation": two fossil finds, two different laws.
 //
 // FIND 1 — the buried pair. /api/settings/tts + src/lib/ibismuh/tts.ts
@@ -22,13 +24,12 @@
 
 process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
-import { PrismaClient } from "@prisma/client";
 import fs from "node:fs";
 import { claimLegacyForOwner, pendingLegacyRows } from "../src/lib/ibismuh/claim";
 import { decryptSecret } from "../src/lib/ibismuh/crypto";
 import { hashPassword } from "../src/lib/ibismuh/tenant";
 
-const prisma = new PrismaClient();
+const prisma = createPrisma();
 // S28 — the studio has a REAL tenant now (the owner's account lives in
 // this DB): teardown asserts NOTHING-BEHIND against the starting baseline.
 const __BASELINE = { users: await prisma.user.count(), orgs: await prisma.organization.count() };

@@ -1,4 +1,6 @@
 #!/bin/bash
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 # S54 autowatch — the self-healing watcher for the owed benchmark legs
 # (T-54.3: §A podcast + islamic-history, §B the real-render matrix).
 #
@@ -65,8 +67,7 @@ fi
 # ---------- check mode: prerequisites only, no probe ----------
 if [ "$MODE" = "check" ]; then
   node --import tsx -e "
-import { PrismaClient } from '@prisma/client';
-const p = new PrismaClient();
+const p = createPrisma();
 p.user.count().then(async (c) => { console.log('check: DB OK, users:', c); await p.\$disconnect(); })
  .catch((e) => { console.error('check: DB FAIL', String(e).slice(0, 120)); process.exit(1); });
 " || exit 2

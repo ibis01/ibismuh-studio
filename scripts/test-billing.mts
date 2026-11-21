@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // Stage 7.1 — Billing Integrity and Security integration suite.
 //
 // Fixes the five pre-launch billing defects and PINS each one against the
@@ -26,11 +28,10 @@
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
 import { NextRequest } from "next/server";
 
 const _root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const db = new PrismaClient();
+const db = createPrisma();
 
 let passed = 0;
 let failed = 0;

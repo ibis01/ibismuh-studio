@@ -1,3 +1,5 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // S14 unit probe — "the delivery": the grade the render encodes at and the
 // form captions ship in, through REAL modules. Two export decisions held
 // captive by the dialog's preset row — the grade readable only by the job
@@ -29,7 +31,6 @@ import {
   type ExportQuality,
 } from "../src/lib/ibismuh/studio-doc";
 import { serializeVideo } from "../src/lib/ibismuh/serialize";
-import { PrismaClient } from "@prisma/client";
 import crypto from "node:crypto";
 
 let failures = 0;
@@ -149,7 +150,7 @@ check(
 // 5. DB-backed — the DTO round-trip
 // =====================================================================
 const MARK = crypto.randomBytes(4).toString("hex");
-const raw = new PrismaClient();
+const raw = createPrisma();
 
 try {
   const org = await raw.organization.create({

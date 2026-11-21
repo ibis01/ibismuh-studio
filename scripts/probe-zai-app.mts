@@ -1,14 +1,15 @@
+import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
+
 // End-to-end preview wiring probe: exercise the app's OWN provider stack
 // (budget → providers → Z.ai SDK → /etc/.z-ai-config → gateway) for both
 // chat and TTS, under the preview user's tenant context. No secrets printed.
-import { PrismaClient } from "@prisma/client";
 
 const { withCtx } = await import("../src/lib/ibismuh/tenant");
 const { aiCall } = await import("../src/lib/ibismuh/budget");
 const { llmChat } = await import("../src/lib/ibismuh/llm");
 const { ttsSynthesize } = await import("../src/lib/ibismuh/providers/tts");
 
-const db = new PrismaClient();
+const db = createPrisma();
 try {
   const user = await db.user.findFirstOrThrow({ where: { email: "ibis01abc@gmail.com" } });
   const m = await db.membership.findFirstOrThrow({
