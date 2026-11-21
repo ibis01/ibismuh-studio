@@ -7258,3 +7258,48 @@ barrel over zai-config.ts (ONE syncZaiConfigFile — the ProviderCredential
 fallback rides for every importer). The registry battery (16 pins: catalog
 integrity, the no-blank-setup-panel law, the $0 lanes per capability, groq
 ASR, the leveled video lane, the dedupe, the capability language) rides CI.
+
+---
+
+## 2026-11-21 — Studio session: the U-port (capability equality closes in BOTH directions)
+
+**Trigger.** The operator asked "are the two repos on equal" — the honest
+answer was: features/engines yes, dependencies NO (the U-series flowed
+tubeforge-ward only). This session ports the U1+U2+U3 modernization BACK
+to Studio. One commit: `85f385a` (102 files, +2765/−724), full provenance
+in the message.
+
+**Port mechanics.** Identity-mapped patch application + a codemod for the
+85 client-construction sites + wholesale copies for the five files whose
+Studio pre-state was byte-identical to tubeforge's pre-U2 state modulo
+names (migrate-stage2, postinstall, restore-drill, run-route-battery,
+s24-route-e2e) and the two brand-string stragglers (test-backup,
+test-clean-clone). The U1 discovery: the U-series grep missed U1
+(6623208) — the react-resizable-panels v4 migration — found through its
+typecheck fingerprint (Panel order/defaultSize shapes), ported by hand.
+
+**Caught-and-mapped receipts (the identity law at work):**
+- `@/lib/tubeforge/` alias form (the sed map only covered relative paths)
+- `TubeForge backup` brand string riding test-backup's copied state
+- 4 dynamic-import sites (`await import("@prisma/client")`) the codemod's
+  static-import pattern missed — found by eslint, not tsc
+- The 4-panel `order` prop and number-size prop shapes in the workspace
+
+**Gates (all green, this sandbox):** tsc clean · eslint 0 errors (the
+19-warning baseline) · battery **1026/1026** (the identity-guard pin
+green) · whiteboard-trace 25/25 · whiteboard-profiles 22/22 ·
+provider-registry 16/16 · production build exit 0.
+
+**Pre-existing residue observed, NOT this port's scope:** docker
+compose's postgres healthcheck speaks `tubeforge` user/db names
+(self-consistent internally — the smoke is green), Dockerfile header
+says TubeForge, scripts/tf_s66_push.sh exists. Recorded for the
+identity-drift sweep.
+
+**Programme state:** both repos are now dependency-equal (prisma 7.10.1
+stack, panels 4, react-table 9, recharts 3, lucide 1.x, resolvers 7,
+playwright 1.65.1, next 16.4.6). Remaining deltas: tubeforge's docker
+deps-stage receipt chain (its Dockerfile layout differs structurally —
+Studio's one-node_modules pattern already satisfies the law), and the
+R3/R2 surface differences (operator-ordered exclusions). Push pending
+operator token; CI owns the 8/8 evidence after.
