@@ -1,0 +1,75 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# HANDOFF COPY — the workflow's paste-ready source of truth.
+#
+# Why this copy exists here (and not at .github/workflows/deploy-fly.yml):
+# GitHub rejects workflow-file writes from tokens without the `workflows`
+# permission (ci.yml's header note) — the automation that landed fly.toml and
+# DEPLOYMENT.md §2.1 cannot create the workflow file itself.
+#
+# To arm the lane (DEPLOYMENT.md §2.1):
+#   1. GitHub → Add file → Create new file → `.github/workflows/deploy-fly.yml`
+#   2. Paste THIS file's content (the block above may be deleted) → commit
+#   3. fly tokens create deploy -a ibismuh-studio
+#   4. GitHub → Settings → Secrets and variables → Actions → New repository
+#      secret: FLY_API_TOKEN = <the token>
+# Until step 4 the workflow runs warn-and-green (deploys skip). After it, the
+# loop is push → CI → fly deploy → smoke.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Deploy (Fly.io)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  # A production release is not cancelled mid-flight by a follow-up push —
+  # deploys QUEUE instead (the opposite of ci.yml's PR behavior, S47).
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: fly deploy → ibismuh-studio
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install flyctl
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Guard — FLY_API_TOKEN present? (warn + skip when absent)
+        id: guard
+        env:
+          TOKEN_SET: ${{ secrets.FLY_API_TOKEN != '' }}
+        run: |
+          if [ "$TOKEN_SET" = "true" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::FLY_API_TOKEN is not set — deploy skipped, job stays green (DEPLOYMENT.md §2.1: fly tokens create deploy -a ibismuh-studio, then add the FLY_API_TOKEN repository secret)"
+          fi
+
+      - name: Deploy (rolling release of the pushed commit)
+        if: steps.guard.outputs.skip == 'false'
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl deploy --config fly.toml --app ibismuh-studio
+
+      - name: Smoke — /api/auth/status must answer 200 (5 attempts × 15s)
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            if curl -fsS --max-time 10 https://ibismuh-studio.fly.dev/api/auth/status; then
+              echo "smoke OK on attempt $i"
+              exit 0
+            fi
+            echo "attempt $i failed — retrying in 15s"
+            sleep 15
+          done
+          echo "::error::smoke failed after 5 attempts — check the release in the Fly dashboard"
+          exit 1
