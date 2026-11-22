@@ -15,8 +15,11 @@
 # (Hereford, UK). The provisioning default `iad` (US East) put every request
 # across the Atlantic. NOTE: `fly deploy` updates EXISTING machines in place
 # (they keep their region), so the one-time move to lhr is a deliberate
-# operator step — see DEPLOYMENT.md §2.1:
-#   fly machines move <machine-id> --region lhr -a ibismuh-studio
+# operator step — see DEPLOYMENT.md §2.1. Receipt 2026-11-23 (flyctl v0.5.14):
+# there is NO `move` command and `machine update` carries no --region flag;
+# the supported move is clone-into-region, then destroy the source:
+#   fly machine clone <machine-id> --region lhr -a ibismuh-studio -y
+#   fly machines destroy <machine-id> -a ibismuh-studio -y   # after the clone answers
 #
 # Two process groups from ONE image (the Dockerfile default command is web):
 #   web    — 2 machines behind the Fly proxy (ports 443/80 → 3000)
