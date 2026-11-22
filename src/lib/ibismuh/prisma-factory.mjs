@@ -50,24 +50,60 @@ export function createPrismaAdapter(url = resolveDatabaseUrl()) {
       "DATABASE_URL is not set — the Prisma 7 client needs a driver adapter and no URL to derive it from",
     );
   }
-  // Runtime guard: if the app boots with SQLite on Vercel's ephemeral
-  // serverless filesystem, every DB write is lost on cold start — settings
-  // silently vanish after reload. Fail loudly with an actionable error
-  // instead of serving an app that eats its own data. (The postinstall
-  // guard catches this at build time; this catches runtime env drift, e.g.
-  // DATABASE_URL set late or a stale .env bundled into the deployment.)
-  // Local dev / sandbox / CI do not set VERCEL, so SQLite still works there.
-  if (
-    (process.env.VERCEL === "1" || process.env.VERCEL_ENV) &&
-    url.startsWith("file:")
-  ) {
-    throw new Error(
-      "DATABASE_URL resolves to SQLite (file: URL) on Vercel. " +
-        "Vercel's serverless filesystem is ephemeral — settings will NOT persist " +
-        "(every write is lost on cold start). Set DATABASE_URL to a Postgres " +
-        "connection string in Vercel → Settings → Environment Variables " +
-        "(Neon / Vercel Postgres / Supabase), then redeploy.",
-    );
+  // Runtime guard: if the app boots with SQLite on an EPHEMERAL production
+  // filesystem, every DB write is lost on restart — settings silently vanish
+  // after reload. Fail loudly with an actionable error instead of serving an
+  // app that eats its own data. (The postinstall guard catches the Vercel
+  // case at build time; this catches runtime env drift, e.g. DATABASE_URL
+  // set late or a stale .env bundled into the deployment.)
+  //
+  // TWO production hosts are covered, because the guard used to cover one
+  // and the production app runs on the other:
+  //   - Vercel  (VERCEL=1 / VERCEL_ENV): serverless filesystem, always
+  //     ephemeral — the original 2026-11-22 trap.
+  //   - Fly.io  (FLY_MACHINE_ID / FLY_ALLOC_ID / FLY_APP_NAME, injected by
+  //     the platform into every machine): machine disks are ephemeral too,
+  //     and the production fly.toml mounts NO volume — a file: URL there is
+  //     the same data-loss trap, and Fly sets neither VERCEL var, so the
+  //     old condition never fired on it. The machine simply stops/recycles
+  //     between sessions and every UserSetting, ProviderCredential and
+  //     account row written since boot is gone.
+  // docker-compose self-hosts, CI, nightly and local dev set neither FLY_*
+  // nor VERCEL and keep the SQLite fallback unchanged. A volume-backed Fly
+  // deploy (persistent disk mounted at the SQLite path) opts out explicitly
+  // with IBISMUH_STUDIO_ALLOW_LOCAL_DB=1.
+  const onVercel = process.env.VERCEL === "1" || Boolean(process.env.VERCEL_ENV);
+  const onFly = Boolean(
+    process.env.FLY_MACHINE_ID ||
+      process.env.FLY_ALLOC_ID ||
+      process.env.FLY_APP_NAME,
+  );
+  const localDbAllowed =
+    process.env.IBISMUH_STUDIO_ALLOW_LOCAL_DB === "1";
+  if (url.startsWith("file:") && !localDbAllowed) {
+    if (onVercel) {
+      throw new Error(
+        "DATABASE_URL resolves to SQLite (file: URL) on Vercel. " +
+          "Vercel's serverless filesystem is ephemeral — settings will NOT persist " +
+          "(every write is lost on cold start). Set DATABASE_URL to a Postgres " +
+          "connection string in Vercel → Settings → Environment Variables " +
+          "(Neon / Vercel Postgres / Supabase), then redeploy.",
+      );
+    }
+    if (onFly) {
+      throw new Error(
+        "DATABASE_URL resolves to SQLite (file: URL) on a Fly.io machine (" +
+          `${process.env.FLY_APP_NAME ?? "app"}, machine ` +
+          `${process.env.FLY_MACHINE_ID ?? "unknown"}). Fly machine disks are ` +
+          "ephemeral and this deployment mounts no volume — every write " +
+          "(settings, provider keys, projects, accounts) is wiped when the " +
+          "machine stops or recycles, so saved data appears to vanish after " +
+          "reload. FIX: `fly secrets set DATABASE_URL=<postgres connection " +
+          "string>` (Neon / Supabase — any durable Postgres), then redeploy. " +
+          "Only if you mount a persistent volume at the SQLite path, set " +
+          "IBISMUH_STUDIO_ALLOW_LOCAL_DB=1 to opt out of this guard.",
+      );
+    }
   }
   if (url.startsWith("file:")) {
     const [pathPart, queryPart] = url.slice("file:".length).split("?", 2);
