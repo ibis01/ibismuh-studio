@@ -7378,3 +7378,33 @@ job — the fly deployment picks this up on its next `fly deploy`.
 
 **Programme state:** twin commits tubeforge `fabde43` (normalization law)
 and `d3fa00a` (full-width settings) — provenance in their messages.
+
+## 2026-11-22 — Studio session: the provider shape audit — the kokoro law (twin port of tubeforge d8f9dcf)
+
+**Trigger.** The operator asked to "verify all providers are in shape". The
+structural audit ran on BOTH twins: registry invariants, adapter export
+resolution, the joinUrl + Magic Hour normalizer laws, twin parity, and
+dispatch coverage (every registry id must route to a wire adapter).
+
+**Finding (one genuine hole, both repos):** `kokoro` (S173's lightweight
+local candidate — kind: openai, kokoro-fastapi at localhost:8880/v1,
+requiresKey:false) had NO dispatch case in `ttsSynthesize`; selecting it
+fell through to `zaiTts` (the Z.ai SDK), a protocol the local server cannot
+answer, and `voiceCatalog("kokoro")` served the 7 Z.ai studio voices. The
+port: kokoro rides the SAME openai-compatible adapter as OpenAI TTS (no new
+adapter, no redesign — the local-host key skip already covered loopback),
+`KOKORO_VOICES` gives it its own 13-voice Apache-2.0 sample set
+(hexgrad/Kokoro-82M), and `openaiTts` defaults its model from the provider's
+own registry meta (chat's modelFor law, mirrored).
+
+**Everything else passed clean:** CHAT 11/11 (8 ids via the OPENAI_COMPATIBLE
+group), IMAGE 12/12 + 12/12, VIDEO 11/11, ASR 4/4; registry invariants hold
+on all 50 meta rows; joinUrl (3 cases) + normalizer (6 cases) laws hold; the
+twins are wire-identical modulo the rebrand namespace. 54 initial audit
+"failures" were audit over-strictness (optional `tier`, intentional
+`models: []` for zai TTS/ASR/image and lmstudio) — zero real defects.
+
+**Gates (this sandbox):** battery 1026/1026 · eslint clean on the changed
+file · tsc --noEmit clean · kokoro behavioral smoke passes (catalog, voice
+passthrough, fallback, openai unchanged). CI owns the push evidence. fly.io
+picks this up on its next manual `fly deploy`.
