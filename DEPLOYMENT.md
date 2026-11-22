@@ -70,14 +70,62 @@ fly secrets set \
   IBISMUH_STUDIO_S3_REGION=auto
 
 # 2. schema (postinstall also baselines, but be explicit on first deploy)
-fly ssh console -a tubeforge --command 'npx prisma migrate deploy --schema prisma/schema.prisma'
+fly ssh console -a ibismuh-studio --command 'npx prisma migrate deploy --schema prisma/schema.prisma'
 
 # 3. ship it
 fly deploy                                     # web + worker from one image
 
 # 4. verify
-curl -f https://tubeforge.fly.dev/api/auth/status
+curl -f https://ibismuh-studio.fly.dev/api/auth/status
 ```
+
+### 2.1 The app name, the region, and the CI/CD lane (2026-11-23)
+
+Three facts the checklist above now assumes:
+
+- **The Fly app is `ibismuh-studio`.** It was provisioned under the
+  pre-rebrand name `tubeforge` and renamed in the 2026-11-17 rebrand — the
+  fly.dev hostname followed: production answers on
+  `https://ibismuh-studio.fly.dev`, and `tubeforge.fly.dev` no longer
+  resolves. `fly.toml` carries `app = "ibismuh-studio"` so a bare
+  `fly deploy` targets the live deployment instead of failing on a ghost
+  app (the state the config sat in until this section landed).
+- **The primary region is `lhr` (London)** — the nearest Fly region to the
+  operator (Hereford, UK). The app was originally provisioned in `iad`
+  (US East), which put every request across the Atlantic. `fly deploy`
+  updates existing machines in place (they keep their region), so moving is
+  a deliberate one-time step per machine:
+
+  ```bash
+  fly machines list -a ibismuh-studio
+  fly machines move <machine-id> --region lhr -a ibismuh-studio   # repeat per machine, one at a time
+  ```
+
+  The S3 storage mode attaches no volumes, so nothing else moves (a
+  local-storage volume would be region-locked — one more reason S3 is the
+  default). The Neon project deserves the same treatment if its endpoint
+  sits in a US region: an EU endpoint keeps the database round-trip in the
+  UK's neighborhood (set it in the Neon console, then update `DATABASE_URL`
+  in `fly secrets set`).
+- **Deploys run themselves.** `.github/workflows/deploy-fly.yml` ships every
+  push to `main`: it builds the same image the S104 docker-smoke job builds
+  (proven on GitHub runners), performs the rolling release against
+  `ibismuh-studio`, and smokes `/api/auth/status`. One-time arming:
+
+  ```bash
+  fly tokens create deploy -a ibismuh-studio
+  # GitHub → Settings → Secrets and variables → Actions → New repository secret
+  #   Name:  FLY_API_TOKEN
+  #   Value: <the token from the command above>
+  ```
+
+  (plus the workflow file itself — if it is not yet in the tree, create it
+  from the handoff copy: **Add file → Create new file →
+  `.github/workflows/deploy-fly.yml`** → paste → commit). Until the secret
+  exists the workflow warns and stays green; with it, the loop is
+  push → CI → fly deploy → smoke. Manual deploys stay available:
+  `fly deploy --config fly.toml` (the config now names the right app), or
+  the workflow's own **Run workflow** button.
 
 Then the operational layer (tracked in the S33+ backlog in `TASKS.md`):
 
