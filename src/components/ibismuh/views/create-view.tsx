@@ -431,7 +431,9 @@ export function CreateView() {
       }
     };
 
-    fetch("/api/settings")
+    // cache: "no-store" — without it the stale pre-save response is served
+    // after a save+reload, so saved defaults appear to vanish on reload.
+    fetch("/api/settings", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => {
         const s = d.settings ?? {};
@@ -451,7 +453,7 @@ export function CreateView() {
       });
 
     // Load AI Provider config to fix the red warning text
-    fetch("/api/settings/ai")
+    fetch("/api/settings/ai", { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => setAiConfig(d))
       .catch(() => undefined);
