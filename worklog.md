@@ -7408,3 +7408,24 @@ twins are wire-identical modulo the rebrand namespace. 54 initial audit
 file · tsc --noEmit clean · kokoro behavioral smoke passes (catalog, voice
 passthrough, fallback, openai unchanged). CI owns the push evidence. fly.io
 picks this up on its next manual `fly deploy`.
+
+## 2026-11-22 — Studio session: the six-type pipeline verification — the S153 kinetic compose law (twin port of tubeforge 31ef02b)
+
+**Trigger.** The operator asked to "verify all the 6 video types pipeline
+work perfectly". All six Create presets rode their FULL pipelines
+end-to-end on a local sandbox runtime (sqlite + platform gateway + real
+ffmpeg): script → storyboard art / engine-doc scaffold → voiceover →
+thumbnail → render → final.mp4, ffprobe-verified. All six PASSED; the
+character type additionally rode the portrait + 3/3 consistency sheet.
+
+**The defect (both repos):** the slides kinetic compose (S153) mapped the
+story lane's `[v]` filter label over an audio-only graph — every
+clip-backed scene compose failed ("Output with label 'v' does not exist in
+any defined filter graph"). Chromium-less hosts never saw it: no kinetic
+clips existed, so the still fallback silently carried the lane. The port
+maps the input stream (`0:v`) for the pass-through clip; the re-render
+produced a real 143s h264+aac keynote.
+
+**Gates (this sandbox):** battery 1026/1026 · eslint clean · tsc clean ·
+five final.mp4 artifacts ffprobe-verified (h264 + AAC). CI owns the push
+evidence. fly.io picks this up on its next manual `fly deploy`.
