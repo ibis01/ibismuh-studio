@@ -1,10 +1,22 @@
-# TubeForge on Fly.io (Stage 3, T-3.12) — process-group deployment.
+# Ibismuh Studio on Fly.io (Stage 3, T-3.12; rebranded from TubeForge) — process-group deployment.
 #
 #   fly launch --no-deploy --copy-config   (first time)
 #   (pre-rebrand apps keep their TUBEFORGE_* secrets — the app mirrors legacy names)
 #   fly secrets set IBISMUH_STUDIO_AUTH_SECRET=... IBISMUH_STUDIO_ENCRYPTION_KEY=... \
 #                  DATABASE_URL=...  POSTGRES_PASSWORD not needed (Fly Postgres URL)
 #   fly deploy
+#
+# The app is `ibismuh-studio`: the original `tubeforge` app was RENAMED in the
+# 2026-11-17 rebrand and the fly.dev hostname followed (tubeforge.fly.dev no
+# longer resolves). This config now targets the renamed app so a bare
+# `fly deploy` ships to the live deployment instead of failing on a ghost.
+#
+# primary_region is `lhr` (London) — the nearest Fly region to the operator
+# (Hereford, UK). The provisioning default `iad` (US East) put every request
+# across the Atlantic. NOTE: `fly deploy` updates EXISTING machines in place
+# (they keep their region), so the one-time move to lhr is a deliberate
+# operator step — see DEPLOYMENT.md §2.1:
+#   fly machines move <machine-id> --region lhr -a ibismuh-studio
 #
 # Two process groups from ONE image (the Dockerfile default command is web):
 #   web    — 2 machines behind the Fly proxy (ports 443/80 → 3000)
@@ -15,8 +27,8 @@
 # (IBISMUH_STUDIO_STORAGE_DRIVER=s3 + the IBISMUH_STUDIO_S3_* secrets) or attach a
 # persistent volume and mount it at /app/uploads for local storage.
 
-app = "tubeforge"
-primary_region = "iad"
+app = "ibismuh-studio"
+primary_region = "lhr"
 
 [build]
   dockerfile = "Dockerfile"
