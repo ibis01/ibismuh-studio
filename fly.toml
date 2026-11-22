@@ -79,9 +79,18 @@ primary_region = "lhr"
 # peak RSS 444/442/285 MB per scene at 1080p on a 4 GB worker — 1 GB untested,
 # expected to OOM). The S185 config-truth scan pins this file to the §5.3
 # number so the two documents cannot drift apart silently again.
+# CPU is 2 cores by RECEIPT, not taste: the org's plan caps every machine at
+# 2 CPU cores — `fly machine update --vm-cpus 4` was refused 2026-11-22 with
+# "Your organization is limited to 2 CPU cores per machine. Please contact
+# billing@fly.io" (Request ID 01M82QSTMEWTQFCPJX7Q5FCJYK-lhr). A shared-cpu-4x
+# pin here could therefore never apply to a real machine — config fiction of
+# exactly the class S185 exists to kill. Renders stay CORRECT at 2 cores
+# (memory is the OOM axis); they are CPU-bound-slower. If the org plan is
+# ever upgraded, restore size = "shared-cpu-4x" and re-run `fly machine
+# update <worker-id> --vm-cpu-kind shared --vm-cpus 4 --vm-memory 4096`.
 [[vm]]
   processes = ["worker"]
-  size = "shared-cpu-4x"
+  size = "shared-cpu-2x"
   memory = "4gb"
 
 # Persistent uploads volume for LOCAL storage mode (optional; S3 mode does
