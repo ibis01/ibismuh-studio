@@ -97,16 +97,27 @@ Three facts the checklist above now assumes:
   a deliberate one-time step per machine:
 
   ```bash
+  # Receipt 2026-11-23 (flyctl v0.5.14): `fly machines move` does not exist
+  # and `fly machine update` carries no --region flag. The supported move is
+  # CLONE into the target region (the clone inherits image, size and process
+  # group), prove health, then destroy the source:
   fly machines list -a ibismuh-studio
-  fly machines move <machine-id> --region lhr -a ibismuh-studio   # repeat per machine, one at a time
+  fly machine clone <machine-id> --region lhr -a ibismuh-studio -y   # repeat per machine; note each clone's NEW id
+  curl -fsS https://ibismuh-studio.fly.dev/api/auth/status           # once the web clone is up
+  fly machines destroy <old-machine-ids> -a ibismuh-studio -y        # only after the clones answer
   ```
 
   The S3 storage mode attaches no volumes, so nothing else moves (a
   local-storage volume would be region-locked — one more reason S3 is the
-  default). The Neon project deserves the same treatment if its endpoint
-  sits in a US region: an EU endpoint keeps the database round-trip in the
-  UK's neighborhood (set it in the Neon console, then update `DATABASE_URL`
-  in `fly secrets set`).
+  default). The Neon project cannot follow the machines in place: a Neon
+  project's region is FIXED at creation (`aws-us-east-2` here) — moving the
+  database means creating a NEW project in `aws-eu-west-2` (London) or
+  `aws-eu-central-1` (Frankfurt), copying the data (`pg_dump | pg_restore`
+  against the direct, non-pooler endpoints), then
+  `fly secrets set DATABASE_URL=<new pooler URL>` and letting the machines
+  pick it up. Order matters: machines in `lhr` against an Ohio database
+  makes every query cross the Atlantic in the other direction — treat the
+  two moves as ONE change.
 - **Deploys run themselves.** `.github/workflows/deploy-fly.yml` ships every
   push to `main`: it builds the same image the S104 docker-smoke job builds
   (proven on GitHub runners), performs the rolling release against
@@ -179,15 +190,15 @@ Two modes, both tested: SQLite zero-config (`npm ci && npm run dev`, see
 
 ## 5. The Chromium worker contract (whiteboard + slides rendering)
 
-The worker role renders video. Every ffmpeg/ffprobe stage is covered by
-the image's `ffmpeg` package; the **Whiteboard Engine** (and the slides
-engine's browser path) rasterize in headless Chromium driven by
-Playwright — and **the production image does not ship a browser**
-(`Dockerfile` §3 states this for the old slides-only world: "no browser
-here"). A worker built from the current image runs every job kind EXCEPT
-whiteboard rendering, which dies at `chromium.launch()`. This section is
-the deployment requirement, measured not assumed (the S75 E10 benchmark
-and the E12 live queue drill, 2026-11-10).
+The worker role renders video. Every ffmpeg/ffprobe stage is covered by the
+image's `ffmpeg` package; the **Whiteboard Engine** (and the slides engine's
+browser path) rasterize in headless Chromium driven by Playwright — and
+**the production image does not ship a browser** (`Dockerfile` §3 states
+this for the old slides-only world: "no browser here"). A worker built from
+the current image runs every job kind EXCEPT whiteboard rendering, which
+dies at `chromium.launch()`. This section is the deployment requirement,
+measured not assumed (the S75 E10 benchmark and the E12 live queue drill,
+2026-11-10).
 
 **5.1 — Install the browser (the image gap).** In the runner stage, as
 root, before `USER ibismuh`:
@@ -233,9 +244,10 @@ bookworm-slim, all three stages.** Two receipts, both hard:
   **`>=22.19.0`** (undici 8.12.4) — node 20 was not merely stale, it
   sat OUTSIDE a runtime dependency's declared support.
 - CI rides **node 24** everywhere (`ci.yml`, the S128-ext receipt:
-  node 22's parser hit a recursion limit on a frozen file; node 24 is
-  where every golden pin and lint gate was recorded) — the production
-  image now builds and runs the SAME major the pins were recorded on.
+  node 22's parser hit a recursion limit on a frozen file; node 24
+  is where every golden pin and lint gate was recorded) — the
+  production image now builds and runs the SAME major the pins were
+  recorded on.
 
 The S185 config-truth scan (`scripts/test-unit.mts`, suite S185) parses
 the lockfile's engines floors, the Dockerfile `FROM` lines and the CI
