@@ -7347,3 +7347,34 @@ run — the spec is byte-identical modulo the draft key).
 
 **Programme state:** the twin commit ports to tubeforge in the same session
 (provenance in its message). Push pending operator token; CI owns the evidence.
+
+## 2026-11-22 — Studio session: the Magic Hour base-URL law + the full-width settings (twin port of fabde43 + d3fa00a)
+
+**Trigger.** The operator reported on the twin: "your fix did not fix any
+thing and also make the setting full screen not one sided and letting the
+remaining space empty". Root causes: (1) the twin's layout fix existed only
+as an unpushed working-tree edit, and (2) the twin's Magic Hour 404 law
+(`fabde43`) had never been ported here — the fly deployment kept using the
+bare-host base URL verbatim, so the key probe 404-ed and looked like an auth
+failure, and the settings view rendered as a one-sided `max-w-2xl` column.
+
+**What landed (one commit, four files):** `providers/video.ts` exports
+`normalizeMagicHourBaseUrl()` — empty → default, bare origin → append `/v1`,
+trailing slashes stripped, explicit paths kept (proxies/versioned overrides)
+— and `magicHourVideo()` now uses it. Both Settings test routes
+(`/api/settings`, `/api/settings/ai`) normalize before probing and a 404
+response carries the actionable hint ("base URL path is wrong; should look
+like https://api.magichour.ai/v1"). The settings view drops its root
+`max-w-2xl` in BOTH the skeleton and the main return — settings render
+full-width with no empty gutter, matching every other view.
+
+**Gates (this sandbox):** 9-case unit check of the normalizer passes
+(undefined/blank/whitespace/bare host/trailing slashes/`/v1` exact/`/v1` +
+slash/custom proxy path) · battery 1026/1026 (after a local `db:push` — the
+sandbox DB pre-dated the Subscription table; failure reproduced on clean
+main, so it was environmental, not a regression) · eslint 0 errors on all
+four changed files. CI owns the push evidence. Note: fly.io has no CI deploy
+job — the fly deployment picks this up on its next `fly deploy`.
+
+**Programme state:** twin commits tubeforge `fabde43` (normalization law)
+and `d3fa00a` (full-width settings) — provenance in their messages.
