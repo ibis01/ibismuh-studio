@@ -108,6 +108,13 @@ export async function POST(req: NextRequest) {
     const ttsSpeed = Math.min(Math.max(Number(body.ttsSpeed ?? 1.0), 0.5), 2.0);
     const thumbStyle = String(body.thumbStyle ?? "cinematic");
     const channelId = body.channelId ? String(body.channelId) : null;
+    // F-02 (tenant integrity): same-organization channel lookup for the
+    // whole batch (character/music are validated per-item below).
+    if (channelId) {
+      const channel = await db.channel.findUnique({ where: { id: channelId } });
+      if (!channel)
+        return NextResponse.json({ error: "Channel not found" }, { status: 400 });
+    }
     const characterId = body.characterId ? String(body.characterId) : null;
     const format = FORMATS.some((f) => f.id === body.format) ? String(body.format) : "story";
     const renderMode = RENDER_MODES.some((m) => m.id === body.renderMode)

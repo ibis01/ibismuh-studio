@@ -519,6 +519,9 @@ async function dedupeOriginals(): Promise<number> {
     const keepId = pinned?.musicTrackId ?? group[0].id;
     for (const g of group) {
       if (g.id === keepId) continue;
+      // Detach referencing videos first — the composite tenant FK is
+      // NoAction (explicit SetNull semantics, same as the DELETE route).
+      await db.video.updateMany({ where: { musicTrackId: g.id }, data: { musicTrackId: null } });
       await db.musicTrack.delete({ where: { id: g.id } });
       removed += 1;
     }

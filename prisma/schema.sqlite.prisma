@@ -251,6 +251,7 @@ model Channel {
   videos         Video[]
 
   @@index([organizationId])
+  @@unique([id, organizationId])
 }
 
 model Character {
@@ -284,6 +285,7 @@ model Character {
   appearances     CharacterAppearance[]
 
   @@index([organizationId])
+  @@unique([id, organizationId])
 }
 
 model Video {
@@ -325,9 +327,9 @@ model Video {
   wordCount     Int?
   error         String?
   channelId     String?
-  channel       Channel?   @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  channel       Channel?   @relation(fields: [channelId, organizationId], references: [id, organizationId], onDelete: NoAction)
   characterId   String?
-  character     Character? @relation(fields: [characterId], references: [id], onDelete: SetNull)
+  character     Character? @relation(fields: [characterId, organizationId], references: [id, organizationId], onDelete: NoAction)
   verifyReport  String? // JSON ASR narration-check report (Phase 3)
   commentsKit   String? // JSON engagement kit: pinned comment + replies + strategy (Phase 4)
   youtubeUrl    String? // https://youtu.be/<id> after a successful OAuth upload (Phase 4)
@@ -341,6 +343,7 @@ model Video {
   // Background music (per-video overrides; null = fall back to Settings defaults)
   musicEnabled          Boolean? // null = use the global default (Settings -> Background Music)
   musicTrackId          String? // manual pick (overrides auto mood-matching)
+  musicTrack            MusicTrack? @relation(fields: [musicTrackId, organizationId], references: [id, organizationId], onDelete: NoAction)
   musicVolume           Float? // 0..1 multiplier applied to the licensed track
   musicFadeIn           Float? // seconds
   musicFadeOut          Float? // seconds
@@ -840,9 +843,11 @@ model MusicTrack {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  videos       Video[]
 
   @@index([organizationId])
   @@index([isActive])
+  @@unique([id, organizationId])
 }
 
 // Stage 5 (AI Director) — per-scene clothing / accessory / mood tracking for

@@ -135,6 +135,52 @@ test.describe.serial("cross-tenant isolation (Stage 2 completion gate)", () => {
     }
   });
 
+  test("cross-tenant CHANNEL attachment is rejected (F-02: the unvalidated channelId seam)", async ({ request }) => {
+    // A owns a channel; B tries to attach it to a NEW video. The route must
+    // resolve channelId through B's tenant-scoped client (null → 400), the
+    // composite (channelId, organizationId) DB foreign key backstops it, and
+    // no channel name may leak into B's video list.
+    const create = await request.post("/api/channels", {
+      headers: { cookie: a.cookie },
+      data: { name: "A private channel", niche: "Test" },
+    });
+    expect(create.status()).toBe(200);
+    const { channel } = (await create.json()) as { channel: { id: string } };
+
+    const attempt = await request.post("/api/videos", {
+      headers: { cookie: b.cookie },
+      data: {
+        topic: "B tries to pin A's channel",
+        format: "script",
+        approved: true,
+        script: "n/a",
+        channelId: channel.id,
+      },
+    });
+    expect(attempt.status(), "cross-tenant channelId must be rejected").toBe(400);
+
+    const list = await request.get("/api/videos", { headers: { cookie: b.cookie } });
+    expect(list.status()).toBe(200);
+    const d = (await list.json()) as { videos: { channelId?: string | null; channel?: { name?: string } | null }[] };
+    for (const v of d.videos) {
+      expect(v.channelId, "no B video may carry A's channel id").not.toBe(channel.id);
+      expect(v.channel?.name, "no B video may leak A's channel name").not.toBe("A private channel");
+    }
+
+    // A's own attach still works (same-org pair passes the composite FK).
+    const legit = await request.post("/api/videos", {
+      headers: { cookie: a.cookie },
+      data: {
+        topic: "A pins its own channel",
+        format: "script",
+        approved: true,
+        script: "n/a",
+        channelId: channel.id,
+      },
+    });
+    expect(legit.status(), "same-org channelId must be accepted").toBe(200);
+  });
+
   test("the survivor check: A's video still exists after B tried to delete it", async ({ request }) => {
     const res = await request.get(`/api/videos/${a.videoId}`, { headers: { cookie: a.cookie } });
     expect(res.status()).toBe(200);

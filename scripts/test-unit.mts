@@ -2613,11 +2613,18 @@ await test("tenant-db: every org-scoped model matches the lowercased lookup", as
     "scheduleslot", "videostat", "voiceprofile", "musictrack", "job", "membership",
     "characterappearance", "location", "prop", "scenerevision", "sceneartifact",
     "scenerepair", "graphicsimport", "whiteboardassetupload",
+    // 2026-11-23 hardening: the schema-driven registry test
+    // (scripts/test-tenant-registry.mts) found these five org-owned models
+    // missing; they join the scoped set (defense in depth — all were safe
+    // via explicit-organizationId raw paths, the registry now covers any
+    // future request-scoped access).
+    "session", "spendreservation", "storagereservation", "storageusage",
+    "usagerecord",
   ];
   for (const m of expected) {
     ok(ORG_SCOPED_MODELS.has(m), `"${m}" is org-scoped`);
   }
-  eq(ORG_SCOPED_MODELS.size, expected.length, "no unexpected scoped models");
+  eq(ORG_SCOPED_MODELS.size, expected.length, "no unexpected scoped models (the schema-driven pin in test-tenant-registry.mts is the authoritative drift check)");
 });
 
 // ---------------------------------------------------------------------------

@@ -105,6 +105,17 @@ export async function POST(req: NextRequest) {
     const ttsSpeed = Math.min(Math.max(Number(body.ttsSpeed ?? 1.0), 0.5), 2.0);
     const thumbStyle = String(body.thumbStyle ?? "cinematic");
     const channelId = body.channelId ? String(body.channelId) : null;
+    // F-02 (tenant integrity): the channel must belong to the acting
+    // organization BEFORE it can be attached to a video — the composite
+    // (channelId, organizationId) foreign key enforces this at the database
+    // level too, but the scoped lookup gives the caller a clean 400 instead
+    // of a raw FK violation (and covers SQLite dev, where db push creates
+    // the same constraint).
+    if (channelId) {
+      const channel = await db.channel.findUnique({ where: { id: channelId } });
+      if (!channel)
+        return NextResponse.json({ error: "Channel not found" }, { status: 400 });
+    }
     const characterId = body.characterId ? String(body.characterId) : null;
     const format = FORMATS.some((f) => f.id === body.format)
       ? String(body.format)

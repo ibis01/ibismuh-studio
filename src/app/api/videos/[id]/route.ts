@@ -148,8 +148,18 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (voiceChanged && video.hasVoiceover) {
     await invalidateVoiceArtifacts(id, data);
   }
-  if (typeof body.channelId === "string" || body.channelId === null)
+  if (typeof body.channelId === "string" || body.channelId === null) {
+    if (body.channelId) {
+      // F-02 (tenant integrity): same-organization channel lookup — the
+      // composite DB foreign key backstops this at the storage layer.
+      const channel = await db.channel.findUnique({
+        where: { id: String(body.channelId) },
+      });
+      if (!channel)
+        return NextResponse.json({ error: "Channel not found" }, { status: 400 });
+    }
     data.channelId = body.channelId;
+  }
   if (typeof body.characterId === "string" || body.characterId === null) {
     if (body.characterId) {
       const character = await db.character.findUnique({

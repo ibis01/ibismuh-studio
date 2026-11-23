@@ -69,6 +69,12 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
   if (!channel)
     return NextResponse.json({ error: "Channel not found" }, { status: 404 });
 
-  await db.channel.delete({ where: { id } });
+  // The composite (channelId, organizationId) foreign key is NoAction —
+  // detach this organization's videos FIRST (one transaction, the old
+  // SetNull semantics made explicit and tenant-scoped by the client).
+  await db.$transaction([
+    db.video.updateMany({ where: { channelId: id }, data: { channelId: null } }),
+    db.channel.delete({ where: { id } }),
+  ]);
   return NextResponse.json({ success: true });
 }

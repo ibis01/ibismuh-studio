@@ -116,7 +116,13 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
   if (!character)
     return NextResponse.json({ error: "Character not found" }, { status: 404 });
 
-  await db.character.delete({ where: { id } });
+  // The composite (characterId, organizationId) foreign key is NoAction —
+  // detach this organization's videos FIRST (the old SetNull semantics,
+  // made explicit and tenant-scoped).
+  await db.$transaction([
+    db.video.updateMany({ where: { characterId: id }, data: { characterId: null } }),
+    db.character.delete({ where: { id } }),
+  ]);
   await deleteCharacterFiles(id);
   return NextResponse.json({ success: true });
 }

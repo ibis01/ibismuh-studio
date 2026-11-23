@@ -53,6 +53,16 @@ export const ORG_SCOPED_MODELS = new Set(
     "sceneRepair", // S115 — the durable repair records
     "graphicsImport", // S126 — the import lane's rows carry organizationId; S136 added it here (the Stabilisation Gate's S1 finding: an oversight of exactly the T-4.14 class — the seam was safe, the defense-in-depth law was not)
     "whiteboardassetupload", // S69 — the whiteboard asset manifest is org content (indexed by organizationId); found by the S136 schema-scan pin the manual audit missed
+    // 2026-11-23 hardening: the schema-driven registry test (scripts/test-tenant-registry.mts)
+    // found these five org-owned models missing. All were safe TODAY (billing
+    // paths write them with explicit organizationId through rawDatabase;
+    // Session is only read during auth bootstrap, which has no tenant ctx),
+    // but the guard now covers any future request-scoped access.
+    "session",
+    "spendreservation",
+    "storagereservation",
+    "storageusage",
+    "usagerecord",
   ].map((m) => m.toLowerCase())
 );
 

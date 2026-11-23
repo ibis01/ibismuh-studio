@@ -50,7 +50,12 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
   const track = await db.musicTrack.findUnique({ where: { id } });
   if (!track) return NextResponse.json({ error: "Track not found" }, { status: 404 });
 
-  await db.musicTrack.delete({ where: { id } });
+  // The composite (musicTrackId, organizationId) foreign key is NoAction —
+  // detach this organization's videos FIRST (explicit SetNull semantics).
+  await db.$transaction([
+    db.video.updateMany({ where: { musicTrackId: id }, data: { musicTrackId: null } }),
+    db.musicTrack.delete({ where: { id } }),
+  ]);
   // Storage seam (T-3.7): system asset — delete through the driver.
   await remove(track.filePath).catch(() => {});
   const abs = trackAbsolutePath(track);
