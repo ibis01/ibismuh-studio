@@ -61,6 +61,41 @@ export function sceneWavFile(index: number): string {
   return `scene-${String(index).padStart(2, "0")}.wav`;
 }
 
+/** 2026-11 render-gate fix — restore a scene's published inputs into the
+ *  scratch tree before any local-disk gate. Scene art is published through
+ *  the storage driver (the storyboard generation / edit / upload paths all
+ *  write storage.put), but the render and clip gates probed the local
+ *  scratch copy with fs.existsSync — on the s3 driver (and on any worker
+ *  other than the one that painted the scene) that copy does not exist
+ *  while the asset does, so every render refused with
+ *  "Scene N has no storyboard image" on a complete storyboard. The DTO and
+ *  storyboardComplete already read through storage; this puts the gates on
+ *  the same truth. A file present locally is left untouched; an asset
+ *  missing in BOTH places stays missing — the gates keep their honest,
+ *  actionable refusal. Per-scene WAVs stay scratch-local by design (see
+ *  the voiceover stage), so the wav branch is a future-proof no-op today. */
+export async function ensureSceneAssetsLocal(
+  videoId: string,
+  dir: string,
+  indexes: number[],
+  parts: Array<"image" | "wav"> = ["image", "wav"],
+): Promise<void> {
+  for (const index of indexes) {
+    if (parts.includes("image")) {
+      const key = `${videoId}/${sceneImageFile(index)}`;
+      const file = path.join(dir, sceneImageFile(index));
+      if (!fs.existsSync(file) && (await storage.exists(key)))
+        fs.writeFileSync(file, await storage.get(key));
+    }
+    if (parts.includes("wav")) {
+      const key = `${videoId}/${sceneWavFile(index)}`;
+      const file = path.join(dir, sceneWavFile(index));
+      if (!fs.existsSync(file) && (await storage.exists(key)))
+        fs.writeFileSync(file, await storage.get(key));
+    }
+  }
+}
+
 /** S89 — the verification record, tolerated: an invalid shape drops the
  *  RECORD (the ref stays valid as a legacy ref), clamps keep the numbers
  *  honest (passed ≤ sampled), and only the two legal verdicts survive. */

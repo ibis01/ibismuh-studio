@@ -25281,9 +25281,18 @@ await test("B3 language & nav: the new copy speaks creator-control and the shell
   ok(page.includes("workspace: {"), "VIEW_META knows the workspace");
   ok(page.includes('view !== "workspace"'), "the header CTA hides on the workspace (a focused surface, like Create/Settings)");
   const sidebar = fs.readFileSync("src/components/ibismuh/app-sidebar.tsx", "utf8");
+  // Receipt 2026-11 — the nav law changed ("every page visible"): create is
+  // now a DIRECT sidebar destination (it lights itself), so the old
+  // `case "create": case "workspace":` pair split. The pin's intent is the
+  // workspace — a per-project surface, not a browsable destination — still
+  // lighting the Projects destination.
   ok(
-    /case "create":\s*\n\s*case "workspace":\s*\n\s*return "library";/.test(sidebar),
+    /case "workspace":\s*\n\s*return "library";/.test(sidebar),
     "the workspace highlights the Projects destination in the sidebar"
+  );
+  ok(
+    /label: "New Project",\s*\n\s*icon: Wand2/.test(sidebar),
+    "New Project is a direct sidebar destination (the 2026-11 every-page-visible law)"
   );
 });
 

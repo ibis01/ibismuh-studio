@@ -5,18 +5,27 @@ import { useAppStore, type ViewId } from "@/lib/store";
 import { IbismuhLogo, IbismuhWordmark } from "@/components/ibismuh/logo";
 import {
   House,
+  Wand2,
   Clapperboard,
-  Boxes,
+  Users,
+  Globe,
+  Mic,
   TrendingUp,
+  Radar,
+  CalendarDays,
+  Tv,
   Settings,
   LogOut,
 } from "lucide-react";
 
 /**
- * B1 navigation architecture (docs/design/B1_DESIGN_SPECIFICATION.md §3):
- * exactly four destinations + Settings at the top level. The specialist
- * modules are NOT removed — Cast/World/Voice Studio live inside Assets and
- * Analytics/Topic Radar/Calendar/Channels live inside Insights as hub tabs.
+ * 2026-11 navigation law — EVERY page is a first-class, visible destination.
+ * The previous B1 architecture (four hub destinations + Settings) buried
+ * Cast/World/Voice inside "Assets" and Analytics/Topic Radar/Calendar/
+ * Channels inside "Insights": pages the operator could not see did not
+ * exist for them. The hub tabs still work (the Assets/Insights ViewIds are
+ * unchanged and keep their HubTabs strips), but the sidebar now lists all
+ * of them DIRECTLY, grouped so the map still reads at a glance.
  *
  * Nav ids are ViewIds, so the ⌘K palette and every programmatic
  * `setView(...)` keep working unchanged.
@@ -26,49 +35,99 @@ export const NAV_ITEMS: {
   label: string;
   icon: typeof House;
   hint: string;
+  group: "Studio" | "Assets" | "Insights" | "Account";
 }[] = [
   {
     id: "dashboard",
     label: "Home",
     icon: House,
     hint: "Recent projects & activity",
+    group: "Studio",
+  },
+  {
+    id: "create",
+    label: "New Project",
+    icon: Wand2,
+    hint: "Start a new video project",
+    group: "Studio",
   },
   {
     id: "library",
     label: "Projects",
     icon: Clapperboard,
-    hint: "Create & continue videos",
+    hint: "All projects & the workspace",
+    group: "Studio",
   },
   {
-    id: "assets",
-    label: "Assets",
-    icon: Boxes,
-    hint: "Cast, world & voice studio",
+    id: "cast",
+    label: "Cast",
+    icon: Users,
+    hint: "Characters & their looks",
+    group: "Assets",
   },
   {
-    id: "insights",
-    label: "Insights",
+    id: "world",
+    label: "World",
+    icon: Globe,
+    hint: "Locations & world bible",
+    group: "Assets",
+  },
+  {
+    id: "voice",
+    label: "Voice Studio",
+    icon: Mic,
+    hint: "Voices, narration & music",
+    group: "Assets",
+  },
+  {
+    id: "analytics",
+    label: "Analytics",
     icon: TrendingUp,
-    hint: "Analytics, research & publishing",
+    hint: "Performance & costs",
+    group: "Insights",
   },
-  { id: "settings", label: "Settings", icon: Settings, hint: "Preferences" },
+  {
+    id: "research",
+    label: "Topic Radar",
+    icon: Radar,
+    hint: "Trending topics & ideas",
+    group: "Insights",
+  },
+  {
+    id: "calendar",
+    label: "Calendar",
+    icon: CalendarDays,
+    hint: "Publishing schedule",
+    group: "Insights",
+  },
+  {
+    id: "channels",
+    label: "Channels",
+    icon: Tv,
+    hint: "Connected channels & brands",
+    group: "Insights",
+  },
+  {
+    id: "settings",
+    label: "Settings",
+    icon: Settings,
+    hint: "Preferences",
+    group: "Account",
+  },
 ];
 
 export const MOBILE_NAV_ITEMS = NAV_ITEMS;
 
-/** Which destination owns the currently active view (drives sidebar state). */
+/** Which sidebar item the currently active view lights up. Every direct
+ *  destination lights ITSELF; the two hub ids (kept for palette/deep-link
+ *  compatibility) and the per-project workspace surface fall back to the
+ *  destination that owns them. */
 export function activeNavId(view: ViewId): ViewId {
   switch (view) {
-    case "cast":
-    case "world":
-    case "voice":
-      return "assets";
-    case "analytics":
-    case "research":
-    case "calendar":
-    case "channels":
-      return "insights";
-    case "create":
+    case "assets":
+      return "cast";
+    case "insights":
+      return "analytics";
     case "workspace":
       return "library";
     default:
@@ -98,45 +157,49 @@ export function AppSidebar() {
         <IbismuhWordmark />
       </div>
 
-      {/* Destinations */}
-      <nav aria-label="Main navigation" className="flex-1 px-3 py-4">
-        <p className="tf-kicker px-3 pb-2">Destinations</p>
-        <ul className="space-y-1.5">
-          {NAV_ITEMS.map((item) => {
-            const isActive = active === item.id;
-            return (
-              <li key={item.id}>
-                <button
-                  onClick={() => setView(item.id)}
-                  aria-current={isActive ? "page" : undefined}
-                  title={item.hint}
-                  className={`tf-focusable relative w-full group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 ${
-                    isActive
-                      ? "bg-primary/15 text-primary font-medium shadow-[inset_0_0_0_1px_rgb(34_211_238/20%)]"
-                      : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
-                  }`}
-                >
-                  {/* R1 active rail — one controlled accent, not a second color */}
-                  <span
-                    aria-hidden
-                    className={`absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-primary transition-opacity ${
-                      isActive ? "opacity-100" : "opacity-0"
-                    }`}
-                  />
-                  <item.icon
-                    className={`h-4.5 w-4.5 shrink-0 transition-transform group-hover:scale-105 ${
-                      isActive ? "text-primary" : ""
-                    }`}
-                  />
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {isActive && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary glow-brand-soft" />
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+      {/* Destinations — grouped, every page visible (2026-11 law) */}
+      <nav aria-label="Main navigation" className="flex-1 px-3 py-4 overflow-y-auto tf-scroll-bar">
+        {["Studio", "Assets", "Insights", "Account"].map((group) => (
+          <div key={group} className={group === "Studio" ? "" : "mt-5"}>
+            <p className="tf-kicker px-3 pb-2">{group}</p>
+            <ul className="space-y-1.5">
+              {NAV_ITEMS.filter((item) => item.group === group).map((item) => {
+                const isActive = active === item.id;
+                return (
+                  <li key={item.id}>
+                    <button
+                      onClick={() => setView(item.id)}
+                      aria-current={isActive ? "page" : undefined}
+                      title={item.hint}
+                      className={`tf-focusable relative w-full group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 ${
+                        isActive
+                          ? "bg-primary/15 text-primary font-medium shadow-[inset_0_0_0_1px_rgb(34_211_238/20%)]"
+                          : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                      }`}
+                    >
+                      {/* R1 active rail — one controlled accent, not a second color */}
+                      <span
+                        aria-hidden
+                        className={`absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-primary transition-opacity ${
+                          isActive ? "opacity-100" : "opacity-0"
+                        }`}
+                      />
+                      <item.icon
+                        className={`h-4.5 w-4.5 shrink-0 transition-transform group-hover:scale-105 ${
+                          isActive ? "text-primary" : ""
+                        }`}
+                      />
+                      <span className="flex-1 text-left">{item.label}</span>
+                      {isActive && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary glow-brand-soft" />
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
 
       {/* Studio status card + session */}

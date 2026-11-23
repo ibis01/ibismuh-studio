@@ -17,7 +17,7 @@ import os from "os";
 import path from "path";
 import { promisify } from "util";
 import type { Scene } from "./types";
-import { sceneImageFile, sceneWavFile, buildSrtFromSegments } from "./story";
+import { ensureSceneAssetsLocal, sceneImageFile, sceneWavFile, buildSrtFromSegments } from "./story";
 import { buildSmartSrt, captionOverridesFor } from "./captions";
 import { videoDir } from "./ai";
 import { zaiClientFor } from "./zai-client";
@@ -1776,6 +1776,16 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
   const outPath = path.join(dir, outName);
 
   if (scenes.length === 0) throw new Error("No scenes to render");
+
+  // 2026-11 fix — the gates below probe the LOCAL scratch tree with
+  // fs.existsSync, but scene art is published through the storage driver
+  // (story.ts storage.put) — on the s3 driver the scratch copy never
+  // exists, so a COMPLETE storyboard refused to render with "Scene N has
+  // no storyboard image". Restore each scene's published inputs locally
+  // first (no-op when the local copy is already there), then gate as
+  // before: an asset missing in BOTH storage and scratch still refuses
+  // with the same actionable message.
+  await ensureSceneAssetsLocal(opts.videoId, dir, scenes.map((s) => s.index));
 
   // Validate inputs up-front with actionable messages. S87 slice 4 — the
   // first legacy branch COLLAPSES onto the contract: the storyboard-art

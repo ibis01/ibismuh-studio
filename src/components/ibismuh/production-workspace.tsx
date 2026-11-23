@@ -4490,6 +4490,14 @@ export function ProductionWorkspace({
                     id="ws-center"
                     className="h-full overflow-y-auto tf-scroll-bar pr-1"
                   >
+                    {/* 2026-11 — the Timeline area is a first-class page:
+                        selecting it moves the full Timeline Studio into the
+                        work area (lanes, playhead, preview get the whole
+                        editing surface) while the Render & Ship controls ride
+                        the side rail. The old strip-under-everything layout is
+                        what made the studio feel cramped under the other
+                        areas; the strip stays for every OTHER tab so the
+                        lanes remain visible while you direct/paint. */}
                     {activeTab === "director"
                       ? scriptTab
                       : activeTab === "storyboard"
@@ -4498,8 +4506,9 @@ export function ProductionWorkspace({
                           ? canvasArea
                           : activeTab === "inspector"
                             ? inspectorArea
-                            : /* timeline — the render & ship controls; the lanes live in the strip below */
-                              renderShipPanel}
+                            : activeTab === "timeline"
+                              ? timelineStrip
+                              : renderShipPanel}
                   </ResizablePanel>
                   {activeTab !== "inspector" && <ResizableHandle withHandle />}
                   {activeTab !== "inspector" && (
@@ -4509,20 +4518,28 @@ export function ProductionWorkspace({
                       id="ws-inspector"
                       className="h-full overflow-y-auto tf-scroll-bar pl-1"
                     >
-                      {inspectorArea}
+                      {/* Timeline tab: the rail hosts the Render & Ship deck
+                          (controls, captions, export, music, QC + ship gate) —
+                          the Inspector is one tab away, never two mounted. */}
+                      {activeTab === "timeline" ? renderShipPanel : inspectorArea}
                     </ResizablePanel>
                   )}
                 </ResizablePanelGroup>
               </ResizablePanel>
-              <ResizableHandle withHandle />
-              <ResizablePanel
-                defaultSize="44"
-                minSize="20"
-                id="ws-timeline"
-                className="overflow-y-auto tf-scroll-bar"
-              >
-                {timelineStrip}
-              </ResizablePanel>
+              {/* The bottom strip only rides the non-Timeline tabs — on the
+                  Timeline tab the studio IS the work area (never two mounted
+                  instances, same law as the Inspector). */}
+              {activeTab !== "timeline" && <ResizableHandle withHandle />}
+              {activeTab !== "timeline" && (
+                <ResizablePanel
+                  defaultSize="44"
+                  minSize="20"
+                  id="ws-timeline"
+                  className="overflow-y-auto tf-scroll-bar"
+                >
+                  {timelineStrip}
+                </ResizablePanel>
+              )}
             </ResizablePanelGroup>
           </div>
         ) : (

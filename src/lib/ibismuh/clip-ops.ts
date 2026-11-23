@@ -49,7 +49,7 @@ import { videoDir, splitForTts } from "./ai";
 import { aiCall } from "./budget";
 import { mergeWavs, wavDurationSec } from "./wav";
 import { ttsSynthesize } from "./providers/tts";
-import { sceneImageFile, sceneWavFile, parseScenes } from "./story";
+import { ensureSceneAssetsLocal, sceneImageFile, sceneWavFile, parseScenes } from "./story";
 import {
   parseTimeline,
   type AssembledTimeline,
@@ -319,6 +319,14 @@ export async function performClipOp(video: Video, body: ClipOpBody): Promise<Cli
   const artPath = path.join(dir, sceneImageFile(target.index));
   const wavPath = path.join(dir, sceneWavFile(target.index));
 
+  // 2026-11 fix — the same driver-blind gate as the render's: on the s3
+  // driver the scratch copy of a published scene asset does not exist on
+  // this machine, so a complete storyboard refused the razor and the
+  // duplicate with "Scene N has no storyboard image". Restore the target
+  // scene's published art + WAV locally first (no-op when already local),
+  // then gate as before — a genuinely missing asset keeps its refusal.
+  await ensureSceneAssetsLocal(video.id, dir, [target.index]);
+
   if (body.action === "split") {
     if (video.voiceSource !== "tts")
       throw new Error("Splitting re-voices both halves with the studio voice — re-attach the per-scene voiceover first (this video uses custom audio)");
@@ -346,6 +354,14 @@ export async function performClipOp(video: Video, body: ClipOpBody): Promise<Cli
     fs.copyFileSync(artPath, path.join(dir, sceneImageFile(nextIndex)));
     const wavDurA = await synthSceneWav(dir, target.index, halves.first, video.voice, video.ttsSpeed);
     const wavDurB = await synthSceneWav(dir, nextIndex, halves.second, video.voice, video.ttsSpeed);
+
+    // s3 coherence — the split's art copy and both re-read WAVs exist only
+    // in the scratch tree; publish them through the driver so the DTO,
+    // storyboardComplete and the next render (on ANY machine) see the
+    // post-split truth instead of a scene the render gate refuses.
+    await storage.putFromPath(`${video.id}/${sceneImageFile(nextIndex)}`, path.join(dir, sceneImageFile(nextIndex)));
+    await storage.putFromPath(`${video.id}/${sceneWavFile(target.index)}`, wavPath);
+    await storage.putFromPath(`${video.id}/${sceneWavFile(nextIndex)}`, path.join(dir, sceneWavFile(nextIndex)));
 
     const nextDoc = applySplitToDoc(
       doc,
@@ -382,6 +398,11 @@ export async function performClipOp(video: Video, body: ClipOpBody): Promise<Cli
     fs.copyFileSync(wavPath, path.join(dir, sceneWavFile(nextIndex)));
     const wavDur = readSceneWav(dir, nextIndex).durSec;
 
+    // s3 coherence — the duplicate's bytes live in the scratch tree only;
+    // publish them so the copy is a first-class scene everywhere.
+    await storage.putFromPath(`${video.id}/${sceneImageFile(nextIndex)}`, path.join(dir, sceneImageFile(nextIndex)));
+    await storage.putFromPath(`${video.id}/${sceneWavFile(nextIndex)}`, path.join(dir, sceneWavFile(nextIndex)));
+
     const nextDoc = applyDuplicateToDoc(doc, target.index, nextIndex, sceneSegmentSec(wavDur));
 
     const merged = await syncVoiceover(video.id, dir, rowScenes);
@@ -409,6 +430,9 @@ export async function performClipOp(video: Video, body: ClipOpBody): Promise<Cli
     // Row first (the render maps by position onto it), then the fresh read.
     rowScenes[p] = { ...target, narration };
     const wavDur = await synthSceneWav(dir, target.index, narration, video.voice, video.ttsSpeed);
+    // s3 coherence — the rewritten read exists in the scratch tree only;
+    // publish it so every machine (and the next render) reads the new take.
+    await storage.putFromPath(`${video.id}/${sceneWavFile(target.index)}`, path.join(dir, sceneWavFile(target.index)));
 
     const nextDoc = applyRevoiceToDoc(doc, target.index, narration, sceneSegmentSec(wavDur));
 
