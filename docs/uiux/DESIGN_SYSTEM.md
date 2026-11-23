@@ -1,0 +1,151 @@
+# Ibismuh Studio — Design System (Phase 1)
+
+**Branch:** `uiux/production-workspace-refresh`
+**Scope:** proposal + codification. The approved identity (navy/blue/cyan, Ibismuh
+Studio logo, dark-only theme) is preserved byte-stable; this document names the single
+source of truth for every new surface and standardizes what was ad hoc.
+
+---
+
+## 1. Color system (preserve — non-negotiable)
+
+Defined once in `src/app/globals.css`. **Do not hardcode new variants of these values
+in components**; the audit (§F3) counts 476 `bg-white/N` overlays that pre-date this
+law — new code uses the tokens below.
+
+### 1.1 Theme tokens (B1 foundation, `:root` / `.dark` block)
+
+| Token | Value (oklch) | Use |
+|---|---|---|
+| `--background` | `0.145 0.02 248` | app canvas (deep navy) |
+| `--card` | `0.19 0.024 250` | card surfaces |
+| `--popover` | `0.205 0.024 250` | menus, palettes |
+| `--primary` | `0.8 0.105 205` | primary accent (cyan) — actions, active states |
+| `--secondary` | `0.24 0.024 250` | secondary surfaces |
+| `--muted` / `--muted-foreground` | `0.225…` / `0.68…` | muted text |
+| `--accent` | `0.27 0.04 232` | accent fill (blue-leaning) |
+| `--destructive` | `0.704 0.191 22.216` | destructive/failed ONLY (red reserved) |
+| `--border` / `--input` / `--ring` | white alphas / cyan ring | hairlines, focus |
+| `--sidebar` family | `0.16…` canvas + cyan primary | app sidebar |
+
+### 1.2 Semantic Stage-4a tokens (`:root`, AA-checked on the dark canvas)
+
+| Token | Value | Use |
+|---|---|---|
+| `--tf-text-1` | white/96% | headings + values |
+| `--tf-text-2` | white/74% | body / secondary |
+| `--tf-text-3` | white/57% | captions / metadata |
+| `--tf-hairline` / `--tf-hairline-strong` | white/8% / 15% | borders |
+| `--tf-surface-1` / `--tf-surface-2` | white/3% / 5.5% | panel fills |
+| `--tf-positive` / `--tf-warning` / `--tf-danger` / `--tf-info` | `#34d399` / `#fbbf24` / `#f87171` / `#7dd3fc` | status only |
+| `--tf-dur-fast` / `--tf-dur` / `--tf-ease` | 120ms / 200ms / cubic-bezier(.25,.1,.25,1) | motion |
+
+### 1.3 Production-state color law (R2, keep)
+
+Stage/progress states use exactly one mapping — `BOARD_STAGE_DOT`
+(`src/components/ibismuh/production-board.tsx`):
+
+- done → emerald-400 · partial → amber-400 · preview → sky-400 ·
+  **running → `bg-primary` (cyan, pulsing) — the same in-flight color everywhere** ·
+  missing → zinc-600.
+
+Red is destructive/failed only. Indigo/purple are outside the identity.
+
+### 1.4 Elevation grammar (R1, keep)
+
+`--tf-elev-1/2/3` (subtle black-alpha shadows) via `.tf-elev-1/2/3`; panels compose
+`.tf-panel` (surface + hairline + elev-1 + top-light inset). `.glass` for translucent
+cards, `.glass-strong` for sticky bars (opaque — header text must never bleed).
+
+---
+
+## 2. Typography
+
+One stack: **Geist Sans** (UI) + **Geist Mono** (technical values) — loaded in
+`src/app/layout.tsx`, no per-component font choices.
+
+| Element | Class | Spec |
+|---|---|---|
+| Display | `.tf-display` | 24px / 1.2 / -2% / 700 / text-1 — one per page (the VIEW_META heading) |
+| Heading 1 | `.tf-h1` | 20px / 1.3 / -1% / 600 — main section headings |
+| Heading 2 | `.tf-h2` | 16px / 1.4 / 600 — panel headings |
+| Heading 3 | `.tf-h3` | 14px / 1.45 / 600 — subsections |
+| Body | `.tf-body` | 14px / 1.55 / text-2 |
+| Secondary | `.tf-body` + muted tokens | descriptions, metadata |
+| Label | `.tf-kicker` | 11px uppercase +8% tracking / 600 — section labels |
+| Caption | `.tf-caption` | 12px / text-3 — supporting info; **never interactive labels** |
+| Monospace | `.tf-mono` | Geist Mono + tabular numerals — timecodes, ids, hashes |
+| Numerals | `.tf-num` | tabular-nums for KPIs, durations, timeline values |
+
+**Laws carried from the plan:**
+1. No 9–10px text for interactive labels (audit §F2: 660 legacy `text-[10/11px]` —
+   migrated opportunistically, never in a bulk sweep that risks regressions).
+2. Every heading takes a scale class; no ad-hoc `text-xl font-semibold` recombination
+   in new code.
+3. All timeline/duration numbers use `.tf-num`/`.tf-mono` (predictable column widths).
+
+---
+
+## 3. Spacing
+
+The Tailwind 4px scale IS the spacing system (4/8/12/16/24/32/48 → `p-1…p-12` rhythm).
+Laws:
+
+1. Panel padding: `p-3` (12px) compact panels / `p-4` (16px) standard cards / `p-6`
+   page gutters.
+2. Section gaps: `space-y-3` (12px) within a panel, `space-y-5` (20px) between page
+   sections — matching the existing page rhythm (`page.tsx`, workspace root).
+3. No arbitrary px spacing in new code (`gap-[Npx]` etc. — audit counted 42 legacy
+   uses; migrate only when touching the file anyway).
+4. Timeline track geometry stays as-is (`LANE_H_VIDEO=64`, `LANE_H_AUDIO=30`) — it is
+   renderer-adjacent contract, not free styling space.
+
+---
+
+## 4. Component standards
+
+### 4.1 Reuse-first inventory (do not re-implement)
+
+| Need | Component |
+|---|---|
+| Empty states | `EmptyState` (shared.tsx:142) |
+| Error states | `ErrorState` (:380) + `RetryButton` (:416) |
+| Loading | `LoadingState` (:438), `SkeletonRows` (:309), `Skeleton` |
+| Status | `StatusBadge` (:77), `Dot` (:203), `BOARD_STAGE_DOT` map |
+| Panel header | `PanelHeader` (:340) |
+| Cards/panels | `.tf-card`, `.tf-card-hover`, `.tf-panel`, `.glass`, `.glass-strong` |
+| KPI | `StatCard` (:98), `Sparkline` (:235), `TrendDelta` (:281) |
+| Shortcut chip | `Kbd` (:198) / `.tf-kbd` |
+| Focus | `.tf-focusable` — the one focus style, never suppressed |
+| Voice pick | `VoiceSelectWithPreview` (:605) |
+
+### 4.2 Interactive states (required for every control)
+
+Every interactive control ships: default / hover / focus (`tf-focusable` ring) /
+active / disabled (with a reason in `title` or adjacent copy where non-obvious) /
+loading (spinner + label, e.g. the render bar pattern production-workspace.tsx:4456).
+Transition durations: `--tf-dur-fast` for color/opacity, `--tf-dur` for
+transform/shadow; `prefers-reduced-motion` collapses everything (global guard,
+globals.css).
+
+### 4.3 Vocabulary (one meaning, one word)
+
+- Save states: **Saving… / Saved / Unsaved changes / Save failed** (timeline toolbar).
+- Generation: **Generating…** + per-stage honest labels; never fake completion.
+- Destructive: red only, confirmation dialog, verb-first copy ("Delete project").
+- Navigation: the sidebar is the ONE map (2026-11 law); page kickers name the group;
+  no page renders a second navigation row.
+
+---
+
+## 5. What this branch changed in the system layer
+
+1. **Added** the `.tf-display/.tf-h1/.tf-h2/.tf-h3/.tf-body/.tf-caption/.tf-mono`
+   scale (globals.css — additive `@layer utilities` block; zero existing rules
+   modified).
+2. **Documented** the existing token system as the source of truth (this file).
+3. **No color, logo, radius, or theme values changed** — brand preservation verified
+   against `docs/design/B1_DESIGN_SPECIFICATION.md` §2 and the R1/R2 release records.
+
+Adoption: Phase 3+ screens take headings/body/captions from §2 and panels from §4.1.
+Existing files migrate opportunistically (when already being edited), never in bulk.
