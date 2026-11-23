@@ -149,3 +149,40 @@ globals.css).
 
 Adoption: Phase 3+ screens take headings/body/captions from §2 and panels from §4.1.
 Existing files migrate opportunistically (when already being edited), never in bulk.
+
+---
+
+## 6. A2 — the ambient aesthetic layer (2026-11 "more beautiful" pass)
+
+Purpose: give the studio cinematic depth WITHOUT touching identity. Appended
+to globals.css as a final layer; documented here as part of the system so it
+is inherited, not reinvented.
+
+### The five primitives
+
+| Primitive | Utility / selector | What it does |
+| --- | --- | --- |
+| Ambient washes | `body::before` (fixed, z −1) | Blue crown upper-left, cyan rim upper-right, deep vignette anchoring the bottom — all sampled from the B1 navy/blue/cyan family at ≤ 7% alpha |
+| Film grain | `body::after` (fixed, z −1) | Desaturated SVG turbulence at 3% opacity — kills gradient banding, adds texture; neutral, not color |
+| Gradient hairline | `.tf-hairline-fade` | Divider brightest at center, gone at both ends — header's lower edge, footer's upper edge, sidebar's logo rule |
+| Lit sidebar plane | `.tf-sidebar-surface` | Top-light gradient over the SAME `--sidebar` token — the rail reads as a separate lit surface |
+| Rail-cast active nav | `.tf-nav-active` | Cyan→blue wash strongest at the rail edge, dissolving right, with inner hairline silhouette — replaces flat `bg-primary/15` |
+
+Also: `::selection` joins the brand (cyan 28%), and `.bg-brand-gradient`
+gains a painted top light (layered background, NOT box-shadow — glow-brand /
+glow-brand-soft must keep winning the box-shadow cascade).
+
+### Laws (non-negotiable, same as the rest of the system)
+
+1. **No new hues.** Every wash uses the existing navy/blue/cyan family; the
+   grain is monochrome. Red stays destructive-only.
+2. **Whisper alphas.** Washes ≤ 7%, grain ≤ 3% — depth you feel, decoration
+   you don't.
+3. **Behind everything.** Both pseudo-layers are `position: fixed`,
+   `z-index: -1`, `pointer-events: none` — zero layout impact, zero click
+   interception, no component changes required.
+4. **Static paint.** The layer is motionless; reduced-motion users get the
+   identical look. Light text over the darker vignette tail gains contrast.
+
+Adoption: automatic (global). New surfaces only need the utilities above;
+never hand-roll radial washes or grain per component.

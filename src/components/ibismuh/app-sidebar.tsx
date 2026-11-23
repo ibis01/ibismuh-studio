@@ -203,12 +203,14 @@ export function AppSidebar() {
   const active = activeNavId(view);
 
   return (
-    <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-white/5 bg-sidebar sticky top-0 h-screen">
+    <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-white/5 tf-sidebar-surface sticky top-0 h-screen">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 h-16 border-b border-white/5">
+      <div className="flex items-center gap-2.5 px-5 h-16">
         <IbismuhLogo size={38} />
         <IbismuhWordmark />
       </div>
+      {/* A2 — the logo rule fades at both ends instead of a flat border */}
+      <div aria-hidden className="tf-hairline-fade mx-5 opacity-70" />
 
       {/* Destinations — grouped, every page visible (2026-11 law) */}
       <nav aria-label="Main navigation" className="flex-1 px-3 py-4 overflow-y-auto tf-scroll-bar">
@@ -226,7 +228,7 @@ export function AppSidebar() {
                       title={item.hint}
                       className={`tf-focusable relative w-full group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200 ${
                         isActive
-                          ? "bg-primary/15 text-primary font-medium shadow-[inset_0_0_0_1px_rgb(34_211_238/20%)]"
+                          ? "tf-nav-active text-primary font-medium"
                           : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
                       }`}
                     >
