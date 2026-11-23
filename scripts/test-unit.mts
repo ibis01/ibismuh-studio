@@ -25279,7 +25279,14 @@ await test("B3 language & nav: the new copy speaks creator-control and the shell
   ok(store.includes('  | "workspace"'), "workspace joined the ViewId union (existing ids preserved)");
   const page = fs.readFileSync("src/app/page.tsx", "utf8");
   ok(page.includes("workspace: {"), "VIEW_META knows the workspace");
-  ok(page.includes('view !== "workspace"'), "the header CTA hides on the workspace (a focused surface, like Create/Settings)");
+  ok(
+    page.includes("the header carries view context, not global"),
+    "the header carries NO global nav CTA at all — plan §5: start-a-project lives in the sidebar map, the ⌘K palette action and Home's hero CTA (one meaning, one accessible name; the e2e strict-mode pin 'New Project' stays unique)"
+  );
+  ok(
+    !page.includes('name: "New Project"') && !page.includes(">New Project<"),
+    "no second 'New Project' button can reappear in the shell"
+  );
   const sidebar = fs.readFileSync("src/components/ibismuh/app-sidebar.tsx", "utf8");
   // Receipt 2026-11 (operator ruling: "every feature must have its page, bold
   // and clear, not cramped into another page") — the five workspace areas are

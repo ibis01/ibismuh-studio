@@ -24,7 +24,7 @@ import {
   SheetTrigger,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { Loader2, Menu, Plus, Search } from "lucide-react";
+import { Loader2, Menu, Search } from "lucide-react";
 import { IbismuhLogo, IbismuhWordmark } from "@/components/ibismuh/logo";
 import { CommandPalette } from "@/components/ibismuh/command-palette";
 
@@ -345,20 +345,10 @@ export default function Home() {
                 <kbd className="tf-kbd ml-1">⌘K</kbd>
               </button>
 
-              {view !== "create" &&
-              view !== "settings" &&
-              view !== "workspace" &&
-              !isWorkspaceArea(view) ? (
-                <Button
-                  onClick={() => setView("create")}
-                  className="bg-brand-gradient hover:opacity-90 text-white font-semibold shadow-lg shrink-0"
-                  size="sm"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span className="hidden sm:inline">New Project</span>
-                  <span className="sm:hidden">New</span>
-                </Button>
-              ) : null}
+              {/* UI/UX plan §5 — the header carries view context, not global
+                  navigation. "Start a project" lives in the sidebar map, the
+                  ⌘K palette action, and Home's hero CTA — one meaning, no
+                  duplicate button with an ambiguous accessible name. */}
             </div>
           </header>
 

@@ -71,7 +71,7 @@ export const NAV_ITEMS: {
     id: "library",
     label: "Projects",
     icon: Library,
-    hint: "All projects & the workspace",
+    hint: "Create & continue videos",
     group: "Studio",
   },
   {
