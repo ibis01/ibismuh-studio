@@ -106,13 +106,18 @@ services:
       - "host.docker.internal:host-gateway"
     # M5-F1 (closed 2026-11-23): the web role's liveness, declared at the
     # topology level — the same probe the image HEALTHCHECK carries
-    # (Dockerfile: node fetch /api/auth/status). The endpoint touches the
-    # DB (user count + session resolve), deliberately: a web container
-    # that cannot answer its auth status cannot serve, and postgres's own
-    # healthcheck disambiguates the culprit. node's global fetch — no
-    # curl/wget in the runner image.
+    # (Dockerfile: node fetch /api/auth/status). THE BIND LAW (proven by
+    # CI run 45266346258): Next standalone binds $HOSTNAME — inside Docker
+    # that is the CONTAINER ID (server.js: HOSTNAME || '0.0.0.0'), NOT
+    # 127.0.0.1; a loopback probe is connection-refused forever and the
+    # image healthcheck was born broken (nothing gated on it until the
+    # smoke walk asserted it). Probe HOSTNAME, fall back to loopback for
+    # non-Docker runs. The endpoint touches the DB (user count + session
+    # resolve), deliberately: a web container that cannot answer its auth
+    # status cannot serve, and postgres's own healthcheck disambiguates.
+    # node's global fetch — no curl/wget in the runner image.
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/auth/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://'+(process.env.HOSTNAME||'127.0.0.1')+':3000/api/auth/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 5s
       retries: 3

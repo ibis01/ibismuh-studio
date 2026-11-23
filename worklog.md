@@ -7553,3 +7553,19 @@ synchronize run after this push walks the topology on the runner).
 
 **Push state:** this commit joins the milestone branch; merge condition
 4 (squash-free merge to main) waits on CI green + docker-smoke green.
+
+**The bind-law receipt (CI run 45266346258, the smoke's first honest walk).
+** The label opted the smoke in for the first time AND the phase-3 syntax
+repair let the walk actually gate — and it caught a real, born-broken
+defect: the image HEALTHCHECK probed 127.0.0.1:3000, but Next standalone
+binds $HOSTNAME (the container id inside Docker; server.js:
+HOSTNAME || '0.0.0.0') — loopback is connection-refused forever. The
+external curl in the walk always passed (it enters via the published
+port), so nothing ever noticed; the walk now ASSERTS docker health
+status, and the probe was wrong. Fixed in BOTH places (compose
+healthcheck + Dockerfile HEALTHCHECK): probe
+http://$HOSTNAME:3000/api/auth/status, loopback fallback for non-Docker
+runs. The prisma 42P01/42703 lines in the same logs are benign-by-
+design (LegacySetting does not exist in fresh installs and the route
+catches; the stale-hold sweep is best-effort warn-logged) — the walk's
+phases own that verdict.

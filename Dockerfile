@@ -118,6 +118,9 @@ ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", ".next/standalone/server.js"]
 
 # Healthcheck — the web role answers; the worker overrides with a process
-# check in compose (its port never opens).
+# check in compose (its port never opens). Probe $HOSTNAME, not 127.0.0.1:
+# standalone server.js binds HOSTNAME (the container id in Docker), so a
+# loopback probe is refused forever (born broken; proven by CI run
+# 45266346258 once the smoke walk began asserting health status).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:3000/api/auth/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://'+(process.env.HOSTNAME||'127.0.0.1')+':3000/api/auth/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
