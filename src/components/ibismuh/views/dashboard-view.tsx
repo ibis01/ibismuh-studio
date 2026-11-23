@@ -162,8 +162,14 @@ export function DashboardView() {
       {/* Quick-start hero (T-4.2) — actions + one-tap topic chips */}
       <Card className="glass rounded-2xl overflow-hidden relative">
         <div className="absolute inset-0 bg-grid opacity-60" aria-hidden="true" />
+        {/* A4 — the two-hue wash: cyan light from the top-right, blue from
+            the bottom-left; the content sits in the lit middle. */}
         <div
-          className="absolute -top-24 -right-16 h-56 w-56 rounded-full bg-primary/15 blur-3xl"
+          className="tf-aurora tf-aurora-cyan -top-28 -right-14 h-64 w-72"
+          aria-hidden="true"
+        />
+        <div
+          className="tf-aurora tf-aurora-blue -bottom-32 -left-16 h-64 w-80"
           aria-hidden="true"
         />
         <div className="relative p-5 sm:p-7">
@@ -173,10 +179,11 @@ export function DashboardView() {
                 <span className="animate-pulse-dot h-1.5 w-1.5 rounded-full bg-primary" />
                 Studio ready
               </div>
-              <h2 className="mt-3 text-xl sm:text-2xl font-bold tracking-tight">
-                Bring an idea in. Leave with a finished video.
+              <h2 className="mt-2.5 text-xl sm:text-2xl font-bold tracking-tight">
+                Bring an idea in. Leave with a{" "}
+                <span className="text-gradient">finished video</span>.
               </h2>
-              <p className="text-sm text-muted-foreground mt-2 max-w-lg leading-relaxed">
+              <p className="text-sm text-muted-foreground mt-1.5 max-w-lg leading-relaxed">
                 You direct the production — AI assists with scripts, scenes,
                 narration and packaging. Every important step stays yours to
                 approve.
@@ -214,7 +221,7 @@ export function DashboardView() {
                       setPrefillTopic(t);
                       setView("create");
                     }}
-                    className="tf-focusable text-left text-xs rounded-full border border-white/12 bg-white/4 hover:bg-white/8 hover:border-white/20 px-3.5 py-2 text-white/70 hover:text-white transition-colors"
+                    className="tf-focusable text-left text-xs rounded-full border border-white/12 bg-white/4 hover:bg-white/8 hover:border-white/20 px-3.5 py-2 text-white/80 hover:text-white transition-colors"
                   >
                     {t}
                   </button>
@@ -225,7 +232,10 @@ export function DashboardView() {
         </div>
       </Card>
 
-      {/* KPI row (T-4.2) — published + failed finally surfaced */}
+      {/* KPI row (T-4.2) — published + failed finally surfaced. An EMPTY
+          studio skips the four zeros (the hero + first-production panel
+          carry the moment); counts appear with the first project. */}
+      {(stats.total > 0 || stats.inPipeline > 0) && (
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           icon={Film}
@@ -257,6 +267,7 @@ export function DashboardView() {
           }
         />
       </div>
+      )}
 
       {/* Performance strip (T-4.2) — real YouTube numbers from VideoStat */}
       {perf && perf.syncedVideos > 0 && (
@@ -354,6 +365,29 @@ export function DashboardView() {
         </Card>
       )}
 
+      {stats.total === 0 && chartTotal === 0 && stats.inPipeline === 0 ? (
+        /* A4 — a designed empty studio instead of two charts of zeros: one
+           inviting panel that points at the first production. */
+        <Card className="glass rounded-2xl px-6 py-8 sm:py-10 relative overflow-hidden">
+          <div
+            aria-hidden="true"
+            className="tf-aurora tf-aurora-cyan -top-24 right-0 h-56 w-72"
+          />
+          <div className="relative flex flex-col items-center text-center">
+            <div className="h-12 w-12 rounded-2xl bg-brand-gradient glow-brand flex items-center justify-center">
+              <Clapperboard className="h-6 w-6 text-white" />
+            </div>
+            <h3 className="mt-4 text-lg font-semibold tracking-tight">
+              Your first production starts here
+            </h3>
+            <p className="text-sm text-muted-foreground mt-2 max-w-md leading-relaxed">
+              Script, scenes, narration and packaging run on rails — you
+              approve every step. Charts and pipeline stats light up as soon
+              as the first project exists.
+            </p>
+          </div>
+        </Card>
+      ) : (
       <div className="grid lg:grid-cols-5 gap-4 items-stretch">
         {/* Production chart */}
         <Card className="glass rounded-2xl p-5 lg:col-span-3 h-full flex flex-col">
@@ -366,7 +400,7 @@ export function DashboardView() {
             </div>
           </div>
           {chartTotal === 0 ? (
-            <div className="mt-6 h-44 rounded-xl border border-dashed border-white/12 bg-white/[0.02] flex flex-col items-center justify-center text-center px-6">
+            <div className="mt-5 h-36 rounded-xl border border-dashed border-white/12 bg-white/[0.02] flex flex-col items-center justify-center text-center px-6">
               <p className="text-sm font-medium">No projects yet</p>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed max-w-xs">
                 Your first production will chart here, day by day.
@@ -427,7 +461,9 @@ export function DashboardView() {
                 <div className="h-2 rounded-full bg-white/6 overflow-hidden">
                   <div
                     className={`h-full rounded-full ${p.cls} transition-all duration-500`}
-                    style={{ width: `${(p.value / maxPipeline) * 100}%` }}
+                    style={{
+                      width: `${Math.max((p.value / maxPipeline) * 100, p.value > 0 ? 4 : 0)}%`,
+                    }}
                   />
                 </div>
               </li>
@@ -462,6 +498,7 @@ export function DashboardView() {
           )}
         </Card>
       </div>
+      )}
 
       {/* Recent projects (T-4.2) — clickable, thumbnail-first */}
       {videos.length > 0 && (

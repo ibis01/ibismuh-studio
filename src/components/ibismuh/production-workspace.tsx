@@ -2138,11 +2138,38 @@ export function ProductionWorkspace({
   // transitions, render buttons, QC scorecard + ship gate). Defined below,
   // after renderShipPanel; the workbench composition rides there too.
 
+  // The Render & Ship DECK — merged into the main column (the old 320px side
+  // rail cramped four tuning cards into one endless scroll and stranded dead
+  // space beside it). Shape: a deck header, then a responsive grid — render
+  // setup full-width first, the tuning cards (music / motion / transitions /
+  // 3D clip) fanning out 1 → 2 → 4 columns, then the verdicts and delivery
+  // full-width at the foot. Every consumer (workbench, mobile tab, legacy
+  // fallback) renders this same composition.
   const renderShipPanel = (
-    <>
-      {/* Render controls */}
+    <div className="space-y-4">
+      {/* Deck header */}
+      <div className="flex items-center gap-2.5">
+        <span
+          aria-hidden
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-primary/25 bg-primary/10"
+        >
+          <Clapperboard className="h-4 w-4 text-primary" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold tracking-tight">Render &amp; Ship</p>
+          <p className="text-[11px] text-muted-foreground">
+            Tune the cut, roll the render, deliver — one deck under the lanes
+          </p>
+        </div>
+      </div>
+
+      {/* Render setup — the one full-width card the click lives in */}
       <div className="rounded-xl border border-white/10 bg-white/3 p-4 space-y-4">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex items-center gap-2">
+          <p className="tf-kicker">Render setup</p>
+          <span className="h-px flex-1 bg-white/8" aria-hidden />
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {RENDER_MODES.map((m) => (
             <button
               key={m.id}
@@ -2238,53 +2265,8 @@ export function ProductionWorkspace({
           </div>
         </div>
 
-        {/* Per-video soundtrack — track pin, volume, fades (debounced PATCH) */}
-        <MusicPickerCard
-          value={musicDraft}
-          onChange={onMusicChange}
-          videoId={video.id}
-          canPreview={video.hasVoiceover}
-        />
-
-        {/* Per-video Smart Motion — mode, intensity, easing, variation.
-            The live preview animates the video's own first storyboard frame
-            when art exists, so the camera work is judged on the real image. */}
-        <MotionControlsCard
-          value={motionDraft}
-          onChange={onMotionChange}
-          disabled={Boolean(busy)}
-          frame={scenes.find((s) => s.imageUrl)?.imageUrl ?? null}
-          note={
-            renderMode === "animated"
-              ? "Image Motion applies to Ken Burns renders — the animated mode generates real video per scene instead."
-              : null
-          }
-        />
-
-        {/* Per-video scene transitions — style + blend length (debounced PATCH).
-            Scene A/B preview the first two storyboard frames when available. */}
-        <TransitionControlsCard
-          value={transitionDraft}
-          onChange={onTransitionChange}
-          disabled={Boolean(busy)}
-          frameA={scenes.filter((s) => s.imageUrl)[0]?.imageUrl ?? null}
-          frameB={scenes.filter((s) => s.imageUrl)[1]?.imageUrl ?? null}
-        />
-
-        {/* Brand kit (keynote slides) — accent recolor + corner logo badge */}
-        {renderMode === "slides" && (
-          <BrandKitCard
-            videoId={video.id}
-            value={{
-              accent: video.brandAccent,
-              hasLogo: video.brandHasLogo,
-              showLogo: video.brandLogoOn,
-            }}
-            onSaved={() => void refreshVideo(video.id)}
-            disabled={Boolean(busy)}
-          />
-        )}
-
+        {/* Render buttons + honest status — the click and its feedback live
+            with the setup so the whole render decision is one glance. */}
         <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
@@ -2345,10 +2327,66 @@ export function ProductionWorkspace({
         )}
       </div>
 
-      {/* B4-3 — the 3D scene clip (optional layer): scaffold, edit and
-          re-render the Scene3D doc from the workspace. The lane was API-only
-          until this panel — the audit's small-scope recommendation. */}
-      <Scene3DPanel videoId={video.id} onChanged={() => void refreshVideo(video.id)} />
+      {/* The tuning GRID — soundtrack, camera work, seams and the 3D layer,
+          side by side instead of one cramped rail. 1 column mobile, 2 at md,
+          4 at 2xl where every card gets its former-rail width back. */}
+      <div className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-4">
+        {/* Per-video soundtrack — track pin, volume, fades (debounced PATCH) */}
+        <MusicPickerCard
+          value={musicDraft}
+          onChange={onMusicChange}
+          videoId={video.id}
+          canPreview={video.hasVoiceover}
+        />
+
+        {/* Per-video Smart Motion — mode, intensity, easing, variation.
+            The live preview animates the video's own first storyboard frame
+            when art exists, so the camera work is judged on the real image. */}
+        <MotionControlsCard
+          value={motionDraft}
+          onChange={onMotionChange}
+          disabled={Boolean(busy)}
+          frame={scenes.find((s) => s.imageUrl)?.imageUrl ?? null}
+          note={
+            renderMode === "animated"
+              ? "Image Motion applies to Ken Burns renders — the animated mode generates real video per scene instead."
+              : null
+          }
+        />
+
+        {/* Per-video scene transitions — style + blend length (debounced PATCH).
+            Scene A/B preview the first two storyboard frames when available. */}
+        <TransitionControlsCard
+          value={transitionDraft}
+          onChange={onTransitionChange}
+          disabled={Boolean(busy)}
+          frameA={scenes.filter((s) => s.imageUrl)[0]?.imageUrl ?? null}
+          frameB={scenes.filter((s) => s.imageUrl)[1]?.imageUrl ?? null}
+        />
+
+        {/* Fourth cell — the 3D scene clip above the slides' brand kit when
+            keynote mode is active (both are the "extras" tier). */}
+        <div className="space-y-4">
+          {/* B4-3 — the 3D scene clip (optional layer): scaffold, edit and
+              re-render the Scene3D doc from the workspace. The lane was
+              API-only until this panel — the audit's recommendation. */}
+          <Scene3DPanel videoId={video.id} onChanged={() => void refreshVideo(video.id)} />
+
+          {/* Brand kit (keynote slides) — accent recolor + corner logo badge */}
+          {renderMode === "slides" && (
+            <BrandKitCard
+              videoId={video.id}
+              value={{
+                accent: video.brandAccent,
+                hasLogo: video.brandHasLogo,
+                showLogo: video.brandLogoOn,
+              }}
+              onSaved={() => void refreshVideo(video.id)}
+              disabled={Boolean(busy)}
+            />
+          )}
+        </div>
+      </div>
 
       {/* S40 — the ship gate: the enforcement verdict over the standing QC
           report (qc-policy.ts matrix, computed server-side in the DTO).
@@ -2825,7 +2863,7 @@ export function ProductionWorkspace({
           what exists today, so run the stage first if you need it inside.
         </p>
       </div>
-    </>
+    </div>
   );
 
   // The mobile/narrow Timeline tab composes the strip + the controls — the
@@ -2837,24 +2875,16 @@ export function ProductionWorkspace({
     </div>
   );
 
-  // 2026-11 workbench law — the deck rides BESIDE the studio inside the
-  // center (the operator's ruling: the timeline page's dead space made no
-  // sense — bring the side panel there), so the whole cutting surface reads
-  // as one workbench: lanes left, Render & Ship right, no rail squeezing
-  // the work area. Each column owns its scroll; the studio card fills the
-  // column's height (min-h-full) so the lane surface absorbs the leftover
-  // space instead of stranding a void under the lanes.
+  // 2026-11 law, REVISED — the deck rides BELOW the studio, merged into the
+  // main column (the operator's ruling: the narrow side rail cramped four
+  // tuning cards into a 320px scroll and stranded dead space beside them).
+  // One vertical flow now: lanes first, the Render & Ship deck beneath, the
+  // verdicts and delivery full-width at the foot. The tuning cards fan out
+  // into a responsive grid (1 → 2 → 4 columns) instead of one cramped rail.
   const timelineWorkbench = (
-    <div className="flex h-full min-h-0 items-stretch gap-3">
-      <div className="min-h-full min-w-0 flex-1 overflow-y-auto tf-scroll-bar">
-        {timelineStrip}
-      </div>
-      <aside
-        className="w-[320px] shrink-0 overflow-y-auto tf-scroll-bar xl:w-[360px]"
-        aria-label="Render and ship"
-      >
-        {renderShipPanel}
-      </aside>
+    <div className="space-y-5 pb-6">
+      {timelineStrip}
+      {renderShipPanel}
     </div>
   );
 

@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/ibismuh/tenant-db";
 import { requireUser } from "@/lib/ibismuh/tenant";
-import { parseScenes } from "@/lib/ibismuh/story";
+import { parseScenes, storyboardComplete } from "@/lib/ibismuh/story";
 import { isJobRunning, lastJobError, jobProgress, startJob, jobFleetStatus } from "@/lib/ibismuh/jobs";
 import { assertWithinVideoCeiling, CostCeilingExceededError } from "@/lib/ibismuh/cost-guard";
 
@@ -235,11 +235,28 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   }
 
   // Keynote slides design their own deck — storyboard art is optional there.
-  if (!video.hasStoryboard && body?.mode !== "slides")
-    return NextResponse.json(
-      { error: "Generate the storyboard first — there is no scene art yet" },
-      { status: 400 }
-    );
+  // The row flag is written by the storyboard job's SUCCESS TAIL, but the
+  // storyboard UI derives "painted" from STORAGE (serializeScenes stats), so
+  // there is a real window — a few seconds normally, longer when the
+  // success tail's artifact-invalidation runs — where every scene shows
+  // painted on the board while the row still reads false. A user who clicks
+  // Render in that window got "Generate the storyboard first — there is no
+  // scene art yet": a lie the pixels on their own board disprove (field
+  // report: the board painted, render refused, retry fixed it). The gate now
+  // falls back to the SAME storage truth the board shows; a stale-false flag
+  // self-heals on the way through, and a genuinely unpainted board still
+  // gets the honest refusal.
+  if (!video.hasStoryboard && body?.mode !== "slides") {
+    const painted = await storyboardComplete(id, scenes).catch(() => false);
+    if (!painted)
+      return NextResponse.json(
+        { error: "Generate the storyboard first — there is no scene art yet" },
+        { status: 400 }
+      );
+    await db.video
+      .update({ where: { id }, data: { hasStoryboard: true } })
+      .catch(() => {}); // self-heal is best-effort; the render proceeds
+  }
   if (!video.hasVoiceover)
     return NextResponse.json(
       { error: "Generate the voiceover first — narration drives the scene timing" },

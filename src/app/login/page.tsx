@@ -72,18 +72,32 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4 relative overflow-hidden">
-      {/* Ambient glow, same dark-premium language as the app */}
+      {/* A4 ambience — two drifting aurora orbs (cyan above, blue below-left)
+          over the grid: the same dark-premium language as the app, with the
+          slow drift that makes the surface feel alive. All decorative. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 h-96 w-[42rem] rounded-full bg-primary/20 blur-[120px]"
+        className="tf-aurora tf-aurora-cyan -top-48 left-1/2 h-[26rem] w-[44rem]"
+      />
+      <div
+        aria-hidden="true"
+        className="tf-aurora tf-aurora-blue bottom-[-14rem] left-[-10rem] h-[30rem] w-[34rem]"
       />
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 bg-grid opacity-[0.35]"
       />
+      {/* A soft floor so the card never floats on pure void */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/30 to-transparent"
+      />
 
       <main className="relative w-full max-w-sm">
-        <div className="glass rounded-2xl p-8 shadow-2xl">
+        {/* A4 — the card wears a brand-ramp edge (the masked gradient ring);
+            the glass panel keeps its own depth law inside. */}
+        <div>
+          <div className="glass tf-glow-edge rounded-2xl p-8">
           <div className="flex flex-col items-center text-center">
             <ForgeMark className="h-16 w-16 drop-shadow-[0_0_24px_rgba(34,211,238,0.4)]" />
             <h1 className="mt-4 text-2xl font-bold tracking-tight">
@@ -133,7 +147,7 @@ export default function LoginPage() {
                 <Button
                   type="submit"
                   disabled={busy || token.length === 0}
-                  className="w-full h-11 font-semibold"
+                  className="w-full h-11 font-semibold bg-brand-gradient glow-brand hover:opacity-90"
                 >
                   {busy ? (
                     <>
@@ -147,6 +161,7 @@ export default function LoginPage() {
               </form>
             )}
           </div>
+        </div>
         </div>
 
         <p className="mt-4 text-center text-[11px] text-muted-foreground leading-relaxed">
