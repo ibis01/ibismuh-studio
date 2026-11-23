@@ -338,7 +338,7 @@ index 33832ef..67d4e41 100755
 +              <h2 className="mt-2.5 text-xl sm:text-2xl font-bold tracking-tight">
 +                Bring an idea in. Leave with a{" "}
 +                <span className="text-gradient">finished video</span>.
-              </h2>
+               </h2>
 -              <p className="text-sm text-muted-foreground mt-2 max-w-lg leading-relaxed">
 +              <p className="text-sm text-muted-foreground mt-1.5 max-w-lg leading-relaxed">
                  You direct the production — AI assists with scripts, scenes,
@@ -400,7 +400,7 @@ index 33832ef..67d4e41 100755
 +          </div>
 +        </Card>
 +      ) : (
-       <div className="grid lg:grid-cols-5 gap-4 items-stretch">
+      <div className="grid lg:grid-cols-5 gap-4 items-stretch">
          {/* Production chart */}
          <Card className="glass rounded-2xl p-5 lg:col-span-3 h-full flex flex-col">
 @@ -366,7 +400,7 @@ export function DashboardView() {
