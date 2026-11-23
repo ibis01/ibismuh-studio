@@ -1966,16 +1966,19 @@ await test("timeoutFor: defaults per capability; env overrides apply; invalid en
 });
 
 await test("timeoutFor: no timeout regression — youtube.ts routes through the matrix", async () => {
-  // Static sanity (the audited D-09 fix): every outbound YouTube HTTP call
-  // goes through ytFetch — the only raw fetch( left is ytFetch's own body.
+  // Static sanity (the audited D-09 fix, 2026-11-23 hardening edition):
+  // every outbound YouTube HTTP call goes through ytFetch, and ytFetch
+  // itself routes through the net-guard safeFetch transport — zero raw
+  // fetch( calls remain in youtube.ts.
   const src = fs.readFileSync(
     new URL("../src/lib/ibismuh/youtube.ts", import.meta.url),
     "utf8"
   );
   const rawFetch = src
     .split("\n")
-    .filter((l) => /\bfetch\(/.test(l) && !/ytFetch\(/.test(l)).length;
-  eq(rawFetch, 1, "exactly one raw fetch remains — inside ytFetch itself");
+    .filter((l) => /\bfetch\(/.test(l) && !/ytFetch\(/.test(l) && !/safeFetch\(/.test(l)).length;
+  eq(rawFetch, 0, "zero raw fetch calls remain — ytFetch rides the guarded transport");
+  ok(src.includes("safeFetch(url, {"), "ytFetch routes through safeFetch (SSRF policy + byte caps + timeouts)");
   const viaHelper = (src.match(/ytFetch\(/g) ?? []).length;
   eq(viaHelper, 10, "9 call sites + the helper definition all route through ytFetch (S72's retention fetch joined the matrix)");
 });
@@ -11605,14 +11608,25 @@ async function withFetchStub(
 ) {
   const calls: Array<{ url: string; method?: string; signal?: unknown }> = [];
   const real = globalThis.fetch;
-  globalThis.fetch = (async (url: RequestInfo | URL, init: RequestInit = {}) => {
+  const stub = (async (url: RequestInfo | URL, init: RequestInit = {}) => {
     calls.push({ url: String(url), method: init.method, signal: init.signal });
     return handler(String(url), init);
   }) as typeof fetch;
+  globalThis.fetch = stub;
+  // The guarded transport (providerFetch/safeFetch → net-guard) does NOT
+  // read globalThis.fetch — install the same stub through net-guard's
+  // hermetic test seam so provider batteries stay offline. The network
+  // POLICY itself is proven with real sockets by test-net-guard-provider.
+  const { __installTestTransport } = await import("../src/lib/ibismuh/net-guard.ts");
+  __installTestTransport(async (url, init) => {
+    calls.push({ url: String(url), method: init?.method, signal: init?.signal });
+    return handler(String(url), (init ?? {}) as RequestInit);
+  });
   try {
     await fn(calls);
   } finally {
     globalThis.fetch = real;
+    __installTestTransport(null);
   }
 }
 

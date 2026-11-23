@@ -23,7 +23,7 @@
 
 import { zaiClientFor } from "./zai-client";
 import { safeFetch } from "./net-guard";
-import { allowPrivateProviderHosts } from "./providers/http";
+import { allowPrivateProviderHosts, privateProviderAllowlist } from "./providers/http";
 import { getCapability } from "./providers/settings";
 import { currentCtx } from "./tenant";
 import { getProviderCredential, getUserSettings } from "./settings";
@@ -176,9 +176,10 @@ async function openaiFetch(
   payload: Record<string, unknown>,
   timeoutMs: number
 ): Promise<LLMCompletion> {
-  // safeFetch: destination validated (public hosts unless
-  // IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS=1 for self-hosted servers), redirects
-  // re-validated, 256 MB response cap, AbortSignal timeout kept.
+  // safeFetch: destination validated (public hosts unless the operator
+  // enabled the restricted self-hosted policy — master switch AND explicit
+  // destination allowlist), redirects re-validated, 256 MB response cap,
+  // AbortSignal timeout kept.
   const res = await safeFetch(`${s.baseUrl}${path}`, {
     method: "POST",
     headers: {
@@ -188,7 +189,9 @@ async function openaiFetch(
     body: JSON.stringify(payload),
     timeoutMs,
     maxBytes: 256 * 1024 * 1024,
-    allowPrivateHosts: allowPrivateProviderHosts(),
+    privateDestinations: allowPrivateProviderHosts()
+      ? privateProviderAllowlist()
+      : undefined,
   });
   if (!res.ok)
     throw new Error(

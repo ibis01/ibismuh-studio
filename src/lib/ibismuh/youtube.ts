@@ -28,6 +28,7 @@ import { log } from "./log";
 // S57/T-57.2 — the module's logger (the old [youtube] prefix became a binding).
 const ytLog = log.child({ mod: "youtube" });
 import { timeoutFor, type ProviderCapability } from "./providers/http";
+import { safeFetch } from "./net-guard";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
@@ -52,7 +53,22 @@ async function ytFetch(
   init: RequestInit,
   capability: Extract<ProviderCapability, "youtube-api" | "youtube-upload"> = "youtube-api"
 ): Promise<Response> {
-  return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutFor(capability)) });
+  // Guarded transport: Google endpoints are fixed, but OAuth/upload URLs and
+  // the resumable-upload session URLs still get the SSRF policy (redirect
+  // revalidation, byte caps) — defense in depth for a compromised upstream
+  // or a poisoned redirect. Timeouts ride the D-09 capability matrix.
+  let headers: Record<string, string> | undefined;
+  if (init.headers) {
+    headers = {};
+    for (const [k, v] of new Headers(init.headers as HeadersInit)) headers[k] = v;
+  }
+  return safeFetch(url, {
+    method: init.method,
+    headers,
+    body: init.body as BodyInit | undefined,
+    timeoutMs: timeoutFor(capability),
+    maxBytes: capability === "youtube-upload" ? 16 * 1024 * 1024 : 10 * 1024 * 1024,
+  });
 }
 
 // ---------- OAuth client (server-wide) ----------

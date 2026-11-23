@@ -16,17 +16,24 @@
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
+import { safeFetch } from "./net-guard";
 
 export interface SpawnResult {
   spawned: boolean;
   detail: string;
 }
 
-/** Is the voice server at `baseUrl` answering /health? */
+/** Is the voice server at `baseUrl` answering /health? The URL is the
+ *  OPERATOR-configured IBISMUH_STUDIO_SHARED_VOICE_URL (and spawnSharedVoice
+ *  only acts on loopback targets) — the guarded transport runs in open mode
+ *  for this operator-owned destination, still enforcing protocol + timeout
+ *  + byte caps. */
 async function voiceServerUp(baseUrl: string): Promise<boolean> {
   try {
-    const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/health`, {
-      signal: AbortSignal.timeout(2_500),
+    const res = await safeFetch(`${baseUrl.replace(/\/+$/, "")}/health`, {
+      timeoutMs: 2_500,
+      maxBytes: 1024 * 1024,
+      allowPrivateHosts: true, // operator env config; loopback-validated before spawn
     });
     return res.ok;
   } catch {

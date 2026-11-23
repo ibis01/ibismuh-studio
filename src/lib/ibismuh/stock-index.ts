@@ -20,6 +20,7 @@
 // exported for the offline unit suite; only fetchJson does I/O.
 
 import { log } from "./log";
+import { safeFetch } from "./net-guard";
 
 const indexLog = log.child({ mod: "stock-index" });
 
@@ -72,25 +73,24 @@ async function fetchJson(
   headers: Record<string, string>,
   timeoutMs = 20000
 ): Promise<unknown> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // Guarded transport: destination validation + byte cap + timeout (stock
+  // API keys ride these requests).
+  let res: Response;
   try {
-    const res = await fetch(url, { headers, signal: controller.signal });
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      if (res.status === 401 || res.status === 403)
-        throw new Error("invalid API key (check it in Settings → Stock footage)");
-      if (res.status === 429) throw new Error("rate limited — try again in a minute");
-      throw new Error(`HTTP ${res.status}${body ? `: ${body.slice(0, 160)}` : ""}`);
-    }
-    return await res.json();
+    res = await safeFetch(url, { headers, timeoutMs, maxBytes: 10 * 1024 * 1024 });
   } catch (err) {
-    if (err instanceof Error && err.name === "AbortError")
+    if (err instanceof Error && /timed out/i.test(err.message))
       throw new Error("provider timed out");
     throw err;
-  } finally {
-    clearTimeout(timer);
   }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    if (res.status === 401 || res.status === 403)
+      throw new Error("invalid API key (check it in Settings → Stock footage)");
+    if (res.status === 429) throw new Error("rate limited — try again in a minute");
+    throw new Error(`HTTP ${res.status}${body ? `: ${body.slice(0, 160)}` : ""}`);
+  }
+  return await res.json();
 }
 
 // ---------- Pexels (video search) ----------

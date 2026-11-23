@@ -40,6 +40,35 @@ function getUndici(): Promise<UndiciModule> {
   return undiciPromise;
 }
 
+// ------------------------------------------------------------ test transport
+//
+// TEST SEAM — scripts/test-unit.mts (and only the test batteries) install a
+// hermetic fetch here to exercise PROVIDER LOGIC without the network. While
+// installed, safeFetch skips destination validation and the pinned
+// dispatcher: stubbed URLs like http://127.0.0.1:9/ are deliberate test
+// fixtures, not policy questions. The network policy itself is verified
+// against REAL sockets by scripts/test-net-guard-provider.mts. No production
+// code path may install a transport.
+
+type TestTransport = (
+  url: URL | string,
+  init?: import("undici").RequestInit,
+) => Promise<Response>;
+const gSeam = globalThis as typeof globalThis & {
+  __ibismuhTestTransport?: TestTransport | null;
+};
+
+/** Test-only: install/remove the hermetic transport override. */
+export function __installTestTransport(
+  fn: TestTransport | null,
+): void {
+  gSeam.__ibismuhTestTransport = fn;
+}
+
+function activeTestTransport(): TestTransport | null {
+  return gSeam.__ibismuhTestTransport ?? null;
+}
+
 // ---------------------------------------------------------------- IP ranges
 
 const V4_BLOCKED: [number, number][] = [
@@ -187,6 +216,136 @@ function friendlyBlockReason(host: string): string {
 
 export interface GuardOptions {
   allowPrivateHosts?: boolean;
+  /** Restricted private-destination policy (SSRF-safe self-hosting):
+   *
+   *  When set (and allowPrivateHosts is NOT set), private/reserved
+   *  addresses and non-standard ports are permitted ONLY for destinations
+   *  matching an entry. Each entry is one of:
+   *
+   *    - an exact hostname           ("ollama.internal")
+   *    - an exact IP                 ("10.1.2.3", "fd00::1")
+   *    - an IPv4/IPv6 CIDR block     ("10.0.0.0/8", "fd00::/8")
+   *
+   *  Hostname entries match the URL hostname; IP/CIDR entries match any
+   *  address the host resolves to (and the pinned connection lookup, so
+   *  DNS-rebinding cannot pivot an allowlisted name to a different
+   *  private target). Public destinations keep the strict rules
+   *  (public addresses, standard ports). */
+  privateDestinations?: string[];
+}
+
+// --------------------------------------------- private-destination parsing
+
+export type ParsedDestination =
+  | { kind: "host"; host: string }
+  | { kind: "ip"; ip: string; isV6: boolean }
+  | { kind: "cidr"; isV6: boolean; lo: bigint; hi: bigint };
+
+function v6ToBig(ip: string): bigint | null {
+  const h = v6Hextets(ip);
+  if (!h) return null;
+  return h.reduce((acc, v) => (acc << 16n) | v, 0n);
+}
+
+function parseV4Cidr(addr: string, bits: number): { lo: bigint; hi: bigint } | null {
+  const long = v4ToLong(addr);
+  if (long === null) return null;
+  const size = 2 ** (32 - bits);
+  const lo = Math.floor(long / size) * size;
+  return { lo: BigInt(lo), hi: BigInt(lo + size - 1) };
+}
+
+function parseV6Cidr(addr: string, bits: number): { lo: bigint; hi: bigint } | null {
+  const base = v6ToBig(addr);
+  if (base === null) return null;
+  const size = 1n << BigInt(128 - bits);
+  const lo = (base / size) * size;
+  return { lo, hi: lo + size - 1n };
+}
+
+/** Parse operator allowlist entries. Invalid entries throw — a typo must
+ *  surface loudly, not silently narrow the policy. */
+export function parsePrivateDestinations(
+  entries: readonly string[],
+): ParsedDestination[] {
+  const out: ParsedDestination[] = [];
+  for (const raw of entries) {
+    const entry = String(raw).trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/$/, "");
+    if (!entry) continue;
+    if (entry.includes("/") && !entry.includes(":")) {
+      // IPv4 CIDR
+      const [addr, bitsRaw] = entry.split("/");
+      const bits = Number(bitsRaw);
+      if (!Number.isInteger(bits) || bits < 0 || bits > 32)
+        throw new UrlGuardError(`Bad private-destination allowlist entry "${raw}" — invalid IPv4 CIDR mask`);
+      const range = parseV4Cidr(addr, bits);
+      if (!range)
+        throw new UrlGuardError(`Bad private-destination allowlist entry "${raw}" — invalid IPv4 CIDR base`);
+      out.push({ kind: "cidr", isV6: false, ...range });
+      continue;
+    }
+    if (entry.includes(":")) {
+      // IPv6 literal or CIDR (a colon can only appear in v6)
+      const [addr, bitsRaw] = entry.split("/");
+      const base = v6ToBig(addr.replace(/^\[|\]$/g, ""));
+      if (base === null)
+        throw new UrlGuardError(`Bad private-destination allowlist entry "${raw}" — invalid IPv6 address`);
+      if (bitsRaw === undefined) {
+        out.push({ kind: "ip", ip: addr.replace(/^\[|\]$/g, ""), isV6: true });
+      } else {
+        const bits = Number(bitsRaw);
+        if (!Number.isInteger(bits) || bits < 0 || bits > 128)
+          throw new UrlGuardError(`Bad private-destination allowlist entry "${raw}" — invalid IPv6 CIDR mask`);
+        const range = parseV6Cidr(addr.replace(/^\[|\]$/g, ""), bits);
+        if (!range)
+          throw new UrlGuardError(`Bad private-destination allowlist entry "${raw}" — invalid IPv6 CIDR base`);
+        out.push({ kind: "cidr", isV6: true, ...range });
+      }
+      continue;
+    }
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(entry)) {
+      if (v4ToLong(entry) === null)
+        throw new UrlGuardError(`Bad private-destination allowlist entry "${raw}" — invalid IPv4 address`);
+      out.push({ kind: "ip", ip: entry, isV6: false });
+      continue;
+    }
+    // hostname entry — strip any accidental port
+    const host = entry.replace(/:\\d+$/, "");
+    if (!/^[a-z0-9.-]+$/.test(host) || !host.includes("."))
+      throw new UrlGuardError(`Bad private-destination allowlist entry "${raw}" — expected a hostname, IPv4/IPv6 literal, or CIDR`);
+    out.push({ kind: "host", host });
+  }
+  return out;
+}
+
+function addressToBig(address: string): bigint | null {
+  return address.includes(":") ? v6ToBig(address) : (v4ToLong(address) === null ? null : BigInt(v4ToLong(address) as number));
+}
+
+/** Does the destination (URL hostname + every resolved address) match an
+ *  allowlist entry? */
+export function matchesPrivateDestination(
+  destinations: readonly ParsedDestination[],
+  urlHostname: string,
+  addresses: readonly string[],
+): boolean {
+  const host = urlHostname.replace(/^\[|\]$/g, "").toLowerCase();
+  for (const d of destinations) {
+    if (d.kind === "host" && d.host === host) return true;
+    for (const a of addresses) {
+      if (d.kind === "ip" && a.toLowerCase() === d.ip) return true;
+      if (d.kind === "cidr") {
+        const v = addressToBig(a);
+        if (v === null) continue;
+        // An IPv4 address compared against a v6 CIDR (and vice versa) can
+        // never match: v4 lives below 2^32, v6 ranges (except ::/x traps
+        // which are already blocked ranges) do not meaningfully overlap.
+        const isAddrV6 = a.includes(":");
+        if (isAddrV6 === d.isV6 && v >= d.lo && v <= d.hi) return true;
+      }
+    }
+  }
+  return false;
 }
 
 export async function assertSafeRemoteUrl(
@@ -204,6 +363,12 @@ export async function assertSafeRemoteUrl(
       `Blocked protocol "${url.protocol.replace(":", "")}" — only http(s) links are allowed`,
     );
   if (!url.hostname) throw new UrlGuardError("The URL has no host");
+  // Credentials embedded in the URL (user:pass@host) would be sent as basic
+  // auth by most clients — reject at the boundary; use headers instead.
+  if (url.username || url.password)
+    throw new UrlGuardError(
+      "Blocked — the URL embeds credentials (user:pass@host). Send credentials via request headers instead",
+    );
 
   const port = url.port
     ? Number(url.port)
@@ -211,39 +376,45 @@ export async function assertSafeRemoteUrl(
       ? 443
       : 80;
   const standardPort = port === 80 || port === 443;
-  if (!standardPort && !opts.allowPrivateHosts)
-    throw new UrlGuardError(
-      `Blocked non-standard port ${port} — only 80/443 are allowed`,
-    );
 
   const host = url.hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  const allowlist = opts.privateDestinations?.length
+    ? parsePrivateDestinations(opts.privateDestinations)
+    : [];
+  const useAllowlist = !opts.allowPrivateHosts && allowlist.length > 0;
+
+  let addresses: string[];
   if (isIpLiteral(host)) {
-    if (!opts.allowPrivateHosts && isPrivateHostname(host))
-      throw new UrlGuardError(
-        `Blocked — ${host} is ${friendlyBlockReason(host)}`,
+    addresses = [host];
+  } else {
+    try {
+      addresses = (await dns.lookup(host, { all: true, verbatim: true })).map(
+        (a) => a.address,
       );
-    return url;
+    } catch {
+      throw new UrlGuardError(
+        `Could not resolve the host "${host}" — check the link`,
+      );
+    }
+    if (addresses.length === 0)
+      throw new UrlGuardError(`Could not resolve the host "${host}"`);
   }
 
-  let addresses: { address: string }[];
-  try {
-    addresses = await dns.lookup(host, { all: true, verbatim: true });
-  } catch {
-    throw new UrlGuardError(
-      `Could not resolve the host "${host}" — check the link`,
-    );
-  }
-  if (addresses.length === 0)
-    throw new UrlGuardError(`Could not resolve the host "${host}"`);
+  const allowlisted =
+    useAllowlist && matchesPrivateDestination(allowlist, host, addresses);
+
   if (!opts.allowPrivateHosts) {
-    for (const { address } of addresses) {
-      if (isPrivateHostname(address))
+    // Non-standard ports: only for operator-allowlisted self-hosted
+    // destinations (or the explicit open mode).
+    if (!standardPort && !allowlisted)
+      throw new UrlGuardError(
+        `Blocked non-standard port ${port} — only 80/443 are allowed (self-hosted services must be listed in the private-destination allowlist)`,
+      );
+    // Private / reserved destinations: only when allowlisted.
+    for (const address of addresses) {
+      if (isPrivateHostname(address) && !allowlisted)
         throw new UrlGuardError(
-          `Blocked — "${host}" resolves to ${address}, ${friendlyBlockReason(address)}`,
-        );
-      if (address.includes(":") ? isBlockedV6(address) : isBlockedV4(address))
-        throw new UrlGuardError(
-          `Blocked — "${host}" resolves to ${address}, ${friendlyBlockReason(address)}`,
+          `Blocked — ${host === address ? host : `"${host}" resolves to ${address}`} is ${friendlyBlockReason(address)}`,
         );
     }
   }
@@ -265,56 +436,82 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 // ------------------------------------------------------- DNS-rebinding pinning
 
-const pinnedLookup: LookupFunction = (hostname, _options, callback) => {
-  const host = String(hostname)
-    .replace(/^\[|\]$/g, "")
-    .toLowerCase()
-    .split("%")[0];
-  dns
-    .lookup(host, { all: true, verbatim: true })
-    .then((addrs) => {
-      if (addrs.length === 0) {
-        callback(
-          new Error(`DNS rebinding guard: no addresses for "${host}"`),
-          "",
-          0,
-        );
-        return;
-      }
-      for (const { address } of addrs) {
-        if (isPrivateHostname(address)) {
+/** Build a connection-time lookup that re-validates every address against
+ *  the private-range blocklist — and, when a restricted policy is active,
+ *  the operator allowlist. This is the DNS-rebinding defense: even if the
+ *  resolver flips an allowlisted or public name to a different address
+ *  between validation and connection, the PINNED lookup refuses to connect
+ *  to an address the policy does not cover. */
+function makePinnedLookup(
+  destinations: readonly ParsedDestination[],
+): LookupFunction {
+  return (hostname, _options, callback) => {
+    const host = String(hostname)
+      .replace(/^\[|\]$/g, "")
+      .toLowerCase()
+      .split("%")[0];
+    dns
+      .lookup(host, { all: true, verbatim: true })
+      .then((addrs) => {
+        if (addrs.length === 0) {
           callback(
-            new Error(
-              `DNS rebinding guard: "${host}" resolves to ${address}, a private or reserved address — blocked`,
-            ),
+            new Error(`DNS rebinding guard: no addresses for "${host}"`),
             "",
             0,
           );
           return;
         }
-      }
-      const pick = addrs.find((a) => a.family === 4) ?? addrs[0];
-      callback(null, pick.address, pick.family);
-    })
-    .catch((err: Error) => callback(err, "", 0));
-};
+        const addresses = addrs.map((a) => a.address);
+        for (const address of addresses) {
+          if (
+            isPrivateHostname(address) &&
+            !matchesPrivateDestination(destinations, host, addresses)
+          ) {
+            callback(
+              new Error(
+                `DNS rebinding guard: "${host}" resolves to ${address}, a private or reserved address not covered by the destination policy — blocked`,
+              ),
+              "",
+              0,
+            );
+            return;
+          }
+        }
+        const pick = addrs.find((a) => a.family === 4) ?? addrs[0];
+        callback(null, pick.address, pick.family);
+      })
+      .catch((err: Error) => callback(err, "", 0));
+  };
+}
 
 // Lazy Agent construction — the constructor comes from the lazily-loaded
-// undici module, so we can't `new Agent(...)` at module scope either.
-let validatingAgentPromise: Promise<Agent> | null = null;
-function getValidatingDispatcher(): Promise<Agent> {
-  if (!validatingAgentPromise) {
-    validatingAgentPromise = getUndici().then(
+// undici module, so we can't `new Agent(...)` at module scope either. One
+// dispatcher per policy shape, cached by the canonical allowlist key so a
+// policy change (tests, config reload) gets a fresh pinned lookup.
+const dispatcherCache = new Map<string, Promise<Agent>>();
+function getValidatingDispatcher(
+  destinations: readonly ParsedDestination[] = [],
+): Promise<Agent> {
+  const key = destinations
+    .map((d) =>
+      d.kind === "host" ? `h:${d.host}` : d.kind === "ip" ? `i:${d.ip}` : `c:${d.isV6 ? 6 : 4}:${d.lo}-${d.hi}`,
+    )
+    .sort()
+    .join("|");
+  let agent = dispatcherCache.get(key);
+  if (!agent) {
+    agent = getUndici().then(
       ({ Agent }) =>
         new Agent({
           connect: {
             autoSelectFamily: false,
-            lookup: pinnedLookup,
+            lookup: makePinnedLookup(destinations),
           } as never,
         }),
     );
+    dispatcherCache.set(key, agent);
   }
-  return validatingAgentPromise;
+  return agent;
 }
 
 export async function safeFetch(
@@ -326,12 +523,65 @@ export async function safeFetch(
     maxBytes = 100 * 1024 * 1024,
     maxRedirects = 5,
     allowPrivateHosts = false,
+    privateDestinations,
     headers,
   } = opts;
 
+  // Test seam: hermetic transport for the provider batteries.
+  const testTransport = activeTestTransport();
+  if (testTransport) {
+    let current = new URL(String(rawUrl));
+    let method = opts.method;
+    let body = opts.body;
+    for (let hop = 0; hop <= maxRedirects; hop++) {
+      const res = await testTransport(current, {
+        method,
+        headers,
+        body: body as import("undici").RequestInit["body"],
+        redirect: "manual",
+        // The no-hang law stays observable through the seam: every call is
+        // abortable on the timeout budget (the production path uses the same
+        // signal on the real transport).
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (REDIRECT_STATUSES.has(res.status)) {
+        const location = res.headers.get("location");
+        if (!location) return res;
+        if (hop === maxRedirects)
+          throw new UrlGuardError(`Too many redirects (>${maxRedirects})`);
+        res.body?.cancel().catch(() => {});
+        const next = new URL(location, current);
+        if (
+          res.status === 303 ||
+          ((res.status === 301 || res.status === 302) && method === "POST")
+        ) {
+          method = "GET";
+          body = undefined;
+        }
+        current = next;
+        continue;
+      }
+      return res;
+    }
+    throw new UrlGuardError(`Too many redirects (>${maxRedirects})`);
+  }
+
   const undici = await getUndici();
 
-  let current = await assertSafeRemoteUrl(rawUrl, { allowPrivateHosts });
+  // Policy shape: open mode (operator-configured, e.g. storage endpoints) →
+  // no pinned dispatcher; restricted mode → allowlist-aware dispatcher;
+  // strict mode (default) → block-all-private dispatcher.
+  const allowlist = privateDestinations?.length
+    ? parsePrivateDestinations(privateDestinations)
+    : [];
+  const dispatcher = allowPrivateHosts
+    ? undefined
+    : await getValidatingDispatcher(allowlist);
+
+  let current = await assertSafeRemoteUrl(rawUrl, {
+    allowPrivateHosts,
+    privateDestinations,
+  });
   let method = opts.method;
   let body = opts.body;
 
@@ -343,12 +593,9 @@ export async function safeFetch(
       redirect: "manual",
       signal: AbortSignal.timeout(timeoutMs),
     };
-    const res = await (allowPrivateHosts
-      ? undici.fetch(current, init)
-      : undici.fetch(current, {
-          ...init,
-          dispatcher: await getValidatingDispatcher(),
-        }));
+    const res = await (dispatcher
+      ? undici.fetch(current, { ...init, dispatcher })
+      : undici.fetch(current, init));
 
     if (REDIRECT_STATUSES.has(res.status)) {
       const location = res.headers.get("location");
@@ -369,7 +616,10 @@ export async function safeFetch(
         method = "GET";
         body = undefined;
       }
-      current = await assertSafeRemoteUrl(next, { allowPrivateHosts });
+      current = await assertSafeRemoteUrl(next, {
+        allowPrivateHosts,
+        privateDestinations,
+      });
       continue;
     }
 

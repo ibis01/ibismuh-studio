@@ -46,6 +46,11 @@ import {
   DEFAULT_ZAI_BASE_URL,
 } from "@/lib/ibismuh/types";
 import { chatComplete } from "@/lib/ibismuh/providers/chat";
+import {
+  providerFetch,
+  ProviderHttpError,
+  validateProviderBaseUrl,
+} from "@/lib/ibismuh/providers/http";
 import { visionComplete } from "@/lib/ibismuh/providers/vision";
 import {
   probeSelfhostHealth,
@@ -179,7 +184,16 @@ export async function PUT(req: NextRequest) {
         if (provider) credUpdates["zai.provider"] = provider;
 
         const baseUrl = String(body.baseUrl ?? "").trim();
-        if (baseUrl) credUpdates[ZAI_SETTING_KEYS.baseUrl] = baseUrl;
+        if (baseUrl) {
+          try {
+            credUpdates[ZAI_SETTING_KEYS.baseUrl] = validateProviderBaseUrl(baseUrl);
+          } catch (err) {
+            return NextResponse.json(
+              { error: err instanceof Error ? err.message : "Invalid base URL" },
+              { status: 400 },
+            );
+          }
+        }
 
         const apiKey = String(body.apiKey ?? "").trim();
         if (apiKey) credUpdates[ZAI_SETTING_KEYS.apiKey] = apiKey;
@@ -245,7 +259,16 @@ export async function PUT(req: NextRequest) {
     if (body.model !== undefined) patch.model = String(body.model).trim();
     if (body.visionModel !== undefined)
       patch.visionModel = String(body.visionModel).trim();
-    if (body.baseUrl !== undefined) patch.baseUrl = String(body.baseUrl).trim();
+    if (body.baseUrl !== undefined) {
+      try {
+        patch.baseUrl = validateProviderBaseUrl(String(body.baseUrl));
+      } catch (err) {
+        return NextResponse.json(
+          { error: err instanceof Error ? err.message : "Invalid base URL" },
+          { status: 400 },
+        );
+      }
+    }
     // Empty key = keep the saved one (masked field stays blank in the UI).
     if (body.apiKey !== undefined) patch.apiKey = String(body.apiKey).trim();
 
@@ -295,8 +318,16 @@ export async function POST(req: NextRequest) {
   const provider = String(body.provider ?? "").trim();
   const overrides: Partial<CapabilityConfig> = {};
   if (provider) overrides.provider = provider as CapabilityConfig["provider"];
-  if (body.baseUrl !== undefined)
-    overrides.baseUrl = String(body.baseUrl).trim();
+  if (body.baseUrl !== undefined) {
+    try {
+      overrides.baseUrl = validateProviderBaseUrl(String(body.baseUrl));
+    } catch (err) {
+      return NextResponse.json(
+        { ok: false, error: err instanceof Error ? err.message : "Invalid base URL" },
+        { status: 200 },
+      );
+    }
+  }
   if (body.model !== undefined) overrides.model = String(body.model).trim();
   if (body.visionModel !== undefined)
     overrides.visionModel = String(body.visionModel).trim();
@@ -469,24 +500,14 @@ export async function POST(req: NextRequest) {
             );
           }
           try {
-            const res = await fetch(`${baseUrl}/video-projects?limit=1`, {
-              headers: { Authorization: `Bearer ${key}` },
-            });
-            if (!res.ok) {
-              const text = await res.text().catch(() => "");
-              const hint =
-                res.status === 404
-                  ? " — 404 means the base URL path is wrong; it should look like https://api.magichour.ai/v1"
-                  : "";
-              return NextResponse.json(
-                {
-                  ok: false,
-                  capability: "video",
-                  error: `Magic Hour auth failed (HTTP ${res.status}): ${text.slice(0, 200)}${hint}`,
-                },
-                { status: 200 },
-              );
-            }
+            // Guarded transport (SSRF policy + byte cap) — the base URL is
+            // user-configured, the key rides the request.
+            const res = await providerFetch(
+              "Magic Hour",
+              `${baseUrl}/video-projects?limit=1`,
+              { headers: { Authorization: `Bearer ${key}` } },
+              { capability: "youtube-api", timeoutMs: 30_000 },
+            );
             const data = (await res.json()) as { projects?: unknown[] };
             return NextResponse.json({
               ok: true,
@@ -495,11 +516,20 @@ export async function POST(req: NextRequest) {
               latencyMs: Date.now() - started,
             });
           } catch (err) {
+            const detail =
+              err instanceof ProviderHttpError
+                ? `Magic Hour auth failed (HTTP ${err.status}): ${err.message.slice(0, 200)}` +
+                  (err.status === 404
+                    ? " — 404 means the base URL path is wrong; it should look like https://api.magichour.ai/v1"
+                    : "")
+                : err instanceof Error
+                  ? err.message
+                  : String(err);
             return NextResponse.json(
               {
                 ok: false,
                 capability: "video",
-                error: `Magic Hour unreachable: ${err instanceof Error ? err.message : String(err)}`,
+                error: detail,
               },
               { status: 200 },
             );

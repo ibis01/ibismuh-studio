@@ -22,6 +22,7 @@
 
 import { db } from "./tenant-db";
 import * as storage from "./storage";
+import { safeFetch } from "./net-guard";
 import { sceneQueries, contentWords } from "./stock-query";
 import {
   buildSceneIndex,
@@ -237,10 +238,14 @@ async function fetchForScene(
 
 /** Download + sanity-check one clip into the video dir. */
 async function downloadClip(videoId: string, sceneIndex: number, url: string): Promise<boolean> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60_000);
+  // Guarded transport: stock CDN URLs are provider-returned (a compromised
+  // or malicious provider response could point anywhere) — validate the
+  // destination, cap the bytes, bound the time.
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await safeFetch(url, {
+      timeoutMs: 60_000,
+      maxBytes: 256 * 1024 * 1024,
+    });
     if (!res.ok) return false;
     const buf = Buffer.from(await res.arrayBuffer());
     // A real HD mp4 clip is megabytes; an error page or thumbnail is not.
@@ -248,8 +253,8 @@ async function downloadClip(videoId: string, sceneIndex: number, url: string): P
     // Storage seam (T-3.7): clip persists through the driver (quota + s3).
     await storage.put(`${videoId}/${stockFile(sceneIndex)}`, buf);
     return true;
-  } finally {
-    clearTimeout(timer);
+  } catch {
+    return false;
   }
 }
 

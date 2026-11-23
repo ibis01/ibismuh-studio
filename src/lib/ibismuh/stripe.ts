@@ -20,6 +20,8 @@
 // checkout page (built from the Price objects) is the only place money is
 // named. When real costs land, only the Stripe dashboard changes.
 
+import { safeFetch } from "./net-guard";
+
 const STRIPE_API = "https://api.stripe.com/v1";
 
 /** The paid tiers a checkout can lead to, and the env that must hold their
@@ -92,10 +94,11 @@ export async function stripeCreate(
   secret: string,
 ): Promise<StripeCallResult> {
   const body = new URLSearchParams(params).toString();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15_000);
+  // Guarded transport: STRIPE_API is a fixed https origin, but the secret
+  // rides the request — it gets the same SSRF/redirect/byte-cap policy as
+  // every other outbound call (defense in depth).
   try {
-    const res = await fetch(`${STRIPE_API}${path}`, {
+    const res = await safeFetch(`${STRIPE_API}${path}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${secret}`,
@@ -106,8 +109,8 @@ export async function stripeCreate(
         "Stripe-Version": "2024-06-20",
       },
       body,
-      signal: controller.signal,
-      cache: "no-store",
+      timeoutMs: 15_000,
+      maxBytes: 10 * 1024 * 1024,
     });
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) {
@@ -124,13 +127,11 @@ export async function stripeCreate(
   } catch (err) {
     const message =
       err instanceof Error
-        ? err.name === "AbortError"
+        ? err.name === "TimeoutError" || /timed out/i.test(err.message)
           ? "Stripe did not answer within 15 s"
           : err.message
         : String(err);
     return { ok: false, status: 502, error: `Stripe request failed: ${message}` };
-  } finally {
-    clearTimeout(timer);
   }
 }
 

@@ -6,6 +6,7 @@
 // facade imports THIS, never the reverse).
 
 import { createHash, createHmac } from "crypto";
+import { safeFetch } from "./net-guard";
 
 export interface S3Config {
   bucket: string;
@@ -170,7 +171,29 @@ export async function s3Fetch(
   extraQuery?: Record<string, string>
 ): Promise<Response> {
   const { url, headers } = sigv4Headers(cfg, method, key, body ?? Buffer.alloc(0), extraQuery);
-  return fetch(url, { method, headers, body: body ? new Uint8Array(body) : undefined });
+  // The S3 endpoint is OPERATOR-configured storage infrastructure (env
+  // vars — including private MinIO), so private destinations are allowed by
+  // design (open mode). What is still enforced: http(s) protocol (a bad
+  // endpoint string must fail loudly, not surprise-fetch), per-method
+  // timeouts (large PUTs get room; metadata calls fail fast), and response
+  // byte caps on reads so a misbehaving endpoint cannot stream unbounded
+  // bytes into memory.
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(
+      `storage: the signed S3 URL protocol "${parsed.protocol}" is not http(s) — refusing the request`,
+    );
+  }
+  const isRead = method === "GET" || method === "HEAD";
+  const timeoutMs = isRead ? 120_000 : 900_000; // large video PUTs are legitimate
+  return safeFetch(url, {
+    method,
+    headers,
+    body: body ? new Uint8Array(body) : undefined,
+    timeoutMs,
+    maxBytes: isRead ? 2 * 1024 * 1024 * 1024 : 64 * 1024 * 1024,
+    allowPrivateHosts: true, // operator-configured storage backend, not user input
+  });
 }
 
 /** Signed ListObjectsV2 with continuation tokens — every key under the
