@@ -237,3 +237,28 @@ full hydration with zero errors. The hardening-era Playwright e2e suites
 (smoke/isolation/CSP) check document titles, API behavior and headers, which
 is why this dev-only regression in the sandbox went unnoticed. Browser-level
 verification above therefore used the production server.
+
+---
+
+## Publish state — branch push to origin (2026-11-23, re-checked in follow-up session)
+
+**Status: BLOCKED (environment)** — local work is complete and verified; the push of the
+restoration branch could not be executed in this sandbox session.
+
+| Item | State | Evidence |
+|---|---|---|
+| Phases 0–11 on `origin/main` | PUBLISHED | `origin/main` = `3fcf04b` (`git ls-remote`), identical to the merged hardening tip; remote branch `security/production-hardening` also at `3fcf04b`. |
+| Restoration branch commits | LOCAL ONLY | `feat/uiux-render-deck-aesthetic` = `41e364b` (3 commits ahead of `origin/main`: `261b8d6`, `f209532`, `41e364b`). Remote branch of the same name exists but still points at `3fcf04b`. |
+| `git push` via CLI | **BLOCKED** | `fatal: could not read Username for 'https://github.com'` — this session's shell has no stored credential helper, no `.git-credentials`, no `.netrc`, no `GITHUB_TOKEN` env, and no SSH client/keys. |
+| Push via GitHub API (plugin) | **BLOCKED** | The connected GitHub plugin authenticates as `ibis01` (verified via `get_me`), but its file-writing tools require full file content per call. Commit `261b8d6` alone carries ~1.9 MB (`scripts/test-unit.mts` 1.4 MB, `production-workspace.tsx` 212 KB, `render.ts` 118 KB, `video-jobs.ts` 127 KB) — not transportable reliably through tool parameters, and silently skipped or partially pushed states are rejected by the no-partial-publish rule (a remote tree missing the updated `test-unit.mts` would run stale tests against new app code in CI). |
+| Working tree | CLEAN | Only the intentionally-untracked `archive-a4-aesthetic-pass.patch` export artifact. |
+
+**Handoff (any ONE of these publishes the branch):**
+
+1. From any machine with GitHub credentials for `ibis01`:
+   `cd /home/z/ibismuh-work && git push -u origin feat/uiux-render-deck-aesthetic`
+2. Or reconnect the GitHub plugin in a session where a git credential helper /
+   `GITHUB_TOKEN` is present in the shell environment, then run the same command.
+3. Optional follow-up: open a PR `feat/uiux-render-deck-aesthetic` → `main` (no merge
+   without approval, per mandate) — the branch is 3 commits ahead of `main` with zero
+   divergence from it.
