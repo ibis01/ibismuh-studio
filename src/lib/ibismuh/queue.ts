@@ -29,6 +29,7 @@
 // pre-lease legacy rows).
 
 import { rawDatabase } from "./raw-db/queue-recovery";
+import { isPermanentFailure } from "./permanent-failure";
 import { db } from "./tenant-db";
 import { withCtx, withCtxNull, type TenantCtx } from "./tenant";
 import { errorText } from "@/lib/ibismuh/redact";
@@ -628,6 +629,7 @@ async function executeClaimed(
 
   let outcome: "done" | "cancelled" | "retry" | "failed" = "done";
   let errorMessage: string | null = null;
+  let jobError: unknown = null; // the RAW error — permanent-failure classification reads it
 
   try {
     if (closure) {
@@ -657,6 +659,7 @@ async function executeClaimed(
       outcome = "cancelled";
       errorMessage = errorText(err, "Cancelled by the user");
     } else {
+      jobError = err;
       errorMessage = errorText(err, `${kind} job failed`);
       outcome = "failed";
     }
@@ -670,7 +673,13 @@ async function executeClaimed(
   const row = await withCtxNull(() => rawDatabase.job.findUnique({ where: { id: jobId }, select: { attempts: true, maxAttempts: true } })).catch(() => null);
   const attempts = row?.attempts ?? 1;
   const maxAttempts = row?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
-  if (outcome === "failed" && attempts < maxAttempts) outcome = "retry";
+  // Phase 7 — the never-retry law: a PERMANENT failure (dead credentials,
+  // quota/policy refusal, tenant-ownership violation, invalid media) goes
+  // straight to the dead-letter state on the FIRST attempt. Retrying it
+  // cannot succeed and re-pays the call.
+  if (outcome === "failed" && isPermanentFailure(jobError)) {
+    log.warn("job failed PERMANENTLY — dead-lettered without retry", { jobId, kind, entityId, attempts, error: errorMessage });
+  } else if (outcome === "failed" && attempts < maxAttempts) outcome = "retry";
 
   // The closure survives a RETRY so the creating process re-runs it with the
   // original request-scoped data; terminal outcomes release it.
@@ -839,4 +848,52 @@ export function claimIsStale(claimedBy: string | null): boolean {
     return true; // previous incarnation of this very process
   }
   return claimerPidIsDead(claimedBy);
+}
+
+
+// ---------------------------------------------------------------------------
+// Metrics (Phase 7) — safe, redacted queue observability for the operator
+// health surface. Counts and ages only; no payloads, no topics, no users.
+
+export interface QueueMetrics {
+  pending: number;
+  running: number;
+  failed: number;
+  cancelled: number;
+  done: number;
+  /** Age (ms) of the OLDEST pending job — the queue-age signal. */
+  oldestPendingAgeMs: number | null;
+  /** Pending jobs whose next attempt is a RETRY (attempts > 1). */
+  retrying: number;
+  /** Running jobs past their lease deadline (about to be reaped). */
+  expiringLeases: number;
+}
+
+export async function queueMetrics(): Promise<QueueMetrics> {
+  const now = new Date();
+  const [pending, running, failed, cancelled, done, oldest, retrying, expiring] =
+    await Promise.all([
+      rawDatabase.job.count({ where: { status: "pending" } }),
+      rawDatabase.job.count({ where: { status: "running" } }),
+      rawDatabase.job.count({ where: { status: "failed" } }),
+      rawDatabase.job.count({ where: { status: "cancelled" } }),
+      rawDatabase.job.count({ where: { status: "done" } }),
+      rawDatabase.job.findFirst({
+        where: { status: "pending" },
+        orderBy: { createdAt: "asc" },
+        select: { createdAt: true },
+      }),
+      rawDatabase.job.count({ where: { status: "pending", attempts: { gt: 1 } } }),
+      rawDatabase.job.count({ where: { status: "running", leaseExpiresAt: { lt: now } } }),
+    ]);
+  return {
+    pending,
+    running,
+    failed,
+    cancelled,
+    done,
+    oldestPendingAgeMs: oldest ? now.getTime() - oldest.createdAt.getTime() : null,
+    retrying,
+    expiringLeases: expiring,
+  };
 }
