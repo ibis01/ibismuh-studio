@@ -2135,9 +2135,9 @@ export function ProductionWorkspace({
 
   // The Timeline-area CENTER: everything the old videoTab rendered around the
   // studio (render controls, captions, export presets, music, motion,
-  // transitions, render buttons, QC scorecard + ship gate). In the wide
-  // layout these ride the center while the lanes live in the strip — the
-  // controls and the lanes are simultaneous.
+  // transitions, render buttons, QC scorecard + ship gate). Defined below,
+  // after renderShipPanel; the workbench composition rides there too.
+
   const renderShipPanel = (
     <>
       {/* Render controls */}
@@ -2834,6 +2834,27 @@ export function ProductionWorkspace({
     <div className="space-y-5">
       {timelineStrip}
       {renderShipPanel}
+    </div>
+  );
+
+  // 2026-11 workbench law — the deck rides BESIDE the studio inside the
+  // center (the operator's ruling: the timeline page's dead space made no
+  // sense — bring the side panel there), so the whole cutting surface reads
+  // as one workbench: lanes left, Render & Ship right, no rail squeezing
+  // the work area. Each column owns its scroll; the studio card fills the
+  // column's height (min-h-full) so the lane surface absorbs the leftover
+  // space instead of stranding a void under the lanes.
+  const timelineWorkbench = (
+    <div className="flex h-full min-h-0 items-stretch gap-3">
+      <div className="min-h-full min-w-0 flex-1 overflow-y-auto tf-scroll-bar">
+        {timelineStrip}
+      </div>
+      <aside
+        className="w-[320px] shrink-0 overflow-y-auto tf-scroll-bar xl:w-[360px]"
+        aria-label="Render and ship"
+      >
+        {renderShipPanel}
+      </aside>
     </div>
   );
 
@@ -4629,14 +4650,19 @@ export function ProductionWorkspace({
             {/* 2026-11 law — every area owns its page: ONE resizable work
                 surface, no strip under anything. Director / Storyboard /
                 Canvas fill the center with the Inspector rail riding beside
-                them; Timeline Studio fills the center with the Render & Ship
-                deck; Inspector fills the whole width. */}
+                them; the Timeline page hosts the WORKBENCH — the studio and
+                the Render & Ship deck side by side INSIDE the center (the
+                rail steps aside there); Inspector fills the whole width. */}
             <ResizablePanelGroup
               direction="horizontal"
               className="mt-3 h-[calc(100vh-15rem)] min-h-[600px]"
             >
               <ResizablePanel
-                defaultSize={activeTab === "inspector" ? "100" : "70"}
+                defaultSize={
+                  activeTab === "inspector" || activeTab === "timeline"
+                    ? "100"
+                    : "70"
+                }
                 minSize="40"
                 id="ws-center"
                 className="h-full overflow-y-auto tf-scroll-bar pr-1"
@@ -4650,21 +4676,22 @@ export function ProductionWorkspace({
                       : activeTab === "inspector"
                         ? inspectorArea
                         : activeTab === "timeline"
-                          ? timelineStrip
+                          ? timelineWorkbench
                           : renderShipPanel}
               </ResizablePanel>
-              {activeTab !== "inspector" && <ResizableHandle withHandle />}
-              {activeTab !== "inspector" && (
+              {activeTab !== "inspector" && activeTab !== "timeline" && (
+                <ResizableHandle withHandle />
+              )}
+              {activeTab !== "inspector" && activeTab !== "timeline" && (
                 <ResizablePanel
                   defaultSize="30"
                   minSize="16"
                   id="ws-inspector"
                   className="h-full overflow-y-auto tf-scroll-bar pl-1"
                 >
-                  {/* Timeline page: the rail hosts the Render & Ship deck
-                      (controls, captions, export, music, QC + ship gate) —
-                      the Inspector is one page away, never two mounted. */}
-                  {activeTab === "timeline" ? renderShipPanel : inspectorArea}
+                  {/* The Inspector is one page away on every other page —
+                      never two mounted instances. */}
+                  {inspectorArea}
                 </ResizablePanel>
               )}
             </ResizablePanelGroup>

@@ -25472,19 +25472,30 @@ await test("B4-1 — the workspace layout: five first-class pages at ≥1024px, 
   const src = fs.readFileSync("src/components/ibismuh/production-workspace.tsx", "utf8");
   // Receipt 2026-11 (operator ruling): the bottom timeline strip is RETIRED —
   // nothing is cramped under anything. The Timeline Studio owns its page as
-  // the work area; the other pages never host it.
+  // the work area; the other pages never host it. Second ruling (same day):
+  // the timeline page's dead space makes sense now — the Render & Ship deck
+  // rides BESIDE the studio INSIDE the center (timelineWorkbench), and the
+  // workspace rail steps aside on that page.
   ok(!src.includes('ResizablePanelGroup direction="vertical"'), "no vertical panel group — no strip under any page (the no-cramped law)");
   ok(!src.includes('id="ws-timeline"'), "the ws-timeline strip panel is retired — the studio owns its page instead");
   ok(src.includes("ResizablePanelGroup\n              direction=\"horizontal\"") || src.includes('direction="horizontal"'), "the horizontal group hosts the work area over the rail");
   ok(src.includes("const timelineStrip"), "the Timeline Studio is the Timeline page's work area");
-  ok(src.includes("const renderShipPanel"), "the render/ship controls ride the Timeline page's rail");
+  ok(src.includes("const timelineWorkbench"), "the Timeline page composes a workbench — studio + deck, not a lone strip");
+  ok(
+    /const timelineWorkbench = \([\s\S]*?timelineStrip[\s\S]*?renderShipPanel[\s\S]*?\);/.test(src),
+    "the workbench holds BOTH pieces — the lanes column and the Render & Ship deck aside"
+  );
+  ok(
+    /activeTab !== "inspector" && activeTab !== "timeline" && \(\s*\n\s*<ResizableHandle/.test(src) ||
+      src.includes('activeTab !== "inspector" && activeTab !== "timeline" && ('),
+    "the rail steps aside on Inspector AND Timeline — the deck lives in the workbench, never two mounted instances"
+  );
+  ok(
+    src.includes('activeTab === "timeline"\n                          ? timelineWorkbench'),
+    "selecting Timeline mounts the workbench as the work area — its own page, not a strip"
+  );
   ok(src.includes("(min-width: 1024px)"), "the pro layout is the lg gate — below it, the B3 stacked tabs");
   ok(src.includes("isWide ? ("), "the branch chooses the layout by the viewport, never both at once");
-  ok(src.includes('activeTab !== "inspector" && <ResizableHandle'), "the Inspector rail hides when Inspector is focused — never two mounted instances");
-  ok(
-    /activeTab === "timeline"\s*\n\s*\? timelineStrip/.test(src) || src.includes('activeTab === "timeline" ? timelineStrip'),
-    "selecting Timeline mounts the studio as the work area — its own page, not a strip"
-  );
   // The S86 law + the e2e selectors survive: same triggers, now routed through
   // changeTab — a tab click IS a page change (store view, hash, header, nav).
   ok(src.includes("<Tabs value={activeTab} onValueChange={changeTab}>"), "the area strip keeps the controlled-tab law, routed to the store (S86 + 2026-11 pages law)");
@@ -25625,6 +25636,71 @@ await test("UIUX §5 — the workspace header owns an editable title and a rende
   ok(ws.includes('if (e.key === "Escape" && !titleSaving) setTitleEditing(false)'), "Escape cancels without a write");
   // Render status is a header fact while it runs (plan §5), progress numbers only.
   ok(ws.includes("(busy === \"render\" || busy === \"preview\") && renderLabel"), "the render chip is gated on a real in-flight label");
+});
+
+await test("2026-11 render-truth — the voiceover-gate refusal heals the stale flag (pure contract)", async () => {
+  const { voiceoverGateFailurePatch } = await import("../src/lib/ibismuh/video-jobs.ts");
+  const healed = voiceoverGateFailurePatch("Scene 1 has no voiceover — generate the voiceover first");
+  ok(healed.hasVoiceover === false, "the per-scene WAV refusal clears the stale hasVoiceover flag");
+  ok(healed.audioDuration === null, "the stale duration dies with the flag — the voice card shows 'not generated', not 3M 27S");
+  ok(healed.error.includes("Scene 1 has no voiceover"), "the error message rides the patch verbatim (the feed keeps its honesty)");
+  const untouched = voiceoverGateFailurePatch("ffmpeg exited 1 while titling");
+  ok(!("hasVoiceover" in untouched), "any OTHER render failure leaves the voiceover flag alone — only the file-truth refusal heals");
+  const scene7 = voiceoverGateFailurePatch("Scene 7 has no voiceover — generate the voiceover first");
+  ok(scene7.hasVoiceover === false, "the refusal matches ANY scene index — the gate names the first missing scene, not always scene 1");
+});
+
+await test("2026-11 voiceover durability — per-scene WAVs publish through storage and restore before TTS (source pins)", () => {
+  const story = fs.readFileSync("src/lib/ibismuh/story.ts", "utf8");
+  ok(
+    /fs\.writeFileSync\(wavPath, merged\.buffer\);\s*\n[\s\S]{0,700}?await storage\s*\n?\s*\.put\(`\$\{opts\.videoId\}\/\$\{sceneWavFile\(scene\.index\)\}`/.test(story),
+    "every synthesized scene WAV is published to storage — the render gate's restore branch has something to restore"
+  );
+  ok(
+    /if \(!fs\.existsSync\(wavPath\)\) \{[\s\S]{0,300}?await storage\.get\(storageKey\)/.test(story),
+    "the resume path restores a missing scene WAV from storage BEFORE re-billing TTS — a recycled machine never re-reads the script"
+  );
+  ok(
+    !story.includes("the wav branch is a future-proof no-op today"),
+    "the stale 'scratch-local by design' doc is retired — per-scene WAVs are durable artifacts now"
+  );
+});
+
+await test("2026-11 quality gate truth — the VLM inspector reads storage, not one machine's scratch (source pins)", () => {
+  const quality = fs.readFileSync("src/lib/ibismuh/quality.ts", "utf8");
+  ok(quality.includes("materializeForInspection"), "the gate materializes published bytes before inspecting");
+  ok(!quality.includes("fs.readFileSync(imagePath).toString(\"base64\")"), "no bare local read feeding the VLM — the s3-driver ENOENT skip is dead");
+  ok(/storage\s*\n?\s*\.get\(`\$\{videoId\}\/\$\{segments\[segments\.length - 1\]\}`/.test(quality),
+    "the materialization reads the published key (<videoId>/<file>) — the same seam the generators publish through");
+});
+
+await test("2026-11 JSON diagnosability — empty replies and prose replies fail with DIFFERENT, actionable errors", async () => {
+  const { parseJsonLoose } = await import("../src/lib/ibismuh/ai.ts");
+  let emptyErr = "";
+  try {
+    parseJsonLoose("   \n```  \n");
+  } catch (err) {
+    emptyErr = err instanceof Error ? err.message : String(err);
+  }
+  ok(emptyErr.startsWith("Model returned an empty response"), "an empty reply names itself — not a JSON lie");
+  ok(emptyErr.includes("provider"), "the empty-reply error points at the provider (rate limit / credits / refusal)");
+  let proseErr = "";
+  try {
+    parseJsonLoose("Sorry, I cannot help with that request as it violates my guidelines. Is there something else I can help you with today?");
+  } catch (err) {
+    proseErr = err instanceof Error ? err.message : String(err);
+  }
+  ok(proseErr.includes("Model did not return valid JSON — reply started:"), "a prose refusal quotes its own head — the failure is diagnosable from the activity feed");
+  ok(proseErr.includes("Sorry, I cannot help"), "the snippet shows WHAT the model said (the 500-identical-lines era ends)");
+  ok(proseErr.length < 400, "the snippet is capped — an error, not a wall of text");
+});
+
+await test("2026-11 timeline workbench — the studio fills its column, the deck rides beside it, the gate never renders silence (source pins)", () => {
+  const ts = fs.readFileSync("src/components/ibismuh/timeline-studio.tsx", "utf8");
+  ok(!ts.includes("if (!canAssemble) return null"), "the null law is dead — a 600px empty panel is not an empty state");
+  ok(ts.includes("The lanes assemble once the project has a voice"), "the gate is a pointed state with the unlock path (voice card locations named)");
+  ok(ts.includes("flex min-h-full flex-col rounded-xl border border-white/10"), "the studio card fills its workbench column (min-h-full)");
+  ok(ts.includes("min-h-[220px] flex-1 overflow-x-auto rounded-lg border border-white/10 bg-black/20"), "the lane surface absorbs the leftover height — no void under the clips");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

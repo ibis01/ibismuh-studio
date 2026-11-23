@@ -1021,6 +1021,21 @@ function buildLedgerNotes(ledger: LivelinessDecision[] | undefined): string {
   return ` — per-scene: ${picked.map((d) => `s${d.sceneIndex} ${d.reason.slice(0, 80)}`).join("; ")}${suffix}`;
 }
 
+/** 2026-11 truth fix — the render gate's voiceover refusal heals the row's
+ *  stale flag. PURE (message in, patch out) so the unit suite pins the
+ *  contract: ONLY the per-scene WAV refusal (the one message that means
+ *  "the files are genuinely gone") clears hasVoiceover + audioDuration;
+ *  every other render failure keeps the row's voiceover truth untouched.
+ *  The repair path is one click: the UI's "Generate voice" card reads the
+ *  same flag, and the voiceover stage republishes every read to storage. */
+export function voiceoverGateFailurePatch(
+  message: string
+): { error: string; hasVoiceover?: false; audioDuration?: null } {
+  if (/Scene \d+ has no voiceover/.test(message))
+    return { error: message, hasVoiceover: false, audioDuration: null };
+  return { error: message };
+}
+
 export async function runRenderJob(
   videoId: string,
   opts: RenderJobOptions = {}
@@ -1483,12 +1498,20 @@ export async function runRenderJob(
     // attempt), the Activity row is best-effort AFTER it — the old
     // unguarded order could lose both writes to the post-timeout SQLite
     // writer lock and leave a "rendering" row with no error.
+    // 2026-11 truth fix — when the render gate refuses because a scene's
+    // voiceover file is genuinely gone (scratch wiped, storage empty), the
+    // row's stale hasVoiceover flag is THE lie that keeps the operator
+    // clicking Render instead of Generate voice. The refusal heals the flag:
+    // the UI flips to the honest "Generate voice" state, the export bundle's
+    // chip stops showing a green checkmark for a file that does not exist.
     const writeFailureState = () =>
       db.video
-        .update({ where: { id: videoId }, data: { error: message } })
+        .update({ where: { id: videoId }, data: voiceoverGateFailurePatch(message) })
         .catch(async () => {
           await new Promise((r) => setTimeout(r, 500));
-          return db.video.update({ where: { id: videoId }, data: { error: message } }).catch(() => {});
+          return db.video
+            .update({ where: { id: videoId }, data: voiceoverGateFailurePatch(message) })
+            .catch(() => {});
         });
     await writeFailureState();
     await db.activity.create({
@@ -1629,13 +1652,17 @@ export async function runShortJob(
     });
   } catch (err) {
     const message = errorText(err, "Short render failed");
-    // S136 — the S135 receipt guard, ported to the short lane.
+    // S136 — the S135 receipt guard, ported to the short lane. The
+    // voiceover-gate healing rides along: a short refuses on the same
+    // per-scene WAV truth the full render does.
     const writeFailureState = () =>
       db.video
-        .update({ where: { id: videoId }, data: { error: message } })
+        .update({ where: { id: videoId }, data: voiceoverGateFailurePatch(message) })
         .catch(async () => {
           await new Promise((r) => setTimeout(r, 500));
-          return db.video.update({ where: { id: videoId }, data: { error: message } }).catch(() => {});
+          return db.video
+            .update({ where: { id: videoId }, data: voiceoverGateFailurePatch(message) })
+            .catch(() => {});
         });
     await writeFailureState();
     await db.activity.create({

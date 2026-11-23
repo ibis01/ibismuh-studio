@@ -222,6 +222,18 @@ export function parseJsonLoose(raw: string): Record<string, unknown> {
     .replace(/\uFEFF/g, "")
     .replace(/[\u200B-\u200D\u2060]/g, "")
     .trim();
+  // 2026-11 diagnosability fix — "Model did not return valid JSON" with no
+  // evidence left every failure a guess (the production history showed 500+
+  // identical lines and nothing to act on). Empty replies and prose replies
+  // are DIFFERENT failures with different fixes, so the error now says which
+  // one happened and quotes a safe head of the reply. The snippet is
+  // control-char-stripped and capped — never a token, never a wall of text.
+  if (!cleaned)
+    throw new Error(
+      "Model returned an empty response — the provider may be rate-limiting, out of credits, or the model refused; check the provider dashboard and retry"
+    );
+  const head = cleaned.slice(0, 180).replace(/[\u0000-\u001f\u007f]/g, " ");
+  const failing = `Model did not return valid JSON — reply started: "${head}${cleaned.length > 180 ? "…" : ""}"`;
   const strategies: unknown[] = [
     tryJsonParse(cleaned),
     tryJsonParse(repairCommonJson(cleaned)),
@@ -239,7 +251,7 @@ export function parseJsonLoose(raw: string): Record<string, unknown> {
   for (const parsed of strategies) {
     if (parsed !== undefined) return parsed as Record<string, unknown>;
   }
-  throw new Error("Model did not return valid JSON");
+  throw new Error(failing);
 }
 
 export async function aiCallJson<T = Record<string, unknown>>(

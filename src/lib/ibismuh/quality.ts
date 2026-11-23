@@ -10,12 +10,14 @@
 // image passes untouched (gates must never break the pipeline).
 
 import fs from "fs";
+import path from "path";
 import { db } from "./tenant-db";
 import { parseJsonLoose } from "./ai";
 import { aiCall } from "./budget";
 import { visionComplete } from "./providers/vision";
 import { errorText } from "@/lib/ibismuh/redact";
 import { log } from "./log";
+import * as storage from "./storage";
 
 // S57/T-57.2 — the module's logger (the old [quality] prefix became a binding).
 const qualityLog = log.child({ mod: "quality" });
@@ -52,12 +54,39 @@ const MODE_COVERS: Record<GateKind, string[]> = {
   scene: ["all"],
 };
 
+/** 2026-11 storage-truth fix — the inspector used to read the LOCAL scratch
+ *  copy with fs.readFileSync, but the generators now publish through the
+ *  storage driver (story.ts storage.put; on the s3 driver the local copy
+ *  never exists), so every production inspection died with ENOENT and the
+ *  gate "skipped" — silently unchecked art on exactly the deployment that
+ *  needs it. Materialize the published bytes into the scratch path first
+ *  (no-op when the local copy is already there); an asset missing in BOTH
+ *  places still fails the read and the gate keeps its fail-open behavior. */
+async function materializeForInspection(imagePath: string): Promise<Buffer> {
+  if (!fs.existsSync(imagePath)) {
+    // The scratch layout is <videosRoot>/<videoId>/<file> — the storage key
+    // is the last two segments joined.
+    const segments = imagePath.split(path.sep).filter(Boolean);
+    const videoId = segments.length >= 2 ? segments[segments.length - 2] : null;
+    if (videoId) {
+      const buf = await storage
+        .get(`${videoId}/${segments[segments.length - 1]}`)
+        .catch(() => null);
+      if (buf && buf.length > 0) {
+        fs.mkdirSync(path.dirname(imagePath), { recursive: true });
+        fs.writeFileSync(imagePath, buf);
+      }
+    }
+  }
+  return fs.readFileSync(imagePath);
+}
+
 /** Run a single VLM inspection on a local PNG. Returns score 0-10 + issues. */
 async function inspectImage(
   imagePath: string,
   context: string
 ): Promise<{ score: number; issues: string[]; summary: string }> {
-  const imagePngBase64 = fs.readFileSync(imagePath).toString("base64");
+  const imagePngBase64 = (await materializeForInspection(imagePath)).toString("base64");
 
   const raw = await aiCall("llm", "quality gate VLM", () =>
     visionComplete({
@@ -130,7 +159,7 @@ export async function relevanceCheck(
 ): Promise<RelevanceVerdict> {
   try {
     const cfg = await getGateConfig();
-    const imagePngBase64 = fs.readFileSync(imagePath).toString("base64");
+    const imagePngBase64 = (await materializeForInspection(imagePath)).toString("base64");
     const raw = await aiCall("llm", "stock relevance check", () =>
       visionComplete({
         system:
