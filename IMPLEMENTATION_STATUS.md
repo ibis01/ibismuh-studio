@@ -308,9 +308,32 @@ the M6 evidence-backed release decision).
   sqlite-lane drill re-run after (dev client restored) 12/12; lint 0/0,
   typecheck PASS.
 
+### M3 — API validation coverage assessment: DONE
+
+- **New census tool `scripts/api-validation-audit.mts`** (`npm run audit:api`):
+  static source census over every exported HTTP method — 138 route files,
+  209 methods, each classified into validation lanes and auth classes, the
+  full per-method table emitted as evidence
+  (`docs/audits/api-validation-audit.md`).
+- **Result: zero unvalidated input surfaces.** raw-parse lane: **0**
+  methods. The first pass flagged 23 candidates; every one was
+  source-verified to carry admission in idioms the initial classifier
+  missed (property-path typeof, enum equality, `Number.isInteger` walls,
+  dedicated validators). Query NaN candidates: **0** (both first-pass
+  candidates source-verified guarded).
+- **Auth: 199/209 session-gated · 1 fail-closed HMAC signature (Stripe
+  webhook) · 9 public-by-design** (auth flows, health, OAuth callback —
+  each dispositioned with its own wall: throttle, zod, hashed one-time
+  tokens, signed state CSRF, safe-by-construction shape).
+- **Manual-walls lane (51 methods, the F-08 class): accepted with
+  evidence** — every member carries explicit walls; the highest-risk
+  routes sit on the shared zod layer pinned by `test:api-schemas`;
+  incremental migration continues opportunistically.
+- Lanes: input-free 112 · manual-walls 51 · query-only 18 · local-zod 15 ·
+  form-walls 9 · shared-schema 3 · signature 1.
+
 ### Remaining
 
-- **M3** — API validation coverage assessment (~130 routes, audit-verified)
 - **M4** — provider retry gap: close or evidence-backed acceptance
 - **M5** — Docker deployment verification (expected BLOCKED in sandbox;
   recorded honestly)
