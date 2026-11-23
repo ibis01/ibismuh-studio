@@ -37,6 +37,10 @@ import { buildCsp } from "@/lib/ibismuh/csp";
 // answers for signed-out browsers (it resolves nothing sensitive).
 const PUBLIC_API = new Set<string>([
   "/api/auth/status",
+  // 2026-11-23 hardening (Phase 10) — the readiness probe: booleans, counts
+  // and versions ONLY (never env values, connection strings, emails or
+  // topics). Load balancers and docker healthchecks cannot authenticate.
+  "/api/health",
   "/api/auth/login",
   "/api/auth/logout",
   "/api/auth/register",

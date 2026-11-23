@@ -179,8 +179,25 @@ Production schema changes run through ONE door — `npm run migrate:release`
                         machines boot only after it succeeds.
                         Vercel: postinstall remains the platform's only hook
                         (VERCEL=1 gates it — see below)
-7. HEALTH VERIFICATION  /api/health (readiness: database, storage, queue,
-                        worker heartbeat — safe booleans only)
+7. HEALTH VERIFICATION  GET /api/health — 200 = ready, 503 = degraded.
+                        Shape (booleans/counts/versions ONLY — public by
+                        design, safe by construction):
+
+                          ok               overall (database reachable)
+                          database         { ok, provider }
+                          storage          { driver, ok }  writable|configured
+                          migration        { mode, latestApplied } version id
+                          queue            { pending, running, failed,
+                                            retrying, expiringLeases,
+                                            oldestPendingAgeMs }
+                          worker           { lastClaimAt } a recent claim
+                                            proves a live worker
+                          providerConfig   per-capability anyConfigured bool
+                          secrets          presence floors only
+
+                        Authenticated operators get the richer triage
+                        surface at /api/diag (redacted error text, env
+                        presence, instrumentation state).
 ```
 
 Where migrations may run (the policy):
