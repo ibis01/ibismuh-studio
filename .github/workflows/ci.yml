@@ -441,6 +441,9 @@ jobs:
       # Set BEFORE npm ci so postinstall picks prisma/schema.prisma and
       # generates the Postgres client (the check/build jobs stay SQLite).
       DATABASE_URL: postgres://tf:tf@localhost:5432/ibismuh
+      # Approved boot-migration context (Phase 8): CI lanes are release
+      # drills — postinstall may migrate. Production runs migrate:release.
+      IBISMUH_STUDIO_BOOT_MIGRATE: "1"
     steps:
       - uses: actions/checkout@v7
 

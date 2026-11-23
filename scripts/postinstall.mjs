@@ -196,6 +196,26 @@ if (isSqlite) {
 //    build time (or a migration that needs human review) must not wedge the
 //    deployment pipeline — the runtime errors stay readable in the API
 //    responses, and the warning below lands in the build logs.
+// 2026-11-23 hardening (Phase 8) — the boot-migration policy:
+//   · SQLite (local dev): keep running — this IS the zero-config local
+//     setup path (npm ci && npm run dev works out of the box).
+//   · Postgres: migrate ONLY in explicitly approved contexts —
+//       VERCEL=1                          (the platform's only hook)
+//       IBISMUH_STUDIO_BOOT_MIGRATE=1     (CI lanes / explicit opt-in)
+//     Docker compose runs the dedicated ibismuh-migrate service
+//     (scripts/migrate-release.mjs), Fly uses the release command, and a
+//     plain `npm ci` against a production Postgres must NOT mutate the
+//     schema as an install side effect.
+const bootMigrateAllowed =
+  isSqlite || process.env.VERCEL === '1' || process.env.IBISMUH_STUDIO_BOOT_MIGRATE === '1';
+
+if (!bootMigrateAllowed) {
+  console.log(
+    '[postinstall] Postgres detected without VERCEL/IBISMUH_STUDIO_BOOT_MIGRATE — skipping boot migration. ' +
+      'Run the release migration explicitly: npm run migrate:release (preflight → lock → migrate → verify). ' +
+      'Local SQLite development still migrates automatically.'
+  );
+} else {
 console.log('[postinstall] running scripts/migrate-stage2.mjs (idempotent)');
 try {
   // 150s cap — a hung database connection (unreachable host, blackholed TCP)
@@ -216,5 +236,6 @@ try {
       `Reason: ${String(err?.message ?? err).slice(0, 200)}`
   );
 }
+} // end bootMigrateAllowed
 
 console.log('[postinstall] done');

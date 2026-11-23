@@ -153,6 +153,54 @@ Then the operational layer (tracked in the S33+ backlog in `TASKS.md`):
 - **Release tag:** tag the commit (`vX.Y.Z`) at every staging→production
   promotion; cut the GitHub Release from the worklog entry.
 
+## 2b. The release migration runbook (2026-11-23 hardening)
+
+Production schema changes run through ONE door — `npm run migrate:release`
+(`scripts/migrate-release.mjs`) — never as a side effect of web startup:
+
+```
+1. BACKUP VERIFICATION   bash scripts/backup.sh   (or db:backup:pg for Postgres)
+                        — confirm the dump exists and its sha256 file matches
+2. PREFLIGHT            node scripts/migrate-release.mjs --preflight
+                        — READ-ONLY: provider, chain status, pending count.
+                          Nothing mutates; safe to run against production any time
+3. LOCK                 (automatic) Postgres: session-scoped advisory lock —
+                        two runners can never interleave; a crashed runner's
+                        lock dies with its session. SQLite (local): a lockfile
+                        with stale detection
+4. MIGRATE              (automatic) delegates to scripts/migrate-stage2.mjs —
+                        the proven baseline-detection + repair + deploy logic
+5. VERSION VERIFY       (automatic) post-deploy `prisma migrate status` must
+                        report the chain fully applied; anything else fails
+                        the release loudly
+6. WEB + WORKER START   docker compose: the ibismuh-migrate one-shot service
+                        gates them (service_completed_successfully).
+                        Fly: the [deploy] release_command runs step 2–5;
+                        machines boot only after it succeeds.
+                        Vercel: postinstall remains the platform's only hook
+                        (VERCEL=1 gates it — see below)
+7. HEALTH VERIFICATION  /api/health (readiness: database, storage, queue,
+                        worker heartbeat — safe booleans only)
+```
+
+Where migrations may run (the policy):
+
+| Context | Runs migrations? | How |
+|---|---|---|
+| Local SQLite dev | yes, automatically | postinstall (the zero-config path) |
+| Docker compose | yes, one-shot | the `ibismuh-migrate` service (`migrate:release`) |
+| Fly.io | yes, release phase | `[deploy] release_command` in fly.toml |
+| Vercel | yes, build phase | postinstall (the platform's only hook; `VERCEL=1` gates it) |
+| CI lanes | yes | `IBISMUH_STUDIO_BOOT_MIGRATE=1` (release drills) |
+| Plain `npm ci` vs production Postgres | **NO** | explicit `npm run migrate:release` only |
+
+Rollback limitation (deliberate, not hidden): the migration chain is
+forward-migrating — there is no automated down-migration. Recovery is
+restore-from-the-step-1-backup. Every migration in the chain is additive
+(add column/table/index; the one data-touching step — the 2026-11-23 tenant
+FK repair — only NULLs already-invalid cross-organization references, and
+is fully documented in its migration.sql).
+
 ## 3. Staging (the drill ground)
 
 Every remaining launch item in the worklog marked "operational" needs a
@@ -186,7 +234,8 @@ reset, teardown, the RC gate — is
 
 Two modes, both tested: SQLite zero-config (`npm ci && npm run dev`, see
 [`SETUP.md`](SETUP.md)) and full-stack Postgres
-(`docker compose up` — Postgres + web + worker, migrations on boot).
+(`docker compose up` — Post + the one-shot `ibismuh-migrate` release runner,
+then web + worker; the web container NEVER mutates the schema).
 
 ## 5. The Chromium worker contract (whiteboard + slides rendering)
 

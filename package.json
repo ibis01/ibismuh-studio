@@ -50,7 +50,8 @@
     "test:tenant-isolation": "node --import tsx scripts/test-tenant-isolation.mts",
     "test:upload-limits": "node --import tsx scripts/test-upload-limits.mts",
     "test:api-schemas": "node --import tsx scripts/test-api-schemas.mts",
-    "test:queue-reliability": "node --import tsx scripts/test-queue-reliability.mts"
+    "test:queue-reliability": "node --import tsx scripts/test-queue-reliability.mts",
+    "migrate:release": "node scripts/migrate-release.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
