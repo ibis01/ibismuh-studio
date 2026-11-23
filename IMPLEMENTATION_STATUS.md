@@ -372,9 +372,39 @@ the M6 evidence-backed release decision).
   its loopback server on a non-standard port is blocked by the network
   policy here; pre-existing environment failure, not an M4 regression.)
 
+### M5 — Docker deployment verification: DONE (runtime walk BLOCKED in sandbox, recorded honestly)
+
+- **Runtime acceptance walk: BLOCKED, as expected.** No Docker daemon in
+  this sandbox (`docker: command not found`) — `scripts/docker-smoke.sh`
+  (the full register → render → store → worker-reaper walk) cannot run
+  here. The prior session's record stands: CI hosts with a daemon own the
+  runtime evidence; the compose topology was validated structurally there.
+- **Structural re-audit on the milestone branch (this session, all
+  programmatic checks against the current files):**
+  - YAML validity: both `docker-compose.yml` and `docker-compose.smoke.yml`
+    parse clean.
+  - Service topology: all four milestone services present
+    (ibismuh-postgres, ibismuh-migrate, ibismuh-web, ibismuh-worker);
+    migrate correctly one-shot (no restart policy); postgres carries a
+    healthcheck.
+  - Persistence: named volumes all carry the `ibismuh_` prefix (the rename
+    law); postgres/web/worker each mount them.
+  - Env naming: zero legacy `TUBEFORGE_*` references across compose +
+    Dockerfile; 15 `IBISMUH_STUDIO_*` variables in use.
+  - Smoke overlay merge-safety: every key the overlay patches
+    (web/worker `depends_on`, `environment`) exists in the base — no
+    orphan keys.
+  - Dockerfile: three-stage build (deps → build → runner), no legacy ARGs.
+- **New finding (M5-F1, minor, recorded — deliberately NOT blind-fixed):**
+  the two long-running app containers (`ibismuh-web`, `ibismuh-worker`)
+  carry NO healthcheck — only postgres does. `ibismuh-web` is the natural
+  candidate for a `/api/health` probe (the phase-10 readiness endpoint);
+  the worker would want a process-liveness probe. Wiring them without a
+  daemon to prove the probes stay green would violate this repo's
+  evidence-backed-change law, so the finding is recorded for the next
+  daemon-equipped session to close WITH the smoke walk as proof.
+
 ### Remaining
 
-- **M5** — Docker deployment verification (expected BLOCKED in sandbox;
-  recorded honestly)
 - **M6** — final evidence-backed production release decision
 - **M7** — full verification gate before the milestone merge
