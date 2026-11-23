@@ -429,18 +429,24 @@ actions below.** The evidence posture, stated honestly:
   - `test:voicestudio`: fails identically on the pre-M4 tree here (loopback
     server on a non-standard port blocked by the sandbox network policy) —
     pre-existing environment failure, not a branch regression.
-  - **Push: BLOCKED — the sandbox has no GitHub credentials this session**
-    (M3, M4, M5, M6, M7 records are local-only on
-    `release/production-readiness`; main remains in sync with origin).
-- **Conditions before the merge (operator actions, in order):**
-  1. Push the milestone branch when credentials are available
-     (`git push origin release/production-readiness`).
-  2. CI green on the pushed branch (the push itself owns the evidence
-     this sandbox cannot produce).
-  3. Docker smoke walk green on a daemon-equipped host; close M5-F1
-     (compose healthchecks for web/worker) WITH that walk as proof.
-  4. Merge `release/production-readiness` → `main` (squash-free merge —
-     the branch's history is the audit trail).
+  - **Push: DONE (2026-11-23, ~21:00 UTC) — the operator supplied a PAT.**
+    `git push origin release/production-readiness` landed
+    ed963e2..3ab5c95 (M3 + M4 + status + M5 + M6/M7); local and origin
+    re-verified identical (`rev-list` 0/0 both directions). CI fired on
+    the push through the PR lane (PR #14 synchronize, run 45264608342).
+- **Conditions before the merge (statuses, 2026-11-23 ~21:10 UTC):**
+  1. DONE — the milestone branch is pushed (see above).
+  2. IN FLIGHT — CI on the pushed branch (PR #14 lane; the branch push
+     itself owns the evidence this sandbox cannot produce).
+  3. FIX LANDED, PROOF PENDING — M5-F1 closed in code (compose
+     healthchecks for web + worker, plus smoke-walk health assertions)
+     and the docker-smoke.sh syntax repair (unbalanced quote on the
+     phase-3 restart line — the walk could not pass as shipped); the
+     `docker-smoke` label is on PR #14 so the next synchronize run
+     walks the topology on a daemon-equipped CI runner.
+  4. PENDING — merge `release/production-readiness` → `main`
+     (squash-free merge — the branch's history is the audit trail)
+     once 2 and 3 are green.
 
 ### M7 — full verification gate before the milestone merge: PASS
 

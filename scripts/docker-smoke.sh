@@ -158,6 +158,27 @@ if [ "$WEB_OK" != true ]; then
 fi
 echo "[smoke] ibismuh-web healthy"
 
+# M5-F1 (closed 2026-11-23): the compose healthchecks are part of the walk
+# now — both services must report healthy to DOCKER, not just answer one
+# external curl: the web probe is the /api/auth/status fetch; the worker's
+# is the /proc process check (its port never opens). And the walk re-proves
+# the worker's probe after the phase-3 restart below.
+wait_healthy() {
+  local svc=$1 steps=$2 i st
+  st=missing
+  for i in $(seq 1 "$steps"); do
+    st=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$svc" 2>/dev/null || echo missing)
+    [ "$st" = "healthy" ] && return 0
+    sleep 5
+  done
+  echo "[smoke] FAIL: $svc never reported healthy (last: $st)"
+  "${COMPOSE[@]}" logs --tail 40 "$svc" || true
+  return 1
+}
+wait_healthy ibismuh-web 30
+wait_healthy ibismuh-worker 30
+echo "[smoke] compose healthchecks report healthy (M5-F1: web HTTP probe + worker process check)"
+
 # The acceptance walk's HTTP leg — through the REAL routes on the REAL
 # topology (fresh database: open registration, no legacy claim gate).
 echo "[smoke] HTTP walk: register → login → create project"
@@ -182,7 +203,9 @@ echo "[smoke] stopping ibismuh-worker — seeding the recovery scenario while it
 "${COMPOSE[@]}" exec -T ibismuh-web node --import tsx scripts/smoke-walk.mts --phase 2
 
 echo "[smoke] starting ibismuh-worker — the reaper + claimer must land both jobs"
-""${COMPOSE[@]}" start ibismuh-worker
+"${COMPOSE[@]}" start ibismuh-worker
+wait_healthy ibismuh-worker 30
+echo "[smoke] ibismuh-worker restarted — process-check probe healthy again"
 "${COMPOSE[@]}" exec -T ibismuh-web node --import tsx scripts/smoke-walk.mts --phase 3
 
 echo "[smoke] PASS — the production topology walked end-to-end"

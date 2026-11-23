@@ -7498,3 +7498,58 @@ lint-budget · rate limiter · scene-revisions 29/29 · restore drill 12/12
 **Push state:** 5 local-only commits on release/production-readiness
 (63351f3 M3 · a562ba0 M4 · 5c8038c status · 898c228 M5 · this record).
 main remains in sync with origin. Push when credentials are available.
+
+## 2026-11-23 — Studio session (continued): the credential unblock — push landed, M5-F1 closed in code, the smoke script repaired
+
+**Push (the M6 pipeline's first operator action).** The operator supplied
+a GitHub PAT mid-session; `git push origin release/production-readiness`
+landed ed963e2..3ab5c95 (M3 · M4 · status · M5 · M6/M7). Local/origin
+re-verified identical (rev-list 0/0 both ways, blob SHAs match). CI fired
+through the PR lane (PR #14 synchronize, run 45264608342) — the ci.yml
+push filter is `branches: [main]` (restored by c1b071a; verified by
+blob-SHA this session), so branch pushes ride the PR lane while a PR is
+open, and the merge commit to main will earn its own push-lane evidence.
+
+**M5-F1 (closed in code; CI proof pending).** The compose topology now
+declares healthchecks for both application services: ibismuh-web carries
+the image's own probe (node fetch /api/auth/status — DB-touching by
+design: a web that cannot answer auth status cannot serve, and postgres's
+own healthcheck disambiguates); ibismuh-worker gets the process check the
+Dockerfile documents ("the worker overrides with a process check in
+compose") — a node /proc scan for the worker.mts process, EXCLUDING the
+probe's own PID (the -e source contains 'worker.mts'; a naive scan
+self-matches and reports a dead worker healthy). No pgrep/ps in the slim
+image — /proc and node are always there. A wedged claim loop is NOT this
+probe's job (the lease/reaper recovery owns it — the walk's phase 2/3
+proves that). docker-smoke.sh now ASSERTS both services report healthy
+to Docker (wait_healthy via docker inspect), and re-proves the worker's
+probe after the phase-3 restart.
+
+**The smoke script repair (found by `bash -n`, exit-code evidence).**
+scripts/docker-smoke.sh shipped with an unbalanced quote on the phase-3
+restart line (`""` + `${COMPOSE[@]}"` — the same restoration-era
+corruption class as the ci.yml trigger glob): the walk executed phases
+1-2 then died at EOF before the worker restart, so the smoke job could
+not pass as shipped. Repaired to the documented call; `bash -n` exit 0,
+all 26 repo shell scripts re-swept clean, compose files re-parse, the
+smoke overlay stays merge-safe (healthchecks are new base keys the
+overlay never touches).
+
+**The display-mangling receipt (recorded for future sessions).** This
+sandbox session caught its own Bash TEXT output rendering the ci.yml
+push filter as `branches: ain]` while the real bytes are
+`branches: [main]` — python integer dumps, git blob SHAs, exit codes
+and the Read/Edit tools all agreed on the truth. c1b071a's restoration
+was real; the "still corrupted" reading was the display layer. Law
+reaffirmed: bracketed tokens in text output are not evidence — exit
+codes, SHAs, and integer dumps are.
+
+**Gates (this sandbox, for the fix commit):** `bash -n` clean on the
+repaired walk · compose YAML parses, overlay merge-safe · the worker
+probe behaviorally verified (exit 1 with no worker process on this
+host; self-match guard proven). The full battery + docker-smoke proof
+is CI's to produce (PR #14 now carries the `docker-smoke` label; the
+synchronize run after this push walks the topology on the runner).
+
+**Push state:** this commit joins the milestone branch; merge condition
+4 (squash-free merge to main) waits on CI green + docker-smoke green.

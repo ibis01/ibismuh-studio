@@ -104,6 +104,19 @@ services:
       # Claim liveness probes compare PIDs across processes — same-host
       # semantics matter more than network isolation between the roles.
       - "host.docker.internal:host-gateway"
+    # M5-F1 (closed 2026-11-23): the web role's liveness, declared at the
+    # topology level — the same probe the image HEALTHCHECK carries
+    # (Dockerfile: node fetch /api/auth/status). The endpoint touches the
+    # DB (user count + session resolve), deliberately: a web container
+    # that cannot answer its auth status cannot serve, and postgres's own
+    # healthcheck disambiguates the culprit. node's global fetch — no
+    # curl/wget in the runner image.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/auth/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
   ibismuh-worker:
     build: .
@@ -131,6 +144,21 @@ services:
       - ibismuh_uploads:/app/uploads
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # M5-F1 (closed 2026-11-23): the worker opens no port, so its probe is
+    # the PROCESS check the Dockerfile documents ("the worker overrides
+    # with a process check in compose") — scan the container's own PID
+    # namespace for the worker process (slim image: no pgrep/ps, but /proc
+    # and node are always there). The probe MUST EXCLUDE ITS OWN PID: the
+    # -e source contains 'worker.mts', so a naive scan self-matches and
+    # reports a dead worker healthy. A wedged claim loop is NOT caught
+    # here (the queue's lease/reaper recovery owns that case — proven by
+    # the smoke walk's phase 2/3); this check proves the process contract.
+    healthcheck:
+      test: ["CMD", "node", "-e", "const fs=require('fs');const me=String(process.pid);let ok=false;for(const d of fs.readdirSync('/proc')){if(!/^\\d+$/.test(d)||d===me)continue;try{if(fs.readFileSync('/proc/'+d+'/cmdline','utf8').includes('worker.mts')){ok=true;break}}catch{}}process.exit(ok?0:1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
 
 volumes:
   ibismuh_pgdata:
