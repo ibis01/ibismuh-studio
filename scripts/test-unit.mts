@@ -11948,7 +11948,11 @@ await test("S149 resolve: an UNKNOWN uuid (an archived id) lands on the live fir
 await test("S149 resolve: an unreachable live list NEVER rewrites a uuid — Cartesia's readable 404 stays honest", async () => {
   const tts = await import("../src/lib/ibismuh/providers/tts.ts");
   const requested = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeffff0000";
-  await withFetchStub(async () => new Response("boom", { status: 500 }), async () => {
+  // M4 note: the stub models a HARD-unreachable list (404 — non-retriable).
+  // A 500 would now be legitimately recovered by the transport retry layer
+  // (the provider lanes re-attempt transient 408/429/5xx), so it no longer
+  // models "cannot verify" — it models "flaky, then healthy".
+  await withFetchStub(async () => new Response("boom", { status: 404 }), async () => {
     const id = await tts.resolveCartesiaVoiceId(requested, s149Cfg("unr1"));
     eq(id, requested, "cannot verify → verbatim (no silent substitution on a network failure)");
   });
@@ -11963,7 +11967,8 @@ await test("S149 resolve: a foreign name goes to the live first voice; offline i
     const id = await tts.resolveCartesiaVoiceId("jam", s149Cfg("nm1"));
     eq(id, "11111111-2222-4333-8444-555566667777", "a zai voice name resolves to the live first voice");
   });
-  await withFetchStub(async () => new Response("boom", { status: 500 }), async () => {
+  // Offline leg: hard-unreachable (404, non-retriable — see the M4 note above).
+  await withFetchStub(async () => new Response("boom", { status: 404 }), async () => {
     const id = await tts.resolveCartesiaVoiceId("jam", s149Cfg("nm2"));
     eq(id, "b24f41fd-00a3-4cd8-992a-a0c9f13f3ef1", "offline, the safety net's first entry (verified Clive) rides");
   });
@@ -11982,11 +11987,13 @@ await test("S149 self-heal: a 404 after a verbatim resolve refreshes the list an
   const voicesGets: number[] = [];
   await withFetchStub(async (url, init) => {
     if (url.includes("/voices")) {
-      // COLD resolve probe fails (network blip) — the uuid rides verbatim.
-      // The refresh probe after the 404 succeeds.
+      // COLD resolve probe fails (hard-unreachable: 404, non-retriable —
+      // M4's transport retry recovers transient 5xx/429s, so a scripted 500
+      // here would honestly succeed on its retry and change the scenario).
+      // The uuid rides verbatim. The refresh probe after the 404 succeeds.
       if (voicesGets.length === 0) {
         voicesGets.push(1);
-        return new Response("boom", { status: 500 });
+        return new Response("boom", { status: 404 });
       }
       voicesGets.push(2);
       return S95_JSON(S149_LIVE);

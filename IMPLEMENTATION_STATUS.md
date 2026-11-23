@@ -332,9 +332,48 @@ the M6 evidence-backed release decision).
 - Lanes: input-free 112 · manual-walls 51 · query-only 18 · local-zod 15 ·
   form-walls 9 · shared-schema 3 · signature 1.
 
+### M4 — provider retry gap: CLOSED
+
+- **New transport-retry layer `providers/http.ts#withTransportRetry`** — the
+  Z.ai SDK lane already retried through `budget.ts#withRetry`; the two lanes
+  with zero retry now share the same philosophy with a stricter classifier:
+  - **`providerFetch`** (every direct-provider adapter call: chat, tts,
+    image, video, vision, asr, voicestudio-extra, voice-clone) — 3 attempts;
+    `retryAttempts` opt-out added to `ProviderFetchOpts`.
+  - **`ytFetch`** (every YouTube call: OAuth, channel lookup, stats sync,
+    retention analytics, resumable upload, thumbnail set) — youtube-api 3
+    attempts · youtube-upload 2 (one clean restart of the expensive resumable
+    PUT — Google's resumable protocol accepts a repeated PUT against the
+    same session URL; a transient 500 no longer fails a finished video).
+- **Transient-only re-attempts**: timeouts (`TimeoutError`/abort), connection
+  blips (`fetch failed`, ECONNRESET/ECONNREFUSED, socket hang up), and
+  statuses 408/429/500/502/503/504. **Deterministic verdicts never retry** —
+  policy blocks (`UrlGuardError`, and the mapped "network policy" error),
+  401/403/400/404, YouTube's quotaExceeded 403 — so bad keys and quota walls
+  surface on the first attempt instead of burning wall time and quota.
+- **429 cool-down parity with budget.ts**: `Retry-After` header honored
+  (delta-seconds or HTTP-date, bounded 60 s) via the new `retryAfterMs`
+  field on `ProviderHttpError`; without a header the same 4x multiplier
+  budget.ts applies to rate limits kicks in. Backoff is exponential with
+  full jitter (base 750 ms) so concurrent lanes don't re-sync their retries.
+- **Zero caller-visible contract change**: the final failure rethrows
+  unchanged — every `.ok` handler keeps its quota-aware, hint-bearing
+  error messages; net-guard/provider battery, provider-registry, rate
+  limiter, and the full unit suite all pass against the new layer.
+- **Suite alignment (stub-only, no assertion changed)**: three S149 Cartesia
+  stubs scripted a 500 as "unreachable list" — under the new transport law a
+  500 is honestly retried and recovered, which changed the self-heal
+  scenario's call sequence. The stubs now script a hard-unreachable 404;
+  the laws they pin (cannot-verify → verbatim, no silent substitution,
+  404-after-verbatim → refresh + retry ONCE) are unchanged and still pass.
+- Gate after: typecheck PASS, lint 0/0, unit 1039/1039, net-guard +
+  provider battery PASS, provider-registry 16/16, rate limiter PASS.
+  (`test:voicestudio` fails identically on the pre-M4 tree in this sandbox —
+  its loopback server on a non-standard port is blocked by the network
+  policy here; pre-existing environment failure, not an M4 regression.)
+
 ### Remaining
 
-- **M4** — provider retry gap: close or evidence-backed acceptance
 - **M5** — Docker deployment verification (expected BLOCKED in sandbox;
   recorded honestly)
 - **M6** — final evidence-backed production release decision

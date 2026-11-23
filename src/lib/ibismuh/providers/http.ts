@@ -1,12 +1,22 @@
 // Shared fetch plumbing for the non-Z.ai provider adapters — URL joining,
-// per-capability timeouts (Stage 3, D-09), and readable errors (status + body
-// snippet) so users can debug 401s / wrong endpoints straight from the feed.
+// per-capability timeouts (Stage 3, D-09) + M4 transport retry, and readable
+// errors (status + body snippet) so users can debug 401s / wrong endpoints
+// straight from the feed.
 //
 // 2026-11-23 hardening: providerFetch now routes EVERY request through the
 // net-guard safeFetch transport (SSRF protection) — protocol allowlist, DNS
 // resolution validation, private/reserved address rejection, per-hop
 // redirect revalidation, DNS-rebinding-pinned connections, response byte
 // caps and timeouts. There is no un-guarded outbound provider call left.
+//
+// M4 (R-HIGH-8) — TRANSPORT RETRY: the Z.ai SDK lane already retries through
+// budget.ts#withRetry; the direct-provider lane (providerFetch) and the
+// YouTube lane (youtube.ts#ytFetch) now retry through the same philosophy:
+// transient transport failures (timeouts, connection blips, 408/429/5xx)
+// re-attempt with exponential backoff + full jitter, and 429s honor the
+// upstream Retry-After header (bounded) or the same 4x rate-limit multiplier
+// budget.ts uses. Deterministic failures (policy blocks, 401/403/400/404…)
+// never retry — a bad key or a wall does not improve with another attempt.
 
 import { redactText } from "../redact";
 import { log } from "../log";
@@ -14,6 +24,8 @@ import {
   safeFetch,
   UrlGuardError,
 } from "../net-guard";
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // S57/T-57.2 — the module's logger (the old [http] prefix became a binding).
 const httpLog = log.child({ mod: "http" });
@@ -177,16 +189,136 @@ export function sanitizeUrlForError(url: string): string {
 }
 
 export class ProviderHttpError extends Error {
+  /** Milliseconds the upstream asked us to wait (Retry-After), or null. */
+  public retryAfterMs: number | null;
   constructor(
     public provider: string,
     public status: number,
-    body: string
+    body: string,
+    retryAfterMs: number | null = null
   ) {
     super(
       `${provider} request failed (HTTP ${status}): ${redactText(body).slice(0, 300)}`
     );
     this.name = "ProviderHttpError";
+    this.retryAfterMs = retryAfterMs;
   }
+}
+
+/**
+ * Transient transport statuses worth a second attempt (M4/R-HIGH-8).
+ * 408 request-timeout, 429 rate-limited, and the classic bad-gateway/overload
+ * 5xx family. Everything else is deterministic from the client's side —
+ * 401/403/400/404/413/422 … do not improve on retry and only burn wall time
+ * (and, on metered APIs, quota).
+ */
+const RETRIABLE_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+
+/** Status-level twin of isRetriableTransportFailure for response lanes that
+ *  handle !ok themselves (ytFetch hands the final bad response to its own
+ *  quota-aware error builders). */
+export function isRetriableTransportStatus(status: number): boolean {
+  return RETRIABLE_STATUS.has(status);
+}
+
+/** Parse a Retry-After header (delta-seconds or HTTP-date) into bounded ms. */
+export function retryAfterMsFromResponse(res: { headers: { get(name: string): string | null } }, now = Date.now()): number | null {
+  const raw = res.headers.get("retry-after")?.trim();
+  if (!raw) return null;
+  const secs = Number(raw);
+  let ms: number;
+  if (Number.isFinite(secs) && secs >= 0) {
+    ms = secs * 1000;
+  } else {
+    const date = Date.parse(raw);
+    if (Number.isNaN(date)) return null;
+    ms = date - now;
+  }
+  if (!Number.isFinite(ms) || ms <= 0) return null;
+  return Math.min(Math.round(ms), 60_000); // bound: a hung cool-down is worse than a fast retry
+}
+
+/**
+ * Retriability classifier for the transport lanes (providerFetch, ytFetch).
+ * Mirrors the transient classes budget.ts#withRetry covers for the Z.ai SDK
+ * lane, minus its blind retry-everything posture: this layer KNOWS the
+ * failure shapes, so deterministic ones are refused a second attempt.
+ *   - UrlGuardError            → never (policy verdict, request never left)
+ *   - ProviderHttpError 408/429/5xx → yes
+ *   - ProviderHttpError others     → never
+ *   - timeouts / aborts / socket+DNS blips → yes (fetch failed, ECONNRESET,
+ *     ECONNREFUSED, socket hang up, terminated, aborted)
+ */
+export function isRetriableTransportFailure(err: unknown): boolean {
+  if (err instanceof UrlGuardError) return false;
+  if (err instanceof ProviderHttpError) return RETRIABLE_STATUS.has(err.status);
+  if (err instanceof Error) {
+    if (err.name === "TimeoutError" || err.name === "AbortError") return true;
+    // "network error" (two words) — the bare token would also match the
+    // deterministic "blocked by the network policy" verdict below.
+    return /timed out|fetch failed|network error|econnreset|econnrefused|etimedout|eai_again|socket hang up|terminated|aborted/i.test(
+      err.message
+    );
+  }
+  return false;
+}
+
+/** Backoff for one retry: Retry-After (bounded) on 429, else exponential
+ *  with full jitter; 429 without a header gets budget.ts's 4x multiplier. */
+function transportRetryDelayMs(err: unknown, attempt: number, baseDelayMs: number): number {
+  if (err instanceof ProviderHttpError && err.status === 429) {
+    if (err.retryAfterMs && err.retryAfterMs > 0) return err.retryAfterMs;
+    return baseDelayMs * Math.pow(2, attempt - 1) * 4;
+  }
+  // Full jitter: random 50–100% of the exponential slot keeps concurrent
+  // lanes from re-syncing their retries into the next thundering herd.
+  return Math.round(baseDelayMs * Math.pow(2, attempt - 1) * (0.5 + Math.random() * 0.5));
+}
+
+export interface TransportRetryOpts {
+  /** Human-readable lane label for the structured log lines. */
+  label: string;
+  /** Total attempts INCLUDING the first (default 3). */
+  attempts?: number;
+  /** Base backoff slot in ms (default 750). */
+  baseDelayMs?: number;
+}
+
+/**
+ * M4 — the shared transport retry core. Runs `fn` up to `attempts` times;
+ * re-attempts only on failures classified retriably by
+ * isRetriableTransportFailure. The attempt callback receives (attempt,
+ * attempts) so response-lane callers (ytFetch) can hand a final bad status
+ * straight through to their own .ok handlers instead of a synthetic error.
+ * The final failure is rethrown unchanged — every caller-visible error type
+ * and message keeps its pre-retry shape.
+ */
+export async function withTransportRetry<T>(
+  opts: TransportRetryOpts,
+  fn: (attempt: number, attempts: number) => Promise<T>
+): Promise<T> {
+  const attempts = Math.max(1, opts.attempts ?? 3);
+  const baseDelayMs = Math.max(1, opts.baseDelayMs ?? 750);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fn(attempt, attempts);
+    } catch (err) {
+      lastError = err;
+      if (attempt >= attempts || !isRetriableTransportFailure(err)) break;
+      const delayMs = transportRetryDelayMs(err, attempt, baseDelayMs);
+      const msg = err instanceof Error ? err.message : String(err);
+      httpLog.warn("transient transport failure — retrying", {
+        label: opts.label,
+        attempt,
+        attempts,
+        delayMs,
+        err: redactText(msg).slice(0, 200),
+      });
+      await sleep(delayMs);
+    }
+  }
+  throw lastError;
 }
 
 export interface ProviderFetchOpts {
@@ -196,6 +328,9 @@ export interface ProviderFetchOpts {
   timeoutMs?: number;
   /** Explicit byte-cap override (default: the capability matrix below). */
   maxBytes?: number;
+  /** M4 — total attempts including the first (default 3; 1 disables retry).
+   *  Only transient transport failures retry — see withTransportRetry. */
+  retryAttempts?: number;
 }
 
 /**
@@ -314,43 +449,57 @@ export async function providerFetch(
     }
   }
 
-  let response: Response;
-  try {
-    response = await safeFetch(url, {
-      method: init.method,
-      headers,
-      body: init.body as BodyInit | undefined,
-      timeoutMs,
-      maxBytes,
-      privateDestinations,
-    });
-  } catch (err) {
-    if (err instanceof UrlGuardError) {
-      // Destination rejected by policy — the request never left the process,
-      // so no credentials were sent. Keep the reason actionable.
-      throw new Error(
-        `${provider} request blocked by the network policy: ${err.message} (${sanitizeUrlForError(url)})`,
-      );
+  // M4 — the retry wraps ONE attempt (guard + error mapping); the final
+  // failure rethrows unchanged so the error contract below is identical to
+  // the pre-retry lane. UrlGuardError never retries (policy verdicts are
+  // deterministic); retriable statuses loop; everything else surfaces once.
+  return withTransportRetry(
+    { label: `${provider} ${sanitizeUrlForError(url)}`, attempts: opts.retryAttempts ?? 3 },
+    async () => {
+      let response: Response;
+      try {
+        response = await safeFetch(url, {
+          method: init.method,
+          headers,
+          body: init.body as BodyInit | undefined,
+          timeoutMs,
+          maxBytes,
+          privateDestinations,
+        });
+      } catch (err) {
+        if (err instanceof UrlGuardError) {
+          // Destination rejected by policy — the request never left the process,
+          // so no credentials were sent. Keep the reason actionable.
+          throw new Error(
+            `${provider} request blocked by the network policy: ${err.message} (${sanitizeUrlForError(url)})`,
+          );
+        }
+        if (
+          err instanceof Error &&
+          (err.name === "TimeoutError" || err.message.includes("timed out"))
+        ) {
+          throw new Error(
+            `${provider} request timed out after ${Math.round(timeoutMs / 1000)}s (${sanitizeUrlForError(url)})`
+          );
+        }
+        throw new Error(
+          redactText(
+            `${provider} request failed: ${err instanceof Error ? err.message : String(err)} (${sanitizeUrlForError(url)})`
+          )
+        );
+      }
+      if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new ProviderHttpError(
+          provider,
+          response.status,
+          body,
+          retryAfterMsFromResponse(response)
+        );
+      }
+      return response;
     }
-    if (
-      err instanceof Error &&
-      (err.name === "TimeoutError" || err.message.includes("timed out"))
-    ) {
-      throw new Error(
-        `${provider} request timed out after ${Math.round(timeoutMs / 1000)}s (${sanitizeUrlForError(url)})`
-      );
-    }
-    throw new Error(
-      redactText(
-        `${provider} request failed: ${err instanceof Error ? err.message : String(err)} (${sanitizeUrlForError(url)})`
-      )
-    );
-  }
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new ProviderHttpError(provider, response.status, body);
-  }
-  return response;
+  );
 }
 
 export async function providerFetchJson<T>(

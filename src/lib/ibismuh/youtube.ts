@@ -14,8 +14,9 @@
 //
 // Upload = YouTube resumable API: initiate a session with video metadata,
 // PUT the MP4 bytes, then set the custom thumbnail. No external deps — plain
-// fetch against Google endpoints, with actionable error surfacing so users
-// can fix quota / auth / scope problems without reading Google's docs.
+// fetch against Google endpoints through ytFetch (D-09 timeouts + M4
+// transient-failure retry), with actionable error surfacing so users can
+// fix quota / auth / scope problems without reading Google's docs.
 
 import { rawDatabase as rawDb } from "./raw-db/system";
 import { decryptSecret, encryptSecret } from "./crypto";
@@ -27,7 +28,7 @@ import { log } from "./log";
 
 // S57/T-57.2 — the module's logger (the old [youtube] prefix became a binding).
 const ytLog = log.child({ mod: "youtube" });
-import { timeoutFor, type ProviderCapability } from "./providers/http";
+import { timeoutFor, type ProviderCapability, withTransportRetry, isRetriableTransportStatus, retryAfterMsFromResponse, ProviderHttpError } from "./providers/http";
 import { safeFetch } from "./net-guard";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -43,16 +44,32 @@ const SCOPES = [
 ].join(" ");
 
 /**
- * Every YouTube fetch goes through the D-09 timeout matrix — the audit found
- * these direct `fetch` calls with NO timeout, so one hung Google request
- * could stall an OAuth callback or upload job forever.
- * youtube-api: 30s (metadata + OAuth) · youtube-upload: 60min (resumable PUT).
+ * Every YouTube fetch goes through the D-09 timeout matrix AND the M4 retry
+ * law — the audit found these direct `fetch` calls with NO timeout and NO
+ * retry, so one hung Google request could stall an OAuth callback or upload
+ * job forever, and one transient Google 500 could fail a finished upload.
+ *
+ *   youtube-api:    30s timeout, 3 attempts (metadata + OAuth — fail fast,
+ *                   then one backoff pair is plenty)
+ *   youtube-upload: 60min timeout, 2 attempts (the resumable PUT is the
+ *                   expensive one; a single clean restart is still far
+ *                   cheaper than failing a finished video on one 500, and
+ *                   Google's resumable protocol accepts a repeated PUT
+ *                   against the same session URL).
+ *
+ * Only TRANSIENT failures re-attempt: timeouts, connection blips, 408/429/
+ * 5xx (429 honors Retry-After). Deterministic verdicts — 401/403/400, the
+ * quotaExceeded 403, policy blocks — surface on the first attempt exactly
+ * as before. The final attempt hands the raw response back, so every .ok
+ * handler keeps its quota-aware, hint-bearing error messages.
  */
 async function ytFetch(
   url: string,
   init: RequestInit,
   capability: Extract<ProviderCapability, "youtube-api" | "youtube-upload"> = "youtube-api"
 ): Promise<Response> {
+  const attempts = capability === "youtube-upload" ? 2 : 3;
+
   // Guarded transport: Google endpoints are fixed, but OAuth/upload URLs and
   // the resumable-upload session URLs still get the SSRF policy (redirect
   // revalidation, byte caps) — defense in depth for a compromised upstream
@@ -62,13 +79,31 @@ async function ytFetch(
     headers = {};
     for (const [k, v] of new Headers(init.headers as HeadersInit)) headers[k] = v;
   }
-  return safeFetch(url, {
-    method: init.method,
-    headers,
-    body: init.body as BodyInit | undefined,
-    timeoutMs: timeoutFor(capability),
-    maxBytes: capability === "youtube-upload" ? 16 * 1024 * 1024 : 10 * 1024 * 1024,
-  });
+  const method = init.method;
+  const body = init.body as BodyInit | undefined;
+  const timeoutMs = timeoutFor(capability);
+  const maxBytes = capability === "youtube-upload" ? 16 * 1024 * 1024 : 10 * 1024 * 1024;
+
+  return withTransportRetry(
+    { label: `youtube ${capability}`, attempts },
+    async (attempt, totalAttempts) => {
+      const res = await safeFetch(url, {
+        method,
+        headers,
+        body,
+        timeoutMs,
+        maxBytes,
+      });
+      // A transient status on a NON-final attempt re-throws as a
+      // ProviderHttpError so the retry loop re-attempts; the final attempt
+      // (or any deterministic status) returns the raw response untouched.
+      if (!res.ok && attempt < totalAttempts && isRetriableTransportStatus(res.status)) {
+        const bodyText = await res.text().catch(() => "");
+        throw new ProviderHttpError("youtube", res.status, bodyText, retryAfterMsFromResponse(res));
+      }
+      return res;
+    }
+  );
 }
 
 // ---------- OAuth client (server-wide) ----------
@@ -136,7 +171,10 @@ export async function verifyOAuthState(
   return payload && payload.s === "state" && payload.uid ? { uid: payload.uid } : null;
 }
 
-/** Exchange the consent callback code for tokens; persists the per-user account. */
+/** Exchange the consent callback code for tokens; persists the per-user account.
+ *  (The code is single-use; the M4 retry only re-attempts transport-level
+ *  failures / 5xx / 429, and a retry after Google already processed a lost
+ *  response simply surfaces the invalid_grant "reconnect" path — acceptable.) */
 export async function exchangeCode(code: string, origin: string): Promise<void> {
   const ctx = requireCtx();
   const { clientId, clientSecret } = await getYtOAuthClient().catch(() => {

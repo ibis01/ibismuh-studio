@@ -48,9 +48,9 @@
 
 ### Missing timeout/retry (1 cluster)
 
-| ID | Risk | File:line | Stage to fix | Mitigation |
-| --- | --- | --- | --- | --- |
-| R-HIGH-8 | YouTube fetch calls have no timeout/retry — a single Google 500 fails the upload | `src/lib/ibismuh/youtube.ts:123,166,218,314,336,362` | Stage 3 | Wrap every YouTube fetch in the existing `budget.ts#aiCall` pattern (timeout, retry, 429 cool-down). Add per-call `AbortSignal.timeout`. |
+| ID | Risk | File:line | Stage to fix | Mitigation | Status |
+| --- | --- | --- | --- | --- | --- |
+| R-HIGH-8 | YouTube fetch calls have no timeout/retry — a single Google 500 fails the upload | `src/lib/ibismuh/youtube.ts:123,166,218,314,336,362` | Stage 3 | Wrap every YouTube fetch in the existing `budget.ts#aiCall` pattern (timeout, retry, 429 cool-down). Add per-call `AbortSignal.timeout`. | **CLOSED (M4)** — timeout half closed by the D-09 capability matrix (`providers/http.ts#timeoutFor`, every call rides `safeFetch`); retry half closed by the M4 transport-retry layer: `providers/http.ts#withTransportRetry` wraps `ytFetch` (youtube-api 3 attempts · youtube-upload 2) and `providerFetch` (3 attempts) — transient failures only (timeouts, connection blips, 408/429/5xx), 429 honors `Retry-After` (bounded 60 s) else budget.ts's 4x multiplier, exponential backoff with full jitter; deterministic verdicts (policy blocks, 401/403/400/404, the quotaExceeded 403) surface on the first attempt untouched. |
 
 ### Missing validation framework (1)
 
