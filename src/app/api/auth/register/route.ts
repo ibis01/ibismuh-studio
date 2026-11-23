@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/raw-db/auth-bootstrap";
 import {
   MIN_PASSWORD_LEN,
   createSessionRecord,

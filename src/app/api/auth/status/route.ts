@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/raw-db/auth-bootstrap";
 import { resolveRequestUser } from "@/lib/ibismuh/tenant";
 import { pendingLegacyRows } from "@/lib/ibismuh/claim";
 

@@ -11,7 +11,7 @@
 
 import { decryptSecret, encryptSecret } from "./crypto";
 import { assertCtx } from "./tenant";
-import { rawDatabase as rawDb } from "./tenant-db";
+import { rawDatabase as rawDb } from "./raw-db/system";
 
 // ---------------------------------------------------------------------------
 // UserSetting (preferences — music, sfx, quality gates, budgets, defaults, …)

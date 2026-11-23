@@ -17,7 +17,7 @@
 // "no shared limit" with a once-per-process announcement, while the
 // middleware's cheap per-instance gate keeps shedding floods.
 
-import { rawDatabase as rawDb } from "./tenant-db";
+import { rawDatabase as rawDb } from "./raw-db/billing";
 import { log } from "./log";
 
 const rateLog = log.child({ mod: "shared-rate-limit" });

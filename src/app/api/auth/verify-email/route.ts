@@ -18,7 +18,7 @@
 //                 S20 set for the keyring).
 
 import { NextRequest, NextResponse } from "next/server";
-import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/raw-db/auth-bootstrap";
 import { randomToken, sha256Hex } from "@/lib/ibismuh/crypto";
 import { requireUser, sessionIdFromRequest } from "@/lib/ibismuh/tenant";
 import { sendMail, linkInResponse } from "@/lib/ibismuh/email";

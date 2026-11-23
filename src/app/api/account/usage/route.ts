@@ -7,7 +7,7 @@
 //   ?days=N   — window in days (1..90, default 30)
 
 import { NextRequest, NextResponse } from "next/server";
-import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/raw-db/system";
 import { requireUser } from "@/lib/ibismuh/tenant";
 import { usageBytes, storageQuotaBytes, storageDriverKind } from "@/lib/ibismuh/storage";
 import { dailyUsageSparkline } from "@/lib/ibismuh/usage-sql";

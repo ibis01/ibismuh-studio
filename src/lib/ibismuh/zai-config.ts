@@ -11,7 +11,7 @@ import fs from "fs";
 import path from "path";
 import ZAI from "z-ai-web-dev-sdk";
 import { readLegacyZai } from "./providers/settings";
-import { rawDatabase as rawDb } from "./tenant-db";
+import { rawDatabase as rawDb } from "./raw-db/system";
 import { decryptSecret } from "./crypto";
 import { DEFAULT_ZAI_BASE_URL } from "./types";
 

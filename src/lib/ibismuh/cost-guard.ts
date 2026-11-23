@@ -11,7 +11,7 @@
 // over-ceiling project gets a readable refusal instead of a failed job row).
 
 import type { Video } from "@prisma/client";
-import { rawDatabase } from "./tenant-db";
+import { rawDatabase } from "./raw-db/billing";
 
 export class CostCeilingExceededError extends Error {
   readonly spentMicroUsd: number;

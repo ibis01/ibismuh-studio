@@ -36,7 +36,7 @@
 // After a successful claim LegacySetting is empty; the table itself is dropped
 // in Stage 3.
 
-import { rawDatabase as rawDb } from "./tenant-db";
+import { rawDatabase as rawDb } from "./raw-db/queue-recovery";
 import { log } from "./log";
 
 // S57/T-57.2 — the module's logger (the old [claim] prefix became a binding).

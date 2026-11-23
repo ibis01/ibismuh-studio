@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/raw-db/system";
 import { withCtx, type TenantCtx } from "@/lib/ibismuh/tenant";
 import { exchangeCode, fetchChannelInfo, verifyOAuthState } from "@/lib/ibismuh/youtube";
 import { errorText } from "@/lib/ibismuh/redact";

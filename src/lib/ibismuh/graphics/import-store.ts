@@ -21,7 +21,8 @@
 // manifest row committed), and the count wall + the row create are ONE
 // serialized transaction.
 import { Prisma } from "@prisma/client";
-import { db, rawDatabase } from "@/lib/ibismuh/tenant-db";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { rawDatabase } from "@/lib/ibismuh/raw-db/system";
 import { get, put, removePrefix } from "@/lib/ibismuh/storage";
 import { IMPORT_WALLS } from "./import-validate";
 

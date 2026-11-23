@@ -40,7 +40,7 @@
 // credential surfaces above, where an attacker needs thousands of tries
 // and every try must count.
 
-import { rawDatabase as rawDb } from "./tenant-db";
+import { rawDatabase as rawDb } from "./raw-db/auth-bootstrap";
 import { log } from "./log";
 
 // S57/T-57.2 — the module's logger (the old [Ibismuh Studio] auth-throttle

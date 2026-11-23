@@ -8,7 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { db } from "@/lib/db";
+import { rawDatabase as db } from "./raw-db/auth-bootstrap";
 import {
   SESSION_COOKIE,
   SESSION_MAX_AGE_SEC,

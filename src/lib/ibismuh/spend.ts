@@ -826,7 +826,7 @@ export async function admitDispatch(opts: {
   // SQLite is single-writer, so its default transaction is already
   // serialized. Any read/write failure is fail-CLOSED (SpendBootFailedError)
   // with no permanent latch — the next admit re-tries.
-  const { rawDatabase } = await import("./tenant-db");
+  const { rawDatabase } = await import("./raw-db/billing");
   const serializable = !`${process.env.DATABASE_URL ?? ""}`.startsWith("file:");
   let fresh: {
     recorded: number;
@@ -948,7 +948,7 @@ export async function admitDispatch(opts: {
     // only; never block the pipeline that just ran the call.
     if (ctx) {
       try {
-        const { rawDatabase } = await import("./tenant-db");
+        const { rawDatabase } = await import("./raw-db/billing");
         await rawDatabase.spendReservation.update({
           where: { id: holdId },
           data: {

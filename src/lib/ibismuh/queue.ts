@@ -28,7 +28,8 @@
 // same-host pid checks (those remain only as the boot-recovery shortcut for
 // pre-lease legacy rows).
 
-import { rawDatabase, db } from "./tenant-db";
+import { rawDatabase } from "./raw-db/queue-recovery";
+import { db } from "./tenant-db";
 import { withCtx, withCtxNull, type TenantCtx } from "./tenant";
 import { errorText } from "@/lib/ibismuh/redact";
 import { log } from "./log";

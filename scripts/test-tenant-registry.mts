@@ -69,6 +69,36 @@ async function main(): Promise<void> {
   // organizationId (the mechanism the registry feeds).
   ok(ORG_SCOPED_MODELS.size >= 24, `the registry carries the full org-owned set (${ORG_SCOPED_MODELS.size} models)`);
 
+  // ---- Phase 6: the raw-db gateway confinement ------------------------
+  // The raw client must be reachable only through the documented gateways;
+  // the ESLint rule is the machine-checked inventory, this pin guards the
+  // gateway files themselves.
+  const gatewayDir = path.resolve(import.meta.dirname, "../src/lib/ibismuh/raw-db");
+  const gateways = fs.readdirSync(gatewayDir).filter((f) => f.endsWith(".ts"));
+  ok(
+    gateways.length === 4 &&
+      gateways.includes("auth-bootstrap.ts") &&
+      gateways.includes("queue-recovery.ts") &&
+      gateways.includes("billing.ts") &&
+      gateways.includes("system.ts"),
+    "the four documented raw-db gateways exist (auth-bootstrap, queue-recovery, billing, system)",
+  );
+  for (const g of gateways) {
+    const src = fs.readFileSync(path.join(gatewayDir, g), "utf8");
+    ok(
+      src.includes("APPROVED IMPORTERS"),
+      `raw-db/${g} carries its auditable importer inventory`,
+    );
+  }
+  const eslintSrc = fs.readFileSync(
+    path.resolve(import.meta.dirname, "../eslint.config.mjs"),
+    "utf8",
+  );
+  ok(
+    eslintSrc.includes("raw-db/auth-bootstrap") && eslintSrc.includes("importNames: [\"rawDatabase\"]"),
+    "the ESLint rule confines rawDatabase imports to the gateways (the reviewable inventory)",
+  );
+
   if (failed) {
     console.error("\ntenant registry battery: FAIL");
     process.exit(1);

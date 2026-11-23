@@ -17,7 +17,7 @@
 // fetch against Google endpoints, with actionable error surfacing so users
 // can fix quota / auth / scope problems without reading Google's docs.
 
-import { db as rawDb } from "@/lib/db";
+import { rawDatabase as rawDb } from "./raw-db/system";
 import { decryptSecret, encryptSecret } from "./crypto";
 import { currentCtx } from "./tenant";
 import { getUserSettings, setUserSetting } from "./settings";

@@ -83,20 +83,51 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   // Stage 2 multi-tenant guard: route handlers must go through the tenant-
   // scoped client (src/lib/ibismuh/tenant-db.ts). A raw @/lib/db import in
   // src/app would silently BYPASS the organizationId filter — this rule makes
-  // that a lint error instead of a cross-tenant hole. Allow-listed exceptions:
-  // the auth/account bootstrap routes (no tenant exists yet there by design).
+  // that a lint error instead of a cross-tenant hole.
+  //
+  // 2026-11-23 hardening (Phase 6): the raw client is now reachable ONLY
+  // through the documented gateway modules (src/lib/ibismuh/raw-db/*) —
+  // auth-bootstrap, queue-recovery, billing, system — each carrying its
+  // auditable inventory. Routes and ordinary lib modules must use the
+  // tenant-scoped client or the gateways.
   files: ["src/app/**/*.{ts,tsx}"],
   rules: {
     "no-restricted-imports": ["error", {
-      patterns: [{
-        group: ["@/lib/db", "@/lib/db*"],
-        message: "Routes must use the tenant-scoped client: import { db } from \"@/lib/ibismuh/tenant-db\" (raw @/lib/db bypasses the organizationId guard).",
-      }],
+      patterns: [
+        {
+          group: ["@/lib/db", "@/lib/db*"],
+          message: "Routes must use the tenant-scoped client: import { db } from \"@/lib/ibismuh/tenant-db\" (raw @/lib/db bypasses the organizationId guard).",
+        },
+        {
+          group: ["@/lib/ibismuh/tenant-db"],
+          importNames: ["rawDatabase"],
+          message: "The raw client is confined to the documented gateways: import { rawDatabase } from \"@/lib/ibismuh/raw-db/auth-bootstrap\" (auth routes) or \"@/lib/ibismuh/raw-db/system\" (account/youtube surfaces) — each gateway carries the auditable inventory.",
+        },
+      ],
     }],
   },
-  ignores: [
-    "src/app/api/auth/**",
-  ],
+}, {
+  // Phase 6, the lib-side wall: inside src/lib/ibismuh, the raw client may
+  // only be imported by tenant-db.ts itself (the definition) and the
+  // raw-db/* gateway modules. Every other module uses the tenant-scoped
+  // client or a gateway — the rule IS the reviewable inventory.
+  files: ["src/lib/ibismuh/**/*.ts"],
+  ignores: ["src/lib/ibismuh/tenant-db.ts", "src/lib/ibismuh/raw-db/**"],
+  rules: {
+    "no-restricted-imports": ["error", {
+      patterns: [
+        {
+          group: ["@/lib/db", "@/lib/db*", "./db", "../db"],
+          message: "Use the tenant-scoped client (./tenant-db) or a raw-db/* gateway — direct raw imports are confined to tenant-db.ts and the gateways.",
+        },
+        {
+          group: ["./tenant-db", "../tenant-db", "@/lib/ibismuh/tenant-db"],
+          importNames: ["rawDatabase"],
+          message: "Import rawDatabase from its category gateway (./raw-db/auth-bootstrap | ./raw-db/queue-recovery | ./raw-db/billing | ./raw-db/system) — the gateway file documents why raw access is legitimate there.",
+        },
+      ],
+    }],
+  },
 }, {
   // S57/T-57.3 — the CLI harness scope: scripts/ and e2e/ are operator-
   // facing tools (probes, suites, workers, evidence harnesses). Their

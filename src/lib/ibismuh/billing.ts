@@ -55,7 +55,7 @@
 //     and avoids a write on every register.
 
 import { Prisma } from "@prisma/client";
-import { db as rawDb } from "@/lib/db";
+import { rawDatabase as rawDb } from "./raw-db/billing";
 import { log } from "@/lib/ibismuh/log";
 
 // S57/T-57.2 — the module's loggers (the old [billing]/[billing/webhook]

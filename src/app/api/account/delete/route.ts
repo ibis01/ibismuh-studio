@@ -10,7 +10,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { db, rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/raw-db/system";
 import { requireUser, sessionIdFromRequest, clearedSessionCookie } from "@/lib/ibismuh/tenant";
 
 export async function POST(req: NextRequest) {

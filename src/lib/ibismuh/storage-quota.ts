@@ -8,7 +8,7 @@
 
 import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
-import { rawDatabase as rawDb } from "./tenant-db";
+import { rawDatabase as rawDb } from "./raw-db/billing";
 import { log } from "./log";
 
 /** Per-organization quota ceiling. Default 10 GiB; 0 = unlimited. */

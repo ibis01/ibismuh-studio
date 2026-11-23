@@ -18,7 +18,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { NextRequest } from "next/server";
-import { db as rawDb } from "@/lib/db";
+import { rawDatabase as rawDb } from "./raw-db/auth-bootstrap";
 import { randomToken } from "./crypto";
 import { trustedClientIp } from "./proxy-trust";
 import { enforceSharedRateLimit } from "./shared-rate-limit";

@@ -3,7 +3,8 @@
 // uploads/<id>/ are listed by path, not inlined).
 
 import { NextRequest, NextResponse } from "next/server";
-import { db, rawDatabase as rawDb } from "@/lib/ibismuh/tenant-db";
+import { db } from "@/lib/ibismuh/tenant-db";
+import { rawDatabase as rawDb } from "@/lib/ibismuh/raw-db/system";
 import { requireUser, sessionIdFromRequest } from "@/lib/ibismuh/tenant";
 
 export async function GET(req: NextRequest) {

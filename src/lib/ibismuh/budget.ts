@@ -363,10 +363,11 @@ async function recordAiUsage(
   const ctx = currentCtx();
   if (!ctx) return null; // platform path (boot recovery) — no user to attribute
   try {
-    const [{ rawDatabase }, settingsMod] = await Promise.all([
-      import("./tenant-db"),
+    const [rawDbMod, settingsMod] = await Promise.all([
+      import("./raw-db/billing"),
       import("./providers/settings"),
     ]);
+    const rawDatabase = rawDbMod.rawDatabase;
     const capability = CAPABILITY_OF[service];
     let provider = "zai";
     let model: string | null = null;

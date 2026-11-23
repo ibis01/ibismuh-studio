@@ -15,7 +15,8 @@
 // setJobProgress, jobProgress, jobSnapshot, characterJobSnapshot,
 // jobHistory, ensureRecovered, startJob — 22 route call sites unchanged.
 
-import { db, rawDatabase } from "./tenant-db";
+import { db } from "./tenant-db";
+import { rawDatabase } from "./raw-db/queue-recovery";
 import { currentCtx, withCtxNull, type TenantCtx } from "./tenant";
 import { errorText } from "@/lib/ibismuh/redact";
 import { JobCancelledError } from "./cancel";
