@@ -255,7 +255,64 @@ immediately after the push).
 
 **Handoff:**
 
-1. PR `feat/uiux-render-deck-aesthetic` → `main` (opened; merge awaits owner
-   approval per mandate — the branch is a strict fast-forward of `main`).
+1. ~~PR `feat/uiux-render-deck-aesthetic` → `main`~~ — **MERGED 2026-11-23**
+   (PR #13, merge commit `7272e95`; full gate re-run on the merged main:
+   typecheck PASS, lint 0/0, unit **1039/1039**).
 2. `archive-a4-aesthetic-pass.patch` stays intentionally untracked (a local
    export artifact, not project source).
+
+---
+
+## Infrastructure & recovery verification milestone (2026-11-23, in progress)
+
+The external review verdict — real work, but "not yet production-ready";
+next milestone must be infrastructure and recovery verification. Tracked as
+PR #14 (`release/production-readiness` → `main`, draft — merges only after
+the M6 evidence-backed release decision).
+
+### M1 — backup & restore drill: DONE
+
+- **Two-leg restore drill** (`npm run test:drill`): database leg + new
+  object-storage leg (real `uploads/` layout, sha256 + manifest parity).
+  Two clean runs, **12/12 assertions PASS** — DB RTO 449/487 ms, storage
+  RTO 35/36 ms (byte-exact).
+- **Real finding fixed:** `npm run backup` exited 1 on hosts without the
+  `sqlite3` CLI — broken on exactly the slim containers it targets. Now
+  falls back to the same `VACUUM INTO` hot copy via `better-sqlite3`
+  (`scripts/backup-vacuum.mjs`); real bundle produced and verified
+  (`integrity_check ok`, 39 tables, 40-file uploads manifest).
+- Evidence: `docs/runbooks/backup-restore.md` §4.2 (commit `6211588`).
+
+### M2 — real PostgreSQL migration drill: DONE
+
+- **New drill `scripts/pg-drill.mts`** (`npm run test:drill:pg`): real
+  PostgreSQL 17.12 (embedded-postgres, no docker/root), the REAL
+  `migrate:release` path (preflight → session advisory lock → full 37-migration
+  chain → verify), seed through the app's prisma-factory, `backup-postgres.sh`
+  dump conventions (custom format, `pg_restore --list` verify, sha256 sidecar),
+  DROP DATABASE casualty, runbook §3 restore command, parity +
+  `prisma migrate status` on the restored DB, and the advisory-lock
+  concurrency law (held lock → concurrent runner FAILS FAST; released →
+  idempotent success). **21/21 PASS**, two consecutive clean runs; RTOs:
+  boot 525 ms · full-chain migrate 6.1 s · dump+verify 154 ms ·
+  destroy+restore+parity 1.2 s.
+- **Finding (operational, now documented + automated away):** a
+  `setup:local` machine holds the sqlite-generated prisma client —
+  `migrate:release`'s lock step dies with an adapter/provider mismatch.
+  The drill regenerates the release-lane client first and restores the dev
+  client after; runbook §5 carries the manual fix.
+- **Proof gained:** the S60 `Setting_pkey` wedge fires on EVERY fresh
+  full-chain deploy and the S60 repair recovers it automatically (one
+  `rolled_back` history row by design) — now asserted on every drill run.
+- Evidence: `docs/runbooks/backup-restore.md` §4 drill log row + §4.3;
+  sqlite-lane drill re-run after (dev client restored) 12/12; lint 0/0,
+  typecheck PASS.
+
+### Remaining
+
+- **M3** — API validation coverage assessment (~130 routes, audit-verified)
+- **M4** — provider retry gap: close or evidence-backed acceptance
+- **M5** — Docker deployment verification (expected BLOCKED in sandbox;
+  recorded honestly)
+- **M6** — final evidence-backed production release decision
+- **M7** — full verification gate before the milestone merge

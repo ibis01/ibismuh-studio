@@ -97,7 +97,7 @@ into the drill log in §4.
 
 | Date | Dump stamp | Size | Restore time | Boot + smoke time | Result | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| — | — | — | — | — | _first quarterly drill pending — production Postgres lane, scheduled with the real-PostgreSQL migration drill (M2); the SQLite-lane machinery below is drilled on every push_ | — |
+| 2026-11-23 | embedded PostgreSQL 17.12 scratch cluster (`scripts/pg-drill.mts`; custom-format dump + sha256 sidecar) | 108 KB | ~1.2 s (drop → pg_restore → parity → migrate status) | boot 0.5 s · migrate:release full chain 6.1 s (drill exercises the release path directly, not the app boot) | **PASS — 21/21 assertions** | First real Postgres-lane drill; details in §4.3. Hosted-provider specifics (Neon branch scratch, off-provider bucket copy) remain operational-lane items — this drill proves the restore machinery and the release path against a real PostgreSQL 17 server. |
 
 ### 4.1 The automated companion drill (S103 / P1.1, 2026-11-13)
 
@@ -158,6 +158,65 @@ drill/setup invocations landed on the wrong database file
 (`DATABASE_URL="file:<abs-path>" npm run …`). This is the live instance of
 the wrong-target failure class §5 warns about.
 
+### 4.3 The real-PostgreSQL lane drill (M2, 2026-11-23)
+
+`scripts/pg-drill.mts` (`npm run test:drill:pg`) runs the production lane
+end to end against a **real PostgreSQL 17.12 server** (embedded-postgres —
+no docker, no root; server binaries only, so pg_dump/pg_restore come from
+`PG_BIN_DIR` or PATH, e.g. `apt-get download postgresql-client-17 && dpkg -x`):
+
+1. **client** — regenerates the prisma client from `prisma/schema.prisma`
+   (the release lane's client) and restores the sqlite-lane client on
+   teardown — see the finding below for why this step exists;
+2. **boot** — scratch cluster, random port, scram auth; client/server major
+   match enforced (the §5 restore-wedge guard, as an assertion);
+3. **migrate** — the REAL `npm run migrate:release`: preflight → session
+   advisory lock → `migrate-stage2` baseline+deploy of the full 37-migration
+   chain → `prisma migrate status` verify;
+4. **seed** — org/user/video/jobs through the app's own `prisma-factory`
+   (`@prisma/adapter-pg` lane);
+5. **dump** — `backup-postgres.sh`'s exact conventions: `pg_dump
+   --format=custom --no-owner --no-privileges`, verified with
+   `pg_restore --list` (TABLE DATA count), sha256 sidecar;
+6. **destroy** — `DROP DATABASE` (asserted: zero tables in `public` — the
+   schema itself is gone);
+7. **restore** — the runbook §3 command verbatim (`pg_restore --no-owner
+   --no-privileges --clean --if-exists`);
+8. **verify** — row parity vs the seed baseline, a real query by id, the
+   applied `_prisma_migrations` history, and `prisma migrate status` exit-0
+   on the RESTORED database (a restored DB that is not release-ready is
+   not restored);
+9. **lock law** — a live session holding
+   `pg_try_advisory_lock(0x494249534d5548)` makes a concurrent
+   `migrate:release` FAIL FAST (exit 1, refusal message); after release, a
+   second run succeeds (idempotent).
+
+First run (2026-11-23): **21/21 PASS** — RTOs: cluster boot 525 ms,
+migrate:release full chain 6.1 s, pg_dump+verify 154 ms, destroy+restore+
+parity+migrate-status 1.2 s. Two consecutive clean runs; lint/typecheck
+clean; the sqlite-lane drill re-run after it (dev client restored) 12/12.
+
+**Finding 1 (operational, documented in §5):** a machine that last ran
+`npm run setup:local` holds the SQLITE-generated prisma client —
+`migrate:release`'s advisory-lock step then dies with "The Driver Adapter
+`@prisma/adapter-pg` … is not compatible with the provider `sqlite`".
+Production images generate from `schema.prisma` and never see this; the
+drill now regenerates the correct client before the release path and
+restores the dev client afterward.
+
+**Finding 2 (proof, not a bug):** the S60 `Setting_pkey` wedge fires on
+**every fresh full-chain deploy** (init creates `Setting` → multiuser
+renames it to `LegacySetting` keeping the PK name → `auth_setting`
+recreates `Setting` → 42P07) — and the S60 repair (constraint rename +
+`migrate resolve --rolled-back` + redeploy) recovers it automatically,
+leaving exactly one `rolled_back` history row in `_prisma_migrations`. The
+drill asserts both the wedge and the repair, every run.
+
+**Finding 3 (harness):** embedded-postgres registers an async exit hook
+that keeps the node process alive after a clean script end — drill-style
+scripts must `process.exit()` explicitly or they hang forever. Recorded
+here because the next harness author will otherwise lose an hour to it.
+
 ## 5. Failure modes and responses
 
 | Symptom | Likely cause | Response |
@@ -166,3 +225,4 @@ the wrong-target failure class §5 warns about.
 | Nightly dump missing from the bucket | Worker machine redeployed (cron wiped), or aws credentials expired | Re-install the crontab (§2A); check `backup-cron.log`; alert on absence (the uptime monitor's companion check — see S33+ backlog, observability) |
 | `sha256sum -c` fails after download | Truncated/corrupted transfer | Re-download; if it fails at the source, the dump was bad at write time — investigate disk health immediately |
 | Dump size drops sharply day-over-day | A table stopped being written, or a silent schema change | Compare `pg_restore --list` table-data counts against the previous day before assuming |
+| `migrate-release` fatal: "The Driver Adapter `@prisma/adapter-pg` … is not compatible with the provider `sqlite`" | The prisma client in `node_modules` was last generated from `prisma/schema.sqlite.prisma` (a `setup:local` machine); the release lane needs the postgres schema's client | `npx prisma generate --schema prisma/schema.prisma`, then re-run `npm run migrate:release`. The pg drill (§4.3) does this automatically and restores the dev client afterward. Production images generate correctly and never hit this. |
