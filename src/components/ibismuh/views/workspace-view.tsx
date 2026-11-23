@@ -1,13 +1,19 @@
 "use client";
 
 // WorkspaceView — the per-project host for the B3 production workspace
-// (docs/design/B3_PRODUCTION_WORKSPACE_SPEC.md). The workspace is opened per
-// project (Projects cards, Home continue row, palette, Create, Topic Radar,
-// Calendar, Analytics, Cast) — it is never browsed, so an absent focus id
-// renders a pointed empty state rather than a list.
+// (docs/design/B3_PRODUCTION_WORKSPACE_SPEC.md).
+//
+// 2026-11 law — "every feature must have its page, bold and clear": the five
+// workspace areas (Director, Storyboard, Canvas, Timeline Studio, Inspector)
+// are FIRST-CLASS views. This component is the single host instance — the
+// page shell keeps it mounted across area changes and passes the active area
+// as a prop, so moving between the pages never remounts the production engine
+// or loses the loaded project. The bare "workspace" view (every entry point
+// lands there) normalizes to a concrete area page once the project loads:
+// a watchable project opens Timeline Studio, everything else the Director.
 
 import { useEffect, useState } from "react";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, isWorkspaceArea, type ViewId, type WorkspaceAreaId } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ibismuh/shared";
@@ -15,11 +21,12 @@ import { ProductionWorkspace } from "@/components/ibismuh/production-workspace";
 import { Library as LibraryIcon, Wand2 } from "lucide-react";
 import type { VideoDTO } from "@/lib/ibismuh/types";
 
-export function WorkspaceView() {
+export function WorkspaceView({ area }: { area: ViewId }) {
   const focusVideoId = useAppStore((s) => s.focusVideoId);
   const setFocusVideoId = useAppStore((s) => s.setFocusVideoId);
-  const refreshKey = useAppStore((s) => s.refreshKey);
+  const setActiveVideoId = useAppStore((s) => s.setActiveVideoId);
   const setView = useAppStore((s) => s.setView);
+  const refreshKey = useAppStore((s) => s.refreshKey);
   const bumpRefresh = useAppStore((s) => s.bumpRefresh);
 
   const [video, setVideo] = useState<VideoDTO | null>(null);
@@ -48,7 +55,22 @@ export function WorkspaceView() {
     };
   }, [focusVideoId, setFocusVideoId]);
 
-  const loading = Boolean(focusVideoId);
+  // The standing project anchor — the URL hash rides this so #/timeline/<id>,
+  // #/director/<id> … survive a reload while the operator moves between the
+  // five area pages. Cleared when the host loses its project.
+  useEffect(() => {
+    setActiveVideoId(video?.id ?? null);
+    return () => setActiveVideoId(null);
+  }, [video?.id, setActiveVideoId]);
+
+  // Entry normalization: the bare "workspace" view is a transient landing —
+  // once the project is known it resolves to the concrete area page (a
+  // watchable project opens Timeline Studio, everything else the Director),
+  // so the page header, the sidebar light and the hash all speak the truth.
+  useEffect(() => {
+    if (area !== "workspace" || !video) return;
+    setView(video.hasVideo || video.hasVoiceover ? "timeline" : "director");
+  }, [area, video, setView]);
 
   // Keep the standing DTO truthful: when any engine bumps the global refresh
   // (a render finishing elsewhere, a publish, a QC run), re-pull the project.
@@ -65,6 +87,8 @@ export function WorkspaceView() {
       cancelled = true;
     };
   }, [refreshKey, video?.id]);
+
+  const loading = Boolean(focusVideoId);
 
   if (loading) {
     return (
@@ -112,9 +136,19 @@ export function WorkspaceView() {
     );
   }
 
+  // Controlled areas: an explicit area view (director/storyboard/canvas/
+  // timeline/inspector) drives the workspace's active page from the store;
+  // the transient "workspace" landing lets the engine seed itself, then the
+  // normalization above hands control to the store.
+  const controlledArea: WorkspaceAreaId | null = isWorkspaceArea(area)
+    ? area
+    : null;
+
   return (
     <ProductionWorkspace
       video={video}
+      area={controlledArea}
+      onAreaChange={(a) => setView(a)}
       onClose={() => setView("library")}
       onChanged={(v) => {
         setVideo(v);

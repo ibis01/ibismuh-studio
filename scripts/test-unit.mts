@@ -25265,7 +25265,7 @@ await test("B3 canvas: SceneStudioPanel is inline (no open prop), the storyboard
   const ws = fs.readFileSync("src/components/ibismuh/production-workspace.tsx", "utf8");
   ok(ws.includes("<SceneStudioPanel"), "the Canvas area hosts the scene panel inline");
   ok(
-    /setCanvasScene\(s\.index\);[\s\S]{0,120}?setActiveTab\("canvas"\)/.test(ws),
+    /setCanvasScene\(s\.index\);[\s\S]{0,120}?changeTab\("canvas"\)/.test(ws),
     "the storyboard's Edit scene lands the Canvas area with the scene picked"
   );
 });
@@ -25281,15 +25281,21 @@ await test("B3 language & nav: the new copy speaks creator-control and the shell
   ok(page.includes("workspace: {"), "VIEW_META knows the workspace");
   ok(page.includes('view !== "workspace"'), "the header CTA hides on the workspace (a focused surface, like Create/Settings)");
   const sidebar = fs.readFileSync("src/components/ibismuh/app-sidebar.tsx", "utf8");
-  // Receipt 2026-11 — the nav law changed ("every page visible"): create is
-  // now a DIRECT sidebar destination (it lights itself), so the old
-  // `case "create": case "workspace":` pair split. The pin's intent is the
-  // workspace — a per-project surface, not a browsable destination — still
-  // lighting the Projects destination.
+  // Receipt 2026-11 (operator ruling: "every feature must have its page, bold
+  // and clear, not cramped into another page") — the five workspace areas are
+  // FIRST-CLASS pages now: each lights ITSELF in the sidebar under Production.
+  // The transient "workspace" landing falls back to the Director (the page it
+  // normalizes to when a project opens).
   ok(
-    /case "workspace":\s*\n\s*return "library";/.test(sidebar),
-    "the workspace highlights the Projects destination in the sidebar"
+    /case "workspace":\s*\n\s*\/\/ The transient landing normalizes to a concrete area page once the\s*\n\s*\/\/ project loads — while it lasts, the Director is where it points\.\s*\n\s*return "director";/.test(sidebar),
+    "the transient workspace landing points at the Director page it becomes"
   );
+  for (const area of ["director", "storyboard", "canvas", "timeline", "inspector"]) {
+    ok(
+      sidebar.includes(`id: "${area}"`),
+      `the ${area} page is a direct sidebar destination (the every-page-visible law)`
+    );
+  }
   ok(
     /label: "New Project",\s*\n\s*icon: Wand2/.test(sidebar),
     "New Project is a direct sidebar destination (the 2026-11 every-page-visible law)"
@@ -25455,17 +25461,27 @@ await test("B4-3 — the scene3d PUT rides the ONE parse law and never overwrite
   ok(src.includes("startJob(id, \"scene3d\""), "rerender rides the SAME deterministic job POST uses");
 });
 
-await test("B4-1 — the workspace layout: simultaneous panels at ≥1024px, the B3 stacked tabs below", () => {
+await test("B4-1 — the workspace layout: five first-class pages at ≥1024px, the B3 stacked tabs below", () => {
   const src = fs.readFileSync("src/components/ibismuh/production-workspace.tsx", "utf8");
-  ok(src.includes("ResizablePanelGroup direction=\"vertical\""), "the vertical group hosts center+inspector over the timeline strip");
-  ok(src.includes("ResizablePanelGroup direction=\"horizontal\""), "the horizontal group hosts center over the inspector rail");
-  ok(src.includes("const timelineStrip"), "the Timeline Studio lives in ONE always-mounted strip");
-  ok(src.includes("const renderShipPanel"), "the render/ship controls are the Timeline-area center content");
+  // Receipt 2026-11 (operator ruling): the bottom timeline strip is RETIRED —
+  // nothing is cramped under anything. The Timeline Studio owns its page as
+  // the work area; the other pages never host it.
+  ok(!src.includes('ResizablePanelGroup direction="vertical"'), "no vertical panel group — no strip under any page (the no-cramped law)");
+  ok(!src.includes('id="ws-timeline"'), "the ws-timeline strip panel is retired — the studio owns its page instead");
+  ok(src.includes("ResizablePanelGroup\n              direction=\"horizontal\"") || src.includes('direction="horizontal"'), "the horizontal group hosts the work area over the rail");
+  ok(src.includes("const timelineStrip"), "the Timeline Studio is the Timeline page's work area");
+  ok(src.includes("const renderShipPanel"), "the render/ship controls ride the Timeline page's rail");
   ok(src.includes("(min-width: 1024px)"), "the pro layout is the lg gate — below it, the B3 stacked tabs");
   ok(src.includes("isWide ? ("), "the branch chooses the layout by the viewport, never both at once");
   ok(src.includes('activeTab !== "inspector" && <ResizableHandle'), "the Inspector rail hides when Inspector is focused — never two mounted instances");
-  // The S86 law + the e2e selectors survive: same triggers, same controlled state.
-  ok(src.includes("<Tabs value={activeTab} onValueChange={setActiveTab}>"), "the area strip keeps the controlled-tab law (S86)");
+  ok(
+    /activeTab === "timeline"\s*\n\s*\? timelineStrip/.test(src) || src.includes('activeTab === "timeline" ? timelineStrip'),
+    "selecting Timeline mounts the studio as the work area — its own page, not a strip"
+  );
+  // The S86 law + the e2e selectors survive: same triggers, now routed through
+  // changeTab — a tab click IS a page change (store view, hash, header, nav).
+  ok(src.includes("<Tabs value={activeTab} onValueChange={changeTab}>"), "the area strip keeps the controlled-tab law, routed to the store (S86 + 2026-11 pages law)");
+  ok(src.includes("const changeTab = (t: string)"), "changeTab writes the seed AND routes the page through onAreaChange");
   ok(src.includes('value="inspector"'), "the five area triggers keep their names (e2e + screen readers)");
 });
 

@@ -2,6 +2,30 @@
 
 import { create } from "zustand";
 
+// 2026-11 law (the operator's words: "every feature must have its page, bold
+// and clear, not cramped into another page"): the five production-workspace
+// areas are FIRST-CLASS views. Director, Storyboard, Canvas, Timeline Studio
+// and Inspector each own a page with its own hash, its own header and its own
+// sidebar entry — nothing rides as a strip under anything else.
+export type WorkspaceAreaId =
+  | "director"
+  | "storyboard"
+  | "canvas"
+  | "timeline"
+  | "inspector";
+
+export const WORKSPACE_AREA_IDS: WorkspaceAreaId[] = [
+  "director",
+  "storyboard",
+  "canvas",
+  "timeline",
+  "inspector",
+];
+
+export function isWorkspaceArea(v: ViewId): v is WorkspaceAreaId {
+  return (WORKSPACE_AREA_IDS as string[]).includes(v);
+}
+
 export type ViewId =
   | "dashboard"
   | "assets"
@@ -11,6 +35,11 @@ export type ViewId =
   | "create"
   | "library"
   | "workspace"
+  | "director"
+  | "storyboard"
+  | "canvas"
+  | "timeline"
+  | "inspector"
   | "cast"
   | "world"
   | "voice"
@@ -31,6 +60,13 @@ interface AppState {
    *  row, palette, Create, Topic Radar, Calendar, Analytics, Cast). */
   focusVideoId: string | null;
   setFocusVideoId: (id: string | null) => void;
+
+  /** The project the workspace is currently hosting (2026-11). focusVideoId is
+   *  a one-shot jump payload the workspace consumes on load; activeVideoId is
+   *  the standing anchor the URL hash rides so #/timeline/<id> and friends
+   *  survive a reload while the operator moves between the five area pages. */
+  activeVideoId: string | null;
+  setActiveVideoId: (id: string | null) => void;
 
   /** Topic prefill when jumping from another view into Create */
   prefillTopic: string | null;
@@ -63,6 +99,9 @@ export const useAppStore = create<AppState>((set) => ({
 
   focusVideoId: null,
   setFocusVideoId: (id) => set({ focusVideoId: id }),
+
+  activeVideoId: null,
+  setActiveVideoId: (id) => set({ activeVideoId: id }),
 
   prefillTopic: null,
   setPrefillTopic: (t) => set({ prefillTopic: t }),
@@ -102,6 +141,11 @@ export const VIEW_IDS = [
   "create",
   "library",
   "workspace",
+  "director",
+  "storyboard",
+  "canvas",
+  "timeline",
+  "inspector",
   "cast",
   "world",
   "voice",
@@ -110,12 +154,14 @@ export const VIEW_IDS = [
   "settings",
 ] as const satisfies readonly ViewId[];
 
-/** The hash for a view state — "" for Home so "/" stays the bare entry URL. */
-export function viewToHash(view: ViewId, focusVideoId: string | null): string {
+/** The hash for a view state — "" for Home so "/" stays the bare entry URL.
+ *  The workspace and its five area pages anchor the hosted project's id so a
+ *  reload (or a pasted deep link) reopens the same production. */
+export function viewToHash(view: ViewId, videoId: string | null): string {
   if (view === "dashboard") return "";
-  return view === "workspace" && focusVideoId
-    ? `#/workspace/${focusVideoId}`
-    : `#/${view}`;
+  const anchorsProject =
+    videoId && (view === "workspace" || isWorkspaceArea(view));
+  return anchorsProject ? `#/${view}/${videoId}` : `#/${view}`;
 }
 
 /** Apply a URL hash to the store (boot restore + hashchange deep links).
@@ -127,8 +173,10 @@ export function restoreViewFromHash(
   const m = /^#\/([a-z]+)(?:\/([A-Za-z0-9_-]+))?$/.exec(hash);
   if (!m || !VIEW_IDS.includes(m[1] as ViewId)) return false;
   const s = useAppStore.getState();
-  if (m[1] === "workspace" && m[2] && m[2] !== s.focusVideoId)
+  const view = m[1] as ViewId;
+  // The workspace and its five area pages all carry the hosted project id.
+  if ((view === "workspace" || isWorkspaceArea(view)) && m[2] && m[2] !== s.focusVideoId)
     s.setFocusVideoId(m[2]);
-  if (m[1] !== s.view) s.setView(m[1] as ViewId);
+  if (view !== s.view) s.setView(view);
   return true;
 }

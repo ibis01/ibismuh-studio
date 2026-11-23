@@ -7,6 +7,11 @@ import {
   House,
   Wand2,
   Clapperboard,
+  Library,
+  LayoutGrid,
+  Brush,
+  Film,
+  Package,
   Users,
   Globe,
   Mic,
@@ -27,6 +32,13 @@ import {
  * unchanged and keep their HubTabs strips), but the sidebar now lists all
  * of them DIRECTLY, grouped so the map still reads at a glance.
  *
+ * 2026-11 operator ruling — "every feature must have its page, bold and
+ * clear, not cramped into another page": the five production-workspace areas
+ * (Director, Storyboard, Canvas, Timeline Studio, Inspector) now also sit in
+ * the sidebar under Production. Each owns a page with its own hash and
+ * header; clicking one with no project open lands the pointed empty state
+ * that points at Projects — the map never hides a destination.
+ *
  * Nav ids are ViewIds, so the ⌘K palette and every programmatic
  * `setView(...)` keep working unchanged.
  */
@@ -35,7 +47,7 @@ export const NAV_ITEMS: {
   label: string;
   icon: typeof House;
   hint: string;
-  group: "Studio" | "Assets" | "Insights" | "Account";
+  group: "Studio" | "Production" | "Assets" | "Insights" | "Account";
 }[] = [
   {
     id: "dashboard",
@@ -54,9 +66,44 @@ export const NAV_ITEMS: {
   {
     id: "library",
     label: "Projects",
-    icon: Clapperboard,
+    icon: Library,
     hint: "All projects & the workspace",
     group: "Studio",
+  },
+  {
+    id: "director",
+    label: "Director",
+    icon: Clapperboard,
+    hint: "The story page — brief, script beats, pacing",
+    group: "Production",
+  },
+  {
+    id: "storyboard",
+    label: "Storyboard",
+    icon: LayoutGrid,
+    hint: "Every scene's frame — generate & re-roll",
+    group: "Production",
+  },
+  {
+    id: "canvas",
+    label: "Canvas",
+    icon: Brush,
+    hint: "Scene-by-scene editing & repainting",
+    group: "Production",
+  },
+  {
+    id: "timeline",
+    label: "Timeline Studio",
+    icon: Film,
+    hint: "Lanes, live preview, render & ship",
+    group: "Production",
+  },
+  {
+    id: "inspector",
+    label: "Inspector",
+    icon: Package,
+    hint: "QC scorecard, voice, publishing",
+    group: "Production",
   },
   {
     id: "cast",
@@ -120,7 +167,7 @@ export const MOBILE_NAV_ITEMS = NAV_ITEMS;
 
 /** Which sidebar item the currently active view lights up. Every direct
  *  destination lights ITSELF; the two hub ids (kept for palette/deep-link
- *  compatibility) and the per-project workspace surface fall back to the
+ *  compatibility) and the per-project landing view fall back to the
  *  destination that owns them. */
 export function activeNavId(view: ViewId): ViewId {
   switch (view) {
@@ -129,7 +176,9 @@ export function activeNavId(view: ViewId): ViewId {
     case "insights":
       return "analytics";
     case "workspace":
-      return "library";
+      // The transient landing normalizes to a concrete area page once the
+      // project loads — while it lasts, the Director is where it points.
+      return "director";
     default:
       return view;
   }
@@ -159,7 +208,7 @@ export function AppSidebar() {
 
       {/* Destinations — grouped, every page visible (2026-11 law) */}
       <nav aria-label="Main navigation" className="flex-1 px-3 py-4 overflow-y-auto tf-scroll-bar">
-        {["Studio", "Assets", "Insights", "Account"].map((group) => (
+        {["Studio", "Production", "Assets", "Insights", "Account"].map((group) => (
           <div key={group} className={group === "Studio" ? "" : "mt-5"}>
             <p className="tf-kicker px-3 pb-2">{group}</p>
             <ul className="space-y-1.5">

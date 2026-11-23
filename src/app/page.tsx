@@ -6,6 +6,7 @@ import {
   useAppStore,
   restoreViewFromHash,
   viewToHash,
+  isWorkspaceArea,
   type ViewId,
 } from "@/lib/store";
 import {
@@ -113,11 +114,12 @@ const SettingsView = lazyView(
       default: m.SettingsView,
     })),
 );
-const WorkspaceView = lazyView(
+const WorkspaceView: ComponentType<{ area: ViewId }> = dynamic(
   () =>
     import("@/components/ibismuh/views/workspace-view").then((m) => ({
       default: m.WorkspaceView,
     })),
+  { ssr: false, loading: () => <ViewFallback /> }
 );
 
 // B1 destination hubs (docs/design/B1_DESIGN_SPECIFICATION.md §3): the four
@@ -175,6 +177,33 @@ const VIEW_META: Record<ViewId, { kicker: string; title: string; subtitle: strin
     kicker: "Production",
     title: "Workspace",
     subtitle: "Direct the production — scene by scene, stage by stage",
+  },
+  // 2026-11 law — the five workspace areas are first-class pages with bold
+  // headers of their own ("every feature must have its page").
+  director: {
+    kicker: "Production",
+    title: "Director",
+    subtitle: "The brief, script beats and emotional pacing — the story takes shape here",
+  },
+  storyboard: {
+    kicker: "Production",
+    title: "Storyboard",
+    subtitle: "Every scene's frame — generate, review and re-roll the shots",
+  },
+  canvas: {
+    kicker: "Production",
+    title: "Canvas",
+    subtitle: "Scene-by-scene editing — repaint, re-voice and refine each shot",
+  },
+  timeline: {
+    kicker: "Production",
+    title: "Timeline Studio",
+    subtitle: "Assemble the cut — lanes, live preview, render and ship",
+  },
+  inspector: {
+    kicker: "Production",
+    title: "Inspector",
+    subtitle: "QC scorecard, voice, publishing — the ship gate",
   },
   cast: {
     kicker: "Assets",
@@ -243,7 +272,10 @@ export default function Home() {
   useEffect(() => {
     const writeHash = () => {
       const s = useAppStore.getState();
-      const h = viewToHash(s.view, s.focusVideoId);
+      const h = viewToHash(
+        s.view,
+        s.focusVideoId ?? s.activeVideoId
+      );
       if (window.location.hash !== h)
         window.history.replaceState(null, "", `${window.location.pathname}${h}`);
     };
@@ -321,7 +353,10 @@ export default function Home() {
                 <kbd className="tf-kbd ml-1">⌘K</kbd>
               </button>
 
-              {view !== "create" && view !== "settings" && view !== "workspace" ? (
+              {view !== "create" &&
+              view !== "settings" &&
+              view !== "workspace" &&
+              !isWorkspaceArea(view) ? (
                 <Button
                   onClick={() => setView("create")}
                   className="bg-brand-gradient hover:opacity-90 text-white font-semibold shadow-lg shrink-0"
@@ -372,7 +407,12 @@ export default function Home() {
             )}
             {view === "create" && <CreateView />}
             {view === "library" && <LibraryView />}
-            {view === "workspace" && <WorkspaceView />}
+            {/* The workspace and its five area pages host ONE component instance
+                — the area prop steers which page fills the work area, so moving
+                Director → Timeline → Inspector never remounts the engine. */}
+            {(view === "workspace" || isWorkspaceArea(view)) && (
+              <WorkspaceView area={view} />
+            )}
             {view === "settings" && <SettingsView />}
           </main>
 

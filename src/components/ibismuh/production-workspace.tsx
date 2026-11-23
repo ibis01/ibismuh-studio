@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Youtube } from "@/components/ibismuh/icons";
-import { useAppStore } from "@/lib/store";
+import {
+  useAppStore,
+  WORKSPACE_AREA_IDS,
+  type WorkspaceAreaId,
+} from "@/lib/store";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
@@ -156,11 +160,21 @@ interface StoryboardResponse {
  */
 export function ProductionWorkspace({
   video,
+  area = null,
+  onAreaChange,
   onClose,
   onChanged,
   onDeleted,
 }: {
   video: VideoDTO | null;
+  /** 2026-11 — the five workspace areas are first-class pages. When the host
+   *  passes an area, the active page is CONTROLLED by the app's view state
+   *  (each area owns a page with its own hash and header); when null the
+   *  workspace seeds itself (the transient "workspace" landing). */
+  area?: WorkspaceAreaId | null;
+  /** Area page navigation — the host routes it to setView, so a tab click
+   *  is a page change (URL, header and sidebar light all follow). */
+  onAreaChange?: (a: WorkspaceAreaId) => void;
   onClose: () => void;
   onChanged: (v: VideoDTO) => void;
   onDeleted: (id: string) => void;
@@ -178,10 +192,20 @@ export function ProductionWorkspace({
   // lands the human where the Director card + scene re-rolls live; the
   // storyboard's "Edit scene" lands on Canvas). Seeded with the same law the
   // dialog used — a watchable video opens on Timeline, everything else on
-  // Director; re-seeded per video below.
-  const [activeTab, setActiveTab] = useState<string>(
+  // Director; re-seeded per video below. When the host passes an explicit
+  // area the store wins (first-class pages law, 2026-11).
+  const [seedTab, setSeedTab] = useState<string>(
     video?.hasVideo || video?.hasVoiceover ? "timeline" : "director"
   );
+  const activeTab = area ?? seedTab;
+  const changeTab = (t: string) => {
+    setSeedTab(t);
+    if (
+      onAreaChange &&
+      (WORKSPACE_AREA_IDS as string[]).includes(t)
+    )
+      onAreaChange(t as WorkspaceAreaId);
+  };
 
   // Storyboard state
   const [scenes, setScenes] = useState<SceneDTO[]>([]);
@@ -392,7 +416,7 @@ export function ProductionWorkspace({
       setSlides(null);
     } else {
       setRenderMode(video.renderMode ?? "kenburns");
-      setActiveTab(video.hasVideo || video.hasVoiceover ? "timeline" : "director");
+      setSeedTab(video.hasVideo || video.hasVoiceover ? "timeline" : "director");
       setMusicDraft({
         enabled: video.musicEnabled ?? null,
         trackId: video.musicTrackId ?? null,
@@ -1976,7 +2000,7 @@ export function ProductionWorkspace({
                     disabled={Boolean(busy) || s.generating}
                     onClick={() => {
                       setCanvasScene(s.index);
-                      setActiveTab("canvas");
+                      changeTab("canvas");
                     }}
                     className="h-7 text-[11px] text-muted-foreground hover:text-foreground hover:bg-white/6 w-fit px-2"
                     title="Open in Canvas — style, prompt, AI edit, or upload your own art"
@@ -2035,13 +2059,12 @@ export function ProductionWorkspace({
       ? "Generate the voiceover first"
       : null;
 
-  // B4-1 — the Timeline Studio lives in ONE place: the always-mounted bottom
-  // strip of the wide (≥1024px) pro layout, so the live preview and lanes
-  // survive every area switch. The narrow layout composes the same const
-  // inline (via videoTab) — only one branch ever renders, so the instance is
-  // never duplicated. The Studio's own gate is honored honestly: it is "for
-  // scene videos with a voiceover" (its own null law) — without one, the
-  // strip explains what unlocks the lanes instead of painting silence.
+  // 2026-11 law — the Timeline Studio is a PAGE, not a strip. It renders as
+  // the work area of the Timeline page (the rail beside it carries the Render
+  // & Ship deck); on the other four pages it does not exist at all — nothing
+  // is cramped under anything. The Studio's own gate is honored honestly: it
+  // is "for scene videos with a voiceover" (its own null law) — without one,
+  // the page explains what unlocks the lanes instead of painting silence.
   const timelineStrip = !isStory || !video || scenes.length === 0 ? (
     <div className="rounded-xl border border-dashed border-white/10 bg-white/3 p-6 text-center text-xs text-muted-foreground">
       The timeline assembles here once the storyboard has scenes — every scene
@@ -2543,7 +2566,7 @@ export function ProductionWorkspace({
           videoId={video.id}
           hasVideo={video.hasVideo}
           disabled={Boolean(busy) || pubBusy}
-          onOpenStoryboard={() => setActiveTab("storyboard")}
+          onOpenStoryboard={() => changeTab("storyboard")}
           onRerunVoiceover={() => void runStage("voiceover")}
           onRerender={() => void startRender(renderMode)}
         />
@@ -4284,7 +4307,7 @@ export function ProductionWorkspace({
             size="sm"
             variant="outline"
             className="border-white/15 bg-white/4"
-            onClick={() => setActiveTab("storyboard")}
+            onClick={() => changeTab("storyboard")}
           >
             <LayoutGrid className="h-3.5 w-3.5" />
             Open the {renderMode === "whiteboard" ? "Whiteboard" : "Graphics"} Studio
@@ -4299,7 +4322,7 @@ export function ProductionWorkspace({
             size="sm"
             variant="outline"
             className="border-white/15 bg-white/4 mt-3"
-            onClick={() => setActiveTab("director")}
+            onClick={() => changeTab("director")}
           >
             <Wand2 className="h-3.5 w-3.5" />
             Open the Director area
@@ -4414,7 +4437,7 @@ export function ProductionWorkspace({
       <ProductionBoard
         videoId={video.id}
         onStageClick={(stage) =>
-          setActiveTab(
+          changeTab(
             stage === "script"
               ? "director"
               : stage === "storyboard"
@@ -4465,7 +4488,7 @@ export function ProductionWorkspace({
              Inspector focuses it full-width (the rail hides for that
              value — never two mounted Inspector instances). */
           <div className="mt-4 space-y-3">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <Tabs value={activeTab} onValueChange={changeTab}>
               <TabsList className="flex w-full overflow-x-auto tf-scroll-bar bg-white/5 sm:grid sm:grid-cols-5">
                 {AREA_TABS.map((t) => (
                   <TabsTrigger
@@ -4481,70 +4504,52 @@ export function ProductionWorkspace({
                 ))}
               </TabsList>
             </Tabs>
-            <ResizablePanelGroup direction="vertical" className="h-[calc(100vh-16rem)] min-h-[640px]">
-              <ResizablePanel defaultSize="56" minSize="22" id="ws-main">
-                <ResizablePanelGroup direction="horizontal" className="h-full">
-                  <ResizablePanel
-                    defaultSize="70"
-                    minSize="40"
-                    id="ws-center"
-                    className="h-full overflow-y-auto tf-scroll-bar pr-1"
-                  >
-                    {/* 2026-11 — the Timeline area is a first-class page:
-                        selecting it moves the full Timeline Studio into the
-                        work area (lanes, playhead, preview get the whole
-                        editing surface) while the Render & Ship controls ride
-                        the side rail. The old strip-under-everything layout is
-                        what made the studio feel cramped under the other
-                        areas; the strip stays for every OTHER tab so the
-                        lanes remain visible while you direct/paint. */}
-                    {activeTab === "director"
-                      ? scriptTab
-                      : activeTab === "storyboard"
-                        ? storyboardArea
-                        : activeTab === "canvas"
-                          ? canvasArea
-                          : activeTab === "inspector"
-                            ? inspectorArea
-                            : activeTab === "timeline"
-                              ? timelineStrip
-                              : renderShipPanel}
-                  </ResizablePanel>
-                  {activeTab !== "inspector" && <ResizableHandle withHandle />}
-                  {activeTab !== "inspector" && (
-                    <ResizablePanel
-                      defaultSize="30"
-                      minSize="16"
-                      id="ws-inspector"
-                      className="h-full overflow-y-auto tf-scroll-bar pl-1"
-                    >
-                      {/* Timeline tab: the rail hosts the Render & Ship deck
-                          (controls, captions, export, music, QC + ship gate) —
-                          the Inspector is one tab away, never two mounted. */}
-                      {activeTab === "timeline" ? renderShipPanel : inspectorArea}
-                    </ResizablePanel>
-                  )}
-                </ResizablePanelGroup>
+            {/* 2026-11 law — every area owns its page: ONE resizable work
+                surface, no strip under anything. Director / Storyboard /
+                Canvas fill the center with the Inspector rail riding beside
+                them; Timeline Studio fills the center with the Render & Ship
+                deck; Inspector fills the whole width. */}
+            <ResizablePanelGroup
+              direction="horizontal"
+              className="mt-3 h-[calc(100vh-15rem)] min-h-[600px]"
+            >
+              <ResizablePanel
+                defaultSize={activeTab === "inspector" ? "100" : "70"}
+                minSize="40"
+                id="ws-center"
+                className="h-full overflow-y-auto tf-scroll-bar pr-1"
+              >
+                {activeTab === "director"
+                  ? scriptTab
+                  : activeTab === "storyboard"
+                    ? storyboardArea
+                    : activeTab === "canvas"
+                      ? canvasArea
+                      : activeTab === "inspector"
+                        ? inspectorArea
+                        : activeTab === "timeline"
+                          ? timelineStrip
+                          : renderShipPanel}
               </ResizablePanel>
-              {/* The bottom strip only rides the non-Timeline tabs — on the
-                  Timeline tab the studio IS the work area (never two mounted
-                  instances, same law as the Inspector). */}
-              {activeTab !== "timeline" && <ResizableHandle withHandle />}
-              {activeTab !== "timeline" && (
+              {activeTab !== "inspector" && <ResizableHandle withHandle />}
+              {activeTab !== "inspector" && (
                 <ResizablePanel
-                  defaultSize="44"
-                  minSize="20"
-                  id="ws-timeline"
-                  className="overflow-y-auto tf-scroll-bar"
+                  defaultSize="30"
+                  minSize="16"
+                  id="ws-inspector"
+                  className="h-full overflow-y-auto tf-scroll-bar pl-1"
                 >
-                  {timelineStrip}
+                  {/* Timeline page: the rail hosts the Render & Ship deck
+                      (controls, captions, export, music, QC + ship gate) —
+                      the Inspector is one page away, never two mounted. */}
+                  {activeTab === "timeline" ? renderShipPanel : inspectorArea}
                 </ResizablePanel>
               )}
             </ResizablePanelGroup>
           </div>
         ) : (
           /* <1024px — the B3 stacked tabs, unchanged (mobile law). */
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <Tabs value={activeTab} onValueChange={changeTab}>
             <TabsList className="flex w-full overflow-x-auto tf-scroll-bar bg-white/5 sm:grid sm:grid-cols-5">
               {AREA_TABS.map((t) => (
                 <TabsTrigger
