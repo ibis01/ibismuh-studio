@@ -434,19 +434,24 @@ actions below.** The evidence posture, stated honestly:
     ed963e2..3ab5c95 (M3 + M4 + status + M5 + M6/M7); local and origin
     re-verified identical (`rev-list` 0/0 both directions). CI fired on
     the push through the PR lane (PR #14 synchronize, run 45264608342).
-- **Conditions before the merge (statuses, 2026-11-23 ~21:10 UTC):**
-  1. DONE — the milestone branch is pushed (see above).
-  2. IN FLIGHT — CI on the pushed branch (PR #14 lane; the branch push
-     itself owns the evidence this sandbox cannot produce).
-  3. FIX LANDED, PROOF PENDING — M5-F1 closed in code (compose
-     healthchecks for web + worker, plus smoke-walk health assertions)
-     and the docker-smoke.sh syntax repair (unbalanced quote on the
-     phase-3 restart line — the walk could not pass as shipped); the
-     `docker-smoke` label is on PR #14 so the next synchronize run
-     walks the topology on a daemon-equipped CI runner.
-  4. PENDING — merge `release/production-readiness` → `main`
-     (squash-free merge — the branch's history is the audit trail)
-     once 2 and 3 are green.
+- **Conditions before the merge (ALL SATISFIED — CI run 45270185522,
+  2026-11-23 21:32–21:47 UTC, PR #14 head a6e0bce):**
+  1. DONE — the milestone branch is pushed (operator PAT).
+  2. DONE — CI GREEN, all eight jobs: Typecheck·Lint·Unit · Production
+     build · Money-path coverage · PostgreSQL integration · Clean-clone
+     bootstrap · Secret scan · E2E (Playwright) · Docker production
+     smoke (P0.6).
+  3. DONE — M5-F1 CLOSED WITH DAEMON PROOF: the walk asserts both
+     compose healthchecks healthy (web HTTP probe + worker process
+     check) and re-proves the worker probe after the phase-3 restart.
+     Three real defects were found and fixed on the way (receipts in
+     worklog): the phase-3 restart line's unbalanced quote (the walk
+     could not pass as shipped), the image/compose web probe's loopback
+     bind bug (Next standalone binds $HOSTNAME — proven by run
+     45266346258 once the walk began gating), and the HTTP-walk payload
+     riding the Phase-5 admission gate (format: script).
+  4. EXECUTING — merge `release/production-readiness` → `main`
+     (squash-free merge — the branch's history is the audit trail).
 
 ### M7 — full verification gate before the milestone merge: PASS
 

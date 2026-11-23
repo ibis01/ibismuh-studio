@@ -7581,3 +7581,18 @@ admission gate and the smoke had not run its HTTP leg since (label
 opt-ins + the phase-3 syntax error). Fixed to format:"script" — the
 handler creates the draft row before any async job, so the phase-1
 topic lookup is unaffected by CI's absent AI credentials.
+
+**GREEN (CI run 45270185522, PR #14 head a6e0bce, 2026-11-23 21:32–21:47
+UTC).** All eight jobs green — Typecheck·Lint·Unit · Production
+build · Money-path coverage · PostgreSQL integration · Clean-clone
+bootstrap · Secret scan · E2E (Playwright) · Docker production smoke
+(P0.6). The walk's full receipt: web healthcheck gate PASS (bind-law
+probe) → worker process-check PASS → register → login → create
+project (admission-gate payload) → phase 1 topology reality (migration
+chain, column projections, s3 round-trip through the production SigV4
+signer into SeaweedFS, cross-process stock job in the worker container,
+in-container whiteboard render through chromium) → phase 2 recovery
+seeding with the worker DOWN → phase 3 restart → worker probe
+re-proven healthy → reaper + claimer landed both jobs → PASS. M5-F1
+is closed WITH the daemon proof the M5 drill required. The M6 merge
+condition list is fully satisfied; condition 4 executes next.
