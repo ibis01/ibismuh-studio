@@ -2564,13 +2564,30 @@ export function TimelineStudio({
 
   // ---------- render gate ----------
 
-  if (!canAssemble) return null; // the Studio is for scene videos with a voiceover
+  // 2026-11 — the null law used to render NOTHING here: a 600px panel of
+  // empty dark space that read as a broken page. The gate is a pointed
+  // state now — the card explains what unlocks the lanes and where the
+  // voice card lives, and the Render & Ship deck still rides beside it.
+  if (!canAssemble)
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center rounded-xl border border-dashed border-white/10 bg-white/[0.03] p-8 text-center">
+        <Scissors className="h-5 w-5 text-primary/70" aria-hidden />
+        <h3 className="mt-3 text-sm font-semibold">The lanes assemble once the project has a voice</h3>
+        <p className="mt-2 max-w-md text-xs leading-relaxed text-muted-foreground">
+          Timeline Studio turns the storyboard's scenes into editable lanes
+          synced to the narration — trim, split, transition, caption and
+          grade them, then render. Generate the voiceover first (Director →
+          the voice card, or Inspector → Change the voice); scenes + narration
+          build the timeline automatically.
+        </p>
+      </div>
+    );
 
   const selectedScene = timeline?.scenes.find((s) => s.index === selected) ?? null;
   const contentW = Math.max(total * density + 32, 320);
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-4">
+    <div className="flex min-h-full flex-col rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-4">
       {/* header */}
       <header className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
@@ -3688,10 +3705,12 @@ export function TimelineStudio({
             )}
           </div>
 
-          {/* lanes */}
+          {/* lanes — flex-1: the lane surface absorbs the panel's leftover
+              height instead of stranding a void under the clips (the
+              operator's 2026-11 ruling: the empty space must make sense). */}
           <div
             ref={lanesWrapRef}
-            className="relative overflow-x-auto rounded-lg border border-white/10 bg-black/20"
+            className="relative min-h-[220px] flex-1 overflow-x-auto rounded-lg border border-white/10 bg-black/20"
           >
             <div className="relative" style={{ width: contentW }}>
               {/* ruler */}

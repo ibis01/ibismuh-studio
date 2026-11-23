@@ -232,3 +232,47 @@ zero view files touched — the whole studio sharpens at once.
 Adoption: automatic (all views inherit the primitives). New floating surfaces
 use `.tf-pop`; new fields need nothing — `<Input>`/`<Textarea>`/`<SelectTrigger>`
 carry the law in their base.
+
+## §8 — The Timeline workbench (2026-11 layout law)
+
+The Timeline page is ONE workbench, not a page with a squeezed rail beside a
+void. The operator's ruling was two-part: "it still doesn't render" (a
+pipeline truth bug, fixed in the storage layer) and "the empty space on the
+timeline studio doesn't make sense — bring the side panel there."
+
+### The composition
+
+- **Center (100% on the Timeline page — the workspace rail steps aside
+  there):** a two-column workbench. LEFT: the Timeline Studio card (preview,
+  transport, clip inspector, lanes). RIGHT: a fixed ~320–360px column owning
+  the Render & Ship deck (render modes, captions, export presets, music,
+  motion, transitions, render buttons, QC + ship gate, export bundle).
+- Each column scrolls independently; the studio card fills its column's
+  height (`min-h-full` flex column) and the lane surface is `flex-1` — the
+  leftover vertical space belongs to the lanes, never a stranded void under
+  the clips.
+- Below 1024px the B3 stacked tabs keep the old composition (strip + deck in
+  one scrolling column) — the workbench is a wide-screen law.
+- The other four pages keep the 70/30 resizable center + Inspector rail;
+  Inspector still fills the whole width when focused. Never two mounted
+  instances of any area.
+
+### The gate is a pointed state
+
+The studio's `canAssemble` gate no longer renders `null` (a 600px panel of
+empty dark space). Without a voiceover the card explains the unlock path —
+generate the voiceover (Director's voice card or Inspector), scenes +
+narration assemble the lanes — with the Render & Ship deck still riding
+beside it.
+
+### Truth laws this layout depends on
+
+1. The render gate reads FILES through the storage driver (per-scene scene
+   art AND voiceover WAVs — the voiceover stage publishes every read), so a
+   recycled machine renders without re-reading the script.
+2. The row's `hasVoiceover` flag heals when the gate refuses: a render
+   failure whose message is the per-scene WAV refusal clears the flag + the
+   stale duration — the voice card, the render button and the export
+   bundle's chips all speak the same truth again.
+3. The VLM quality gate materializes published bytes before inspecting —
+   the inspector reads storage truth, not one machine's scratch.

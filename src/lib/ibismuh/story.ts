@@ -72,8 +72,9 @@ export function sceneWavFile(index: number): string {
  *  storyboardComplete already read through storage; this puts the gates on
  *  the same truth. A file present locally is left untouched; an asset
  *  missing in BOTH places stays missing — the gates keep their honest,
- *  actionable refusal. Per-scene WAVs stay scratch-local by design (see
- *  the voiceover stage), so the wav branch is a future-proof no-op today. */
+ *  actionable refusal. Per-scene WAVs are durable artifacts too (the
+ *  voiceover stage publishes them through the driver), so the wav branch
+ *  is what lets a recycled machine render without re-reading the script. */
 export async function ensureSceneAssetsLocal(
   videoId: string,
   dir: string,
@@ -1329,7 +1330,15 @@ export async function generateSceneVoiceovers(opts: {
     // voiceover stage re-runs, so presence here means "current". This is
     // what lets a crash-recovered job — or a one-scene narration edit —
     // re-read ONLY the missing scenes instead of the whole script.
+    // 2026-11 durability fix — a scene WAV now also lives in storage, so a
+    // scratch wipe (Fly machine recycle) or a render on ANOTHER worker
+    // restores the published read instead of re-billing the whole TTS run.
     const wavPath = path.join(dir, sceneWavFile(scene.index));
+    if (!fs.existsSync(wavPath)) {
+      const storageKey = `${opts.videoId}/${sceneWavFile(scene.index)}`;
+      const restored = await storage.get(storageKey).catch(() => null);
+      if (restored && restored.length >= 44) fs.writeFileSync(wavPath, restored);
+    }
     if (fs.existsSync(wavPath)) {
       const existing = fs.readFileSync(wavPath);
       const existingDur = wavDurationSec(existing);
@@ -1385,6 +1394,22 @@ export async function generateSceneVoiceovers(opts: {
 
     const merged = mergeWavs(buffers);
     fs.writeFileSync(wavPath, merged.buffer);
+    // 2026-11 durability fix — the per-scene read is a durable artifact now,
+    // not one machine's scratch: the render gate (ensureSceneAssetsLocal)
+    // and the resume restore above read it back through the driver, so a
+    // recycled machine never costs the narration again. Stale-key removal
+    // (scene-deps) already drops `${videoId}/scene-XX.wav` on narration /
+    // voice / speed changes — publishing here cannot resurrect an old read.
+    await storage
+      .put(`${opts.videoId}/${sceneWavFile(scene.index)}`, merged.buffer)
+      .catch((err) => {
+        // An unpublishable read is an honest failure, not a silent one: the
+        // stage stops, the job error names the scene, and a re-run resumes
+        // from the scenes that DID land (the restore above reads them back).
+        throw new Error(
+          `Scene ${scene.index} voiceover could not be published to storage — ${(err instanceof Error ? err.message : String(err)).slice(0, 160)}`
+        );
+      });
     await finalizeSceneArtifact(voiceAttribution, {
       input: `${scene.narration}|voice=${opts.voice}|speed=${speed}`,
       prompt: scene.narration,
