@@ -34,6 +34,11 @@ export async function register(): Promise<void> {
     const { startStaleHoldSweeper } = await import("./lib/ibismuh/billing");
     startStaleHoldSweeper();
 
+    // Reclaim scratch dirs orphaned by CRASHED processes (the try/finally
+    // cleanup never ran — OOM, SIGKILL, deploy replacement). Best-effort.
+    const { sweepOrphanedTempAtBoot } = await import("./lib/ibismuh/temp-sweep");
+    void sweepOrphanedTempAtBoot();
+
     const { log } = await import("./lib/ibismuh/log");
     log.info("queue initialized", {
       role: "web",

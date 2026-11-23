@@ -31,6 +31,10 @@ async function main(): Promise<void> {
   const { startStaleHoldSweeper } = await import("@/lib/ibismuh/billing");
   startStaleHoldSweeper();
 
+  // Reclaim scratch dirs orphaned by crashed processes (best-effort).
+  const { sweepOrphanedTempAtBoot } = await import("@/lib/ibismuh/temp-sweep");
+  void sweepOrphanedTempAtBoot();
+
   // Adopt orphaned rows from processes that died while we were down.
   await ensureRecovered();
 

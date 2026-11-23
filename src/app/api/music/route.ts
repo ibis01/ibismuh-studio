@@ -9,6 +9,12 @@ import {
   MAX_TRACK_BYTES,
 } from "@/lib/ibismuh/music";
 import { errorText } from "@/lib/ibismuh/redact";
+import {
+  UploadConcurrencyError,
+  UploadTooLargeError,
+  enforceQuotaHeadroom,
+  withUploadSlot,
+} from "@/lib/ibismuh/upload-limits";
 
 /**
  * GET — the music library + settings. Pure read: no side effects.
@@ -73,22 +79,29 @@ export async function POST(req: NextRequest) {
       );
 
     try {
-      const track = await ingestUploadedTrack(Buffer.from(await file.arrayBuffer()), {
-        name,
-        moods: f("moods"),
-        genre: f("genre") || undefined,
-        licenseType,
-        sourceUrl: f("sourceUrl") || undefined,
-        commercialUse: f("commercialUse") !== "false",
-        attributionRequired,
-        attributionText: f("attributionText") || undefined,
-        licenseEvidence: f("licenseEvidence") || undefined,
-        contentIdNotes: f("contentIdNotes") || undefined,
-      });
+      // Upload admission: quota headroom + the concurrency slot wrap the
+      // (already pre-buffer) size wall; ingestUploadedTrack's ffprobe pass
+      // stays the deep content validator.
+      await enforceQuotaHeadroom(auth.ctx.organizationId, file.size, "The track");
+      const track = await withUploadSlot(auth.ctx.organizationId, async () =>
+        ingestUploadedTrack(Buffer.from(await file.arrayBuffer()), {
+          name,
+          moods: f("moods"),
+          genre: f("genre") || undefined,
+          licenseType,
+          sourceUrl: f("sourceUrl") || undefined,
+          commercialUse: f("commercialUse") !== "false",
+          attributionRequired,
+          attributionText: f("attributionText") || undefined,
+          licenseEvidence: f("licenseEvidence") || undefined,
+          contentIdNotes: f("contentIdNotes") || undefined,
+        }));
       return NextResponse.json({ track: serializeTrack(track) }, { status: 201 });
     } catch (err) {
       const message = errorText(err, "Upload failed");
-      return NextResponse.json({ error: message }, { status: 400 });
+      const status =
+        err instanceof UploadTooLargeError ? 413 : err instanceof UploadConcurrencyError ? 429 : 400;
+      return NextResponse.json({ error: message }, { status });
     }
   }
 

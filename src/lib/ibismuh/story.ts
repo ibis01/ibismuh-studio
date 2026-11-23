@@ -1188,7 +1188,7 @@ export async function editSceneImage(opts: {
   return { fileBytes: buffer.length };
 }
 
-const MAX_SCENE_UPLOAD_BYTES = 15 * 1024 * 1024;
+export const MAX_SCENE_UPLOAD_BYTES = 15 * 1024 * 1024;
 
 // S51 — the byte sniffer + HEIC decode moved DOWN into image-upload.ts so
 // the reference-photo seam can share them without an import cycle

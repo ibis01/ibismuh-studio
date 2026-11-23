@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/ibismuh/tenant-db";
 import { requireUser } from "@/lib/ibismuh/tenant";
-import { readMedia } from "@/lib/ibismuh/ai";
+import { stat as statObject, presign, materialize } from "@/lib/ibismuh/storage";
+import fs from "node:fs";
+import { Readable } from "node:stream";
 import { parseScenes } from "@/lib/ibismuh/story";
 import { MAX_AUDIO_BYTES, isValidAudioUrl } from "@/lib/ibismuh/voice";
 import { startJob, isJobRunning } from "@/lib/ibismuh/jobs";
 import { serializeVideo } from "@/lib/ibismuh/serialize";
 import { put, remove } from "@/lib/ibismuh/storage";
 import { runVoiceoverJob, type VoiceoverJobSource } from "@/lib/ibismuh/video-jobs";
+import {
+  UploadConcurrencyError,
+  UploadTooLargeError,
+  enforceAudioMagicBytes,
+  enforceFileSize,
+  enforceQuotaHeadroom,
+  enforceRequestContentLength,
+  withUploadSlot,
+} from "@/lib/ibismuh/upload-limits";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -58,17 +69,35 @@ export async function POST(req: NextRequest, ctx: Ctx) {
         { error: "Attach an audio file in the 'file' field" },
         { status: 400 }
       );
-    if (file.size > MAX_AUDIO_BYTES)
-      return NextResponse.json(
-        { error: `Audio exceeds the ${MAX_AUDIO_BYTES / 1024 / 1024} MB limit` },
-        { status: 413 }
-      );
     const label = (form?.get("label") as string | null)?.trim() || file.name || "uploaded audio";
-    mode = {
-      kind: "upload",
-      buffer: Buffer.from(await file.arrayBuffer()),
-      filename: label,
-    };
+    // Upload admission: request wall (Content-Length) + file wall (the
+    // parsed File's size) + magic bytes — the old path size-checked but
+    // still trusted the container; a renamed text file now dies at the
+    // signature, and a concurrent-upload ceiling protects the workers.
+    try {
+      enforceRequestContentLength(req, MAX_AUDIO_BYTES + 256 * 1024, "The audio file");
+      enforceFileSize(file, MAX_AUDIO_BYTES, "The audio file");
+      await enforceQuotaHeadroom(auth.ctx.organizationId, file.size, "The audio file");
+      const staged = await withUploadSlot(auth.ctx.organizationId, async () => {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        enforceAudioMagicBytes(buffer, "The audio file");
+        return buffer;
+      });
+      mode = {
+        kind: "upload",
+        buffer: staged,
+        filename: label,
+      };
+    } catch (err) {
+      if (err instanceof UploadTooLargeError)
+        return NextResponse.json({ error: err.message }, { status: 413 });
+      if (err instanceof UploadConcurrencyError)
+        return NextResponse.json({ error: err.message }, { status: 429 });
+      return NextResponse.json(
+        { error: err instanceof Error ? err.message : "The audio file was rejected" },
+        { status: 400 },
+      );
+    }
   } else if (contentType.includes("application/json")) {
     const body = (await req.json().catch(() => ({}))) as {
       mode?: string;
@@ -160,7 +189,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   );
 }
 
-/** GET — stream the voiceover WAV file. */
+/** GET — stream the voiceover WAV file.
+ *
+ * F-04 (memory safety): long narrations produce WAVs far beyond what should
+ * ever be buffered per request — the old whole-buffer NextResponse multiplied
+ * memory use under concurrent downloads. Delivery now follows the MP4
+ * route's law: presigned redirect on the s3 driver (bytes flow
+ * CDN→client, never through the app) and bounded-memory Range streaming on
+ * the local driver. */
 export async function GET(req: NextRequest, ctx: Ctx) {
   const auth = await requireUser(req);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
@@ -173,16 +209,52 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   if (!video)
     return NextResponse.json({ error: "Video not found" }, { status: 404 });
 
-  const media = await readMedia(id, "voiceover.wav");
-  if (!media)
+  const key = `${id}/voiceover.wav`;
+  const info = await statObject(key);
+  if (!info)
     return NextResponse.json({ error: "No voiceover yet" }, { status: 404 });
 
-  return new NextResponse(new Uint8Array(media), {
+  const baseHeaders: Record<string, string> = {
+    "Content-Type": "audio/wav",
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "private, max-age=3600",
+  };
+
+  // s3 driver — presigned redirect; bytes never transit the app.
+  const signed = await presign(key, 300);
+  if (signed) return NextResponse.redirect(signed, 302);
+
+  // local driver — bounded-memory Range streaming.
+  const filePath = await materialize(key);
+  const total = info.size;
+  const streamRange = (start: number, end: number) =>
+    Readable.toWeb(fs.createReadStream(filePath, { start, end })) as unknown as ReadableStream<Uint8Array>;
+
+  const range = req.headers.get("range");
+  if (range) {
+    const match = /bytes=(\d*)-(\d*)/.exec(range);
+    if (match) {
+      const start = match[1] ? Number(match[1]) : 0;
+      const end = match[2] ? Math.min(Number(match[2]), total - 1) : total - 1;
+      if (start <= end && start < total) {
+        return new NextResponse(streamRange(start, end), {
+          status: 206,
+          headers: {
+            ...baseHeaders,
+            "Content-Range": `bytes ${start}-${end}/${total}`,
+            "Content-Length": String(end - start + 1),
+          },
+        });
+      }
+      return new NextResponse(null, {
+        status: 416,
+        headers: { ...baseHeaders, "Content-Range": `bytes */${total}` },
+      });
+    }
+  }
+
+  return new NextResponse(streamRange(0, total - 1), {
     status: 200,
-    headers: {
-      "Content-Type": "audio/wav",
-      "Content-Length": String(media.length),
-      "Cache-Control": "private, max-age=3600",
-    },
+    headers: { ...baseHeaders, "Content-Length": String(total) },
   });
 }

@@ -19,7 +19,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/ibismuh/tenant-db";
 import { requireUser } from "@/lib/ibismuh/tenant";
-import { parseScenes, replaceSceneImage, sceneImageFile, storyboardComplete } from "@/lib/ibismuh/story";
+import { parseScenes, replaceSceneImage, sceneImageFile, storyboardComplete , MAX_SCENE_UPLOAD_BYTES } from "@/lib/ibismuh/story";
 import { invalidateRenderedArtifacts } from "@/lib/ibismuh/render";
 import { registerSceneArtifact, hashArtifactInput } from "@/lib/ibismuh/scene-artifacts";
 import { startJob } from "@/lib/ibismuh/jobs";
@@ -50,6 +50,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     return NextResponse.json({ error: "A valid scene index is required" }, { status: 400 });
   if (!(file instanceof File))
     return NextResponse.json({ error: "Attach an image file (PNG, JPEG, WebP or HEIC)" }, { status: 400 });
+  // Upload admission (F-03 class): the size wall runs BEFORE the buffer —
+  // MAX_SCENE_UPLOAD_BYTES is the same cap replaceSceneImage enforces, moved
+  // to the door so an oversized image never materializes in memory.
+  if (file.size > MAX_SCENE_UPLOAD_BYTES)
+    return NextResponse.json(
+      { error: `Image is ${Math.round(file.size / 1024 / 1024)} MB — the limit is ${MAX_SCENE_UPLOAD_BYTES / 1024 / 1024} MB` },
+      { status: 413 }
+    );
 
   const scenes = parseScenes(video.scenes);
   const scene = scenes.find((s) => s.index === sceneIndex);

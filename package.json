@@ -33,7 +33,7 @@
     "test:coverage": "node scripts/test-coverage.mjs",
     "worker": "node --import tsx scripts/worker.mts",
     "worker:daemon": "python3 scripts/daemonize.py scripts/worker-daemon.log npm run worker",
-    "check": "npm run typecheck && npm run lint && npm run test && npm run test:whiteboard-trace && npm run test:whiteboard-profiles && npm run test:provider-registry && npm run test:billing && npm run test:storage && npm run test:net-guard && npm run test:tenant-registry && npm run test:tenant-isolation && npm run test:rate && npm run test:scene-revisions && npm run test:drill && npm run alert:probe",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run test:whiteboard-trace && npm run test:whiteboard-profiles && npm run test:provider-registry && npm run test:billing && npm run test:storage && npm run test:net-guard && npm run test:tenant-registry && npm run test:tenant-isolation && npm run test:upload-limits && npm run test:rate && npm run test:scene-revisions && npm run test:drill && npm run alert:probe",
     "test:e2e": "playwright test",
     "test:billing": "node --import tsx scripts/test-billing.mts",
     "test:voicestudio": "node --import tsx scripts/test-voicestudio-adapter.mts",
@@ -47,7 +47,8 @@
     "verify:clone": "node --import tsx scripts/test-clean-clone.mts",
     "test:net-guard": "node --import tsx scripts/test-net-guard-provider.mts",
     "test:tenant-registry": "node --import tsx scripts/test-tenant-registry.mts",
-    "test:tenant-isolation": "node --import tsx scripts/test-tenant-isolation.mts"
+    "test:tenant-isolation": "node --import tsx scripts/test-tenant-isolation.mts",
+    "test:upload-limits": "node --import tsx scripts/test-upload-limits.mts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

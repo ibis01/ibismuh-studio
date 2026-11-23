@@ -87,8 +87,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     );
 
   // Gate 1 — the transport wall, per-kind: the magic bytes pick the wall
-  // (raster 8 MB, SVG text 256 KB). Headers can lie about size; the parsed
-  // File is the truth the music-upload precedent checks too.
+  // (raster 8 MB, SVG text 256 KB). The parsed File's size is the truth the
+  // music-upload precedent checks too — the OUTER cap (raster) is enforced
+  // BEFORE the buffer materializes; the per-kind cap after the sniff.
+  if (file.size > WB_RASTER_MAX_BYTES)
+    return NextResponse.json(
+      { error: `Asset is ${Math.round(file.size / 1024 / 1024)} MB — the limit is ${WB_RASTER_MAX_BYTES / 1024 / 1024} MB` },
+      { status: 413 }
+    );
   const raw = Buffer.from(await file.arrayBuffer());
   const rasterMagic = sniffRasterImage(raw);
   const byteCap = rasterMagic ? WB_RASTER_MAX_BYTES : WB_UPLOAD_MAX_BYTES;

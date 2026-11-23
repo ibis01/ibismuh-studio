@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/ibismuh/tenant-db";
 import { requireUser } from "@/lib/ibismuh/tenant";
 import { readMedia } from "@/lib/ibismuh/ai";
+import { stat, presign, materialize, storageDriverKind } from "@/lib/ibismuh/storage";
+import fs from "node:fs";
+import { Readable } from "node:stream";
 import { startJob, isJobRunning, lastJobError } from "@/lib/ibismuh/jobs";
 import { serializeVideo } from "@/lib/ibismuh/serialize";
 import { runThumbnailJob } from "@/lib/ibismuh/video-jobs";
@@ -73,15 +76,45 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     });
   }
 
-  const media = await readMedia(id, "thumbnail.png");
-  if (!media)
+  // F-04 note: thumbnails are bounded generation artifacts — buffered
+  // delivery is fine (the review's carve-out for small artifacts), with a
+  // defensive ceiling: an artifact beyond 10 MB (corruption, misuse) streams
+  // instead of multiplying memory under concurrent downloads.
+  const THUMBNAIL_BUFFER_CEILING = 10 * 1024 * 1024;
+  const key = `${id}/thumbnail.png`;
+  const info = await stat(key);
+  if (!info)
     return NextResponse.json({ error: "No thumbnail yet" }, { status: 404 });
 
-  return new NextResponse(new Uint8Array(media), {
+  if (info.size <= THUMBNAIL_BUFFER_CEILING && storageDriverKind() !== "s3") {
+    const media = await readMedia(id, "thumbnail.png");
+    if (!media)
+      return NextResponse.json({ error: "No thumbnail yet" }, { status: 404 });
+    return new NextResponse(new Uint8Array(media), {
+      status: 200,
+      headers: {
+        "Content-Type": "image/png",
+        "Content-Length": String(media.length),
+        "Cache-Control": "private, max-age=3600",
+      },
+    });
+  }
+
+  // Large artifact or the s3 driver: presigned redirect (bytes never
+  // transit the app).
+  const signed = await presign(key, 300);
+  if (signed) return NextResponse.redirect(signed, 302);
+
+  // Local driver, oversized artifact: bounded-memory streaming.
+  const filePath = await materialize(key);
+  const stream = Readable.toWeb(
+    fs.createReadStream(filePath),
+  ) as unknown as ReadableStream<Uint8Array>;
+  return new NextResponse(stream, {
     status: 200,
     headers: {
       "Content-Type": "image/png",
-      "Content-Length": String(media.length),
+      "Content-Length": String(info.size),
       "Cache-Control": "private, max-age=3600",
     },
   });

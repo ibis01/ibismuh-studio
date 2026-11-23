@@ -14,8 +14,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/ibismuh/tenant";
 import { getCapability } from "@/lib/ibismuh/providers/settings";
-import { cloneVoice, isCloneProvider, parseCloneConsent, pickCloneProvider } from "@/lib/ibismuh/voice-clone";
+import { cloneVoice, isCloneProvider, parseCloneConsent, pickCloneProvider, MAX_SAMPLE_BYTES } from "@/lib/ibismuh/voice-clone";
 import { errorText } from "@/lib/ibismuh/redact";
+import {
+  UploadTooLargeError,
+  UploadConcurrencyError,
+  UnsupportedMediaError,
+  enforceAudioMagicBytes,
+  enforceQuotaHeadroom,
+  enforceFileSize,
+  enforceRequestContentLength,
+  withUploadSlot,
+} from "@/lib/ibismuh/upload-limits";
 
 export async function POST(req: NextRequest) {
   const auth = await requireUser(req);
@@ -39,6 +49,17 @@ export async function POST(req: NextRequest) {
     } else if (active.provider === "voicestudio" && (active.baseUrl?.trim() || active.apiKey?.trim())) {
       provider = "voicestudio";
     }
+  }
+
+  // F-03 (upload admission): the request and file walls run BEFORE any
+  // body is materialized — an oversized sample dies at the door (413), a
+  // fake-extension file dies at the magic bytes, and one organization
+  // cannot hold the workers with parallel clone streams.
+  try {
+    // multipart overhead (fields + boundaries) on top of the file cap
+    enforceRequestContentLength(req, MAX_SAMPLE_BYTES + 64 * 1024, "The voice sample");
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Upload too large" }, { status: 413 });
   }
 
   let form: FormData;
@@ -80,20 +101,30 @@ export async function POST(req: NextRequest) {
     );
 
   try {
-    const result = await cloneVoice({
-      source:
-        file instanceof File && file.size > 0
-          ? {
-              kind: "upload",
-              buffer: Buffer.from(await file.arrayBuffer()),
-              filename: file.name || "uploaded sample",
-            }
-          : { kind: "url", url: String(url ?? "").trim() },
-      name,
-      sampleText,
-      auditionText,
-      provider,
-      consent,
+    const result = await withUploadSlot(auth.ctx.organizationId, async () => {
+      let source:
+        | { kind: "upload"; buffer: Buffer; filename: string }
+        | { kind: "url"; url: string };
+      if (file instanceof File && file.size > 0) {
+        // Wall 2: the parsed File's size — checked BEFORE arrayBuffer()
+        // materializes it (the old path buffered first and asked later).
+        enforceFileSize(file, MAX_SAMPLE_BYTES, "The voice sample");
+        await enforceQuotaHeadroom(auth.ctx.organizationId, file.size, "The voice sample");
+        const buffer = Buffer.from(await file.arrayBuffer());
+        // Wall 3: magic bytes — a ".wav" that is not a WAV dies here
+        enforceAudioMagicBytes(buffer, "The voice sample");
+        source = { kind: "upload", buffer, filename: file.name || "uploaded sample" };
+      } else {
+        source = { kind: "url", url: String(url ?? "").trim() };
+      }
+      return cloneVoice({
+        source,
+        name,
+        sampleText,
+        auditionText,
+        provider,
+        consent,
+      });
     });
     return NextResponse.json({
       ok: true,
@@ -107,11 +138,18 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = errorText(err, "Voice cloning failed");
-    const status = /needs an API key|Add your bigmodel/.test(message)
-      ? 409
-      : /too small|no audio|Could not read|not a valid|exceeds|enormous|only .*s/.test(message)
-        ? 400
-        : 502;
+    const status =
+      err instanceof UploadTooLargeError
+        ? 413
+        : err instanceof UploadConcurrencyError
+          ? 429
+          : err instanceof UnsupportedMediaError
+            ? 400
+            : /needs an API key|Add your bigmodel/.test(message)
+              ? 409
+              : /too small|no audio|Could not read|not a valid|exceeds|enormous|only .*s/.test(message)
+                ? 400
+                : 502;
     return NextResponse.json({ error: message }, { status });
   }
 }
