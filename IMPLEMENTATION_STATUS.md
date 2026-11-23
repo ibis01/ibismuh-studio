@@ -404,7 +404,55 @@ the M6 evidence-backed release decision).
   evidence-backed-change law, so the finding is recorded for the next
   daemon-equipped session to close WITH the smoke walk as proof.
 
+### M6 — final evidence-backed production release decision
+
+**DECISION: GO for the milestone merge, conditional on the operator
+actions below.** The evidence posture, stated honestly:
+
+- **Green in this sandbox (the evidence that exists):**
+  - Full `npm run check` gate: **exit 0, end-to-end** — typecheck PASS ·
+    lint 0/0 · unit **1039/1039** · whiteboard-trace · whiteboard-profiles ·
+    provider-registry · billing · storage · net-guard + provider battery ·
+    tenant-registry · tenant-isolation · upload-limits · api-schemas
+    battery PASS · queue-reliability battery PASS · lint-budget within
+    budget · rate limiter battery PASS · scene-revisions 29/29 ·
+    restore drill 12/12 (RTO database 394 ms · object storage 57 ms) ·
+    alert probe HEALTH 0 failed.
+  - M2's real-PostgreSQL lane drill (21/21, two consecutive runs) stands.
+  - M3's validation census: zero unvalidated input surfaces, evidence-
+    dispositioned; M4's transport retry closed the last HIGH risk cluster
+    with zero caller-visible contract change.
+- **Honest limits (what this sandbox could NOT prove):**
+  - `scripts/docker-smoke.sh` runtime walk: BLOCKED — no Docker daemon
+    (M5). CI on a daemon-equipped host owns this evidence. Finding M5-F1
+    (web/worker compose healthchecks) rides along with that walk.
+  - `test:voicestudio`: fails identically on the pre-M4 tree here (loopback
+    server on a non-standard port blocked by the sandbox network policy) —
+    pre-existing environment failure, not a branch regression.
+  - **Push: BLOCKED — the sandbox has no GitHub credentials this session**
+    (M3, M4, M5, M6, M7 records are local-only on
+    `release/production-readiness`; main remains in sync with origin).
+- **Conditions before the merge (operator actions, in order):**
+  1. Push the milestone branch when credentials are available
+     (`git push origin release/production-readiness`).
+  2. CI green on the pushed branch (the push itself owns the evidence
+     this sandbox cannot produce).
+  3. Docker smoke walk green on a daemon-equipped host; close M5-F1
+     (compose healthchecks for web/worker) WITH that walk as proof.
+  4. Merge `release/production-readiness` → `main` (squash-free merge —
+     the branch's history is the audit trail).
+
+### M7 — full verification gate before the milestone merge: PASS
+
+- `npm run check` executed **end-to-end on the M6-decision tree**: exit 0.
+- The chain: typecheck · lint · unit · whiteboard-trace ·
+  whiteboard-profiles · provider-registry · billing · storage · net-guard ·
+  tenant-registry · tenant-isolation · upload-limits · api-schemas ·
+  queue-reliability · lint-budget · rate · scene-revisions · restore
+  drill · alert probe — **all green, single run, no retries**.
+
 ### Remaining
 
-- **M6** — final evidence-backed production release decision
-- **M7** — full verification gate before the milestone merge
+- **None.** M1–M7 are complete on the milestone branch. The four
+  conditions in M6 move with the branch: push → CI → docker-smoke
+  (+ M5-F1) → merge.

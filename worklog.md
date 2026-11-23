@@ -7464,3 +7464,37 @@ policy — pre-existing environment failure, not an M4 regression).
 release/production-readiness — the sandbox has no GitHub credentials this
 session (`could not read Username for 'https://github.com'`); main stays
 in sync at origin. Push when credentials are available.
+
+## 2026-11-23 — Studio session (continued): M5 + M6 + M7 — the milestone plan completes on the branch
+
+**M5 (drill, BLOCKED-as-expected).** No Docker daemon in this sandbox —
+the docker-smoke runtime walk cannot run here (CI owns that evidence).
+A full structural re-audit of the deployment topology ran instead: both
+compose files parse; all four milestone services present (postgres /
+migrate one-shot / web / worker); postgres healthchecked; named volumes
+all carry the ibismuh_ rename law; zero legacy TUBEFORGE_* references;
+smoke overlay merge-safe (every patched key exists in base); Dockerfile
+three-stage (deps → build → runner). ONE new finding recorded, M5-F1
+(minor): ibismuh-web and ibismuh-worker carry NO compose healthcheck —
+deliberately not blind-fixed (probes need a daemon to be proven; the
+next daemon-equipped session closes it WITH the smoke walk).
+
+**M6 (decision).** GO for the milestone merge, conditional on operator
+actions in order: push the branch when credentials exist → CI green →
+docker-smoke green (+ M5-F1 closed with it) → merge release/production-
+readiness → main (squash-free — the history is the audit trail). Honest
+limits recorded: docker-smoke BLOCKED (no daemon), test:voicestudio
+pre-existing sandbox-environment failure (fails identically pre-M4),
+push BLOCKED (no GitHub credentials — M3..M7 records are local-only).
+
+**M7 (gate).** npm run check executed END-TO-END on the decision tree:
+exit 0, single run — typecheck · lint 0/0 · unit 1039/1039 ·
+whiteboard-trace · whiteboard-profiles · provider-registry · billing ·
+storage · net-guard + provider battery · tenant-registry ·
+tenant-isolation · upload-limits · api-schemas · queue-reliability ·
+lint-budget · rate limiter · scene-revisions 29/29 · restore drill 12/12
+(RTO db 394ms / objects 57ms) · alert probe HEALTH 0 failed.
+
+**Push state:** 5 local-only commits on release/production-readiness
+(63351f3 M3 · a562ba0 M4 · 5c8038c status · 898c228 M5 · this record).
+main remains in sync with origin. Push when credentials are available.
