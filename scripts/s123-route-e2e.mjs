@@ -21,16 +21,16 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //      (400), the classic-video refusal (format guard);
 //   7. cleanup: the throwaway account + org removed (baseline-relative).
 //
-// Run: TUBEFORGE_BASE=http://localhost:3000 node scripts/s123-route-e2e.mjs
+// Run: IBISMUH_STUDIO_BASE=http://localhost:3000 node scripts/s123-route-e2e.mjs
 import fs from "node:fs";
 import path from "node:path";
 
 const db = createPrisma();
-const BASE = process.env.TUBEFORGE_BASE ?? "http://localhost:3000";
+const BASE = process.env.IBISMUH_STUDIO_BASE ?? "http://localhost:3000";
 // The local storage driver's root (the uploads/ layout) — the draft and
 // per-scene artifacts are verified ON DISK here (the Playwright suite has
 // no storage access; that is this probe's reason to exist).
-const UPLOADS = process.env.TUBEFORGE_UPLOADS ?? path.resolve("uploads");
+const UPLOADS = process.env.IBISMUH_STUDIO_UPLOADS ?? path.resolve("uploads");
 
 let cookie = "";
 async function call(method, path_, body) {

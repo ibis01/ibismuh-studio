@@ -18,7 +18,7 @@
 // The `baseUrl` is `http://127.0.0.1:<port>/v1` — written to a TEMP
 // .z-ai-config by the probe (the SDK reads cwd), restored after. Provider
 // "zai" is UNGATED by the spend law (isPaidProvider("zai") === false), so
-// TUBEFORGE_SPEND_GATE stays untouched and no paid dispatch ever runs.
+// IBISMUH_STUDIO_SPEND_GATE stays untouched and no paid dispatch ever runs.
 //
 // Every prompt the gateway receives is RECORDED (state.*) so the probe can
 // assert the L2/L3 sanitization actually ran on the wire — the adversarial

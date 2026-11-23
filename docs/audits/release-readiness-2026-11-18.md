@@ -37,7 +37,7 @@
 - Two limiter layers: `rate-limit.ts` and `shared-rate-limit.ts`, both
   env-tunable (`IBISMUH_STUDIO_RATE_READ=600`, `IBISMUH_STUDIO_RATE_WRITE=90`
   defaults). The B4 session's "flake that wasn't" found the e2e config still
-  raising ceilings under the dead legacy `TUBEFORGE_RATE_*` names — fixed to
+  raising ceilings under the dead legacy `IBISMUH_STUDIO_RATE_*` names — fixed to
   the current names with a config-truth pin (`af15635`).
 
 ### Deployment — VERIFIED (smoke-level)

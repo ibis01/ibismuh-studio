@@ -7,9 +7,9 @@ Phase B tail is listed, not built. Unit-pinned in
 `scripts/test-unit.mts`; the VLM layers ride the budget choke point and
 fail open.
 **Scope of this document:** the engine's contract only — what a
-"consistency score" IS in TubeForge, the data envelope it writes, the
+"consistency score" IS in Ibismuh Studio, the data envelope it writes, the
 job it runs under, and the laws it must never break. Implementation:
-`src/lib/tubeforge/visual-consistency.ts`.
+`src/lib/ibismuh/visual-consistency.ts`.
 **Mandate:** S75 §0 (quality infrastructure before engine expansion) and
 the S76 adoption decision §4.A (the design target) + §6 (acceptance:
 cross-scene comparison detects seeded continuity defects) + §8 (every
@@ -273,7 +273,7 @@ measurement is insulated — it renders committed scene-art prompts
 only). Six unit pins.
 
 **Phase B slice 5 (S82 — implemented):** org-wide cross-video
-character identity — `src/lib/tubeforge/character-identity.ts`. ONE
+character identity — `src/lib/ibismuh/character-identity.ts`. ONE
 batched VLM call per run: the character's reference set (portrait + up
 to 3 library refs, the same refs the per-video pass judges against)
 plus the character's LATEST painted host-scene frame from each video

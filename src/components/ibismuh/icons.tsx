@@ -1,7 +1,7 @@
 import * as React from "react"
 
 // lucide-react 1.x stripped the brand icons (Youtube among them) from the
-// core set. TubeForge's surfaces still need the YouTube mark for platform
+// core set. Ibismuh Studio's surfaces still need the YouTube mark for platform
 // affordances (upload states, analytics badges, integrations), so the
 // original lucide path (MIT, lucide v0.x) rides here with the same component
 // contract the codebase already uses: className passthrough, currentColor

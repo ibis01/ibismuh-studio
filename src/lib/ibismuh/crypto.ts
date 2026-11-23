@@ -2,7 +2,7 @@
 //
 // Used for ProviderCredential.apiKey, YouTubeAccount.refreshToken/accessToken
 // and any other column that must never sit in the database in plaintext.
-// Key source: TUBEFORGE_ENCRYPTION_KEY (>= 16 chars) in .env — see .env.example.
+// Key source: IBISMUH_STUDIO_ENCRYPTION_KEY (>= 16 chars) in .env — see .env.example.
 // The key is stretched with scrypt into a 32-byte AES key; every value carries
 // its own random 12-byte IV, so identical plaintexts never share ciphertext.
 //
@@ -21,17 +21,21 @@ import {
 } from "node:crypto";
 
 const PREFIX = "v1.";
+// FROZEN VALUE (data compatibility): the scrypt salt MUST stay exactly
+// "tubeforge-at-rest-v1" — it derives the AES key for every secret already
+// stored in the database (provider API keys, OAuth tokens). Changing it makes
+// all of them undecryptable. Pinned by scripts/test-unit.mts. The string is
+// historical crypto material, not an active identity reference.
 const SCRYPT_SALT = "tubeforge-at-rest-v1"; // static KDF salt — per-record IVs carry the randomness
 const KEY_CACHE = (globalThis as typeof globalThis & { __ibismuhEncKey?: Buffer }).__ibismuhEncKey;
 
 function requireKey(): Buffer {
   const g = globalThis as typeof globalThis & { __ibismuhEncKey?: Buffer };
   if (g.__ibismuhEncKey) return g.__ibismuhEncKey;
-  const raw =
-    process.env.IBISMUH_STUDIO_ENCRYPTION_KEY ?? process.env.TUBEFORGE_ENCRYPTION_KEY ?? "";
+  const raw = process.env.IBISMUH_STUDIO_ENCRYPTION_KEY ?? "";
   if (raw.length < 16) {
     throw new Error(
-      "IBISMUH_STUDIO_ENCRYPTION_KEY (or legacy TUBEFORGE_ENCRYPTION_KEY) is missing or too short (<16 chars) — secrets cannot be encrypted. Set it in .env (see .env.example); rotating it invalidates stored secrets."
+      "IBISMUH_STUDIO_ENCRYPTION_KEY is missing or too short (<16 chars) — secrets cannot be encrypted. Set it in .env (see .env.example); rotating it invalidates stored secrets."
     );
   }
   const key = scryptSync(raw, SCRYPT_SALT, 32);

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tf_s74_catchup.sh — the S74 catch-up pass: silence, then a rotating canary.
+# ibismuh_s74_catchup.sh — the S74 catch-up pass: silence, then a rotating canary.
 #
 # 2026-11-10 receipt: after ~6 video generations the account entered a hard
 # throttle window (identical shape to the S63 outage) — patient retries (6/12
@@ -8,7 +8,7 @@
 #
 # PROBE-FIRST (the one gateway-resumption policy, all entry points):
 #   - probe GREEN right now → nothing to wait out; the paced lane runs
-#     immediately (tf_s74_lane.sh).
+#     immediately (ibismuh_s74_lane.sh).
 #   - probe 429 → 75 min of FULL gateway silence, then per cycle: probe
 #     again BEFORE any canary submission (the canary is an expensive i2v
 #     call; the probe is a cheap llm call — never spend the canary into a
@@ -27,7 +27,7 @@ FAILED=(social explainer islamic-history narrative documentary advertisement pod
 
 if node --import tsx scripts/gateway-quota-probe.mts > /tmp/s74-probe.log 2>&1; then
   echo "[catchup] probe GREEN — the window is open; running the paced lane now"
-  exec bash "$SCRIPT_DIR/tf_s74_lane.sh"
+  exec bash "$SCRIPT_DIR/ibismuh_s74_lane.sh"
 fi
 echo "[catchup] probe NOT green ($(tail -1 /tmp/s74-probe.log)) — the silence discipline applies"
 
@@ -51,7 +51,7 @@ for cycle in 1 2 3; do
   fi
   if node --import tsx scripts/s74-paired-remeasure.mts --profile "$CANARY" --pace-ms=300000; then
     echo "[catchup] canary $CANARY landed — the window is open; running the rest"
-    exec bash "$SCRIPT_DIR/tf_s74_lane.sh"
+    exec bash "$SCRIPT_DIR/ibismuh_s74_lane.sh"
   fi
   # rotate: the failed canary goes to the END of the list
   FAILED=("${FAILED[@]:1}" "$CANARY")

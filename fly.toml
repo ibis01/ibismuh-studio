@@ -1,13 +1,13 @@
-# Ibismuh Studio on Fly.io (Stage 3, T-3.12; rebranded from TubeForge) — process-group deployment.
+# Ibismuh Studio on Fly.io (Stage 3, T-3.12; rebranded from Ibismuh Studio) — process-group deployment.
 #
 #   fly launch --no-deploy --copy-config   (first time)
-#   (pre-rebrand apps keep their TUBEFORGE_* secrets — the app mirrors legacy names)
+#   (pre-rebrand apps keep their IBISMUH_STUDIO_* secrets — the app mirrors legacy names)
 #   fly secrets set IBISMUH_STUDIO_AUTH_SECRET=... IBISMUH_STUDIO_ENCRYPTION_KEY=... \
 #                  DATABASE_URL=...  POSTGRES_PASSWORD not needed (Fly Postgres URL)
 #   fly deploy
 #
-# The app is `ibismuh-studio`: the original `tubeforge` app was RENAMED in the
-# 2026-11-17 rebrand and the fly.dev hostname followed (tubeforge.fly.dev no
+# The app is `ibismuh-studio`: the original `ibismuh` app was RENAMED in the
+# 2026-11-17 rebrand and the fly.dev hostname followed (ibismuh.fly.dev no
 # longer resolves). This config now targets the renamed app so a bare
 # `fly deploy` ships to the live deployment instead of failing on a ghost.
 #
@@ -97,9 +97,9 @@ primary_region = "lhr"
   memory = "4gb"
 
 # Persistent uploads volume for LOCAL storage mode (optional; S3 mode does
-# not need it). Uncomment and `fly volumes create tubeforge_uploads --size 10`.
+# not need it). Uncomment and `fly volumes create ibismuh_uploads --size 10`.
 #
 # [[mounts]]
 #   processes = ["web", "worker"]
-#   source = "tubeforge_uploads"
+#   source = "ibismuh_uploads"
 #   destination = "/app/uploads"

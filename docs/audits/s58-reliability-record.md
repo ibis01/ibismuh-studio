@@ -44,7 +44,7 @@ run at the head covers every tree below it cumulatively):
 | `14bfa20` (docs: S58 opened) | — | tree covered by the head run |
 | `34ec87a` (feat: S58 — this stage's head) | 42480528396 | ✅ **all jobs green** — Typecheck · Lint · Unit, Secret scan (gitleaks), Production build, Money-path coverage, E2E (Playwright) |
 
-https://github.com/ibis01/tubeforge/actions/runs/42480528396. S58 closes
+https://github.com/ibis01/ibismuh/actions/runs/42480528396. S58 closes
 on this evidence.
 
 ## The tranche — what actually changed
@@ -57,7 +57,7 @@ honest moves — no carve-outs, no rule exemptions:
    lookups. A missing registry row is an adapter/registry sync bug; it now
    throws `provider registry has no <capability> provider "<id>"` instead
    of a TypeError at `.defaultBaseUrl`.
-2. **`must()`** (`src/lib/tubeforge/must.ts`) — the named-invariant helper
+2. **`must()`** (`src/lib/ibismuh/must.ts`) — the named-invariant helper
    for the three provable map/find sites (analytics' keyset, motion's
    grouped-byInput, shorts' timeline). A broken invariant becomes a named
    error that says WHICH invariant broke.
@@ -131,8 +131,8 @@ is the natural S59.
 
 ## The spend-gate law — untouched, observable
 
-- No `TUBEFORGE_SPEND_GATE=0` anywhere in S58.
-- No forced `TUBEFORGE_PRICING_VERIFIED`; the pricing block stays
+- No `IBISMUH_STUDIO_SPEND_GATE=0` anywhere in S58.
+- No forced `IBISMUH_STUDIO_PRICING_VERIFIED`; the pricing block stays
   provisional; `SpendPricingUnverifiedError` behavior unchanged.
 - Zero gateway quota, zero paid dispatches — S58 touched no provider path
   (the 12 registry swaps are dispatch-table lookups, and the probes that

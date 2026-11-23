@@ -1,7 +1,7 @@
 # S76 — OpenMontage Capability Adoption Decision and Master Roadmap
 
 Opened 2026-11-10 UTC. Provenance: an external engineering audit
-("TubeForge × OpenMontage — Verified Engineering Adoption Roadmap")
+("Ibismuh Studio × OpenMontage — Verified Engineering Adoption Roadmap")
 was delivered in chat on 2026-11-10 and its decision text was approved
 for recording. This record is that decision, re-verified against the
 remote tree at `f7bfe47` (CI 6/6 on that exact SHA) before it was
@@ -14,9 +14,9 @@ module exists until the file was seen in the verified tree.
 ## 1. The decision
 
 **Decision:** Adopt selected OpenMontage creative-production concepts
-through independent TubeForge implementations.
+through independent Ibismuh Studio implementations.
 
-**Architectural constraint:** Preserve TubeForge's native
+**Architectural constraint:** Preserve Ibismuh Studio's native
 orchestration, multi-tenant SaaS infrastructure, provider boundaries,
 billing controls and durable job system.
 
@@ -35,8 +35,8 @@ billing controls and durable job system.
 
 **Reuse policy:** Study OpenMontage's architecture and independently
 implement suitable capabilities. No source-code copying or adaptation
-before the AGPL-3.0 implications and TubeForge's own licensing
-position are reviewed (OpenMontage is AGPL-3.0; the TubeForge
+before the AGPL-3.0 implications and Ibismuh Studio's own licensing
+position are reviewed (OpenMontage is AGPL-3.0; the Ibismuh Studio
 repository currently has no LICENSE file — one must be chosen and
 published before commercial distribution).
 
@@ -68,11 +68,11 @@ comparison, all confirmed against the tree:
    systems.
 3. **Reference-video analysis is the clearest missing creative
    capability.** OpenMontage dedicates a workflow to it; no
-   first-class equivalent was found in TubeForge.
+   first-class equivalent was found in Ibismuh Studio.
 
-| Capability | OpenMontage | TubeForge | Decision |
+| Capability | OpenMontage | Ibismuh Studio | Decision |
 | --- | --- | --- | --- |
-| Native orchestration | Agent-driven pipelines | Native Director + job orchestration | Keep TubeForge |
+| Native orchestration | Agent-driven pipelines | Native Director + job orchestration | Keep Ibismuh Studio |
 | Reference-video analysis | Dedicated workflow | No equivalent verified | Adopt |
 | Stock footage | Broad source ecosystem | Pexels + Pixabay implemented | Expand |
 | AI video generation | Broad provider ecosystem | Provider abstraction | Improve selection |
@@ -94,7 +94,7 @@ architecture documents real tool files (`tools/analysis/video_analyzer.py`,
 `tools/video/clip_search.py`, `tools/graphics/blender_world.py`, …) and its
 latest retrieved provider commit (Pika H3 Flex, `fecb9a1`) carries 72
 faked-HTTP contract tests — substantial adapter engineering that still
-does not prove live production quality for every provider. TubeForge's
+does not prove live production quality for every provider. Ibismuh Studio's
 side is evidenced by the verified module list: `stock.ts`/`stock-query.ts`,
 `director.ts`/`director-plan.ts`, `timeline.ts`, `quality.ts`/
 `render-qc.ts`, `providers/registry.ts` + the provider files,
@@ -199,7 +199,7 @@ camera movement, visual treatment, hook and narrative structure; the
 Director then produces an original concept from the abstract
 characteristics. Structural patterns, never copyrighted footage,
 scripts or distinctive expression. Ingestion must respect source
-access rights, platform terms and TubeForge's SSRF protections.
+access rights, platform terms and Ibismuh Studio's SSRF protections.
 Integration points: `director.ts`, `director-plan.ts`, `story.ts`,
 `stock-query.ts`.
 
@@ -265,7 +265,7 @@ deterministic checks, model-assisted evaluation and human review.
 
 ## 8. Governing rule
 
-> Every new production engine must consume TubeForge's shared
+> Every new production engine must consume Ibismuh Studio's shared
 > intelligence, asset, timeline, rendering and quality contracts. No
 > new engine may introduce an isolated production pipeline.
 

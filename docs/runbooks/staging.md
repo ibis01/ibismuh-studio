@@ -18,7 +18,7 @@ The kit: `fly.staging.toml` (same topology as production) ·
 
 | Account | What you create | Cost |
 | --- | --- | --- |
-| Fly.io | nothing yet — the provisioner registers `tubeforge-staging` | pay-as-you-go; two small machines + one 2 GB worker |
+| Fly.io | nothing yet — the provisioner registers `ibismuh-studio-staging` | pay-as-you-go; two small machines + one 2 GB worker |
 | Neon | a **branch** of the production project (resettable) | free tier |
 | Cloudflare R2 | a separate bucket + an S3 API token (Object Read & Write on that bucket) | free tier covers drills |
 | Stripe | **test-mode** API key + two test prices (creator / studio) | free |
@@ -45,10 +45,10 @@ bash scripts/staging-provision.sh             # launch → secrets → deploy �
 Then the two manual steps the script cannot do:
 
 1. **Stripe webhook** — in the Stripe dashboard (test mode) register an
-   endpoint for `https://tubeforge-staging.fly.dev/api/billing/webhook`,
+   endpoint for `https://ibismuh-studio-staging.fly.dev/api/billing/webhook`,
    copy the signing secret into `.env.staging`
    (`IBISMUH_STUDIO_STAGING_STRIPE_WEBHOOK_SECRET`) and re-run the provisioner
-   (or `fly secrets set -a tubeforge-staging IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET=whsec_…`).
+   (or `fly secrets set -a ibismuh-studio-staging IBISMUH_STUDIO_STRIPE_WEBHOOK_SECRET=whsec_…`).
 2. **Provider key for the pipeline drill** — sign in at the staging URL →
    Settings → AI Providers → paste the Z.ai key → Test. (One key powers
    every Z.ai task; the drill's render itself is $0 — the whiteboard
@@ -57,7 +57,7 @@ Then the two manual steps the script cannot do:
 ## 4. The drills
 
 ```bash
-STAGING_URL=https://tubeforge-staging.fly.dev bash scripts/staging-drills.sh
+STAGING_URL=https://ibismuh-studio-staging.fly.dev bash scripts/staging-drills.sh
 ```
 
 ### 4.1 Automated — the harness suites (`staging-drill.mts`)
@@ -85,7 +85,7 @@ k6 is not installed.
 ### 4.3 Stripe webhook rehearsal (Stripe CLI)
 
 ```bash
-stripe listen --forward-to https://tubeforge-staging.fly.dev/api/billing/webhook
+stripe listen --forward-to https://ibismuh-studio-staging.fly.dev/api/billing/webhook
 stripe trigger checkout.session.completed
 ```
 
@@ -97,9 +97,9 @@ portal, cancel — the whole lifecycle in test mode.
 ### 4.4 Worker recovery (the S100 law on the real platform)
 
 ```bash
-node --import tsx scripts/staging-drill.mts --url https://tubeforge-staging.fly.dev --suite pipeline &
+node --import tsx scripts/staging-drill.mts --url https://ibismuh-studio-staging.fly.dev --suite pipeline &
 sleep 45   # let the render claim + start
-fly machines restart --app tubeforge-staging --process-group worker
+fly machines restart --app ibismuh-studio-staging --process-group worker
 ```
 
 The render must still land: `hasVideo` + a fetchable `final.mp4`. The
@@ -118,7 +118,7 @@ it lands (unlisted) on the test channel → delete it.
 ```bash
 IBISMUH_STUDIO_DB_URL="<the Neon branch URL>" npm run db:backup:pg
 # restore the dump into a SCRATCH Neon branch (never the live one):
-createdb "$SCRATCH_URL" && psql "$SCRATCH_URL" -f backups/tubeforge-<stamp>/database.sql
+createdb "$SCRATCH_URL" && psql "$SCRATCH_URL" -f backups/ibismuh-<stamp>/database.sql
 ```
 
 Row counts must match the live branch. The SQLite edition of this drill
@@ -129,10 +129,10 @@ step proves the Postgres path against the real provider.
 
 ```bash
 # a fresh Neon branch (dashboard or neon CLI), then point staging at it:
-fly secrets set -a tubeforge-staging DATABASE_URL="<new branch URL>" \
+fly secrets set -a ibismuh-studio-staging DATABASE_URL="<new branch URL>" \
   IBISMUH_STUDIO_AUTH_SECRET="$(openssl rand -hex 32)" \
   IBISMUH_STUDIO_ENCRYPTION_KEY="$(openssl rand -hex 32)"
-fly deploy -a tubeforge-staging --config fly.staging.toml
+fly deploy -a ibismuh-studio-staging --config fly.staging.toml
 ```
 
 Rotating the auth secret revokes every staging session instantly; old
@@ -141,7 +141,7 @@ data stays on the abandoned branch (delete it when done).
 ## 6. Teardown
 
 ```bash
-fly apps destroy tubeforge-staging     # machines, secrets, the app
+fly apps destroy ibismuh-studio-staging     # machines, secrets, the app
 # Neon branch + R2 bucket: delete from their dashboards.
 ```
 

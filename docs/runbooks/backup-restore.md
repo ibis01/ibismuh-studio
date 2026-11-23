@@ -35,19 +35,19 @@ process group). Two workable options:
 
 ```bash
 # from a machine with the fly CLI, authenticated:
-fly ssh console -a tubeforge --select \
-  --command 'grep -q db:backup:pg /etc/cron.d/tubeforge 2>/dev/null || \
-    echo "17 3 * * * root cd /app && BACKUP_S3_URI=s3://<bucket>/tubeforge-backups npm run db:backup:pg >> /app/backups/backup-cron.log 2>&1" > /etc/cron.d/tubeforge'
+fly ssh console -a ibismuh --select \
+  --command 'grep -q db:backup:pg /etc/cron.d/ibismuh 2>/dev/null || \
+    echo "17 3 * * * root cd /app && BACKUP_S3_URI=s3://<bucket>/ibismuh-backups npm run db:backup:pg >> /app/backups/backup-cron.log 2>&1" > /etc/cron.d/ibismuh'
 ```
 
 (Cron inside a Fly machine resets on redeploy — re-check after each deploy,
 or bake the crontab into the Dockerfile when the schedule is proven.)
 
 **Option B — scheduled GitHub Action** calling
-`fly ssh console -a tubeforge --command 'cd /app && BACKUP_S3_URI=… npm run db:backup:pg'`
+`fly ssh console -a ibismuh --command 'cd /app && BACKUP_S3_URI=… npm run db:backup:pg'`
 with the Fly API token stored as a repository secret.
 
-**Success criterion:** a new `tubeforge-YYYY-MM-DD_HHMMSS.dump` +
+**Success criterion:** a new `ibismuh-YYYY-MM-DD_HHMMSS.dump` +
 `.sha256` pair appears in the bucket every day, and `backup-cron.log` ends
 with `done`.
 
@@ -58,14 +58,14 @@ into the drill log in §4.
 
 1. **Pick the artifact.** Take the most recent dump from the bucket (or
    `backups/pg/`). Verify it against its sidecar:
-   `sha256sum -c tubeforge-<stamp>.dump.sha256`.
+   `sha256sum -c ibismuh-<stamp>.dump.sha256`.
 2. **Create a scratch database.** With Neon, the cheapest drill target is a
    branch: `neonctl branches create --name restore-drill-$(date +%Y%m%d)`,
    then copy its connection string. (Any scratch Postgres works — even
    `docker run -e POSTGRES_PASSWORD=drill -p 5433:5432 postgres:16-alpine`.)
 3. **Restore into it:**
    ```bash
-   pg_restore --dbname "$SCRATCH_URL" --no-owner --no-privileges --clean --if-exists tubeforge-<stamp>.dump
+   pg_restore --dbname "$SCRATCH_URL" --no-owner --no-privileges --clean --if-exists ibismuh-<stamp>.dump
    ```
    Any error here is a finding: the backup is not restorable as-is. Record
    it and fix the cause before continuing.

@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Milestone | S170 — "Translates Director instructions into native engine operations: identify the target, select an approved preset, calculate its timeline, apply easing, generate frame states, render through the native engine. The AI does not generate the animation." |
-| Module | `src/lib/tubeforge/animation-compiler.ts` — pure, data-in/data-out. |
-| Acceptance | **"Disconnect the AI provider after the project has been approved. TubeForge must still render the complete video."** — the compile half is PROVEN (receipt `docs/audits/s170-offline-compile.json`, sha256 `141e0ba3…`); the render half rides the engines' own AI-free gates (the S165 golden-video harness, the S167 assembly smoke). |
+| Module | `src/lib/ibismuh/animation-compiler.ts` — pure, data-in/data-out. |
+| Acceptance | **"Disconnect the AI provider after the project has been approved. Ibismuh Studio must still render the complete video."** — the compile half is PROVEN (receipt `docs/audits/s170-offline-compile.json`, sha256 `141e0ba3…`); the render half rides the engines' own AI-free gates (the S165 golden-video harness, the S167 assembly smoke). |
 | Status | **CLOSED (compiler)** — battery 974/974 (4 new pins), proof 13/13, typecheck + lint clean. |
 
 ## 1. What the compiler does

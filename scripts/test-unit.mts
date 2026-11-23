@@ -25147,69 +25147,68 @@ await test("S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuse
 
 
 // ---------------------------------------------------------------------------
-// Rebrand compatibility (the controlled 2026-11-17 migration): the legacy
-// TUBEFORGE_* world must keep working while IBISMUH_STUDIO_* is
-// authoritative. These suites pin the compat seams — mirror, dual-reads,
-// cookie names — so no future cleanup can silently strand deployments.
+// Identity contract (the 2026-11-23 hardening pass): the IBISMUH_STUDIO_*
+// configuration contract is the ONLY contract. The 2026-11-17 rebrand's
+// compatibility aliases (env mirror, dual-reads, legacy cookie) were removed
+// per the hardening mandate — with the two data-coupled values that must
+// NEVER move (KDF salt, scene3d seed) still pinned below.
 
-await test("rebrand: compat-env mirrors legacy TUBEFORGE_* into IBISMUH_STUDIO_* and the new name always wins", async () => {
-  const { mirrorLegacyEnv } = await import("../src/lib/ibismuh/compat-env.ts");
-  const legacy = "TUBEFORGE_REBRAND_PROBE_VAR";
-  const next = "IBISMUH_STUDIO_REBRAND_PROBE_VAR";
-  try {
-    process.env[legacy] = "from-legacy";
-    delete process.env[next];
-    mirrorLegacyEnv();
-    eq(process.env[next], "from-legacy", "an unset new name inherits the legacy value");
-    process.env[next] = "from-new";
-    mirrorLegacyEnv();
-    eq(process.env[next], "from-new", "a set new name is authoritative — the mirror never overwrites");
-  } finally {
-    delete process.env[legacy];
-    delete process.env[next];
+await test("identity: the legacy env mirror is GONE — only IBISMUH_STUDIO_* is read", async () => {
+  eq(fs.existsSync("src/lib/ibismuh/compat-env.ts"), false, "compat-env.ts is deleted");
+  const srcs = [
+    fs.readFileSync("src/lib/ibismuh/auth-token.ts", "utf8"),
+    fs.readFileSync("src/lib/ibismuh/crypto.ts", "utf8"),
+    fs.readFileSync("src/lib/ibismuh/providers/settings.ts", "utf8"),
+  ];
+  for (const src of srcs) {
+    // pinned-absence: the literal below is the SUBJECT of the assertion
+    ok(!src.includes("TUBEFORGE_"), "no legacy env name remains in the secrets readers");
   }
 });
 
-await test("rebrand: the auth secret dual-reads — legacy-only deployments keep signing", async () => {
+await test("identity: the auth secret reads ONLY the new name", async () => {
   const { getAuthSecret } = await import("../src/lib/ibismuh/auth-token.ts");
   try {
     delete process.env.IBISMUH_STUDIO_AUTH_SECRET;
+    // pinned-absence probe: the legacy env name is the test's subject
     process.env.TUBEFORGE_AUTH_SECRET = "a".repeat(32);
-    eq(getAuthSecret(), "a".repeat(32), "a legacy-only env still yields the secret");
+    eq(getAuthSecret(), undefined, "a legacy-only env yields NO secret — operators must rename the variable (documented operator action)");
     process.env.IBISMUH_STUDIO_AUTH_SECRET = "b".repeat(32);
-    eq(getAuthSecret(), "b".repeat(32), "the new name is authoritative when both are set");
+    eq(getAuthSecret(), "b".repeat(32), "the new name authenticates");
     delete process.env.TUBEFORGE_AUTH_SECRET;
     delete process.env.IBISMUH_STUDIO_AUTH_SECRET;
     eq(getAuthSecret(), undefined, "neither name set — no secret, the middleware fail-safe applies");
   } finally {
-    delete process.env.TUBEFORGE_AUTH_SECRET;
+    delete process.env.IBISMUH_STUDIO_AUTH_SECRET;
     delete process.env.IBISMUH_STUDIO_AUTH_SECRET;
   }
 });
 
-await test("rebrand: the session cookie reads BOTH names, new first — live sessions survive the flip", async () => {
-  const { SESSION_COOKIE, LEGACY_SESSION_COOKIE, pickSessionCookie } = await import("../src/lib/ibismuh/auth-token.ts");
-  eq(SESSION_COOKIE, "ibismuh_session", "the new cookie name is pinned");
-  eq(LEGACY_SESSION_COOKIE, "tf_session", "the legacy cookie name is pinned — dropping it would strand logins");
-  eq(pickSessionCookie((n) => (n === SESSION_COOKIE ? "new-token" : undefined)), "new-token", "a new-name cookie wins");
-  eq(pickSessionCookie((n) => (n === LEGACY_SESSION_COOKIE ? "old-token" : undefined)), "old-token", "a legacy-name cookie still authenticates");
+await test("identity: the session cookie reads ONLY the new name (pre-rebrand cookies are past their 7-day expiry)", async () => {
+  const { SESSION_COOKIE, pickSessionCookie } = await import("../src/lib/ibismuh/auth-token.ts");
+  eq(SESSION_COOKIE, "ibismuh_session", "the cookie name is pinned");
+  eq(pickSessionCookie((n) => (n === SESSION_COOKIE ? "tok" : undefined)), "tok", "the session cookie authenticates");
   eq(pickSessionCookie(() => undefined), undefined, "no cookie — nothing is invented");
+  const src = fs.readFileSync("src/lib/ibismuh/auth-token.ts", "utf8");
+  ok(!src.includes("tf_session"), "the legacy cookie constant is gone");
 });
 
-await test("rebrand: the encryption key reader dual-reads both names (config-truth: the reader is process-cached, so the source line is the contract)", async () => {
+await test("identity: the encryption key reads ONLY the new name; the KDF salt stays frozen (data compatibility)", async () => {
   const src = fs.readFileSync("src/lib/ibismuh/crypto.ts", "utf8");
   ok(
-    src.includes("process.env.IBISMUH_STUDIO_ENCRYPTION_KEY ?? process.env.TUBEFORGE_ENCRYPTION_KEY"),
-    "requireKey() falls back to the legacy TUBEFORGE_ENCRYPTION_KEY when the new name is unset"
+    src.includes('process.env.IBISMUH_STUDIO_ENCRYPTION_KEY ?? ""'),
+    "requireKey() reads the single IBISMUH_STUDIO_ENCRYPTION_KEY contract"
   );
-  ok(src.includes('const SCRYPT_SALT = "tubeforge-at-rest-v1"'), "the KDF salt is UNTOUCHED — renaming it would orphan every stored provider secret");
+  ok(src.includes('const SCRYPT_SALT = "tubeforge-at-rest-v1"'), "the KDF salt is FROZEN — changing it would orphan every stored provider secret");
 });
 
-await test("rebrand: the data-coupled seeds and paths stay preserved — only identity moved, not behavior", async () => {
+await test("identity: the data-coupled seeds stay frozen and the storage path carries the new identity", async () => {
   const sceneSrc = fs.readFileSync("src/lib/ibismuh/scene3d.ts", "utf8");
-  ok(sceneSrc.includes('hash32(topic || "tubeforge")'), "the scene3d determinism seed is UNTOUCHED — renaming it would shift every generated scene");
+  ok(sceneSrc.includes('hash32(topic || "tubeforge")'), "the scene3d determinism seed is FROZEN — renaming it would shift every generated scene");
   const storageSrc = fs.readFileSync("src/lib/ibismuh/storage.ts", "utf8");
-  ok(storageSrc.includes("/tmp/tubeforge-uploads"), "default storage paths are UNTOUCHED — renaming them would orphan existing deployments' uploads");
+  ok(storageSrc.includes("/tmp/ibismuh-uploads"), "the Vercel-ephemeral upload root carries the new identity (ephemeral by nature — nothing durable referenced the old name)");
+  // pinned-absence: the literal below is the SUBJECT of the assertion
+  ok(!storageSrc.includes("/tmp/tubeforge-uploads"), "the legacy upload-root literal is gone");
 });
 
 
@@ -25355,7 +25354,7 @@ await test("security review P0-2: diag is guarded in-handler and hides the schem
 await test("security review P1-1: the auth-secret floor law — 16 accepted, 15 refused (agreement, not breakage)", async () => {
   const { getAuthSecret } = await import("../src/lib/ibismuh/auth-token.ts");
   try {
-    delete process.env.TUBEFORGE_AUTH_SECRET;
+    delete process.env.IBISMUH_STUDIO_AUTH_SECRET;
     process.env.IBISMUH_STUDIO_AUTH_SECRET = "k".repeat(16);
     eq(getAuthSecret(), "k".repeat(16), "the 16-char runtime floor STAYS — legacy .env files keep authenticating");
     process.env.IBISMUH_STUDIO_AUTH_SECRET = "k".repeat(15);
@@ -25519,6 +25518,7 @@ await test("B4 — the e2e harness rate ceilings speak the CURRENT env names (co
   const cfg = fs.readFileSync("playwright.config.ts", "utf8");
   ok(cfg.includes("IBISMUH_STUDIO_RATE_WRITE"), "the harness raises the WRITE ceiling under the name both limiters read");
   ok(cfg.includes("IBISMUH_STUDIO_RATE_READ"), "the harness raises the READ ceiling under the current name");
+  // pinned-absence: the literal below is the SUBJECT of the assertion
   ok(!cfg.includes("TUBEFORGE_RATE_"), "the dead legacy names are gone — they reached NO limiter after the rebrand");
   const limiter = fs.readFileSync("src/lib/ibismuh/shared-rate-limit.ts", "utf8");
   const shed = fs.readFileSync("src/lib/ibismuh/rate-limit.ts", "utf8");

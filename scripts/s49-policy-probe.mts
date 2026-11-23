@@ -22,8 +22,8 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 // Run: node --import tsx scripts/s49-policy-probe.mts
 // Writes: docs/baselines/s49-policy-probe-<utc-day>.txt
 
-process.env.TUBEFORGE_DB ??= "file:./db/custom.db";
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_DB ??= "file:./db/custom.db";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import fs from "node:fs";
 import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";

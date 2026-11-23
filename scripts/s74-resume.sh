@@ -39,7 +39,7 @@ fi
 #    the supervisor re-probes — harmless — and skips healthy profiles)
 echo "$$" > "$LOCK"
 trap 'rm -f "$LOCK"' EXIT
-bash "$SCRIPT_DIR/tf_s74_lane.sh" >> /tmp/s74-lane.log 2>&1
+bash "$SCRIPT_DIR/ibismuh_s74_lane.sh" >> /tmp/s74-lane.log 2>&1
 RC=$?
 if [ $RC -ne 0 ]; then
   echo "lane exited $RC — see /tmp/s74-lane.log"

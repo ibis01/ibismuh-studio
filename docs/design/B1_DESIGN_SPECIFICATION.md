@@ -37,9 +37,9 @@ under `/tmp/inspect/` (session artifact; re-runnable via the receipt commands be
 
 | # | Finding | Evidence | Severity |
 |---|---------|----------|----------|
-| I1 | Setup/lock screen wordmark still renders **"TubeForge"** | `src/components/ibismuh/auth-gate.tsx:301` | Legacy leak — MUST_RENAME (stage-E escape) |
-| I2 | Login page wordmark still renders **"TubeForge"** | `src/app/login/page.tsx:90` | Legacy leak — MUST_RENAME |
-| I3 | `BrandLockup` wordmark still renders **"TubeForge"** | `src/components/ibismuh/brand.tsx:96` | Legacy leak — MUST_RENAME |
+| I1 | Setup/lock screen wordmark still renders **"Ibismuh Studio"** | `src/components/ibismuh/auth-gate.tsx:301` | Legacy leak — MUST_RENAME (stage-E escape) |
+| I2 | Login page wordmark still renders **"Ibismuh Studio"** | `src/app/login/page.tsx:90` | Legacy leak — MUST_RENAME |
+| I3 | `BrandLockup` wordmark still renders **"Ibismuh Studio"** | `src/components/ibismuh/brand.tsx:96` | Legacy leak — MUST_RENAME |
 | I4 | 11 flat top-level nav destinations on desktop and mobile sidebar | `app-sidebar.tsx` NAV_ITEMS | IA fragmentation |
 | I5 | Automation framing: "Mission Control", "Your faceless channel, fully automated.", "Auto-Pilot Online", "Auto-Pilot Active — Zero manual work", "Fire up Auto-Pilot", "Production Line", footer "Automated faceless YouTube content engine", wordmark subtitle "Auto-Pilot Engine" | dashboard-view, app-sidebar, page.tsx, logo.tsx, brand.tsx | Product-identity mismatch |
 | I6 | Identity: near-black charcoal (`oklch(0.128 0.005 285.8)`) + red-orange gradient (`#FF2020→#FF7A1F`); not the agreed navy/blue/cyan | `globals.css:46-81`, `brand.tsx` BRAND_GRADIENT | Visual identity |
@@ -338,7 +338,7 @@ compat-env/cookie seams, the 1008-test battery expectations.
 Implemented 2026-11 (B1 + B2, single pass). Receipts per the §9 acceptance criteria:
 
 1. **Identity**: `rg "Tube|Forge" src/ public/manifest.webmanifest` returns only
-   YouTube-platform vocabulary (YouTube Data API, Audio Library) — zero TubeForge brand
+   YouTube-platform vocabulary (YouTube Data API, Audio Library) — zero Ibismuh Studio brand
    instances. Setup screen, login page, BrandLockup, sidebar, footer all read
    "Ibismuh Studio". The three stage-E wordmark escapes (I1–I3) are closed.
 2. **IA**: sidebar renders exactly 5 destinations (Home, Projects, Assets, Insights,

@@ -3,7 +3,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 // One-time end-state purge, run as part of the S31 battery.
 //
 // The end-state sweep after the e2e battery found yesterday's leftovers:
-// seven throwaway "ux-*@tubeforge.test" accounts (an uncommitted UX-probe
+// seven throwaway "ux-*@ibismuh.test" accounts (an uncommitted UX-probe
 // run) with two probe videos, while the owner's real account and their
 // in-progress Phoenician-history video are PRODUCTION data and stay.
 // E2E law: residue is purged, orphan orgs are deleted, the sweep re-runs.
@@ -20,7 +20,7 @@ const before = {
 
 // 1. the probe accounts — test-domain convention, never the owner's.
 const probeUsers = await db.user.findMany({
-  where: { email: { startsWith: "ux-", endsWith: "@tubeforge.test" } },
+  where: { email: { startsWith: "ux-", endsWith: "@ibismuh.test" } },
   select: { id: true, email: true },
 });
 console.log(`purging ${probeUsers.length} probe users:`, probeUsers.map((u) => u.email).join(", "));

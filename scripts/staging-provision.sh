@@ -30,7 +30,7 @@
 # Optional:
 #   IBISMUH_STUDIO_STAGING_YT_CLIENT_ID/_SECRET    YouTube test OAuth client
 #   IBISMUH_STUDIO_STAGING_ZAI_KEY                 provider key for the pipeline drill
-#   IBISMUH_STUDIO_STAGING_APP (default tubeforge-staging)
+#   IBISMUH_STUDIO_STAGING_APP (default ibismuh-studio-staging)
 
 set -euo pipefail
 
@@ -40,7 +40,7 @@ cd "$ROOT"
 DRY_RUN=0
 [ "${1:-}" = "--dry-run" ] && DRY_RUN=1
 
-APP="${IBISMUH_STUDIO_STAGING_APP:-tubeforge-staging}"
+APP="${IBISMUH_STUDIO_STAGING_APP:-ibismuh-studio-staging}"
 URL="https://${APP}.fly.dev"
 
 # --- 0. inputs --------------------------------------------------------------

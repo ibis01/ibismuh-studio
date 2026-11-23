@@ -84,9 +84,9 @@ curl -f https://ibismuh-studio.fly.dev/api/auth/status
 Three facts the checklist above now assumes:
 
 - **The Fly app is `ibismuh-studio`.** It was provisioned under the
-  pre-rebrand name `tubeforge` and renamed in the 2026-11-17 rebrand — the
+  pre-rebrand name `ibismuh` and renamed in the 2026-11-17 rebrand — the
   fly.dev hostname followed: production answers on
-  `https://ibismuh-studio.fly.dev`, and `tubeforge.fly.dev` no longer
+  `https://ibismuh-studio.fly.dev`, and `ibismuh.fly.dev` no longer
   resolves. `fly.toml` carries `app = "ibismuh-studio"` so a bare
   `fly deploy` targets the live deployment instead of failing on a ghost
   app (the state the config sat in until this section landed).
@@ -160,7 +160,7 @@ staging environment, not the dev sandbox:
 
 | Resource | Staging value |
 | --- | --- |
-| Fly app | `tubeforge-staging` (same image, `fly launch --no-deploy --copy-config --name tubeforge-staging`) |
+| Fly app | `ibismuh-studio-staging` (same image, `fly launch --no-deploy --copy-config --name ibismuh-studio-staging`) |
 | Database | A Neon **branch** of the production project (resettable, free) |
 | Object storage | A separate R2 bucket (or a subfolder + lifecycle rule) |
 | Stripe | **Test mode** keys + test-mode webhook endpoint |

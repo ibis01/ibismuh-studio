@@ -1,6 +1,6 @@
 # IBISMUH Studio — Design Kickoff (Execution Artifact 01)
 
-**Status:** APPROVED — kickoff record for the design-first evolution of TubeForge.
+**Status:** APPROVED — kickoff record for the design-first evolution of Ibismuh Studio.
 **Recorded:** 2026-11-17.
 **Provenance:** This file preserves the decisions approved in the kickoff artifact
 (Execution Artifact 01). Two restoration items are tracked below as B1
@@ -13,7 +13,7 @@ authorises implementation ahead of that restoration — no speculative work.
 ## 1. Mission
 
 IBISMUH Studio is an AI visual production studio — *"From imagination to motion."*
-It is the design-first evolution of the TubeForge codebase: the engineering core is
+It is the design-first evolution of the Ibismuh Studio codebase: the engineering core is
 preserved wholesale, and the product surface is rebuilt against a new design system.
 
 ## 2. Non-negotiable engineering constraints
@@ -28,7 +28,7 @@ preserved wholesale, and the product surface is rebuilt against a new design sys
    - rendering pipeline,
    - queue,
    - animation engines.
-3. **No global rename of TubeForge identifiers.** Product naming evolves only at
+3. **No global rename of Ibismuh Studio identifiers.** Product naming evolves only at
    the user-visible surface; code-level identifiers stay.
 4. **No speculative implementation.** Nothing is built that the current stage's
    spec does not pin.

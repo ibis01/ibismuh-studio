@@ -27,7 +27,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //      stripe wiring honestly in every state (off / key-only / wired).
 // Run: node --import tsx scripts/s24-unit-probe.mts
 
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { NextRequest } from "next/server";
 import {

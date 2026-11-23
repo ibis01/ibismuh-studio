@@ -19,8 +19,8 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //
 // Run: node --import tsx scripts/s34-unit-probe.mts
 
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
-process.env.TUBEFORGE_PRICING_VERIFIED ??= "1";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_PRICING_VERIFIED ??= "1";
 
 import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
 import {

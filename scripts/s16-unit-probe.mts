@@ -25,7 +25,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 
 // The secret must exist before any token is signed (getAuthSecret reads env
 // per call — no cache — but set it first anyway so the layer reads cleanly).
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { NextRequest } from "next/server";
 import {
@@ -75,8 +75,8 @@ const reqWith = (opts: RequestInit) => new NextRequest(URL_, { method: "POST", .
   // S20: createApiToken now persists a registry row (real users only), but
   // the SID law never touches the DB — sign the api-scope token directly so
   // this layer stays pure.
-  const apiToken = await createSignedToken("api", 3600, req("TUBEFORGE_AUTH_SECRET env", process.env.TUBEFORGE_AUTH_SECRET), { uid });
-  const stateToken = await createSignedToken("state", 60, req("TUBEFORGE_AUTH_SECRET env", process.env.TUBEFORGE_AUTH_SECRET), { uid });
+  const apiToken = await createSignedToken("api", 3600, req("IBISMUH_STUDIO_AUTH_SECRET env", process.env.IBISMUH_STUDIO_AUTH_SECRET), { uid });
+  const stateToken = await createSignedToken("state", 60, req("IBISMUH_STUDIO_AUTH_SECRET env", process.env.IBISMUH_STUDIO_AUTH_SECRET), { uid });
 
   check("1.1  a browser session token yields its sid", sessionToken !== null && (await sessionIdFromRequest(
     reqWith({ headers: { cookie: `${SESSION_COOKIE}=${sessionToken}` } })

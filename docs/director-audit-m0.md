@@ -89,7 +89,7 @@ scene with a 4-shot plan still renders as **one** image moving for 15 seconds.
 | `duration` | **sum only** — `planSceneDuration()` → `timeline.ts` extend-only rule (`max(planDuration, narrationSec)`) | **PARTIAL — individual shot durations never shape the cut** |
 | `imagePrompt` | produced by the LLM prompt spec, parsed, clamped to 400 chars, persisted, round-trips through every test fixture… | **DEAD — zero consumers in src/, scripts/, e2e/** |
 
-### 3.4 The "shot engine" (`src/lib/tubeforge/shots.ts`)
+### 3.4 The "shot engine" (`src/lib/ibismuh/shots.ts`)
 
 | Export | Consumer(s) | Verdict |
 |---|---|---|

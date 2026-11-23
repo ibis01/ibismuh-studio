@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Milestone | S168 — Director Specification: "a formal spec defining what the AI Director can and cannot control… the Director must understand the capabilities of the six engines and **must not invent unsupported animation commands**." |
-| Module | `src/lib/tubeforge/director-vocabulary.ts` — the law as code: closed catalogs, derivation from the engines' own constants, the validator, the batch gate, the prohibitions. |
+| Module | `src/lib/ibismuh/director-vocabulary.ts` — the law as code: closed catalogs, derivation from the engines' own constants, the validator, the batch gate, the prohibitions. |
 | Status | **CLOSED (spec + enforcement)** — battery 960/960 (8 new pins), typecheck + lint clean. The runtime wiring (the plan format, the compiler) is S169/S170. |
 
 ## 1. What the Director MAY decide (the closed nine domains)

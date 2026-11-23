@@ -52,13 +52,13 @@ deltas are listed so the record is honest:
 
 | File | §6 said | S125 ships |
 | --- | --- | --- |
-| `src/lib/tubeforge/characters/rig2d.ts` | the `CharacterRigDoc` contract + `validateRigDoc` | yes — plus the parts-library contract (`RigPartArt` + `validateRigParts`), the slot vocabulary, and the named walls |
-| `src/lib/tubeforge/characters/rig-frame.ts` | `poseAt(rig, timeline, tMs): RigFrameState` | yes — plus the mouth-beat compiler (W4 word anchors → syllable-counted open/close beats) |
-| `src/lib/tubeforge/characters/rig-compose.ts` | (absorbed in rig-render per §6) | split out — the ONE compose seam law ("one compose, two callers": the chromium loop AND the studio editor read the same skeleton + applier). This is the graphics `compose.ts` precedent, not a new architecture |
-| `src/lib/tubeforge/characters/tracks.ts` | (the tracks projection is named only in the pins) | `characterTracks` — the `tracks.ts` pattern, the §6 pin "tracks projection" made concrete |
-| `src/lib/tubeforge/characters/preflight.ts` | (the frame budget is named only in the pins) | the delivered-count wall (R-1), mirrored from `graphics/preflight.ts` |
-| `src/lib/tubeforge/characters/rig-director.ts` | pure planner: narration + pose sheet → pose timeline | yes — reusing `beat-plan.ts#classifySentence` (exported, one classifier two consumers) |
-| `src/lib/tubeforge/characters/rig-render.ts` | chromium frame loop composing rig layers into scene SVG | yes — scene-clip renderer (video-only clip; the story segment's audio graph owns narration), content-hash clip cache |
+| `src/lib/ibismuh/characters/rig2d.ts` | the `CharacterRigDoc` contract + `validateRigDoc` | yes — plus the parts-library contract (`RigPartArt` + `validateRigParts`), the slot vocabulary, and the named walls |
+| `src/lib/ibismuh/characters/rig-frame.ts` | `poseAt(rig, timeline, tMs): RigFrameState` | yes — plus the mouth-beat compiler (W4 word anchors → syllable-counted open/close beats) |
+| `src/lib/ibismuh/characters/rig-compose.ts` | (absorbed in rig-render per §6) | split out — the ONE compose seam law ("one compose, two callers": the chromium loop AND the studio editor read the same skeleton + applier). This is the graphics `compose.ts` precedent, not a new architecture |
+| `src/lib/ibismuh/characters/tracks.ts` | (the tracks projection is named only in the pins) | `characterTracks` — the `tracks.ts` pattern, the §6 pin "tracks projection" made concrete |
+| `src/lib/ibismuh/characters/preflight.ts` | (the frame budget is named only in the pins) | the delivered-count wall (R-1), mirrored from `graphics/preflight.ts` |
+| `src/lib/ibismuh/characters/rig-director.ts` | pure planner: narration + pose sheet → pose timeline | yes — reusing `beat-plan.ts#classifySentence` (exported, one classifier two consumers) |
+| `src/lib/ibismuh/characters/rig-render.ts` | chromium frame loop composing rig layers into scene SVG | yes — scene-clip renderer (video-only clip; the story segment's audio graph owns narration), content-hash clip cache |
 | `src/app/api/characters/[id]/rig/route.ts` | GET/PUT rig doc | yes — PUT validates, stores doc + parts together |
 | `src/app/api/characters/[id]/rig/auto/route.ts` | planner pass | auto-scaffold: standard slot poses derived from the parts (rest = zero deltas; expressive states authored by the parts pass / human) |
 | `prisma/schema.prisma` | `Character.rigDoc Json?`, `Character.parts Json?` (additive) | shipped as **TEXT** columns + hand migration — the graphicsDoc house pattern (§ `s123_graphics_doc`), not Json |

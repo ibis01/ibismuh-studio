@@ -18,7 +18,7 @@ agent-browser open http://localhost:3000/ >/dev/null 2>&1
 agent-browser wait --load networkidle >/dev/null 2>&1
 
 agent-browser find label "Your name" fill "Preview Check" 2>&1 | tail -1
-agent-browser find label "Email" fill "preview-check@tubeforge.test" 2>&1 | tail -1
+agent-browser find label "Email" fill "preview-check@ibismuh.test" 2>&1 | tail -1
 agent-browser find label "Password" fill "PreviewCheck!2026" 2>&1 | tail -1
 agent-browser find label "Repeat the password" fill "PreviewCheck!2026" 2>&1 | tail -1
 sleep 1

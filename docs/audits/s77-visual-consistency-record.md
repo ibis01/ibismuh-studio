@@ -12,7 +12,7 @@ The engine turns three disjoint judges into one platform service on
 `Video.consistency` — **without a migration, without touching a
 generation prompt, and without a fourth scoring scale**:
 
-1. **`src/lib/tubeforge/visual-consistency.ts`** (new) — the engine.
+1. **`src/lib/ibismuh/visual-consistency.ts`** (new) — the engine.
    Pure + pinned: verdict math (`verdictFromScore` on the family's
    80/55 thresholds, `worstVerdict`, `sceneScoreOf` = min-across,
    `sceneVerdictOf` = worst-of, `overallScoreOf` with an honest

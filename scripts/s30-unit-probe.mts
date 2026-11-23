@@ -98,7 +98,7 @@ const decide = (o: {
 // ---- D-bis. the built-in Z.ai preview-deployment trust (S38) ----
 //
 // The chat-bot preview deployment URL is preview-<uuid>.space-z.ai and
-// operators cannot set TUBEFORGE_ALLOWED_ORIGINS on it. The built-in default
+// operators cannot set IBISMUH_STUDIO_ALLOWED_ORIGINS on it. The built-in default
 // in origin-trust.ts trusts that pattern unconditionally — without it, the
 // deployed preview's first POST dies at the CSRF door before the z SDK is
 // ever reached (the screenshot pinned this in S38).

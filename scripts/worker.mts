@@ -19,7 +19,6 @@
 //                  (share the DB; same host so claim-liveness checks work)
 
 async function main(): Promise<void> {
-  await import("@/lib/ibismuh/compat-env");
   const { registerDefaultHandlers } = await import("@/lib/ibismuh/queue-handlers");
   const { initQueue, queueWorkerId } = await import("@/lib/ibismuh/queue");
   const { ensureRecovered } = await import("@/lib/ibismuh/jobs");

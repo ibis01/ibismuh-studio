@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Milestones | S171 — the Shared Animation Vocabulary; S172 — Cross-Mode Integration ("shared capabilities, not duplicated engines"). |
-| Modules | `src/lib/tubeforge/anim/primitives.ts` (S171, pure, mode-agnostic); `src/lib/tubeforge/cross-mode.ts` (S172, the matrix + resolver). |
+| Modules | `src/lib/ibismuh/anim/primitives.ts` (S171, pure, mode-agnostic); `src/lib/ibismuh/cross-mode.ts` (S172, the matrix + resolver). |
 | Status | **CLOSED (code)** — battery 981/981 (7 new pins), typecheck + lint clean. |
 
 ## S171 — the shared vocabulary

@@ -55,8 +55,8 @@ Verified on the working tree (HEAD `46f140d`, CI 6/6 green):
 
 ## 2. The frozen architecture (the plan's §3, adapted to house law)
 
-Engine home: `src/lib/tubeforge/whiteboard/` — an independent engine
-module sharing TubeForge infrastructure, importing nothing from
+Engine home: `src/lib/ibismuh/whiteboard/` — an independent engine
+module sharing Ibismuh Studio infrastructure, importing nothing from
 Director. P0 modules:
 
 | Module | Responsibility | Purity |

@@ -17,7 +17,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //   1. the auth gate (unchanged law — anonymous mutations still 401)
 //   2. a throwaway owner through the front door
 //   3. THE ORIGIN LAWS — with the daemon launched under
-//      TUBEFORGE_ALLOWED_ORIGINS=.space-z.ai (the preview deployment's env):
+//      IBISMUH_STUDIO_ALLOWED_ORIGINS=.space-z.ai (the preview deployment's env):
 //        · no Origin (curl/scripts/API clients)      → allowed (Stage-2 law)
 //        · preview origin (preview-x.space-z.ai)     → allowed (THE FIX —
 //          what the phone browser sends behind the rewriting proxy)
@@ -37,7 +37,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //      STARTING baseline (the owner's real account lives in this DB).
 //
 // Run after a daemon restart UNDER THE PREVIEW ENV:
-//   TUBEFORGE_COOKIE_SAMESITE=none TUBEFORGE_ALLOWED_ORIGINS=.space-z.ai
+//   IBISMUH_STUDIO_COOKIE_SAMESITE=none IBISMUH_STUDIO_ALLOWED_ORIGINS=.space-z.ai
 //   node scripts/s30-route-e2e.mjs
 
 

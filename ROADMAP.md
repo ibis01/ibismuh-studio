@@ -1,4 +1,4 @@
-# TubeForge — Roadmap
+# Ibismuh Studio — Roadmap
 
 **Status:** Stages 1–7 closed at the code level; the S-series hardening
 sprints landed on top (S1→S74 — the S-series index and the
@@ -31,7 +31,7 @@ A 28-week (planning estimate; realistic ~32 weeks given the audit findings) deve
 | 4a | Premium UX — core 5 surfaces | 11–12 | 13–15 | Dashboard, Project creation, Script editor, Storyboard, Scene editor feel like an established professional creative product. |
 | 4b | Premium UX — remaining 5 surfaces | 13–14 | 16–18 (parallel with 5) | Research workspace, Character management, Voice studio, Render management, Analytics redesigned. |
 | 5 | AI Director & film quality | 15–19 | 16–22 | The system flags scene inconsistencies and offers one-click regeneration; visuals match the narration; the video has a deliberate cinematic rhythm. |
-| 6 | Editing, rendering & publishing | 20–24 | 23–28 | A user can edit, render, review, export and publish a finished video without leaving TubeForge. |
+| 6 | Editing, rendering & publishing | 20–24 | 23–28 | A user can edit, render, review, export and publish a finished video without leaving Ibismuh Studio. |
 | 7 | Testing, launch & optimization | 25–28 | 29–33 | All Stage 7 tests pass against real beta usage; platform opened to paying customers. |
 
 ---
@@ -40,7 +40,7 @@ A 28-week (planning estimate; realistic ~32 weeks given the audit findings) deve
 
 **Weeks 1–2 · Must complete first**
 
-The objective is to make the existing TubeForge safe to develop and deploy.
+The objective is to make the existing Ibismuh Studio safe to develop and deploy.
 
 ### Tasks (full detail in `TASKS.md`)
 
@@ -53,7 +53,7 @@ The objective is to make the existing TubeForge safe to develop and deploy.
 | Add security headers | `next.config.ts` `headers()` — CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, HSTS |
 | Re-enable ESLint rules | `@typescript-eslint/no-explicit-any`, `@typescript-eslint/no-unused-vars`, `react-hooks/exhaustive-deps`, `no-console`, `no-debugger` (warn level) |
 | Adopt `prisma migrate` | First migration created from the current schema; `prisma/migrations/` directory |
-| Eliminate first-come setup race | `TUBEFORGE_OWNER_TOKEN` env bootstrap so the first `POST /api/auth/setup` must present it |
+| Eliminate first-come setup race | `IBISMUH_STUDIO_OWNER_TOKEN` env bootstrap so the first `POST /api/auth/setup` must present it |
 | Delete `DELETE /api/videos/[id]` orphan gap | `rmSync uploads/<id>/` on delete (D-05) |
 | Fix `POST /api/videos` synchronous script generation | Wire `runScriptJob` into `startJob` (D-01, D-08) |
 | Document architecture | `ARCHITECTURE.md` (done) |
@@ -81,7 +81,7 @@ Specifically:
 - CI runs all three on every commit.
 - `prisma migrate dev` produces a real migration.
 - `next.config.ts` sets security headers.
-- `POST /api/auth/setup` requires `TUBEFORGE_OWNER_TOKEN`.
+- `POST /api/auth/setup` requires `IBISMUH_STUDIO_OWNER_TOKEN`.
 - `POST /api/videos` enqueues a script job (no synchronous LLM call in the request).
 - `DELETE /api/videos/[id]` cleans up `uploads/<id>/`.
 - All 30 defects in `FOUNDATION_AUDIT.md` §5 are either fixed or have a `TASKS.md` entry assigning them to a later stage.
@@ -92,7 +92,7 @@ Specifically:
 
 **Weeks 3–7 (audit-adjusted from 3–6)**
 
-Transform TubeForge from a protected single studio into a secure platform for multiple customers.
+Transform Ibismuh Studio from a protected single studio into a secure platform for multiple customers.
 
 ### Build
 
@@ -110,7 +110,7 @@ Transform TubeForge from a protected single studio into a secure platform for mu
 - **Audit logs:** every mutating action appends an `Activity` row with `userId` + `organizationId`.
 - **Account deletion and data export:** `POST /api/account/delete` and `POST /api/account/export` (per GDPR).
 - **Move session state, rate-limit buckets, login lockouts to Redis** (survive restart; eliminate D-20, D-21).
-- **Encrypt secrets at rest:** `ProviderCredential.apiKey` and `YouTubeAccount.refreshToken` encrypted with `TUBEFORGE_ENCRYPTION_KEY`.
+- **Encrypt secrets at rest:** `ProviderCredential.apiKey` and `YouTubeAccount.refreshToken` encrypted with `IBISMUH_STUDIO_ENCRYPTION_KEY`.
 - **Eliminate D-27 (first-come setup race)** — already done in Stage 1; the new flow is `POST /api/auth/register` with email verification.
 
 ### Important
@@ -129,7 +129,7 @@ Two independent test accounts cannot access each other's projects, files, jobs, 
 
 **Weeks 8–12 (audit-adjusted from 7–10)**
 
-Make TubeForge capable of reliably handling substantial video-production workloads.
+Make Ibismuh Studio capable of reliably handling substantial video-production workloads.
 
 ### Build
 
@@ -345,7 +345,7 @@ Build the professional editing and delivery experience.
 
 ### Completion gate
 
-A user can edit, render, review, export and publish a finished video without leaving TubeForge.
+A user can edit, render, review, export and publish a finished video without leaving Ibismuh Studio.
 
 ---
 
@@ -420,7 +420,7 @@ Total: 33 weeks (audit-adjusted) vs 28 weeks (original plan). For a focused 2-3 
 
 ---
 
-## Post-Stage-7 — TubeForge 2.0 tracks (the shared-systems era, in flight)
+## Post-Stage-7 — Ibismuh Studio 2.0 tracks (the shared-systems era, in flight)
 
 Stage 7 closed into the era the stage records track as S-series stages.
 The active tracks, one line each (detail lives in `docs/audits/` records
@@ -549,7 +549,7 @@ docs/runbooks/scene-editing.md).
 
 Standing risks tracked in the worklog: Z.ai gateway outage (S63
 remeasurement and the LLM whiteboard planner gated on the one-probe
-resumption discipline), production `TUBEFORGE_ENCRYPTION_KEY` on Vercel
+resumption discipline), production `IBISMUH_STUDIO_ENCRYPTION_KEY` on Vercel
 (owner-side, unverified), and the dependency PRs (the S97 triage:
 five merged, two tombstoned with their dead deps removed, PR #10
 TypeScript 7 still open — typescript-eslint's peer ceiling is

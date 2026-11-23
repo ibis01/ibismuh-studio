@@ -1,7 +1,7 @@
 # Phase 0 — Read-Only Architecture Audit (Commercial Foundation)
 
 - **Date:** 2026-11-02
-- **Commit audited:** `2cda028` (`feat(m1): production profiles — the universal Director`), the same commit deployed to production (`tubeforge-ibismuh.vercel.app`). Working tree was clean and identical to `origin/main` at audit time.
+- **Commit audited:** `2cda028` (`feat(m1): production profiles — the universal Director`), the same commit deployed to production (`ibismuh-ibismuh.vercel.app`). Working tree was clean and identical to `origin/main` at audit time.
 - **Method:** read-only. No application code was changed. Five parallel evidence passes (data model, commerce, generation, identity/security, director/production/observability) produced file:line findings; the five most load-bearing claims were re-verified directly against the working tree and are marked **[verified]** below.
 - **Purpose:** map the commercial-architecture proposal (multi-provider video SaaS; Director-orchestrated capabilities; subscriptions + credit top-ups; immutable credit ledger; `GenerationProvider` abstraction) onto the codebase as it exists today, and define what Phase 1 must build. This document is the Phase 0 exit artifact required by the proposal's roadmap.
 
@@ -9,7 +9,7 @@
 
 ## 1. Executive summary
 
-TubeForge is much further along the proposal's target architecture than a typical "idea-stage" codebase. Identity, multi-tenancy, a durable job pipeline, a Director with approval gates, an ffmpeg production engine with publishing, and — decisively — a **real billing core** (canonical microcredit unit, period-scoped balances, transactional reserve→settle, DB-enforced idempotency, a 36-test integration suite) already exist on `main`.
+Ibismuh Studio is much further along the proposal's target architecture than a typical "idea-stage" codebase. Identity, multi-tenancy, a durable job pipeline, a Director with approval gates, an ffmpeg production engine with publishing, and — decisively — a **real billing core** (canonical microcredit unit, period-scoped balances, transactional reserve→settle, DB-enforced idempotency, a 36-test integration suite) already exist on `main`.
 
 What does **not** exist yet is the *commercial layer on top of that core*: no payment initiation (Stripe SDK, checkout, portal), no top-ups, no Free-tier watermark, no per-model cost truth (`costMicroUsd` is hardwired 0 **[verified]**), and no admin/audit surface. Two correctness gaps matter for the proposal's "0 duplicate charges / 0 untracked spend" targets: the render path skips credit reservation, and job dedupe ignores running jobs in split web/worker topologies **[verified]**.
 
@@ -76,7 +76,7 @@ The Postgres schema (713 lines, 27 models) is the source of truth; `prisma/schem
 |---|---|---|---|
 | C1 | **Renders never reserve.** Route does a non-transactional `hasCredits` pre-check (402 gate), spend is recorded *post-success*, unconditionally | `render/route.ts:104-125`, `video-jobs.ts:640-650` | TOCTOU overspend on paid tiers; balance can go negative — "0 untracked spend" at risk |
 | C2 | **`costMicroUsd` hardwired 0**; per-capability flat estimates only (chat 3,000 µ … video 40,000 µ), placeholder $0.001/credit | `budget.ts:344` **[verified]**, `billing.ts:742-781` | No real per-model cost → pricing formula (credits = cost/(price×(1−margin))) cannot be populated |
-| C3 | **No payment initiation.** No `stripe` dependency; no checkout/portal routes; Upgrade button unwired; `TUBEFORGE_STRIPE_SECRET_KEY` never read | `billing.ts:49-52`, `plan-card.tsx:5-8` | Revenue streams blocked; "0 duplicate charges" vacuous until money moves |
+| C3 | **No payment initiation.** No `stripe` dependency; no checkout/portal routes; Upgrade button unwired; `IBISMUH_STUDIO_STRIPE_SECRET_KEY` never read | `billing.ts:49-52`, `plan-card.tsx:5-8` | Revenue streams blocked; "0 duplicate charges" vacuous until money moves |
 | C4 | **No top-ups / no `refund` writer.** `topup`/`refund` kinds declared, never written; `charge.refunded` acked silently; refunds are manual operator rows | `billing.ts:326-336`, `test-billing.mts:590-601` | Proposal's second revenue stream absent; clawback policy absent |
 | C5 | **3 plans, not 6.** starter/creator/studio only; no Free (watermark) tier, no Pro, no Enterprise; no prices/price IDs; no Plan seed script | `billing.ts:75-103` **[verified]** | Tier mismatch with launch pricing |
 | C6 | **Billing is user-scoped, not org-scoped.** `Subscription.userId @unique`; org cannot pool credits | `schema.prisma:641` | Blocks business/team plans (Phase 5) |
@@ -93,7 +93,7 @@ The Postgres schema (713 lines, 27 models) is the source of truth; `prisma/schem
 
 ## 4. Generation provider layer
 
-**Pattern today:** a *capability-gateway function* per capability (`imageGenerate`, `imageToVideo`, `ttsSynthesize`, `chatComplete`, `visionComplete`, `asrTranscribe` in `src/lib/tubeforge/providers/*`), each switching on per-user config from `getCapability()` (`providers/settings.ts:106-136`), wrapped by `aiCall` (pacing, credits, retries, metering). The Director is provider-agnostic (`director.ts:296-304` uses `llmChat` only). There is **no `GenerationProvider` interface** with `generateImage/Video/Audio`, `getJobStatus`, `cancelJob` — the proposal's seam must be introduced, not patched.
+**Pattern today:** a *capability-gateway function* per capability (`imageGenerate`, `imageToVideo`, `ttsSynthesize`, `chatComplete`, `visionComplete`, `asrTranscribe` in `src/lib/ibismuh/providers/*`), each switching on per-user config from `getCapability()` (`providers/settings.ts:106-136`), wrapped by `aiCall` (pacing, credits, retries, metering). The Director is provider-agnostic (`director.ts:296-304` uses `llmChat` only). There is **no `GenerationProvider` interface** with `generateImage/Video/Audio`, `getJobStatus`, `cancelJob` — the proposal's seam must be introduced, not patched.
 
 **Adapter inventory (real code):**
 
@@ -127,7 +127,7 @@ The Postgres schema (713 lines, 27 models) is the source of truth; `prisma/schem
 
 ## 5. Identity, organizations, security
 
-**Solid:** default-deny middleware for `/api/*` with a small public allow-list; production fails closed without `TUBEFORGE_AUTH_SECRET`; CSRF origin check for cookie mutations; per-IP rate limits (600 read/90 write per min); PBKDF2-SHA-256 (120k iters, 16-byte salt, constant-time compare); server-side revocable `Session` rows (7-day, `jti` = row id → instant revocation); registration transactionally creates User + personal Organization + owner Membership; login lockout (5/10 min). Tenant isolation is centralized in a Prisma client extension (`tenant-db.ts`) injecting `organizationId` for 15+ org-scoped models, with a lint guard banning raw `@/lib/db` imports in `src/app` and an e2e isolation suite pinning a historically-fixed leak.
+**Solid:** default-deny middleware for `/api/*` with a small public allow-list; production fails closed without `IBISMUH_STUDIO_AUTH_SECRET`; CSRF origin check for cookie mutations; per-IP rate limits (600 read/90 write per min); PBKDF2-SHA-256 (120k iters, 16-byte salt, constant-time compare); server-side revocable `Session` rows (7-day, `jti` = row id → instant revocation); registration transactionally creates User + personal Organization + owner Membership; login lockout (5/10 min). Tenant isolation is centralized in a Prisma client extension (`tenant-db.ts`) injecting `organizationId` for 15+ org-scoped models, with a lint guard banning raw `@/lib/db` imports in `src/app` and an e2e isolation suite pinning a historically-fixed leak.
 
 **Gaps:**
 

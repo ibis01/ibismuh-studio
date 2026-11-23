@@ -60,7 +60,7 @@ npm warn     eslint-plugin-react@"^7.37.0" from eslint-config-next@16.4.5
 npm warn     node_modules/eslint-config-next
 npm warn deprecated recharts@2.15.4: 1.x and 2.x branches are no longer active. Bump to Recharts v3 to receive latest features and bugfixes. See https://github.com/recharts/recharts/wiki/3.0-migration-guide
 
-> tubeforge@1.0.0 postinstall
+> ibismuh@1.0.0 postinstall
 > node scripts/postinstall.mjs
 
 [postinstall] created next-env.d.ts (image import types for tsc)

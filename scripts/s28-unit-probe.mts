@@ -10,7 +10,7 @@
 // stayed emailVerifiedAt=null forever. Layers proved here:
 //   1. THE DEFAULT COOKIE LAW — SameSite=Lax stays the default (direct
 //      deploys unchanged; Secure follows NODE_ENV).
-//   2. THE KNOB — TUBEFORGE_COOKIE_SAMESITE=none ships SameSite=None and
+//   2. THE KNOB — IBISMUH_STUDIO_COOKIE_SAMESITE=none ships SameSite=None and
 //      FORCES Secure (browsers reject None without Secure), in any NODE_ENV,
 //      and BOTH cookie writers (auth.ts + tenant.ts) obey it.
 //   3. THE CLEARED COOKIE follows the knob (logout must work in the iframe
@@ -60,7 +60,7 @@ console.log("\n§1/§2/§3 the cookie law");
   // would silently inherit the knob. Prisma never overwrites vars that are
   // already set, so the default-law runs pin the knob to a benign sentinel:
   // any value but "none" IS the default law (check 3.2 pins that too).
-  const NEUTRAL_KNOB = { TUBEFORGE_COOKIE_SAMESITE: "off" };
+  const NEUTRAL_KNOB = { IBISMUH_STUDIO_COOKIE_SAMESITE: "off" };
   const run = (env: NodeJS.ProcessEnv): Record<string, unknown> =>
     JSON.parse(execFileSync("node", ["--import", "tsx", tmp], { env: { ...process.env, ...NEUTRAL_KNOB, ...env } }).toString().trim());
 
@@ -71,16 +71,16 @@ console.log("\n§1/§2/§3 the cookie law");
   const prod = run({ NODE_ENV: "production" });
   check("1.4  default in production: Secure on, still Lax",
     prod.tenant.secure === true && prod.tenant.sameSite === "lax", prod.tenant);
-  const knob = run({ NODE_ENV: "test", TUBEFORGE_COOKIE_SAMESITE: "none" });
+  const knob = run({ NODE_ENV: "test", IBISMUH_STUDIO_COOKIE_SAMESITE: "none" });
   check("2.1  the knob: SameSite=None in any NODE_ENV", knob.tenant.sameSite === "none", knob.tenant);
   check("2.2  the knob FORCES Secure (None without Secure is rejected by browsers)",
     knob.tenant.secure === true, knob.tenant);
   check("2.3  the knob: auth.ts's copy obeys too", knob.auth.sameSite === "none" && knob.auth.secure === true, knob.auth);
-  check("2.4  the knob: cookie stays HttpOnly + named tf_session",
-    knob.tenant.httpOnly === true && knob.tenant.name === "tf_session", knob.tenant);
+  check("2.4  the knob: cookie stays HttpOnly + named ibismuh_session",
+    knob.tenant.httpOnly === true && knob.tenant.name === "ibismuh_session", knob.tenant);
   check("3.1  the cleared cookie follows the knob (maxAge 0, None; Secure)",
-    knob.clearedTenant === 0 && run({ TUBEFORGE_COOKIE_SAMESITE: "none" }).auth.httpOnly === true, knob);
-  const junk = run({ NODE_ENV: "test", TUBEFORGE_COOKIE_SAMESITE: "strict" });
+    knob.clearedTenant === 0 && run({ IBISMUH_STUDIO_COOKIE_SAMESITE: "none" }).auth.httpOnly === true, knob);
+  const junk = run({ NODE_ENV: "test", IBISMUH_STUDIO_COOKIE_SAMESITE: "strict" });
   check("3.2  any knob value but 'none' keeps the Lax default", junk.tenant.sameSite === "lax", junk.tenant);
 }
 

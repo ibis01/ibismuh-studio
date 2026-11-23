@@ -1,4 +1,4 @@
-TubeForge — money-path coverage baseline, frozen at S56 (2026-11-08 UTC)
+Ibismuh Studio — money-path coverage baseline, frozen at S56 (2026-11-08 UTC)
 =========================================================================
 
 Command   : npm run test:coverage
@@ -7,7 +7,7 @@ Command   : npm run test:coverage
             three runs; --include scoped to the money paths)
 Runner    : recovered sandbox, commit ~a4efe16 (T-56.1/T-56.2 in tree)
 Result    : AGGREGATE 56.30% lines (4541/8065) · 79.79% branches ·
-            79.54% functions — floor enforced at 50% (TUBEFORGE_COV_FLOOR_LINES)
+            79.54% functions — floor enforced at 50% (IBISMUH_STUDIO_COV_FLOOR_LINES)
 
 Correction (same day, T-56.4 fix): the first published number (53.63%,
             4330/8073) was measured with a silently-mistyped c8 flag

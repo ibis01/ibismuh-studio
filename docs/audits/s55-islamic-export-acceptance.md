@@ -26,7 +26,7 @@ plan), vision (the scan/quality/text verdicts, mode-controlled),
 images/generations (+edit), video/generation + async-result + the clip
 download. `.z-ai-config` points the SDK at it for the probe's process only
 and is restored after; provider "zai" is ungated by the spend law, so
-`TUBEFORGE_SPEND_GATE` stays untouched and **0 gateway quota, 0 paid
+`IBISMUH_STUDIO_SPEND_GATE` stays untouched and **0 gateway quota, 0 paid
 dispatches** were consumed.
 
 What the stand-in proves and what it cannot: the stand-in's VLM verdicts are
@@ -145,7 +145,7 @@ restricted figure outside the L4/L5 backstops.
 
 ## Files
 
-- `src/lib/tubeforge/story.ts` — the `editSceneImage` L3 fix (one seam).
+- `src/lib/ibismuh/story.ts` — the `editSceneImage` L3 fix (one seam).
 - `scripts/s55-acceptance-probe.mts` — the 7-step acceptance (versioned,
   phased: seed / render1 / regen / render2 / unmeasured / report / teardown).
 - `scripts/s55-standin-gateway.mts` — the local stand-in gateway.

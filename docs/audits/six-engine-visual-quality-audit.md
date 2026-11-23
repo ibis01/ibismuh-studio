@@ -9,7 +9,7 @@ below cites the file it was read from. No repository files outside
 `docs/audits/` were modified by this audit.
 
 The governing objective (from the commissioning report, adopted): every
-TubeForge video type should produce polished, professional-looking videos —
+Ibismuh Studio video type should produce polished, professional-looking videos —
 not merely videos that render. Borrow proven TECHNIQUES; import no
 applications; no new runtime dependencies.
 
@@ -27,7 +27,7 @@ applications; no new runtime dependencies.
    lists as missing are now present (camera easing, the first finishing
    passes).
 2. **"Six unrelated rendering engines" is already false in the best way.**
-   The audit confirms the report's architecture instinct: TubeForge runs ONE
+   The audit confirms the report's architecture instinct: Ibismuh Studio runs ONE
    chromium-screenshot → ffmpeg pipeline shared by four drawn engines
    (whiteboard, graphics, character rig, 3D), ONE universal timeline
    contract (S87 tracks[]), ONE frame-truth law (pure `frameAt`/`poseAt`
@@ -81,7 +81,7 @@ Clean-room extensions that now bind every stage below:
   `tweening/tween.ts`): a tween is a generator advanced once per frame
   against `thread.fixed` — the deterministic rendering proof: any frame can
   be rendered independently from scratch (`app/Renderer.ts renderFrame`).
-  TubeForge's pure `frameAt(doc, tMs)` is the declarative equivalent; the
+  Ibismuh Studio's pure `frameAt(doc, tMs)` is the declarative equivalent; the
   borrowable idea is **per-frame quantized evaluation everywhere**, which
   we already hold.
 - **Spring integrator** (`core/src/tweening/spring.ts`): Hooke's law at
@@ -91,7 +91,7 @@ Clean-room extensions that now bind every stage below:
 - **The transition architecture** (`core/src/transitions/useTransition.ts`
   + `app/Stage.ts`): previous and current scenes render to separate
   buffers; a transition = two per-scene transform/alpha hooks; built-ins
-  are 18–52 LOC each. This is the shape a TubeForge transition module
+  are 18–52 LOC each. This is the shape a Ibismuh Studio transition module
   should take.
 - **Choreography flow** (`core/src/flow/sequence.ts`): stagger = constant
   START offset without waiting for completion, then join-to-max. The
@@ -182,7 +182,7 @@ Clean-room extensions that now bind every stage below:
 - **Page-side virtual-time shim** (`producer/src/services/fileServer.ts`):
   Mulberry32 re-seeded from frame time on every seek; virtual Date/
   performance.now; timers fired in due order per seek; rAF flushed
-  synchronously. ~200 dependency-free lines. (TubeForge's engines own their
+  synchronously. ~200 dependency-free lines. (Ibismuh Studio's engines own their
   clocks by construction — the shim's value for us is the 3D page and any
   future page that runs third-party code.)
 - **Media never trusted to seek** (`engine/src/services/videoFrameExtractor.ts`):
@@ -272,7 +272,7 @@ Clean-room extensions that now bind every stage below:
 
 ## Part 3 — the six-mode audit (today / missing / borrow)
 
-### 3.1 Motion graphics (2D) — engine `src/lib/tubeforge/graphics/`
+### 3.1 Motion graphics (2D) — engine `src/lib/ibismuh/graphics/`
 
 Works today: declarative GraphicsDoc (11 element kinds), 6 eases incl.
 glide, enter/tween/exit/emphasis composition, per-scene pan/zoom camera
@@ -307,7 +307,7 @@ transition buffers → if 3D clips ever composite in-engine. Wiring task:
 add `"3d"` to `PlanVisualKind` + `engineSegmentVerdict` admission so
 `scene-3d.mp4` joins assembly (the S94 recorded-tail pattern).
 
-### 3.3 Whiteboard explainer — `src/lib/tubeforge/whiteboard/`
+### 3.3 Whiteboard explainer — `src/lib/ibismuh/whiteboard/`
 
 Works today: stroke-dash reveal synced to word anchors, hand tremble, pen
 width breathing, ink palette, camera drift + director, glyph text.
@@ -323,7 +323,7 @@ hachure + 4 fill wrappers → NEW `whiteboard/fills.ts`; rough Catmull-Rom +
 ellipse overshoot → `whiteboard/glyphs.ts`; bezier flatten + RDP →
 `whiteboard/svg.ts`. Determinism checklist from Part 1 §4 is binding.
 
-### 3.4 Character animation — `src/lib/tubeforge/characters/`
+### 3.4 Character animation — `src/lib/ibismuh/characters/`
 
 Works today: FK rig (14 slots), pose tweens 320ms, mouth art swap (5
 vowel-group shapes) from syllable estimator, gesture table, BVH partial
@@ -342,7 +342,7 @@ the K2 gate (results written back as editable keyframes); OT xsheet cell
 spans → mouth/pose art-swap spans (closer to our current spans than to a
 change).
 
-### 3.5 Keynote slides — `src/lib/tubeforge/slides-kinetic.ts`
+### 3.5 Keynote slides — `src/lib/ibismuh/slides-kinetic.ts`
 
 Works today (S153): staggered headlines, accent pops, counters, bars,
 entering rows, camera settle, deterministic hash-cached clips, static
@@ -510,7 +510,7 @@ walls, no new dependencies. Order = visual impact per LOC × risk.
 > `{minPsnr, maxFrameFailures, minAudioCorrelation}` per engine — green
 > on THREE engines (graphics / scene3d / whiteboard fixtures committed
 > under `scripts/golden/s165/`). The generalized frame-truth scan
-> (`src/lib/tubeforge/frame-truth-scan.ts`, 251 LOC): the real engine
+> (`src/lib/ibismuh/frame-truth-scan.ts`, 251 LOC): the real engine
 > tree green at 32 modules, and the DELIBERATE NONDETERMINISM FIXTURE is
 > CAUGHT — the acceptance is evidence, not intent.
 

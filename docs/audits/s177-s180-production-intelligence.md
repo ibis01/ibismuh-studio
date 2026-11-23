@@ -20,7 +20,7 @@ generate count named.
 
 ## S178 — the sound plan rides the EXISTING catalogs
 
-The Director selects; TubeForge mixes. The plan is data: the music mood
+The Director selects; Ibismuh Studio mixes. The plan is data: the music mood
 MUST be a `music.ts` catalog id (junk refuses — the Director selects
 from the closed mood set); the duck intensity MUST be an `audiomix.ts`
 intensity; the loudness contract is the house −16 LUFS constant; and
@@ -51,7 +51,7 @@ pins that every canned proposal survives `validateDirectorDirective`
 silently applied). `repairScopeGuard` enforces the structural
 guarantees: the repair targets a DECLARED scene (never an invented
 one) and `requiresApproval` is ALWAYS true — the user approves;
-TubeForge regenerates only the affected scene. Audio-sync and
+Ibismuh Studio regenerates only the affected scene. Audio-sync and
 movement-wall findings deliberately propose nothing canned — they need
 human replanning, not a reflex directive.
 

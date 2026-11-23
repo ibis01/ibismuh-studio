@@ -97,7 +97,7 @@ function storageHealth(): {
       "This deployment has no durable database — settings, projects and accounts are stored on Vercel's EPHEMERAL filesystem and vanish on restart/redeploy. Fix: set DATABASE_URL to a Postgres connection string (free tiers: Neon, Vercel Postgres, Supabase) in Vercel → Project → Settings → Environment Variables, then redeploy.";
   } else if (!encryption) {
     warning =
-      "IBISMUH_STUDIO_ENCRYPTION_KEY (or legacy TUBEFORGE_ENCRYPTION_KEY) is not set — provider API keys cannot be stored securely. Set it (openssl rand -hex 32) in your hosting environment variables, then redeploy. Keep it STABLE: rotating it makes every saved key unreadable.";
+      "IBISMUH_STUDIO_ENCRYPTION_KEY (or legacy IBISMUH_STUDIO_ENCRYPTION_KEY) is not set — provider API keys cannot be stored securely. Set it (openssl rand -hex 32) in your hosting environment variables, then redeploy. Keep it STABLE: rotating it makes every saved key unreadable.";
   }
   return { durable, database, onVercel, encryption, warning };
 }

@@ -6,7 +6,7 @@
 # smoke, Stripe webhook trigger, backup/restore) with their commands.
 #
 # Usage:
-#   STAGING_URL=https://tubeforge-staging.fly.dev bash scripts/staging-drills.sh
+#   STAGING_URL=https://ibismuh-studio-staging.fly.dev bash scripts/staging-drills.sh
 #   STAGING_URL=… bash scripts/staging-drills.sh --suite pipeline   # one suite
 #   STAGING_URL=… bash scripts/staging-drills.sh --skip-load        # no k6
 #
@@ -17,8 +17,8 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-URL="${STAGING_URL:-https://tubeforge-staging.fly.dev}"
-APP="${IBISMUH_STUDIO_STAGING_APP:-tubeforge-staging}"
+URL="${STAGING_URL:-https://ibismuh-studio-staging.fly.dev}"
+APP="${IBISMUH_STUDIO_STAGING_APP:-ibismuh-studio-staging}"
 
 DRILL_ARGS=(--url "$URL")
 if [ "${1:-}" = "--suite" ] && [ -n "${2:-}" ]; then

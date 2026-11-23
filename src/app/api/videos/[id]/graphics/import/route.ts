@@ -302,7 +302,7 @@ async function importWebm(
   // (wall-clocked; a hung/dead ffmpeg fails the gate, never hangs the
   // route). Gate 3 rides the decode's output: the frames carry alpha iff
   // the source does — verified by the alphaextract probe below.
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "tubeforge-import-"));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ibismuh-import-"));
   const src = path.join(tmp, "source.webm");
   const outPattern = path.join(tmp, "f%04d.png");
   try {

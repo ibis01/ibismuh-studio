@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# tf_s67_push.sh — one-shot S67 landing gate: push main (2 commits: the
-# whiteboard reconciliation + the queue-suite kind pin) to origin and verify.
+# ibismuh_s73_push.sh — one-shot S73 landing gate: push main (the E5 phase-2
+# feat commit) to origin and verify.
 # CREDENTIAL-SAFE (the 2026-11-10 review fix, the pattern scripts/tf-push.sh
-# documents in full): the PAT lives only in the TF_TOKEN environment
+# documents in full): the PAT lives only in the GH_PAT environment
 # variable; git auth rides a one-shot GIT_ASKPASS helper whose body contains
-# no secret; every git command uses the plain https URL — the token never
-# appears in a process argument, a URL, or on disk.
+# no secret (it reads the inherited environment); every git command uses the
+# plain https URL — the token never appears in a process argument, a URL, or
+# on disk, and is unset when the script exits.
 #
-# Usage:  TF_TOKEN=<workflow-scoped-PAT> bash scripts/tf_s67_push.sh
+# Usage:  GH_PAT=<workflow-scoped-PAT> bash scripts/ibismuh_s73_push.sh
 set -uo pipefail
 
 # Portable repo root — resolved from THIS script's location, never hardcoded.
@@ -15,22 +16,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-REPO="ibis01/tubeforge"
+REPO="ibis01/ibismuh"
 PLAIN_URL="https://github.com/${REPO}.git"
-EXPECTED_REMOTE="7644690f39527c07fcc251a9f3234d04294e7f19"   # s67 feat+fix head
+EXPECTED_REMOTE="f5fe44277e1ffa334daa4fa401db5613db0c6403"   # s73 feat head
 TIP="$(git rev-parse main)"
 
-[ -n "${TF_TOKEN:-}" ] || { echo "!! TF_TOKEN not set — nothing to do"; exit 1; }
+[ -n "${GH_PAT:-}" ] || { echo "!! GH_PAT not set — nothing to do"; exit 1; }
 ASKPASS="$(mktemp)"
 cat > "$ASKPASS" <<'HELPER'
 #!/bin/sh
 case "$1" in
   Username*) printf '%s\n' "${TF_PUSH_USER:-x-access-token}" ;;
-  *)         printf '%s\n' "${TF_TOKEN:?askpass invoked without TF_TOKEN}" ;;
+  *)         printf '%s\n' "${GH_PAT:?askpass invoked without GH_PAT}" ;;
 esac
 HELPER
 chmod 700 "$ASKPASS"
-trap 'rm -f "$ASKPASS"; unset TF_TOKEN' EXIT
+trap 'rm -f "$ASKPASS"; unset GH_PAT' EXIT
 export GIT_ASKPASS="$ASKPASS"
 export GIT_TERMINAL_PROMPT=0
 
@@ -58,4 +59,4 @@ echo "[4/4] verify"
 FINAL="$(git ls-remote "$PLAIN_URL" refs/heads/main 2>/dev/null | awk '{print $1}')"
 [ "$FINAL" = "$TIP" ] || { echo "!! remote main = $FINAL (expected $TIP)"; exit 1; }
 echo "OK — origin/main = $FINAL"
-echo "next: TF_TOKEN=<same pat> bash scripts/tf_s66_ci_watch.sh   (CI on $FINAL)"
+echo "next: TF_PAT=<same pat> node scripts/tf-ci-poll.mjs ibis01/ibismuh $FINAL   (CI on $FINAL)"

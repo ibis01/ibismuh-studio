@@ -86,7 +86,7 @@ async function seedTenants(run: string) {
   });
   const user = await db.user.create({
     data: {
-      email: `e12-drill-${run}@tubeforge.test`,
+      email: `e12-drill-${run}@ibismuh.test`,
       passwordHash: "pbkdf2$120000$probe$probe",
       name: "E12 Drill",
     },

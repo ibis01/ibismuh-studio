@@ -1,26 +1,26 @@
 #!/usr/bin/env bash
 # ibismuh-push.sh — the REUSABLE, credential-safe landing gate (successor to the
-# one-shot tf_s66/s67/s73_push.sh family).
+# one-shot ibismuh_s66/s67/s73_push.sh family).
 #
 # Credential handling (the 2026-11-10 review fix — execution-time safety,
 # beyond what gitleaks can see):
-#   - The PAT lives ONLY in the TF_TOKEN environment variable. It is NEVER
+#   - The PAT lives ONLY in the GH_PAT environment variable. It is NEVER
 #     embedded in a URL, NEVER passed as a process argument (process args
 #     are world-readable via /proc on shared systems and land in shell
 #     history and tool logs), and NEVER written to disk.
 #   - Git authentication rides a one-shot GIT_ASKPASS helper: a 0600 temp
-#     file whose body contains NO secret — it only reads TF_TOKEN from the
+#     file whose body contains NO secret — it only reads GH_PAT from the
 #     inherited environment when git asks for a password. Git commands all
 #     use the plain https://github.com/<repo>.git URL.
 #   - GIT_TERMINAL_PROMPT=0: if the askpass path fails, git errors out
 #     instead of hanging on a hidden prompt.
-#   - The helper file is removed and TF_TOKEN unset on exit (trap).
+#   - The helper file is removed and GH_PAT unset on exit (trap).
 #   - If the machine has a real credential helper configured (gh auth,
 #     manager-core), git consults it FIRST — the PAT is then not needed
 #     at all, which is the preferred production posture.
 #
 # Usage:
-#   TF_TOKEN=<workflow-scoped-PAT> bash scripts/ibismuh-push.sh [expected-remote-sha]
+#   GH_PAT=<workflow-scoped-PAT> bash scripts/ibismuh-push.sh [expected-remote-sha]
 #
 # The optional argument is the drift guard: the SHA origin/main must be at
 # BEFORE the push (the one-shot gates pinned this; a reusable gate can
@@ -38,20 +38,20 @@ PLAIN_URL="https://github.com/${REPO}.git"
 TIP="$(git rev-parse main)"
 BRANCH="main"
 
-[ -n "${TF_TOKEN:-}" ] || { echo "!! TF_TOKEN not set — nothing to do"; exit 1; }
+[ -n "${GH_PAT:-}" ] || { echo "!! GH_PAT not set — nothing to do"; exit 1; }
 
 # ---- one-shot askpass helper (no secret in the file, no secret in args) ----
 ASKPASS="$(mktemp)"
 cat > "$ASKPASS" <<'HELPER'
 #!/bin/sh
-# Reads TF_TOKEN from the inherited environment. Prompt string arrives as $1.
+# Reads GH_PAT from the inherited environment. Prompt string arrives as $1.
 case "$1" in
   Username*) printf '%s\n' "${TF_PUSH_USER:-x-access-token}" ;;
-  *)         printf '%s\n' "${TF_TOKEN:?askpass invoked without TF_TOKEN}" ;;
+  *)         printf '%s\n' "${GH_PAT:?askpass invoked without GH_PAT}" ;;
 esac
 HELPER
 chmod 700 "$ASKPASS"
-trap 'rm -f "$ASKPASS"; unset TF_TOKEN' EXIT
+trap 'rm -f "$ASKPASS"; unset GH_PAT' EXIT
 export GIT_ASKPASS="$ASKPASS"
 export GIT_TERMINAL_PROMPT=0
 
@@ -84,4 +84,4 @@ echo "[4/4] verify"
 FINAL="$(git ls-remote "$PLAIN_URL" refs/heads/main 2>/dev/null | awk '{print $1}')"
 [ "$FINAL" = "$TIP" ] || { echo "!! remote main = $FINAL (expected $TIP)"; exit 1; }
 echo "OK — origin/${BRANCH} = $FINAL"
-echo "next: TF_TOKEN=<same pat> bash scripts/tf_s66_ci_watch.sh $FINAL   (CI on $FINAL)"
+echo "next: GH_PAT=<same pat> bash scripts/ibismuh_s66_ci_watch.sh $FINAL   (CI on $FINAL)"

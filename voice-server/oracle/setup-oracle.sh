@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ── TubeForge Voice Server — Oracle Cloud installer (Ubuntu + Oracle Linux) ──
+# ── Ibismuh Studio Voice Server — Oracle Cloud installer (Ubuntu + Oracle Linux) ──
 #
 # Target: an Oracle Cloud Always Free Ampere A1 VM running either
 #   - Ubuntu 22.04/24.04 (apt), or
@@ -13,10 +13,10 @@
 #
 # What it does:
 #   1. installs system packages (distro-aware)
-#   2. creates /opt/tubeforge-voice with a venv, CPU torch, chatterbox-tts
+#   2. creates /opt/ibismuh-voice with a venv, CPU torch, chatterbox-tts
 #      (ARM64 note: the PyTorch CPU index has no aarch64 wheels, so we install
 #       torch from PyPI there — PyPI's ARM64 torch builds are CPU-only anyway)
-#   3. writes /opt/tubeforge-voice/voice.env (key + port, root-only readable)
+#   3. writes /opt/ibismuh-voice/voice.env (key + port, root-only readable)
 #   4. installs a systemd service that auto-starts on boot and auto-restarts
 #      on crashes, then opens the port in the VM's local firewall
 #      (the cloud-side Security List rule is a console step — see README)
@@ -45,7 +45,7 @@ fi
 # A random key if none given (printed at the end, saved in voice.env)
 KEY="${KEY:-${VOICE_KEY:-$(openssl rand -hex 16)}}"
 
-APP_DIR="/opt/tubeforge-voice"
+APP_DIR="/opt/ibismuh-voice"
 
 # ── distro detection ────────────────────────────────────────────────────────
 PY="python3"
@@ -120,9 +120,9 @@ EOF
 chmod 600 "$APP_DIR/voice.env"
 
 echo "==> [4/5] systemd service (starts on boot, restarts on crash)"
-cat > /etc/systemd/system/tubeforge-voice.service <<EOF
+cat > /etc/systemd/system/ibismuh-voice.service <<EOF
 [Unit]
-Description=TubeForge voice server (Chatterbox, self-hosted)
+Description=Ibismuh Studio voice server (Chatterbox, self-hosted)
 After=network-online.target
 Wants=network-online.target
 
@@ -139,7 +139,7 @@ Environment=OMP_NUM_THREADS=4
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable --now tubeforge-voice.service
+systemctl enable --now ibismuh-voice.service
 
 echo "==> [5/5] opening port $PORT in the local firewall"
 if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
@@ -167,13 +167,13 @@ cat <<EOF
       IP Protocol:  TCP
       Destination port range:  $PORT
 
-  Then in TubeForge → Settings → AI Providers → Voiceover:
+  Then in Ibismuh Studio → Settings → AI Providers → Voiceover:
     Provider : My Machine (self-hosted)
     Base URL : http://$PUBLIC_IP:$PORT
     API key  : $KEY
 
-  Check status:    systemctl status tubeforge-voice
-  Live logs:       journalctl -u tubeforge-voice -f
+  Check status:    systemctl status ibismuh-voice
+  Live logs:       journalctl -u ibismuh-voice -f
   First start downloads the ~1.5 GB Chatterbox model — give it 2-5 min,
   then:  curl http://localhost:$PORT/health   →  {"ok": true, ...}
 ════════════════════════════════════════════════════════════════════

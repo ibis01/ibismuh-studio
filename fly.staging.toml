@@ -1,4 +1,4 @@
-# TubeForge STAGING on Fly.io (S110 — the DEPLOYMENT §3 drill ground).
+# Ibismuh Studio STAGING on Fly.io (S110 — the DEPLOYMENT §3 drill ground).
 #
 # Same image, same process groups, same health checks as fly.toml — staging
 # exists to PROVE production shape, not to be a cheaper cousin of it. The
@@ -6,7 +6,7 @@
 # `fly logs`), and the secrets never being shared with production (the
 # provisioner generates fresh AUTH_SECRET/ENCRYPTION_KEY every time it runs).
 #
-# Deploy with:   fly deploy --app tubeforge-staging --config fly.staging.toml
+# Deploy with:   fly deploy --app ibismuh-studio-staging --config fly.staging.toml
 # Provision:     bash scripts/staging-provision.sh   (runbook: docs/runbooks/staging.md)
 #
 # Secrets (set by the provisioner from .env.staging / environment — NEVER
@@ -15,7 +15,7 @@
 # IBISMUH_STUDIO_ENCRYPTION_KEY (fresh), optional IBISMUH_STUDIO_YT_* (test client)
 # and a provider key for the pipeline drill.
 
-app = "tubeforge-staging"
+app = "ibismuh-studio-staging"
 primary_region = "iad"
 
 [build]

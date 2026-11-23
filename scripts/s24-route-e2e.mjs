@@ -49,7 +49,7 @@ check("1.1  register -> 201", reg.status === 201, reg.status);
 const _regBody = await j(reg);
 const setCookie = reg.headers.get("set-cookie") ?? "";
 const cookie = setCookie.split(";")[0];
-check("1.2  the session cookie arrives", cookie.startsWith("tf_session=") || cookie.length > 20, cookie.slice(0, 24));
+check("1.2  the session cookie arrives", cookie.startsWith("ibismuh_session=") || cookie.length > 20, cookie.slice(0, 24));
 const authed = { "content-type": "application/json", cookie };
 
 // ---- arc 2: the door law ----

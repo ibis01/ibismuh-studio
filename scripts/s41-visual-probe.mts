@@ -27,7 +27,7 @@ const ctx = await browser.newContext({
   viewport: { width: 1440, height: 1000 },
 });
 await ctx.addCookies([
-  { name: "tf_session", value: token, url: "http://localhost:3000" },
+  { name: "ibismuh_session", value: token, url: "http://localhost:3000" },
 ]);
 const page = await ctx.newPage();
 
@@ -108,7 +108,7 @@ console.log(pass ? "PROBE PASS (desktop) — dialog frame contains its content" 
 // toolbar must not blow the frame out there either. ----
 const mctx = await browser.newContext({ viewport: { width: 375, height: 812 } });
 await mctx.addCookies([
-  { name: "tf_session", value: token, url: "http://localhost:3000" },
+  { name: "ibismuh_session", value: token, url: "http://localhost:3000" },
 ]);
 const mpage = await mctx.newPage();
 await mpage.goto("http://localhost:3000/", { waitUntil: "networkidle" });

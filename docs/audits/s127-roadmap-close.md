@@ -30,7 +30,7 @@ release order rides it: S125 → S126 → S125-ext → C2 → R → X → this c
   corruption during the S126 pin work was caught by the battery and
   restored from HEAD before any commit rode it).
 - The S123/S124 regression law held: the whiteboard tree untouched
-  (`git diff 37796ce..HEAD -- src/lib/tubeforge/whiteboard/` carries only
+  (`git diff 37796ce..HEAD -- src/lib/ibismuh/whiteboard/` carries only
   the §6-mandated `classifySentence` export comment — the beat plan's own
   outputs byte-identical, pinned).
 

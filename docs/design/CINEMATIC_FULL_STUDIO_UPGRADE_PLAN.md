@@ -4,7 +4,7 @@
 **Proposed document:** `docs/design/CINEMATIC_FULL_STUDIO_UPGRADE_PLAN.md`
 **Baseline:** `b2fd3f3`
 **Status:** PROPOSED — implementation approval required per release
-**Legacy repository:** `ibis01/tubeforge` — strictly out of scope
+**Legacy repository:** `ibis01/ibismuh` — strictly out of scope
 
 ## 1. Mission
 
@@ -118,7 +118,7 @@ No release may claim production readiness from a successful frontend build alone
 
 All changes must be committed exclusively to `ibis01/ibismuh-studio`.
 
-Never push, cherry-pick, rename, or modify files in `ibis01/tubeforge` as part of this programme.
+Never push, cherry-pick, rename, or modify files in `ibis01/ibismuh` as part of this programme.
 
 ## 9. Reporting format
 

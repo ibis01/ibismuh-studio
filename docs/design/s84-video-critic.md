@@ -3,9 +3,9 @@
 **Status:** implemented (foundation slice + the S85 UI card + the S86
 repair lane). Design target: the S76
 adoption decision §4.B (`docs/audits/s76-openmontage-adoption-decision.md`).
-Implementation: `src/lib/tubeforge/video-critic.ts`; surface
+Implementation: `src/lib/ibismuh/video-critic.ts`; surface
 `/api/videos/[id]/critic`; job kind `"critic"` (entity = video); the human
-surface is `src/components/tubeforge/critic-card.tsx` (S85 — the video
+surface is `src/components/ibismuh/critic-card.tsx` (S85 — the video
 detail dialog's Video tab, after the QC scorecard; Mission Control resumes
 interrupted critic jobs; S86 — the one-click repair lane wires each hold's
 proposal to the affordance it names through the dialog's existing
@@ -107,7 +107,7 @@ identity are explicitly disclaimed (judged elsewhere). STRICT JSON
 - Auto-run after render (today manual-only; the S74-informed motion
   thresholds land first).
 - ~~A critic card in the UI~~ — **landed in S85**
-  (`src/components/tubeforge/critic-card.tsx`): the report card in the
+  (`src/components/ibismuh/critic-card.tsx`): the report card in the
   Video tab — verdict badge, one row per dimension (status icon,
   source, issues, evidence), the repair proposals, the engine's honesty
   notes, run/re-run with the rerunQc poll pattern, and a pre-existing

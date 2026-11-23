@@ -214,7 +214,7 @@ Implemented 2026-11 (single pass). Receipts per §7:
 7. **E2E** — full Playwright suite **37/37** (2.0m). The road there earned a fix of its
    own: the alternating-victim 429 flake (a different spec dying each full-suite run,
    every one passing solo) turned out to be a REAL post-rebrand escape —
-   `playwright.config.ts` still raised the ceilings under the LEGACY `TUBEFORGE_RATE_*`
+   `playwright.config.ts` still raised the ceilings under the LEGACY `IBISMUH_STUDIO_RATE_*`
    names, which rebrand stage-B left reading at NEITHER limiter layer
    (`rate-limit.ts` + `shared-rate-limit.ts` read only `IBISMUH_STUDIO_RATE_*`). The
    harness speaks the current names now, and a battery config-truth pin keeps the

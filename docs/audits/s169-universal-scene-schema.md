@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Milestone | S169 — "a structured representation of each scene… must accommodate all six modes, validation, asset provenance and timeline synchronization." |
-| Module | `src/lib/tubeforge/universal-scene.ts` — pure, strict, deterministic. |
+| Module | `src/lib/ibismuh/universal-scene.ts` — pure, strict, deterministic. |
 | Status | **CLOSED (schema)** — battery 970/970 (9 new pins), typecheck + lint clean. The compile step that walks scenes into engine calls is S170. |
 
 ## 1. The shape

@@ -1,4 +1,4 @@
-# TubeForge gitleaks baseline — added 2026-11-15 (the S128-ext dispatch receipt).
+# Ibismuh Studio gitleaks baseline — added 2026-11-15 (the S128-ext dispatch receipt).
 #
 # WHY THIS FILE EXISTS: workflow_dispatch runs the secret scan over the FULL
 # history (no before/after SHA exists for that event), unlike push (main-only)
@@ -24,12 +24,12 @@ useDefault = true
 description = "the 2026-11-15 dispatch baseline — historic findings, receipt per commit (see the comments)"
 commits = [
   # 2026-10-27 "Security hardening" — the commit that UNTRACKS .env from the
-  # tree (the sandbox's dev-only TUBEFORGE_AUTH_SECRET leaving the repo; the
+  # tree (the sandbox's dev-only IBISMUH_STUDIO_AUTH_SECRET leaving the repo; the
   # secret itself predates this commit). Dev-only: production secrets are
   # minted fresh by the npm setup flow (SECURITY.md), never shipped here.
   "cc24e05f2053dd83d2064cf29f67fc90daa730b2",
   # Stage 2 (2026-11-01) — e2e/isolation.spec.ts: the cross-tenant suite's
-  # per-run fixture credentials (iso-a/-b@tubeforge.test, "isolated-pairs-123").
+  # per-run fixture credentials (iso-a/-b@ibismuh.test, "isolated-pairs-123").
   "89ce85bb7be9cfbe82b2a8261f1e2e6c92f3a9a4",
   # S24 (2026-11-04) — s24-route-e2e.mjs + s24-unit-probe.mts: the billing
   # suite's per-run fixtures (s24-e2e-*@e2e.local, throwaway passwords, fake
@@ -50,7 +50,7 @@ commits = [
   # S118 (2026-11-13) — worklog.md §S116 QUOTES that same flagged line as the
   # fix's receipt: the false positive echoing itself in prose.
   "29411aeb7d4306d2a781b31266e82bb8607ded34",
-  # 2026-11-16 sandbox restore — "restore TubeForge (S128 tip 60a87e4) as the
+  # 2026-11-16 sandbox restore — "restore Ibismuh Studio (S128 tip 60a87e4) as the
   # app": the post-wipe re-land that re-introduced the SAME fixture content
   # already receipted above at a NEW commit SHA (gitleaks allowlists match the
   # introducing commit, so the re-land needed its own entry): e2e/isolation
@@ -68,7 +68,7 @@ commits = [
   "fdd76722a9ab3522d50616f4e775f12cfeeae521",
   "6d45ec159eef3adb08907831560a9febdcabd2ac",
   # e5387bf (2026-11-19) — scripts/s24-unit-probe.mts: the battery-pin
-  # catch-up renamed the fixture env TUBEFORGE_* → IBISMUH_STUDIO_*, which
+  # catch-up renamed the fixture env IBISMUH_STUDIO_* → IBISMUH_STUDIO_*, which
   # changed the line's introducing commit and un-covered the per-run fake
   # Stripe key already receipted at 9d82cf1b (same fixture class: probe-only
   # value against fetch fakes, never a real credential). Root-killed by the

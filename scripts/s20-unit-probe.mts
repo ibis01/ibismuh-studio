@@ -20,7 +20,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //      second resolve within the minute does NOT bump it (one write/min).
 // Run: node --import tsx scripts/s20-unit-probe.mts
 
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { NextRequest } from "next/server";
 import { createSignedToken, } from "../src/lib/ibismuh/auth-token";import { randomToken } from "../src/lib/ibismuh/crypto";
@@ -53,7 +53,7 @@ const reqWith = (opts: RequestInit) => new NextRequest("http://probe.local/api/a
 const bearerReq = (token: string) =>
   reqWith({ headers: { authorization: `Bearer ${token}` } });
 // Guaranteed by the `??=` at the top; req keeps the guarantee named.
-const AUTH_SECRET = req("TUBEFORGE_AUTH_SECRET env", process.env.TUBEFORGE_AUTH_SECRET);
+const AUTH_SECRET = req("IBISMUH_STUDIO_AUTH_SECRET env", process.env.IBISMUH_STUDIO_AUTH_SECRET);
 
 // ---- throwaway identity ----
 const suffix = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;

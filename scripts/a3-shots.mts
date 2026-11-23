@@ -20,10 +20,10 @@ const ctx = await browser.newContext({
   deviceScaleFactor: 1,
 });
 // Local harness session — minted by scripts/mint-preview-session.mts into
-// /tmp/tf-session.txt (the s41 probe's cookie contract: name tf_session).
+// /tmp/tf-session.txt (the s41 probe's cookie contract: name ibismuh_session).
 const token = fs.readFileSync("/tmp/tf-session.txt", "utf8").trim();
 await ctx.addCookies([
-  { name: "tf_session", value: token, url: "http://localhost:3000" },
+  { name: "ibismuh_session", value: token, url: "http://localhost:3000" },
 ]);
 const page = await ctx.newPage();
 

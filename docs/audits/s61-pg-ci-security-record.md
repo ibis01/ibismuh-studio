@@ -16,7 +16,7 @@ wedge (42P07 at auth_setting) and two Postgres-only SQL bugs (42703 unquoted
 camelCase identifiers, 42883 boolean `ok = 0`) shipped and sat in production
 for six days. The audit's #1 recommendation: a real PostgreSQL service in
 CI. The audit's security P0s: `/api/diag` was still public, and the
-deployment runs without `TUBEFORGE_ENCRYPTION_KEY`.
+deployment runs without `IBISMUH_STUDIO_ENCRYPTION_KEY`.
 
 ## 2. What changed
 
@@ -31,14 +31,14 @@ requires a session cookie or Bearer token like every other `/api/*`
 endpoint.
 
 Verified live on the rebuilt sandbox preview: `GET /api/diag` → **401**
-`{"error":"Authentication required — sign in to use TubeForge"}`;
+`{"error":"Authentication required — sign in to use Ibismuh Studio"}`;
 `GET /api/auth/status` → still public 200 (signed-out browsers need it).
 
 ### 2.2 The encryption-key watchlight (T-61.2)
 
 `src/instrumentation.ts` now warns — once per process, at boot, with the
 exact remediation — when a production server starts without a usable
-`TUBEFORGE_ENCRYPTION_KEY` (< 16 chars). The S60 record found the Vercel
+`IBISMUH_STUDIO_ENCRYPTION_KEY` (< 16 chars). The S60 record found the Vercel
 deployment in precisely this state (`diag: encryptionKey false`): the
 crypto module fails closed at USE time, so nothing was visibly broken until
 someone stores or reads a provider credential. Boot is the one
@@ -75,7 +75,7 @@ not a report.
 
 The daily-usage sparkline moved from an inline block in
 `src/app/api/account/usage/route.ts` into
-`src/lib/tubeforge/usage-sql.ts` (`dailyUsageSparkline`). The route and the
+`src/lib/ibismuh/usage-sql.ts` (`dailyUsageSparkline`). The route and the
 CI probe now call **one** function — CI verifies the exact production SQL;
 copy-drift is structurally impossible. Pure code motion: the SQL text is
 byte-identical to the S60-fixed version (quoted identifiers + `NOT "ok"`).

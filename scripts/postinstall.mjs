@@ -83,11 +83,8 @@ if (
 // auto-provisioning path below.
 if (process.env.VERCEL === '1' || process.env.VERCEL_ENV) {
   const missing = [];
-  for (const [key, legacy] of [
-    ['IBISMUH_STUDIO_AUTH_SECRET', 'TUBEFORGE_AUTH_SECRET'],
-    ['IBISMUH_STUDIO_ENCRYPTION_KEY', 'TUBEFORGE_ENCRYPTION_KEY'],
-  ]) {
-    const value = (process.env[key] ?? process.env[legacy] ?? '').trim();
+  for (const key of ['IBISMUH_STUDIO_AUTH_SECRET', 'IBISMUH_STUDIO_ENCRYPTION_KEY']) {
+    const value = (process.env[key] ?? '').trim();
     if (value.length < 16) missing.push(key);
   }
   if (missing.length) {

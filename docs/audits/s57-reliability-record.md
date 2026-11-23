@@ -55,7 +55,7 @@ it cumulatively):
 | `14bfa20` (docs: S58 opened) | — | tree covered by the head run |
 | `34ec87a` (feat: S58 — non-null class zeroed and frozen) | 42480528396 | ✅ **all jobs green** — Typecheck · Lint · Unit, Secret scan (gitleaks), Production build, Money-path coverage, E2E (Playwright) |
 
-https://github.com/ibis01/tubeforge/actions/runs/42480528396 — queried by
+https://github.com/ibis01/ibismuh/actions/runs/42480528396 — queried by
 full head SHA over the authenticated REST API (the API answered in the
 landing session; the earlier IP-rate-limit was an anonymous-request
 phenomenon). S57 closes on this evidence.
@@ -67,7 +67,7 @@ no-console warnings were ~378 scripts/e2e CLI sites; the production debt was
 INVISIBLE to the census — the rule's `allow: ["warn","error","info"]`
 permitted **83 console.warn/error/info sites across 29 src/ files** to
 bypass the structured logger entirely. The Stage-3 logger
-(`src/lib/tubeforge/log.ts`, zero-dep pino-format JSON, redacting,
+(`src/lib/ibismuh/log.ts`, zero-dep pino-format JSON, redacting,
 child-capable, with a `consoleBridge` nobody ever migrated onto) was the
 destination; migration, not new machinery.
 
@@ -151,8 +151,8 @@ unused-expressions 11, exhaustive-deps 9, any 7, two singles.
 
 ## The spend-gate law — untouched, observable
 
-- No `TUBEFORGE_SPEND_GATE=0` anywhere in S57.
-- No forced `TUBEFORGE_PRICING_VERIFIED`; the pricing block stays
+- No `IBISMUH_STUDIO_SPEND_GATE=0` anywhere in S57.
+- No forced `IBISMUH_STUDIO_PRICING_VERIFIED`; the pricing block stays
   provisional; `SpendPricingUnverifiedError` behavior unchanged.
 - Zero gateway quota, zero paid dispatches — S57 touched no provider path
   (the one logger line inside spend.ts is the override-warning banner).

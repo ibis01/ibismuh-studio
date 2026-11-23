@@ -920,7 +920,7 @@ async function buildSegment(opts: {
       // correctly refuses "Output with label 'v' does not exist in any
       // defined filter graph" — every clip-backed scene compose failed
       // (S153 shipped the label; the still fallback masked it on hosts
-      // without Chromium, where no clip ever existed). Port of tubeforge.
+      // without Chromium, where no clip ever existed). Port of ibismuh.
       await run("ffmpeg", [
         "-i", kineticClip,
         "-i", wav,

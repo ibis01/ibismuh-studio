@@ -50,7 +50,7 @@ Statuses used (per mandate): PASS / PARTIAL / FAIL / BLOCKED / NOT VERIFIED
 5. **F-05 (P1)**: dependency audit (above).
 6. **F-06 (P1)**: `docker-compose.yml:40-45` runs `migrate-stage2.mjs` (schema repair) as part of web startup.
 7. **Tenant registry gap (new finding)**: 5 org-owned models missing from `ORG_SCOPED_MODELS`: `session`, `spendReservation`, `storageReservation`, `storageUsage`, `usageRecord`. (The two `usageRecord` read sites pass explicit `organizationId` today; `Session` is raw-DB-only in auth bootstrap — safe today, defense-in-depth needed.)
-8. **Legacy identity (Phase 1 scope)**: 1,193 `TubeForge|TUBEFORGE|tubeforge|tf_session` matches across ~190 tracked files. Load-bearing values are frozen by existing regression tests (`SCRYPT_SALT = "tubeforge-at-rest-v1"`, scene3d seed, default storage paths) — these are data-compatibility invariants, NOT aliases; they require documented-exception treatment, not blind renaming.
+8. **Legacy identity (Phase 1 scope)**: 1,193 `Ibismuh Studio|TUBEFORGE|ibismuh|tf_session` matches across ~190 tracked files. Load-bearing values are frozen by existing regression tests (`SCRYPT_SALT = "tubeforge-at-rest-v1"`, scene3d seed, default storage paths) — these are data-compatibility invariants, NOT aliases; they require documented-exception treatment, not blind renaming.
 
 ### Known environment limitations
 

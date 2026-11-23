@@ -112,7 +112,7 @@ trail of what shipped then. The current posture is the table above.
 
 ## 2026-11 Foundation Audit findings
 
-A full security audit was run as part of Stage 1 of the TubeForge product development plan. The audit covered all 71 API route files (110 endpoints), the 11 Prisma models, the auth/middleware layer, the video-generation pipeline, and the build/test baseline.
+A full security audit was run as part of Stage 1 of the Ibismuh Studio product development plan. The audit covered all 71 API route files (110 endpoints), the 11 Prisma models, the auth/middleware layer, the video-generation pipeline, and the build/test baseline.
 
 Findings:
 
@@ -161,7 +161,7 @@ tests pass, live smoke test green. Remaining CRITICAL work is Stage 2
   the operator must still revoke them at github.com/settings/tokens. Pushes from the
   build machine ride a repo-scoped deploy key that never leaves the machine.
 - **Public-dir hygiene (S136).** `public/` is served statically in production: a
-  stale 1.4 MB repository snapshot (`public/tubeforge.zip`, 381 files, 2026-10-31)
+  stale 1.4 MB repository snapshot (`public/ibismuh.zip`, 381 files, 2026-10-31)
   was untracked, and patch artifacts are gitignored. The zip was scanned before
   removal: no secrets (an empty `apiKey` in `.z-ai-config`, placeholder templates),
   a dev-only `DATABASE_URL` file path, and source that was already public in this

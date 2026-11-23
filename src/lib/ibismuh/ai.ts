@@ -23,7 +23,7 @@ export function videoDir(videoId: string) {
   // Vercel, so scratchDir() and every put()/get() share the same writable
   // tree — the scene WAVs written here, the merged voiceover.wav published
   // through storage.put, and the renderer's ffmpeg inputs all resolve to
-  // /tmp/tubeforge-uploads/<videoId>/. This restores the one-seam design the
+  // /tmp/ibismuh-uploads/<videoId>/. This restores the one-seam design the
   // interim hard-coded /tmp path forked around.
   // The explicit mkdir keeps the failure loud (scratchDir swallows
   // read-only-FS errors by design — module-evaluation callers rely on that).

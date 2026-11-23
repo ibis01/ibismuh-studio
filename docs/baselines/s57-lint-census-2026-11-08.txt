@@ -1,4 +1,4 @@
-TubeForge — ESLint census after the S57/T-57.2+T-57.3 structured-logger tranche (2026-11-08 UTC)
+Ibismuh Studio — ESLint census after the S57/T-57.2+T-57.3 structured-logger tranche (2026-11-08 UTC)
 =============================================================================================
 
 Command : npx eslint .            (eslint.config.mjs)

@@ -1,8 +1,8 @@
-# TubeForge — W5/G1 commit sequences + W3/W4 API signature drafts
+# Ibismuh Studio — W5/G1 commit sequences + W3/W4 API signature drafts
 
 **Status:** companion to `docs/design/s120-2d-animation-roadmap.md` (the file-by-file roadmap). This document adds the two artifacts the roadmap deferred: (A) the **commit-by-commit sequence for W5** (the camera director — the highest-risk stage), (B) the **commit-by-commit sequence for G1** (the motion-graphics engine — the largest build), and (C/D) the **actual TypeScript signature drafts** for the two APIs other stages depend on: `asset-validate.ts` (W3) and the `scheduleScene` word-anchor input (W4).
 
-**Ground truth:** verified against `ibis01/tubeforge` at origin HEAD `e387287` ("feat(whiteboard): W2 the semantic beat compiler"). The S120 roadmap exists as local commit `915dbee` in the audit clone (unpushed). Nothing in this document modifies repository code — every signature below is a draft for the implementer, written against the real types read from the tree (`storyboard.ts`, `timing.ts`, `beat-plan.ts`, `svg.ts`, `assets.ts`, `captions.ts`).
+**Ground truth:** verified against `ibis01/ibismuh` at origin HEAD `e387287` ("feat(whiteboard): W2 the semantic beat compiler"). The S120 roadmap exists as local commit `915dbee` in the audit clone (unpushed). Nothing in this document modifies repository code — every signature below is a draft for the implementer, written against the real types read from the tree (`storyboard.ts`, `timing.ts`, `beat-plan.ts`, `svg.ts`, `assets.ts`, `captions.ts`).
 
 **Update 2026-11-14:** re-verified against a fresh full clone at origin HEAD `37796ce` — the W-track (W3–W7) and Stage S have **LANDED**. Status of the parts below: Part A EXECUTED by the repo, Part B still valid (G1.0/Stage S already green — G1.1 is the first remaining code commit), Part C EXECUTED, Part D SUPERSEDED by the leaner shipped anchors contract, Part E still valid and pending, Part F still valid and pending (its Stage-S aliases now resolve against the real `anim/` exports). The full reconciliation — the claims table, three post-landing findings, and the G1 gate reading — is **Part G** at the end of this document. CI at `37796ce` is independently verified 8/8 green (Part G.1, token-authenticated API lookup).
 
@@ -20,7 +20,7 @@
 
 ### Commit W5.1 — `feat(whiteboard): W5.1 focus targets — beat bounds resolve to camera focus rects (pure, unconsumed)`
 
-- **New:** `src/lib/tubeforge/whiteboard/camera-director.ts` (part 1).
+- **New:** `src/lib/ibismuh/whiteboard/camera-director.ts` (part 1).
 - **Contents:** `FocusRect`, `boundsOf(segs)` (flattened-bounds over `PathSegment[]` — svg.ts has no bounds helper today; it lives here because W5's file list adds exactly one new file), `focusRectsForScene(scene, project, durationMs, geometry, beats, opts)`: beat-aware focus rects from placement/text bounds (`buildGeometry` + `boundsOf`), safe margins per aspect (16:9 / 9:16 / 1:1 — the project's own dimensions, never hardcoded 960×540 — the S68 receipt), degenerate scenes → `[]`.
 - **Behavior change:** none. The planner is exported but consumed by nothing yet.
 - **Pins:** determinism (serialize-hash); containment math (rect ⊇ bounds ∪ safe margin); empty/unmatched beats → `[]`; bounds of a text-only scene derive from the character-count width model (the same approximation `handAt` uses — one text-width model per truth).
@@ -57,7 +57,7 @@
 
 ### Commit W5.4 — `feat(whiteboard): W5.4 camera validation consumes the policy grammar (strict on write, tolerant on read)`
 
-- **Modified:** `src/lib/tubeforge/whiteboard/storyboard.ts` — the save/PUT validation path runs `checkCameraPlan`; violations → validation **errors** (the spec: "invalid CameraEvent[] → validation error, not silent clamp").
+- **Modified:** `src/lib/ibismuh/whiteboard/storyboard.ts` — the save/PUT validation path runs `checkCameraPlan`; violations → validation **errors** (the spec: "invalid CameraEvent[] → validation error, not silent clamp").
 - **Tolerant-parse law applied to stored docs:** the LOAD path stays tolerant — stored v1 docs that predate the policies load with warnings, never refuse (otherwise this commit bricks every existing project; the same strict-write/tolerant-read split G1's `validateGraphicsDoc` uses). Editor round-trip keeps working: load → save of an unedited legacy doc must not newly fail (pin).
 - **Pins:** crafted-bad doc rejected at save with per-violation reasons; every stored benchmark doc loads clean; editor round-trip; the grandfather pin from W5.2 re-run against the live validator.
 - **Rollback:** revert the storyboard call site (one call).
@@ -65,8 +65,8 @@
 ### Commit W5.5 — `feat(whiteboard): W5.5 render and preview adopt the director; drift demoted to the keyless fallback` — **THE RISK COMMIT, atomic**
 
 - **Modified:**
-  - `src/lib/tubeforge/whiteboard/timing.ts` — `cameraAt`: drift applies **only when the effective key list is empty** (byte-identical to HEAD for keyless scenes — hard pin); keyed scenes interpolate keys with NO full-amplitude drift, plus the **residual sway** term (D1): `cameraDrift(tMs, factor)` gains the factor parameter — keyless factor 1 (byte-identical), keyed factor `SWAY_FACTOR` (constant, receipt-pinned, ≤ ¼ safe-margin, ≥ freezedetect sensitivity).
-  - `src/lib/tubeforge/whiteboard/render.ts` + `wb-canvas.tsx` — both schedule camera through `sceneCameraPlan` (the one-source law: preview ≡ final by construction, exactly the W2 seam).
+  - `src/lib/ibismuh/whiteboard/timing.ts` — `cameraAt`: drift applies **only when the effective key list is empty** (byte-identical to HEAD for keyless scenes — hard pin); keyed scenes interpolate keys with NO full-amplitude drift, plus the **residual sway** term (D1): `cameraDrift(tMs, factor)` gains the factor parameter — keyless factor 1 (byte-identical), keyed factor `SWAY_FACTOR` (constant, receipt-pinned, ≤ ¼ safe-margin, ≥ freezedetect sensitivity).
+  - `src/lib/ibismuh/whiteboard/render.ts` + `wb-canvas.tsx` — both schedule camera through `sceneCameraPlan` (the one-source law: preview ≡ final by construction, exactly the W2 seam).
 - **Behavior change:** keyed scenes lose full drift (author-keyed scenes included — the spec's explicit call); keyless scenes byte-identical; director scenes get planned travel + holds + residual sway.
 - **Proof (this commit carries the W5 exit gate):** FULL W1 harness on real chromium+ffmpeg — 3 aspects × exact frames, QC battery green per aspect **with drift fully demoted on director scenes**; frozen-frames/static-shots receipts attached per aspect; per-aspect framing receipts (label bounds inside safe margins); writing-window stability receipts; keyless-scenes byte-identity serialize-hash pin. The W5.3 property test is the cheap pre-gate; this benchmark run is the law.
 - **Rollback:** the demotion is one boolean branch in `cameraAt` + one seam call per surface — reverting restores HEAD behavior exactly (spec's rollback note).
@@ -81,57 +81,57 @@
 
 **Pattern:** the whiteboard engine's proven shape applied to a new grammar — peer lane first (Phase 1: G1 renders whole graphics-led videos; `render-lane.ts` routes by mode; `render.ts` untouched), compositor citizenship later (Phase 2, gated on Stage X). **Sizing note:** this is the L (3–4 wk) stage; the commits below average one focused day each except G1.5/G1.8 (2–3 days).
 
-**File-list refinement vs S120 §5:** the substrate that §5 lists as `graphics/anim.ts` is realized at its §8 home `src/lib/tubeforge/anim/` — one home, no shim, no re-export layer. G1/K1 import `@/lib/tubeforge/anim/*` directly. (Two homes for one substrate would violate the leaf-module law's spirit.)
+**File-list refinement vs S120 §5:** the substrate that §5 lists as `graphics/anim.ts` is realized at its §8 home `src/lib/ibismuh/anim/` — one home, no shim, no re-export layer. G1/K1 import `@/lib/ibismuh/anim/*` directly. (Two homes for one substrate would violate the leaf-module law's spirit.)
 
 ### Commit G1.0 — `feat(anim): S1 the shared animation substrate — easings, keyframes, clock (pure, unused by any engine yet)`
 
 *(This is Stage S from the roadmap; it lands as G1's first commit because G1 is its first consumer — the dependency graph's "S → G1" edge.)*
 
-- **New:** `src/lib/tubeforge/anim/easing.ts` (`linear | ease-in-out | ease-out | pop | ease-back` as pure functions + the zoompan-expression compiler for G1/K1 frame math), `src/lib/tubeforge/anim/keyframe.ts` (`Keyframe<T>`, `evalAt(keys, tMs)` — ordered keys, clamped evaluation, tween composition), `src/lib/tubeforge/anim/clock.ts` (frame quantization matching `framePlanClock` byte-behavior + the shared frame-budget wall constant — one wall, two engines).
+- **New:** `src/lib/ibismuh/anim/easing.ts` (`linear | ease-in-out | ease-out | pop | ease-back` as pure functions + the zoompan-expression compiler for G1/K1 frame math), `src/lib/ibismuh/anim/keyframe.ts` (`Keyframe<T>`, `evalAt(keys, tMs)` — ordered keys, clamped evaluation, tween composition), `src/lib/ibismuh/anim/clock.ts` (frame quantization matching `framePlanClock` byte-behavior + the shared frame-budget wall constant — one wall, two engines).
 - **Pins:** purity (no fs/clock/randomness — the S64 law generalized); curve table complete; `evalAt` clamps outside the key range; quantization byte-matches the whiteboard's `framePlanClock`; `ease-back` overshoot bounded.
 - **Scope law:** the whiteboard's `timing.ts` is NOT migrated onto it (byte-identity beats elegance where determinism is pinned — S120 §8).
 - **Rollback:** delete the folder; nothing imports it.
 
 ### Commit G1.1 — `feat(graphics): G1.1 the GraphicsDoc grammar + validator`
 
-- **New:** `src/lib/tubeforge/graphics/types.ts` — versioned like `Scene3D`: `GraphicsScene { id, narration, durationMs?, background, elements }`; `GraphicsElement` closed v1 set of 8 variants: `headline | subhead | bullet | counter | bar | barChart | icon | callout` (+ `shape`, `group` as structural variants — see spec wording) each carrying `{ id, at: Placement, enter: ElementMotion, exit?, emphasis? }`; `ElementMotion = { kind: "fade"|"rise"|"slide"|"pop"|"wipe"|"count"|"grow"|"draw", durationMs, delayMs, ease }`; named walls mirroring `WB_BUDGETS`: `elementsPerScene`, `scenesPerProject`, `sceneDurationMsMax`, `GRAPHICS_FRAME_BUDGET`; `validateGraphicsDoc` (tolerant parse / strict write; unknown element variants ignored on read with warnings — the additive law; id-charset law enforced — the `${assetId}--${pathId}` namespace seam lesson applies to element ids verbatim).
+- **New:** `src/lib/ibismuh/graphics/types.ts` — versioned like `Scene3D`: `GraphicsScene { id, narration, durationMs?, background, elements }`; `GraphicsElement` closed v1 set of 8 variants: `headline | subhead | bullet | counter | bar | barChart | icon | callout` (+ `shape`, `group` as structural variants — see spec wording) each carrying `{ id, at: Placement, enter: ElementMotion, exit?, emphasis? }`; `ElementMotion = { kind: "fade"|"rise"|"slide"|"pop"|"wipe"|"count"|"grow"|"draw", durationMs, delayMs, ease }`; named walls mirroring `WB_BUDGETS`: `elementsPerScene`, `scenesPerProject`, `sceneDurationMsMax`, `GRAPHICS_FRAME_BUDGET`; `validateGraphicsDoc` (tolerant parse / strict write; unknown element variants ignored on read with warnings — the additive law; id-charset law enforced — the `${assetId}--${pathId}` namespace seam lesson applies to element ids verbatim).
 - **Pins:** mixed doc round-trips byte-identical; wall violations reject with named walls; tolerant parse of v-next fields; id-charset rejects separator-carrying ids.
 - **Rollback:** unused module.
 
 ### Commit G1.2 — `feat(graphics): G1.2 frame truth — GraphicsFrameState (pure)`
 
-- **New:** `src/lib/tubeforge/graphics/frame.ts` — `frameAt(doc, geometry, tMs): GraphicsFrameState` (element transforms / opacities / text states / counters) — **the one source of motion truth**; fixed precedence `emphasis > exit > enter`; `counter` number tweens and `bar`/`barChart` data-driven tweens are pure math (no `Math.random`, no `Date.now`).
+- **New:** `src/lib/ibismuh/graphics/frame.ts` — `frameAt(doc, geometry, tMs): GraphicsFrameState` (element transforms / opacities / text states / counters) — **the one source of motion truth**; fixed precedence `emphasis > exit > enter`; `counter` number tweens and `bar`/`barChart` data-driven tweens are pure math (no `Math.random`, no `Date.now`).
 - **Pins:** determinism (frame-hash over a fixed doc sweep); precedence; **element state never NaN outside its motion window** (the named G1 pin); tween continuity (no discontinuity at motion boundaries).
 - **Rollback:** unused module.
 
 ### Commit G1.3 — `feat(graphics): G1.3 the composer — static skeleton + one APPLY_FRAME_FN`
 
-- **New:** `src/lib/tubeforge/graphics/compose.ts` — the `composeScene` pattern: static HTML/SVG skeleton + ONE applier function shared by editor preview and renderer; icon variant paths through `svg.ts#sanitizeSvg`/`parsePathData` (reuse, never a second parser); **no CSS animation** — every frame applied by JS, deterministic.
+- **New:** `src/lib/ibismuh/graphics/compose.ts` — the `composeScene` pattern: static HTML/SVG skeleton + ONE applier function shared by editor preview and renderer; icon variant paths through `svg.ts#sanitizeSvg`/`parsePathData` (reuse, never a second parser); **no CSS animation** — every frame applied by JS, deterministic.
 - **Pins:** applier idempotence (apply twice ≡ once); deterministic DOM (no wall-clock in output); sanitize path exercised on a hostile-icon fixture.
 - **Rollback:** unused module.
 
 ### Commit G1.4 — `feat(graphics): G1.4 the native planner + the LLM spec with per-element degradation`
 
-- **New:** `src/lib/tubeforge/graphics/planner.ts` (native keyword/rule scaffold over narration), `src/lib/tubeforge/graphics/llm-planner.ts` (same schema as the whiteboard's `llm-planner.ts`: planner report, normalization police, per-element degradation to native, **byte-compatible fallback** when the model is absent or returns junk).
+- **New:** `src/lib/ibismuh/graphics/planner.ts` (native keyword/rule scaffold over narration), `src/lib/ibismuh/graphics/llm-planner.ts` (same schema as the whiteboard's `llm-planner.ts`: planner report, normalization police, per-element degradation to native, **byte-compatible fallback** when the model is absent or returns junk).
 - **Pins:** LLM-less compose byte-identical to the native planner's output; dropped/invalid elements reported in the planner report; degrade path compiles the SAME doc the native planner would.
 - **Rollback:** unused modules.
 
 ### Commit G1.5 — `feat(graphics): G1.5 the render engine — chromium loop, encode, VO slot, frame-budget wall`
 
-- **New:** `src/lib/tubeforge/graphics/render.ts` — mirror of `whiteboard/render.ts` discipline: fresh context per scene, no-network route abort, JPEG quality 92, ffmpeg encode, VO slot normalization (`normalizeVoSlot`), music bed under the −16 LUFS mix contract, **pre-flight frame budget** (refuse over-budget docs BEFORE chromium launches — the E1 lesson).
+- **New:** `src/lib/ibismuh/graphics/render.ts` — mirror of `whiteboard/render.ts` discipline: fresh context per scene, no-network route abort, JPEG quality 92, ffmpeg encode, VO slot normalization (`normalizeVoSlot`), music bed under the −16 LUFS mix contract, **pre-flight frame budget** (refuse over-budget docs BEFORE chromium launches — the E1 lesson).
 - **Returns:** `{ scenes, file, tracks, plan }` with the `plan.totalSec == Σ deliveredSec` assertion baked in.
 - **Pins:** determinism (identical frame hashes across two runs — G1's benchmark headline pin); budget wall refusal; seam law (no network from the page).
 - **Rollback:** unused module.
 
 ### Commit G1.6 — `feat(graphics): G1.6 S87 projection — graphicsTracks (one clip per scene, kind "graphics")`
 
-- **New:** `src/lib/tubeforge/graphics/tracks.ts` — `graphicsTracks(doc, fps, { voSceneIds, musicOn })`: visual track kind **`"graphics"`** (one clip per scene, `asset: null` — the reserved kind at types.ts:580), audio + subtitle tracks; the `framePlanClock` pattern re-used so edges are frame-quantized and contiguous **by construction**.
+- **New:** `src/lib/ibismuh/graphics/tracks.ts` — `graphicsTracks(doc, fps, { voSceneIds, musicOn })`: visual track kind **`"graphics"`** (one clip per scene, `asset: null` — the reserved kind at types.ts:580), audio + subtitle tracks; the `framePlanClock` pattern re-used so edges are frame-quantized and contiguous **by construction**.
 - **Pins:** projection parity (the `plan.totalSec` assertion against the tracks' own arithmetic); contiguity pins; quantization matches `anim/clock.ts`.
 - **Rollback:** unused module.
 
 ### Commit G1.7 — `feat(lane): G1.7 the graphics render mode — types and lane routing move in ONE slice`
 
-- **Modified:** `src/lib/tubeforge/types.ts` — `RENDER_MODES` gains `graphics`; `src/lib/tubeforge/render-lane.ts` — `StoryRenderMode` + `RenderLane` + `resolveRenderLane` gain the graphics lane.
+- **Modified:** `src/lib/ibismuh/types.ts` — `RENDER_MODES` gains `graphics`; `src/lib/ibismuh/render-lane.ts` — `StoryRenderMode` + `RenderLane` + `resolveRenderLane` gain the graphics lane.
 - **The lockstep law (S88 CI lesson):** both ledgers move in the SAME slice — a half-registered mode is exactly the failure mode `laneDecisionsComplete` exists to catch.
 - **Pins:** lane battery green; unknown modes still refuse; the graphics lane resolves and refuses ONLY on missing assets (honest errors).
 - **Note:** until G1.8 the mode is reachable only through a direct doc PUT — no queue wiring, no user-facing surface change.
@@ -480,44 +480,44 @@ export function checkReadability(opts: {
 
 ### Commit K1.0 — `feat(characters): K1.0 the CharacterRigDoc contract + validator (pure, unused)`
 
-- **New:** `src/lib/tubeforge/characters/rig2d.ts` — versioned like `Scene3D` (the S88 house doc laws verbatim: tolerant parse null-on-unreadable, strict write, byte-stable round-trip): `RIG2D_VERSION = 1`; `RigPart { id, svgRef, z, pivot: Point, parent?: partId, rest: Placement }`; **standard slot names** — the closed vocabulary pose sheets map to: mouth `{ closed | open | wide | oh | smile }` (5 shapes — honest narration-sync at explainer quality), brow `{ neutral | raised | furrowed }`, `arm-l` / `arm-r` `{ rest | raise | point }` (3-way); `RigPose { id, name, slot, joints }`; `RigTimeline` (ordered pose keyframes over the scene clock); `validateRigDoc` — referential integrity (svgRef exists in the character's parts, parent refs acyclic, pivot inside svgRef bounds, joint partIds exist), **FK-rotation-only** (no IK in v1 — the non-goal); `parseRig2D(json): CharacterRigDoc | null` / `writeRig2D(doc): string`.
+- **New:** `src/lib/ibismuh/characters/rig2d.ts` — versioned like `Scene3D` (the S88 house doc laws verbatim: tolerant parse null-on-unreadable, strict write, byte-stable round-trip): `RIG2D_VERSION = 1`; `RigPart { id, svgRef, z, pivot: Point, parent?: partId, rest: Placement }`; **standard slot names** — the closed vocabulary pose sheets map to: mouth `{ closed | open | wide | oh | smile }` (5 shapes — honest narration-sync at explainer quality), brow `{ neutral | raised | furrowed }`, `arm-l` / `arm-r` `{ rest | raise | point }` (3-way); `RigPose { id, name, slot, joints }`; `RigTimeline` (ordered pose keyframes over the scene clock); `validateRigDoc` — referential integrity (svgRef exists in the character's parts, parent refs acyclic, pivot inside svgRef bounds, joint partIds exist), **FK-rotation-only** (no IK in v1 — the non-goal); `parseRig2D(json): CharacterRigDoc | null` / `writeRig2D(doc): string`.
 - **Pins:** round-trip byte-stable; acyclic-parent check fires on a crafted cycle; slot names are a closed set (unknown slot → validation error); id law mirrors `validWhiteboardId` (the namespace-seam law applies to part ids verbatim).
 - **Rollback:** unused module.
 
 ### Commit K1.1 — `feat(characters): K1.1 pose evaluation — poseAt + the mouth beat schedule (pure, unused)`
 
-- **New:** `src/lib/tubeforge/characters/rig-frame.ts` — `poseAt(rig, timeline, tMs): RigFrameState`: per-part resolved FK transforms, parent chain composed root-down, keyframed joint states evaluated through `anim/keyframe.ts#evalAt` + the shared easing curves; `mouthSchedule(anchors: WordAnchors, opts): MouthBeat[]` — **syllable-counted open/close beats inside each word span** (vowel-group counting — a pure, deterministic heuristic; the honest alternative to phoneme lip-sync, scope-claimed as beat-sync everywhere); `mouthAt(beats, tMs): MouthShape`; a locomotion primitive `travelTimeline(opts): RigTimeline` (stride-coupled torso bob + arm swing — v1 has NO leg parts in the spec's part list, so the walk reads as glide-with-bob; the scope claim is recorded in the stage doc, not hidden).
+- **New:** `src/lib/ibismuh/characters/rig-frame.ts` — `poseAt(rig, timeline, tMs): RigFrameState`: per-part resolved FK transforms, parent chain composed root-down, keyframed joint states evaluated through `anim/keyframe.ts#evalAt` + the shared easing curves; `mouthSchedule(anchors: WordAnchors, opts): MouthBeat[]` — **syllable-counted open/close beats inside each word span** (vowel-group counting — a pure, deterministic heuristic; the honest alternative to phoneme lip-sync, scope-claimed as beat-sync everywhere); `mouthAt(beats, tMs): MouthShape`; a locomotion primitive `travelTimeline(opts): RigTimeline` (stride-coupled torso bob + arm swing — v1 has NO leg parts in the spec's part list, so the walk reads as glide-with-bob; the scope claim is recorded in the stage doc, not hidden).
 - **Pins:** determinism (serialize-hash over a pose sweep); **transforms never NaN** (the named K1 pin); **mouth beats ⊂ word spans** (the W4 tolerance pin — beats never leak outside anchor spans); mouth `closed` outside speech runs; FK composition pinned on a 3-part chain fixture (rotations compose in the documented order).
 - **Rollback:** unused module.
 
 ### Commit K1.2 — `feat(characters): K1.2 the rig director — narration + pose sheet → pose timeline (pure, unused)`
 
-- **New:** `src/lib/tubeforge/characters/rig-director.ts` — `planRigTimeline(scene, poseSheet, anchors?): RigTimelinePlan` — gesture beats from W2-style purpose classification, **reusing `beat-plan.ts#classifySentence`** (one classifier, two consumers — the spec's own law): setup → welcoming pose, action → gesture on the action verb's word span, emphasis → point/circle on the claim; the mouth channel rides continuously through speech runs; idle = rest pose with breathing (the S93 breath cadence, `BREATH_SEC = 2.2`, as the idle oscillator — subtle, in-character). Degradation report pattern: poses requested but missing from the pose sheet resolve to nearest rest and are REPORTED (`missingSlots[]`), never silently dropped.
-- **Modified:** `src/lib/tubeforge/whiteboard/beat-plan.ts` — export `classifySentence` (the cue tables stay private; `BeatPurpose` is already exported).
+- **New:** `src/lib/ibismuh/characters/rig-director.ts` — `planRigTimeline(scene, poseSheet, anchors?): RigTimelinePlan` — gesture beats from W2-style purpose classification, **reusing `beat-plan.ts#classifySentence`** (one classifier, two consumers — the spec's own law): setup → welcoming pose, action → gesture on the action verb's word span, emphasis → point/circle on the claim; the mouth channel rides continuously through speech runs; idle = rest pose with breathing (the S93 breath cadence, `BREATH_SEC = 2.2`, as the idle oscillator — subtle, in-character). Degradation report pattern: poses requested but missing from the pose sheet resolve to nearest rest and are REPORTED (`missingSlots[]`), never silently dropped.
+- **Modified:** `src/lib/ibismuh/whiteboard/beat-plan.ts` — export `classifySentence` (the cue tables stay private; `BeatPurpose` is already exported).
 - **Pins:** determinism; order-monotonic law respected (gestures never scheduled before an earlier-ordered beat — the W2 law extends to gestures); emphasis lands AFTER the spoken claim (the W4 law); missing-slot degradation reported.
 - **Rollback:** unused module; the export is additive.
 
 ### Commit K1.3 — `feat(characters): K1.3 part decomposition + pose-sheet generation targeting rig slots`
 
-- **Modified:** `src/lib/tubeforge/characters.ts` — the portrait flow gains a part-decomposition pass: generate layered parts (head, torso, upper/lower arms, hands, brows, mouth set) instead of one flat PNG; pose-sheet generation targets the K1 slot vocabulary verbatim; parts are generated AND human-editable (the art-quality mitigation, risk register row 6).
+- **Modified:** `src/lib/ibismuh/characters.ts` — the portrait flow gains a part-decomposition pass: generate layered parts (head, torso, upper/lower arms, hands, brows, mouth set) instead of one flat PNG; pose-sheet generation targets the K1 slot vocabulary verbatim; parts are generated AND human-editable (the art-quality mitigation, risk register row 6).
 - **Pins:** the decomposition prompt produces the slot vocabulary verbatim; **identity VCE ≥ 80 between the composed parts and the source portrait** — parts must reassemble into the same face, enforced HERE at generation time (the identity floor pin, not deferred to render); every part passes svg sanitize; failure of the floor → the character falls back to still portrait + S93 (reported, honest).
 - **Rollback:** the pass is additive per-character; absent parts → portrait flow byte-identical.
 
 ### Commit K1.4 — `feat(characters): K1.4 the rig render engine — chromium loop into the shared frame pipeline`
 
-- **New:** `src/lib/tubeforge/characters/rig-render.ts` — composes rig layers into scene SVG per frame (`svg.ts` sanitize/parse; z-ordered part stacking; `poseAt` transforms applied root-down; `mouthAt` swaps the mouth part's svgRef); rides the G1 frame discipline: the APPLY_FRAME_FN applier pattern, per-scene fresh context, no-network route abort, JPEG quality 92, ffmpeg encode, **pre-flight frame budget** — the shared wall from `anim/clock.ts` (one wall, three engines now); returns `{ scenes, file, tracks, plan }` with the `plan.totalSec == Σ deliveredSec` assertion.
+- **New:** `src/lib/ibismuh/characters/rig-render.ts` — composes rig layers into scene SVG per frame (`svg.ts` sanitize/parse; z-ordered part stacking; `poseAt` transforms applied root-down; `mouthAt` swaps the mouth part's svgRef); rides the G1 frame discipline: the APPLY_FRAME_FN applier pattern, per-scene fresh context, no-network route abort, JPEG quality 92, ffmpeg encode, **pre-flight frame budget** — the shared wall from `anim/clock.ts` (one wall, three engines now); returns `{ scenes, file, tracks, plan }` with the `plan.totalSec == Σ deliveredSec` assertion.
 - **Pins:** determinism (identical frame hashes across two runs); **identity VCE ≥ 80 on RENDERED frames** (the full-chain floor — generation-time in K1.3, render-time here); transforms never NaN in output SVG; budget wall refusal BEFORE chromium launches (the E1 lesson).
 - **Rollback:** unused module.
 
 ### Commit K1.5 — `feat(characters): K1.5 S87 projection — characterTracks (one clip per scene, kind "character")`
 
-- **New:** `src/lib/tubeforge/characters/tracks.ts` — `characterTracks(doc, fps, { voSceneIds, musicOn })`: visual track kind **`"character"`** (reserved at types.ts:580 and already present in the `TimelineTrackDTO` union — no contract change needed), audio + subtitle tracks; the `whiteboardTracks` pattern verbatim: `framePlanClock` quantization, contiguous edges by construction, `rowSceneIndex` linkage, `asset: null` (the frame is posed by the engine).
+- **New:** `src/lib/ibismuh/characters/tracks.ts` — `characterTracks(doc, fps, { voSceneIds, musicOn })`: visual track kind **`"character"`** (reserved at types.ts:580 and already present in the `TimelineTrackDTO` union — no contract change needed), audio + subtitle tracks; the `whiteboardTracks` pattern verbatim: `framePlanClock` quantization, contiguous edges by construction, `rowSceneIndex` linkage, `asset: null` (the frame is posed by the engine).
 - **Pins:** projection parity (the totalSec assertion); contiguity; quantization byte-matches `anim/clock.ts`.
 - **Rollback:** unused module.
 
 ### Commit K1.6 — `feat(liveliness): K1.6 the native-rig channel + the rig seniority ladder`
 
-- **Modified:** `src/lib/tubeforge/liveliness.ts` — `LivelinessChannel` gains `"character"`; the channel precedence inserts **native-rig between `kenburns` and `i2v`** — native-first ($0 pixels) before premium pixels, the ladder law applied to channels; `src/lib/tubeforge/character-rig.ts` — the S93 seniority ladder extended: **explicit rig timeline > S93 breath > auto** (the ladder pattern preserved; S93 breath stays for still-portrait scenes).
+- **Modified:** `src/lib/ibismuh/liveliness.ts` — `LivelinessChannel` gains `"character"`; the channel precedence inserts **native-rig between `kenburns` and `i2v`** — native-first ($0 pixels) before premium pixels, the ladder law applied to channels; `src/lib/ibismuh/character-rig.ts` — the S93 seniority ladder extended: **explicit rig timeline > S93 breath > auto** (the ladder pattern preserved; S93 breath stays for still-portrait scenes).
 - **Pins:** channel decision determinism (the existing unit pattern); **rigDoc-absent path byte-identical** (the master rollback pin — additive parse means every existing character renders exactly as HEAD); ladder order pinned.
 - **Rollback:** remove the channel from the precedence list; rigDoc absent → S93 byte-identical (spec's rollback note).
 
@@ -536,7 +536,7 @@ export function checkReadability(opts: {
 
 ### Commit K1.9 — `feat(characters): K1.9 the i2v escalation lane — rig-aware prompts + identity re-check`
 
-- **Modified:** the i2v lane prompt contract gains rig awareness (pose sheet + motion intent injected — the premium escalation when native rig quality is insufficient or the scene demands full-frame motion); `src/lib/tubeforge/visual-consistency.ts` — the S83 cross-video VCE re-checks identity on i2v outputs at the same ≥ 80 floor.
+- **Modified:** the i2v lane prompt contract gains rig awareness (pose sheet + motion intent injected — the premium escalation when native rig quality is insufficient or the scene demands full-frame motion); `src/lib/ibismuh/visual-consistency.ts` — the S83 cross-video VCE re-checks identity on i2v outputs at the same ≥ 80 floor.
 - **Pins:** prompt determinism; VCE floor enforced — below floor the scene falls back to the native rig and the fallback is REPORTED (honest degradation, never silent).
 - **Rollback:** the prompt extension is additive text; the re-check is a gate, removable independently.
 

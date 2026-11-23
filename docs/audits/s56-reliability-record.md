@@ -67,10 +67,10 @@ coverage job: run 42462954735 (`4cb46fe`).
 
 ## The spend-gate law — untouched, observable
 
-- No `TUBEFORGE_SPEND_GATE=0` anywhere in S56 (the one grep hit is a
+- No `IBISMUH_STUDIO_SPEND_GATE=0` anywhere in S56 (the one grep hit is a
   comment in the battery runner's header describing s27/s32's on-demand
   requirements).
-- No forced `TUBEFORGE_PRICING_VERIFIED` — the pricing block stays
+- No forced `IBISMUH_STUDIO_PRICING_VERIFIED` — the pricing block stays
   provisional, `SpendPricingUnverifiedError` behavior unchanged.
 - The nightly battery renders with ffmpeg only (kenburns mode); the
   excluded s8/s11 are the only gateway-touching probes, and they are NOT

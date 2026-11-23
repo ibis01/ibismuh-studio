@@ -1,4 +1,4 @@
-# TubeForge — Stage 1 Task Backlog
+# Ibismuh Studio — Stage 1 Task Backlog
 
 **Status:** Stage 1 audit complete; this is the implementation backlog.
 **Last updated:** 2026-11-01
@@ -19,7 +19,7 @@ All 19 tasks executed. Verification: `tsc --noEmit` clean · `eslint` 0 errors /
 | T-1.5 CI | ✅ Done | `.github/workflows/ci.yml` — typecheck + lint + tests + Postgres schema compile on push/PR; optional Playwright job on PRs |
 | T-1.6 security headers | ✅ Done | CSP, nosniff, Referrer-Policy, Permissions-Policy, HSTS, COOP via `next.config.ts headers()`; verified live. XFO/frame-ancestors/COEP deliberately deferred to Stage 4a (preview-iframe caveat documented in the config) |
 | T-1.7 prisma migrate | ✅ Done | Baseline migration `prisma/migrations/000000000000_init/migration.sql` generated via `migrate diff` (266 lines) + `migration_lock.toml` |
-| T-1.8 setup race | ✅ Done | `TUBEFORGE_OWNER_TOKEN` gate in `POST /api/auth/setup`; documented in `.env.example` + SETUP.md |
+| T-1.8 setup race | ✅ Done | `IBISMUH_STUDIO_OWNER_TOKEN` gate in `POST /api/auth/setup`; documented in `.env.example` + SETUP.md |
 | T-1.9 jobbed script create | ✅ Done | `POST /api/videos` returns 202 in 28 ms (was 30 s+ blocking); `runScriptJob` wired; end-to-end verified — job ran, video landed `scripted` |
 | T-1.10 jobbed research/greenlight | ✅ Done* | Research: jobbed with new `research` JobKind + new `GET /api/research/[id]` poll endpoint + persisted scan errors; client polls. Greenlight: jobbed via `runScriptJob` with the radar brief + keyword union; client toast updated; detail dialog adopts the in-flight job. *Deviation: the character-bible route stays synchronous by design (~5-8 s, form-preview path has no entity id to job onto) — documented in the route; moves to the queue in Stage 3 |
 | T-1.11 zod validation | ✅ Done* | Full zod schemas on `PATCH channels/[id]`, `PATCH characters/[id]`, `PATCH schedule/[id]`; `PATCH videos/[id]` got length caps (description ≤5000, tags ≤500) with full zod conversion deferred to Stage 2 |
@@ -27,7 +27,7 @@ All 19 tasks executed. Verification: `tsc --noEmit` clean · `eslint` 0 errors /
 | T-1.13 DELETE cleanup | ✅ Done | `DELETE /api/videos/[id]` removes `uploads/<id>/`; live-verified |
 | T-1.14 music seed off GET | ✅ Done | GET is a pure read returning `needsSeed`; the client seeds explicitly; live-verified |
 | T-1.15 strict mode + drift | ✅ Done | `reactStrictMode: true`; dead Tailwind v3 config left in place intentionally (v4 ignores it — deletion is cosmetic and deferred to avoid churn); VoiceProfile comment drift noted for the Stage 2 schema pass |
-| T-1.16 docs | ✅ Done | SETUP.md: studio access modes table, npm-only prerequisites, migrate deploy guidance; `.env.example` documents `TUBEFORGE_OWNER_TOKEN` |
+| T-1.16 docs | ✅ Done | SETUP.md: studio access modes table, npm-only prerequisites, migrate deploy guidance; `.env.example` documents `IBISMUH_STUDIO_OWNER_TOKEN` |
 | T-1.17 Playwright | ✅ Done | Kept (it is a runtime dep for slides rendering, not dead weight); added `@playwright/test` + `playwright.config.ts` + `e2e/smoke.spec.ts` (3 tests incl. a security-header assertion) + `npm run test:e2e`; wired as an optional CI job |
 | T-1.18 docs in repo | ✅ Done | Already in place from the audit sprint |
 | T-1.19 SECURITY.md | ✅ Done | Already in place from the audit sprint |
@@ -44,10 +44,10 @@ Risks closed this session: R-CRIT-3, R-HIGH-1, R-HIGH-2, R-HIGH-3, R-HIGH-11, R-
 |---|---|---|
 | Prisma schema (PG + SQLite) | ✅ | `User`, `Organization`, `Membership`, `Session`, `UserSetting`, `YouTubeAccount`, `ProviderCredential`, `LegacySetting`; `organizationId` + cascade + index on all 10 content models; `schema.sqlite.prisma` now GENERATED from `schema.prisma` (`scripts/sync-sqlite-schema.mjs`) — the mirror can never drift again |
 | Migration | ✅ | Postgres: `20261101000000_stage2_multiuser` (backfill via `DEFAULT 'default'` + `DROP DEFAULT`, `Setting`→`LegacySetting` RENAME, bootstrap org, partial unique owner index, `Membership_one_owner_per_org`). SQLite: `scripts/migrate-stage2.mjs` (3-phase, idempotent; wired into `setup:local` + `postinstall`) |
-| Claim flow | ✅ | First registrant on a legacy install must prove the OLD studio password (`POST /api/auth/register` + `legacyPassword`); `src/lib/tubeforge/claim.ts` migrates every LegacySetting row (yt* → YouTubeAccount w/ encrypted refresh token; ai.*/tts keys → ProviderCredential encrypted; everything else → UserSetting) and transfers all content from org `default` to the claimer's org |
-| Tenant guard | ✅ | `src/lib/tubeforge/tenant-db.ts`: Prisma `$extends` client injecting `organizationId` (reads/writes/creates/upserts) from the request context; `requireUser()`/`auth.enter()` (ALS) + `requireRole()`; ESLint rule `no-restricted-imports` blocks raw `@/lib/db` imports in `src/app/**` (auth bootstrap allow-listed) |
+| Claim flow | ✅ | First registrant on a legacy install must prove the OLD studio password (`POST /api/auth/register` + `legacyPassword`); `src/lib/ibismuh/claim.ts` migrates every LegacySetting row (yt* → YouTubeAccount w/ encrypted refresh token; ai.*/tts keys → ProviderCredential encrypted; everything else → UserSetting) and transfers all content from org `default` to the claimer's org |
+| Tenant guard | ✅ | `src/lib/ibismuh/tenant-db.ts`: Prisma `$extends` client injecting `organizationId` (reads/writes/creates/upserts) from the request context; `requireUser()`/`auth.enter()` (ALS) + `requireRole()`; ESLint rule `no-restricted-imports` blocks raw `@/lib/db` imports in `src/app/**` (auth bootstrap allow-listed) |
 | Auth | ✅ | register/login/logout/status/token/verify-email/reset-password; PBKDF2 (same hash format — legacy `auth.password` migrates verbatim); server-side `Session` rows (7-day, revocable — revocation verified by e2e); signed OAuth state tokens (scope `"state"`, never credentials) |
-| Default-deny middleware | ✅ | §6.3 model: public allow-list = the 6 auth endpoints + `/api/youtube/callback` (Google redirect); everything else 401s without a session; production fail-safe on missing `TUBEFORGE_AUTH_SECRET` |
+| Default-deny middleware | ✅ | §6.3 model: public allow-list = the 6 auth endpoints + `/api/youtube/callback` (Google redirect); everything else 401s without a session; production fail-safe on missing `IBISMUH_STUDIO_AUTH_SECRET` |
 | Secrets at rest | ✅ | `crypto.ts` AES-256-GCM (`v1.` format, per-record IV) on ProviderCredential.apiKey + YouTubeAccount refresh/access tokens; unit tests pin roundtrip + tamper detection |
 | Per-user settings | ✅ | All 26 former `db.setting` access points migrated (llm/tts/budget/quality/music/stock/analytics/providers/​zai-config + settings/youtube routes); caches keyed per user; stock keys + provider keys → ProviderCredential |
 | Jobs | ✅ | Job rows carry `organizationId`/`userId`; boot recovery runs context-free (`withCtxNull`); job bodies inherit the launching request's tenant (ALS) |
@@ -55,9 +55,9 @@ Risks closed this session: R-CRIT-3, R-HIGH-1, R-HIGH-2, R-HIGH-3, R-HIGH-11, R-
 | Client | ✅ | `auth-gate.tsx` rewritten: register/sign-in modes, legacy-claim field on first registration, in-background email verification (console mode) |
 
 **Documented deviations (carry to Stage 3):**
-1. Email delivery is console-mode (`TUBEFORGE_EMAIL_MODE=console` default): verification/reset links are logged + returned in the response; SMTP adapter + production email is Stage 3.
+1. Email delivery is console-mode (`IBISMUH_STUDIO_EMAIL_MODE=console` default): verification/reset links are logged + returned in the response; SMTP adapter + production email is Stage 3.
 2. The bundled Z.ai SDK stays a PLATFORM-level credential (single `.z-ai-config` gateway); per-user zai rows migrate for owner continuity but per-user Z.ai isolation arrives with the Stage 3 provider abstraction. Non-zai provider keys are fully per-user + encrypted.
-3. `ytClientId`/`ytClientSecret` prefer env (`TUBEFORGE_YT_CLIENT_ID/SECRET`); the claiming owner's migrated rows serve as fallback (same exposure model as the old Setting rows — documented).
+3. `ytClientId`/`ytClientSecret` prefer env (`IBISMUH_STUDIO_YT_CLIENT_ID/SECRET`); the claiming owner's migrated rows serve as fallback (same exposure model as the old Setting rows — documented).
 4. Redis for session state / rate-limit buckets / login lockouts is deferred (in-memory + DB-backed Session rows survive restarts — the roadmap's D-20/D-21 goal is met by the Session table); Redis pacing for budget.ts lands in Stage 3.
 5. `Video`↔`YouTubeAccount` publish attribution relation deferred to Stage 6 (publish wiring); YouTubeAccount.channelId uses a `legacy` placeholder until reconnect for migrated connections.
 6. `LegacySetting` drop scheduled for Stage 3 (two-step removal kept data safe through the transition).
@@ -72,10 +72,10 @@ Risks closed this session: R-CRIT-3, R-HIGH-1, R-HIGH-2, R-HIGH-3, R-HIGH-11, R-
 
 | Task | Status | Notes |
 |---|---|---|
-| T-3.7 storage abstraction | ✅ Done | `src/lib/tubeforge/storage.ts`: key API (put/putFromPath/get/readStream/stat/delete/removePrefix/presign/materialize/withLocalFile/scratchDir). LocalDisk default (key = historical uploads layout — ZERO data migration); s3 driver is a zero-dep SigV4 signer over fetch (path-style, R2/MinIO compatible). Per-org quota counter (`StorageUsage` model, `TUBEFORGE_STORAGE_QUOTA_GB`, default 10 GiB, O(1) on put). All ~20 `UPLOAD_ROOT` call sites migrated (ai/render/shorts/story/serialize/verify/convert/captions/voice/voice-preview/stock/qc/music/queue-handlers + mp4/export/thumbnail/variants/voiceover/script/short/stock/music routes). `GET mp4` 302s to a presigned URL under s3 (D-24 closes the ROADMAP way). Asset presence in DTOs moved to DB flags (`Video.hasPreview` added) — the fs probes lied under s3 and cost a stat per row. |
+| T-3.7 storage abstraction | ✅ Done | `src/lib/ibismuh/storage.ts`: key API (put/putFromPath/get/readStream/stat/delete/removePrefix/presign/materialize/withLocalFile/scratchDir). LocalDisk default (key = historical uploads layout — ZERO data migration); s3 driver is a zero-dep SigV4 signer over fetch (path-style, R2/MinIO compatible). Per-org quota counter (`StorageUsage` model, `IBISMUH_STUDIO_STORAGE_QUOTA_GB`, default 10 GiB, O(1) on put). All ~20 `UPLOAD_ROOT` call sites migrated (ai/render/shorts/story/serialize/verify/convert/captions/voice/voice-preview/stock/qc/music/queue-handlers + mp4/export/thumbnail/variants/voiceover/script/short/stock/music routes). `GET mp4` 302s to a presigned URL under s3 (D-24 closes the ROADMAP way). Asset presence in DTOs moved to DB flags (`Video.hasPreview` added) — the fs probes lied under s3 and cost a stat per row. |
 | T-3.8 UsageRecord | ✅ Done | `aiCall()` meters every AI call (capability, provider+model from the user's config, latency, ok) — fire-and-forget, never breaks a pipeline; token/cost columns are wired for provider-level reporting. `GET /api/account/usage?days=N` aggregates per capability + daily sparkline + storage footprint. |
-| T-3.9 SMTP email | ✅ Done | `src/lib/tubeforge/email.ts`: console default (link logged + returned) / smtp via env — a zero-dependency ESMTP client (EHLO/STARTTLS/implicit-TLS-465/AUTH LOGIN/dot-stuffing, 15s step timeouts, header-injection guard). register + reset-password routes deliver through it; smtp responses never echo the link. Closes Stage 2 deviation 1. |
-| T-3.10 per-user Z.ai | ✅ Done | `src/lib/tubeforge/zai-client.ts`: the acting user's zai ProviderCredential (AES-256-GCM) wins — capability-preferred, any-capability fallback — else the platform client. The SDK's file-only config surface is handled with a per-(user,key-hash) client cache + GLOBAL MUTEX around the write→create critical section. `saveCapability` now stores zai keys (the Stage 2 "platform-level only" carve-out is gone); the Settings UI gained the optional per-account Z.ai key field; caches invalidate on save. Closes Stage 2 deviation 2. |
+| T-3.9 SMTP email | ✅ Done | `src/lib/ibismuh/email.ts`: console default (link logged + returned) / smtp via env — a zero-dependency ESMTP client (EHLO/STARTTLS/implicit-TLS-465/AUTH LOGIN/dot-stuffing, 15s step timeouts, header-injection guard). register + reset-password routes deliver through it; smtp responses never echo the link. Closes Stage 2 deviation 1. |
+| T-3.10 per-user Z.ai | ✅ Done | `src/lib/ibismuh/zai-client.ts`: the acting user's zai ProviderCredential (AES-256-GCM) wins — capability-preferred, any-capability fallback — else the platform client. The SDK's file-only config surface is handled with a per-(user,key-hash) client cache + GLOBAL MUTEX around the write→create critical section. `saveCapability` now stores zai keys (the Stage 2 "platform-level only" carve-out is gone); the Settings UI gained the optional per-account Z.ai key field; caches invalidate on save. Closes Stage 2 deviation 2. |
 | T-3.11 LegacySetting close-out | ✅ Done | Model removed from the schema (table now UNMANAGED — prisma neither creates nor drops it); claim.ts reads via raw SQL (tolerates the table's absence on fresh installs) and DROPs the table once every row is migrated. The migrate-stage2 RENAME path is untouched so unclaimed legacy installs still upgrade safely. Closes Stage 2 deviation 6. |
 | T-3.12 deploy pipeline | ✅ Done | `Dockerfile` (node:20-slim + ffmpeg/tini, one image → web/worker roles, non-root, healthcheck) · `docker-compose.yml` (postgres + web + worker, `prisma migrate deploy` on web start, `--scale worker=N`, shared uploads volume) · `fly.toml` (web/worker process groups, checks, sizing) · SETUP.md §7 production matrix (Compose / Fly / Vercel+worker hybrid, storage local-vs-S3 table, email modes, ops quick reference). |
 
@@ -287,8 +287,8 @@ Tasks are ordered by dependency, not by ID. Do them in order.
 **Dependencies:** none
 
 **Acceptance criteria:**
-- `npm run backup` writes a hot-copy of the SQLite DB + `uploads/` manifest into `backups/tubeforge-<timestamp>/` (or no-ops with a clear message on Postgres — for Postgres the script should document `pg_dump` as the alternative).
-- `npm run auth:reset` removes `db/auth.lock` and sets `Setting "auth.enabled" = "false"` (matches `forceLockOff` in `src/lib/tubeforge/auth.ts:69`). Supports `--purge` flag to also delete `Setting "auth.password"`.
+- `npm run backup` writes a hot-copy of the SQLite DB + `uploads/` manifest into `backups/ibismuh-<timestamp>/` (or no-ops with a clear message on Postgres — for Postgres the script should document `pg_dump` as the alternative).
+- `npm run auth:reset` removes `db/auth.lock` and sets `Setting "auth.enabled" = "false"` (matches `forceLockOff` in `src/lib/ibismuh/auth.ts:69`). Supports `--purge` flag to also delete `Setting "auth.password"`.
 - `scripts/package-local.sh` packages the project for local distribution; explicitly excludes `db/custom.db`, `uploads/`, `.env`, `.z-ai-config`.
 - All three scripts have executable permission (`chmod +x`).
 - `SETUP.md` and `SECURITY.md` references to these scripts still match.
@@ -524,7 +524,7 @@ const securityHeaders = [
 
 ## T-1.8 — Eliminate first-come setup race
 
-**Objective:** Require a `TUBEFORGE_OWNER_TOKEN` env var so the first `POST /api/auth/setup` call must present it. Eliminates the race where a fresh install can be claimed by the first caller.
+**Objective:** Require a `IBISMUH_STUDIO_OWNER_TOKEN` env var so the first `POST /api/auth/setup` call must present it. Eliminates the race where a fresh install can be claimed by the first caller.
 
 **Files / modules affected:**
 - `src/app/api/auth/setup/route.ts` — add a token check at the top
@@ -535,16 +535,16 @@ const securityHeaders = [
 
 ```ts
 // src/app/api/auth/setup/route.ts
-import { getAuthSecret } from "@/lib/tubeforge/auth-token";
+import { getAuthSecret } from "@/lib/ibismuh/auth-token";
 
 export async function POST(req: Request) {
   const secret = getAuthSecret();
   if (!secret) {
-    return Response.json({ error: "TUBEFORGE_AUTH_SECRET is missing from .env" }, { status: 500 });
+    return Response.json({ error: "IBISMUH_STUDIO_AUTH_SECRET is missing from .env" }, { status: 500 });
   }
 
   // NEW: require the owner token for the first-come claim
-  const ownerToken = process.env.TUBEFORGE_OWNER_TOKEN;
+  const ownerToken = process.env.IBISMUH_STUDIO_OWNER_TOKEN;
   if (ownerToken) {
     const provided = req.headers.get("x-owner-token");
     if (provided !== ownerToken) {
@@ -557,15 +557,15 @@ export async function POST(req: Request) {
 ```
 
 **Notes:**
-- If `TUBEFORGE_OWNER_TOKEN` is not set, the route behaves as before (first-come claim). This preserves the dev sandbox behavior.
-- For production deploys, `TUBEFORGE_OWNER_TOKEN` is set once; the owner presents it via the setup UI's "Owner token" field; the UI sends it as `x-owner-token` header.
+- If `IBISMUH_STUDIO_OWNER_TOKEN` is not set, the route behaves as before (first-come claim). This preserves the dev sandbox behavior.
+- For production deploys, `IBISMUH_STUDIO_OWNER_TOKEN` is set once; the owner presents it via the setup UI's "Owner token" field; the UI sends it as `x-owner-token` header.
 - Stage 2 replaces the whole flow with `POST /api/auth/register` + email verification.
 
 **Dependencies:** none
 
 **Acceptance criteria:**
-- `POST /api/auth/setup` with no `TUBEFORGE_OWNER_TOKEN` env behaves as before (dev mode).
-- `POST /api/auth/setup` with `TUBEFORGE_OWNER_TOKEN` set: missing/wrong `x-owner-token` header → 403.
+- `POST /api/auth/setup` with no `IBISMUH_STUDIO_OWNER_TOKEN` env behaves as before (dev mode).
+- `POST /api/auth/setup` with `IBISMUH_STUDIO_OWNER_TOKEN` set: missing/wrong `x-owner-token` header → 403.
 - `POST /api/auth/setup` with correct `x-owner-token` header → setup proceeds as before.
 - `SETUP.md` and `SECURITY.md` document the new env var.
 
@@ -581,8 +581,8 @@ export async function POST(req: Request) {
 
 **Files / modules affected:**
 - `src/app/api/videos/route.ts:247,298` — replace the synchronous `generateSceneScriptPackage` / `generateScriptPackage` calls with `startJob(video.id, "script", () => runScriptJob(video.id))`
-- `src/lib/tubeforge/script-job.ts` — confirm `runScriptJob` works as the worker body; update if needed
-- `src/lib/tubeforge/poll.ts` — confirm `pollScript` polls the new job correctly (it already does — `batch/route.ts:156` uses the same pattern)
+- `src/lib/ibismuh/script-job.ts` — confirm `runScriptJob` works as the worker body; update if needed
+- `src/lib/ibismuh/poll.ts` — confirm `pollScript` polls the new job correctly (it already does — `batch/route.ts:156` uses the same pattern)
 
 **Implementation pattern (mirror `batch/route.ts:156`):**
 
@@ -625,7 +625,7 @@ return Response.json({ id: video.id, status: "scripting" }, { status: 202 });
 - `src/app/api/characters/bible/route.ts:13` — wrap the LLM call in `startJob(characterId, "bible", …)`
 
 **Notes:**
-- These routes need a new `Job.kind` value for research and bible. Add `"research"` and `"bible"` to the `KINDS` whitelist in `src/lib/tubeforge/jobs.ts` and `src/app/api/jobs/cancel/route.ts:27`.
+- These routes need a new `Job.kind` value for research and bible. Add `"research"` and `"bible"` to the `KINDS` whitelist in `src/lib/ibismuh/jobs.ts` and `src/app/api/jobs/cancel/route.ts:27`.
 - The research route creates a `ResearchSession` row first, then starts the job; the job body calls `generateTopicResearch` and updates the session row.
 - The greenlight route creates a `Video` row first, then starts a script job (same as T-1.9).
 - The bible route is per-character; the job body updates the `Character` row.
@@ -744,7 +744,7 @@ export async function GET(req: Request, { params }: { params: { id: string; n: s
 ```ts
 import { rmSync } from "node:fs";
 import path from "node:path";
-import { UPLOAD_ROOT } from "@/lib/tubeforge/ai";
+import { UPLOAD_ROOT } from "@/lib/ibismuh/ai";
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   const video = await db.video.findUnique({ where: { id: params.id } });
@@ -786,7 +786,7 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
 
 **Files / modules affected:**
 - `src/app/api/music/route.ts` — `GET` returns the library only (no seeding). Add a new `POST /api/music/seed` route that does the seeding.
-- `src/components/tubeforge/views/library-view.tsx` (or wherever the music panel is) — call `POST /api/music/seed` on first load if the library is empty.
+- `src/components/ibismuh/views/library-view.tsx` (or wherever the music panel is) — call `POST /api/music/seed` on first load if the library is empty.
 
 **Implementation:**
 
@@ -846,7 +846,7 @@ export async function POST() {
 
 ---
 
-## T-1.16 — Document `TUBEFORGE_AUTH_SECRET` requirement
+## T-1.16 — Document `IBISMUH_STUDIO_AUTH_SECRET` requirement
 
 **Objective:** Make the local-dev default explicit in `SETUP.md` and `SECURITY.md`.
 
@@ -859,15 +859,15 @@ export async function POST() {
 ```md
 ## Studio access modes
 
-- **Local dev (default):** the studio is OPEN. `TUBEFORGE_AUTH_SECRET` is absent from `.env`. No login required. Suitable for localhost development only.
-- **Production (locked):** the studio is LOCKED. `TUBEFORGE_AUTH_SECRET` is set in `.env` (32+ hex chars). `TUBEFORGE_REQUIRE_LOCK=1` is set. The first-time setup requires `TUBEFORGE_OWNER_TOKEN` to claim the owner password. Every `/api/*` request requires a signed session cookie or Bearer token.
+- **Local dev (default):** the studio is OPEN. `IBISMUH_STUDIO_AUTH_SECRET` is absent from `.env`. No login required. Suitable for localhost development only.
+- **Production (locked):** the studio is LOCKED. `IBISMUH_STUDIO_AUTH_SECRET` is set in `.env` (32+ hex chars). `IBISMUH_STUDIO_REQUIRE_LOCK=1` is set. The first-time setup requires `IBISMUH_STUDIO_OWNER_TOKEN` to claim the owner password. Every `/api/*` request requires a signed session cookie or Bearer token.
 ```
 
 **Dependencies:** T-1.8 (the owner token doc)
 
 **Acceptance criteria:**
 - `SETUP.md` has a "Studio access modes" section.
-- `SECURITY.md` references `TUBEFORGE_OWNER_TOKEN`.
+- `SECURITY.md` references `IBISMUH_STUDIO_OWNER_TOKEN`.
 - A new dev reading `SETUP.md` understands the difference between local dev and production without reading the source.
 
 **Rollback strategy:** revert the docs.
@@ -912,15 +912,15 @@ export async function POST() {
 
 ## T-1.18 — Document the architecture in-repo
 
-**Objective:** Place the audit deliverables in the TubeForge repo root so they live with the code.
+**Objective:** Place the audit deliverables in the Ibismuh Studio repo root so they live with the code.
 
 **Files / modules affected:**
-- `/home/z/my-project/MASTER_PLAN.md` — copy from `download/tubeforge-stage1/`
-- `/home/z/my-project/ARCHITECTURE.md` — copy from `download/tubeforge-stage1/`
-- `/home/z/my-project/ROADMAP.md` — copy from `download/tubeforge-stage1/`
+- `/home/z/my-project/MASTER_PLAN.md` — copy from `download/ibismuh-stage1/`
+- `/home/z/my-project/ARCHITECTURE.md` — copy from `download/ibismuh-stage1/`
+- `/home/z/my-project/ROADMAP.md` — copy from `download/ibismuh-stage1/`
 - `/home/z/my-project/TASKS.md` — this file
-- `/home/z/my-project/RISK_REGISTER.md` — copy from `download/tubeforge-stage1/`
-- `/home/z/my-project/FOUNDATION_AUDIT.md` — copy from `download/tubeforge-stage1/`
+- `/home/z/my-project/RISK_REGISTER.md` — copy from `download/ibismuh-stage1/`
+- `/home/z/my-project/FOUNDATION_AUDIT.md` — copy from `download/ibismuh-stage1/`
 - `/home/z/my-project/SECURITY.md` — append the audit findings section (T-1.19)
 
 **Notes:**
@@ -954,7 +954,7 @@ export async function POST() {
 
 A full security audit was run as part of Stage 1 of the product development plan. Findings:
 
-- **1 CRITICAL:** first-come race on `POST /api/auth/setup` (mitigated in this stage by the new `TUBEFORGE_OWNER_TOKEN` env var — see §"Daily-use security checklist" above).
+- **1 CRITICAL:** first-come race on `POST /api/auth/setup` (mitigated in this stage by the new `IBISMUH_STUDIO_OWNER_TOKEN` env var — see §"Daily-use security checklist" above).
 - **3 CRITICAL multi-tenant blockers:** no `userId`/`tenantId` on any Prisma model; `Setting` table is singleton per key; one YouTube OAuth grant per install. These are addressed in Stage 2 (multi-user SaaS architecture).
 - **28 HIGH findings:** synchronous heavy work in-request, dead scaffolding for the YouTube publish stage, missing timeout/retry on YouTube fetch calls, zero `zod` use across 110 endpoints, no `prisma/migrations/` directory, no CI. Most are addressed in Stage 1; the rest in Stage 3.
 - **15 MEDIUM findings:** orphan cleanup gap, in-memory security state (login lockouts, rate limits), memory-bound media streaming, missing security headers, build/packaging inconsistencies, cross-platform compatibility, side-effecting GET, path parameter validation.
@@ -988,7 +988,7 @@ After all 19 tasks are done, verify:
 - [ ] CI runs all three on every commit (T-1.5).
 - [ ] `prisma migrate dev` produces a real migration (T-1.7).
 - [ ] `next.config.ts` sets security headers (T-1.6).
-- [ ] `POST /api/auth/setup` requires `TUBEFORGE_OWNER_TOKEN` (T-1.8).
+- [ ] `POST /api/auth/setup` requires `IBISMUH_STUDIO_OWNER_TOKEN` (T-1.8).
 - [ ] `POST /api/videos` enqueues a script job (T-1.9).
 - [ ] `POST /api/research`, `POST /api/research/[id]/greenlight`, `POST /api/characters/bible` all enqueue jobs (T-1.10).
 - [ ] The 4 thinnest PATCH routes use `zod` (T-1.11).
@@ -1029,13 +1029,13 @@ Stage 2 starts immediately after Stage 1 completion.
 | T-6.6 Scheduled publishing (publishAt) | ✅ Done | `uploadToYouTube` accepts ISO `publishAt`; publish job threads `opts.publishAt` through; YouTube only honors it when `privacyStatus === "private"` (caller's responsibility) |
 | T-6.7 Caption burn-in + SRT/VTT export | ✅ Done | New `subtitle-export.ts` (`srtToVtt` + `looksLikeSrt`); `GET /api/videos/[id]/captions?format=srt\|vtt` serves both formats; PATCH `/api/videos/[id]` accepts `aspectRatio` / `frameRate` / `burnCaptions` |
 | T-6.8 Aspect-ratio + frame-rate consumption | ✅ Done | motion.ts `Aspect` + `OUTPUT_SIZES` gained `1:1` (2160×2160 work / 1080×1080 out); qc.ts `QcAspect` + `ASPECT_TARGET` gained `1:1`; render.ts `RenderOptions` accepts `aspectRatio` + `frameRate`; `buildSegment` threads `aspect`/`fps` into ffmpeg `-r`/`-framerate`; the `FPS = 30` constant becomes a default. RenderJobOptions gains aspectRatio + frameRate; runRenderJob resolves per-render override > per-project default > 30 fps / 16:9. Slides mode always 9:16. Per-project `burnCaptions` becomes the default for subtitles; per-render override still wins. Live smoke: 12/12 aspect × fps combinations pass (1:1, 16:9@24, 16:9@60, 9:16) |
-| T-6.9 Editing Studio UI | ✅ Done | `src/components/tubeforge/editing-studio.tsx` (~430 lines, self-contained) — uses `@dnd-kit/sortable` (already in deps). Mounted at the top of the Video tab in `video-detail-dialog.tsx` when `isStory && scenes.length > 0`. Features per the ROADMAP §6 list: scene timeline, drag-and-drop ordering (PointerSensor + KeyboardSensor), per-scene trimming (number input [0.5, 300]s, `recomputeTimes` cascades), audio levels (per-scene voice/music/sfx/ambient sliders 0..1), transition previews (in/out labels per scene), undo/redo (bounded 50-entry history stack with Reset). Auto-loads GET /assemble; Save PUTs; Re-assemble POSTs; the existing render button's POST honors saved trims via T-6.10. |
+| T-6.9 Editing Studio UI | ✅ Done | `src/components/ibismuh/editing-studio.tsx` (~430 lines, self-contained) — uses `@dnd-kit/sortable` (already in deps). Mounted at the top of the Video tab in `video-detail-dialog.tsx` when `isStory && scenes.length > 0`. Features per the ROADMAP §6 list: scene timeline, drag-and-drop ordering (PointerSensor + KeyboardSensor), per-scene trimming (number input [0.5, 300]s, `recomputeTimes` cascades), audio levels (per-scene voice/music/sfx/ambient sliders 0..1), transition previews (in/out labels per scene), undo/redo (bounded 50-entry history stack with Reset). Auto-loads GET /assemble; Save PUTs; Re-assemble POSTs; the existing render button's POST honors saved trims via T-6.10. |
 | T-6.10 Render job consumes the assembled timeline | ✅ Done | RenderOptions gains `sceneDurationsSec?: number[]`; renderVideo computes WAV durations as default, prefers the timeline's per-scene durationSec when it sits inside [MIN_SEG_SEC, 3× measured narration]. RenderJobOptions + parseRenderPayload + the render route's `ignoreTimeline` body flag wire the full pipeline. Safety: a single bad/missing duration falls back to WAV durations for ALL scenes (a half-overridden timeline would produce a broken render) |
 | T-6.11 Stage 6 sweep + close-out | ✅ Done | Worklog + TASKS.md updated; final gate below. (Live YouTube upload smoke still pending a connected channel — the publish path is structurally identical to the other 13 job bodies and is typecheck-verified.) |
 
 ### Stage 6 complete (2026-11-02)
 
-All 11 Stage 6 tasks are closed. The publish loop is end-to-end functional: LLM suggest → publishAt → uploadToYouTube → `Video.youtubeUrl` + `publishedAt` written. The two ROADMAP §6 endpoints that didn't exist (`/assemble`, `/qc`) now exist; the third (`/publish`) wires the audit's dead `uploadToYouTube` (D-06, D-07). The render pipeline honors per-project `aspectRatio` (16:9 / 9:16 / 1:1) + `frameRate` (24 / 30 / 60) + `burnCaptions` defaults, and consumes the assembled timeline's per-scene trims. Captions export serves SRT + VTT. The Editing Studio UI lets the user edit the timeline (drag-drop reorder + per-scene trims + audio levels + undo/redo) and Save it before the render commits the trims to disk — closing the Stage 6 completion gate ("edit, render, review, export and publish without leaving TubeForge").
+All 11 Stage 6 tasks are closed. The publish loop is end-to-end functional: LLM suggest → publishAt → uploadToYouTube → `Video.youtubeUrl` + `publishedAt` written. The two ROADMAP §6 endpoints that didn't exist (`/assemble`, `/qc`) now exist; the third (`/publish`) wires the audit's dead `uploadToYouTube` (D-06, D-07). The render pipeline honors per-project `aspectRatio` (16:9 / 9:16 / 1:1) + `frameRate` (24 / 30 / 60) + `burnCaptions` defaults, and consumes the assembled timeline's per-scene trims. Captions export serves SRT + VTT. The Editing Studio UI lets the user edit the timeline (drag-drop reorder + per-scene trims + audio levels + undo/redo) and Save it before the render commits the trims to disk — closing the Stage 6 completion gate ("edit, render, review, export and publish without leaving Ibismuh Studio").
 
 **Final gate for Stage 6:** tsc 0 · eslint 0 errors / 275 warnings · **81/81 unit** (76 baseline + 5 new: 3 timeline + 1 captions + 1 timeline-render-shape) · live aspect smoke 12/12 · live route smoke 401×5 on the new endpoints · dev-server boots clean with the Editing Studio mounted. Push status: 6 Stage 6 commits pushed cleanly to origin/main across the sprint (`3114d58` → `53dd362`); no workflow file in any diff. The T-1.5 ci.yml still requires a workflow-scoped PAT to push — pending.
 
@@ -1074,7 +1074,7 @@ All code-side Stage 7 tasks are closed. The test scaffolding + the billing found
 
 | Task | Status | Notes |
 |---|---|---|
-| B-1 Webhook auth fail-closed | ✅ Done | `POST /api/billing/webhook`: with the secret set, a missing `stripe-signature` header is now a **401** (was: silently skipped verification) and a bad signature stays 401. With the secret unset the endpoint accepts NOTHING — 401 in dev, 500 under `NODE_ENV=production`. The only unsigned path is the explicit `TUBEFORGE_ALLOW_UNSIGNED_WEBHOOKS=1` dev opt-in (refused in production regardless). `verifyStripeSignature` gained a 300s timestamp replay window + constant-time compare. |
+| B-1 Webhook auth fail-closed | ✅ Done | `POST /api/billing/webhook`: with the secret set, a missing `stripe-signature` header is now a **401** (was: silently skipped verification) and a bad signature stays 401. With the secret unset the endpoint accepts NOTHING — 401 in dev, 500 under `NODE_ENV=production`. The only unsigned path is the explicit `IBISMUH_STUDIO_ALLOW_UNSIGNED_WEBHOOKS=1` dev opt-in (refused in production regardless). `verifyStripeSignature` gained a 300s timestamp replay window + constant-time compare. |
 | B-2 Canonical credit units | ✅ Done | ONE ledger unit: the **microCredit** (1 UI credit = 1,000 micro, `MICROS_PER_CREDIT`). `CreditGrant.grantedCredits` renamed → `grantedMicroCredits` (migration `20261102020000_stage71_billing_integrity`), grants converted from the plan's UI-credit allowance at grant time, balances converted back only at the display edge (`microToCredits`). The exact regression — a full Creator allowance failing the 50,000-micro render pre-check — is pinned in both suites. |
 | B-3 Ledger↔subscription linkage | ✅ Done | Spends auto-attach the user's active subscriptionId (`recordCreditSpend`/`spendCredits` resolve it internally — callers can no longer write null-linked rows by omission). Balance math is **user-scoped** (grants + ledger filtered by userId directly, never via the subscription relation), so legacy null-linked rows still count and nothing spent can resurrect. Canceled subscriptions collect no new linked rows. |
 | B-4 Subscription status enforcement | ✅ Done | `subscriptionAccess(status)`: active/trialing → `full`, past_due → `grace` (paid plan continues while dunning runs; plan card shows a payment-failed banner), canceled/unpaid/incomplete/incomplete_expired/paused/**unknown** → `none` → resolver falls back to Starter (fail-closed on new Stripe statuses). Enforcement tier in `spendCredits` follows the access decision, not the stored plan row. Every status is tested. |
@@ -1180,7 +1180,7 @@ reconciliation (`4d71d76`), the owner's password-recovery script (`24845a5`,
 
 Source: the improvement roadmap assessment of the S32 snapshot (fresh
 inspection at commit `0491934`, 2026-11-05). Full narrative in
-`download/TubeForge_Improvement_Roadmap.docx` (delivery copy); this is the
+`download/Ibismuh Studio_Improvement_Roadmap.docx` (delivery copy); this is the
 executable ledger. The verdict it reached: **feature-complete for a paid
 launch, operations-incomplete** — the remaining work is release engineering
 and operations, not product redesign.
@@ -1273,7 +1273,7 @@ as the loop-closure the motion architecture was already shaped for: the
 approved Director plan's per-scene `needsI2V` flag (written by the pass,
 approved by the human, trusted by the QC pacing gate as a motion channel) was
 never consumed by the default render mode. Now one PURE selector
-(`src/lib/tubeforge/liveliness.ts`) derives each scene's execution channel —
+(`src/lib/ibismuh/liveliness.ts`) derives each scene's execution channel —
 slides deck / matched stock / i2v (subject-real motion, $5-gate-metered) /
 Ken Burns — with explicit human edits (camera keys, stills contract, motion
 overrides) staying senior and every decision carrying a human-readable reason
@@ -1291,7 +1291,7 @@ Full narrative + gate results in the worklog ("S35"). New probe:
 
 Render QC lenses — flicker, stutter and continuity, the three defect classes
 the 12-check battery could not see, now checks 11-13 of `runQcReport` (NEW
-`src/lib/tubeforge/render-qc.ts`; pure cores + thin ffmpeg shells). Flicker:
+`src/lib/ibismuh/render-qc.ts`; pure cores + thin ffmpeg shells). Flicker:
 8 Hz luma sampling, one contiguous pumping episode = one ledger event
 (alternation is the signature — crossfades are monotone ramps, single flashes
 are one pair, neither flags). Stutter: packet-pts pacing — duplicated
@@ -1328,7 +1328,7 @@ audit implied.
    and paid testing stays OFF, as the audit asked.
 3. **Override controls made observable** — new `spendOverrides()` export +
    once-per-process stderr announcement at the admitDispatch choke point:
-   a lifted TUBEFORGE_SPEND_GATE or forced TUBEFORGE_PRICING_VERIFIED can
+   a lifted IBISMUH_STUDIO_SPEND_GATE or forced IBISMUH_STUDIO_PRICING_VERIFIED can
    no longer operate silently.
 4. **test:queue joined the CI check job** — the Stage-3 resume contract
    (real worker restart) is now CI-proven on every push instead of
@@ -1349,7 +1349,7 @@ it": the render pipeline's i2v path has spoken to the Z.ai SDK since Stage
 a STUB that threw ("handled in the pipeline, not here") — so the settings
 Test button and every `imageToVideo` caller with provider "zai" could
 never exercise the default provider. NEW
-`src/lib/tubeforge/providers/zai-video-core.ts`: the submit → poll →
+`src/lib/ibismuh/providers/zai-video-core.ts`: the submit → poll →
 download core as a STRUCTURAL client shape (SDK-free, fake-driven tests —
 the S36 "pure cores behind thin shells" pattern), live-calibrated against
 the real gateway (cogvideox-3, 5s 1080p, ~2.8 min → 4.9 MB h264). Both
@@ -1380,7 +1380,7 @@ Metadata failed / Cross-origin request rejected" was the same wire-up
 problem S30 fixed at the env-config level (proxy rewrites Host, Origin
 mismatch → 403), but the chat-bot preview platform serves every
 deployment at `preview-<id>.space-z.ai` and operators cannot provision
-`TUBEFORGE_ALLOWED_ORIGINS` on it. S37 wired the i2v core but the
+`IBISMUH_STUDIO_ALLOWED_ORIGINS` on it. S37 wired the i2v core but the
 preview's first POST died at the CSRF door before the SDK was ever
 reached. S38 lands a built-in default trust: `origin-trust.ts` now
 matches the regex `^preview-[a-z0-9][a-z0-9-]*\.space-z\.ai$`
@@ -1449,7 +1449,7 @@ Fail-closed rules: an unmeasured BLOCKING check blocks (a lens that never ran
 cannot certify); a zero-checks report blocks; an UNKNOWN check id blocks
 until classified (new lenses can't inherit advisory by silence); no standing
 report on a rendered video blocks (fix = one Re-run QC click); junk
-TUBEFORGE_QC_ENFORCEMENT values fail closed to enforce ("report" — exact,
+IBISMUH_STUDIO_QC_ENFORCEMENT values fail closed to enforce ("report" — exact,
 case-sensitive — restores the pre-S40 advisory behavior, documented in
 .env.example). The human escape hatch is the audited override: POST
 /api/videos/[id]/export with a 3-500-char note stamps
@@ -1760,7 +1760,7 @@ migration both sprints needed: `Video.contentPolicy`).
 
 | Task | Status | Notes |
 |---|---|---|
-| T-49.1 the policy module | ✅ Done | `src/lib/tubeforge/restricted-subjects.ts`: `ContentPolicyId` (standard \| islamic-history), the registry (the Prophet ﷺ with transliterations + honorifics + the definite reference; the Ten Promised Paradise; the family; the Quranic prophets; angels; God; collectives), a compiled word-boundary detector (longest-alias-first; POSSESSIVES EXCLUDE — "the Prophet's mosque" names an artifact/place, and the system's own alternative-composition library leans on those), the alternative-composition clause library (12 person-free deterministically-picked substitutions), `sanitizePromptForPolicy` (sentence REPLACE, never delete + the hard negative clause; `appendNegative:false` for metadata fields), `policyVisualRules`/`policySystemOverlay`, and `runRestrictedVisualScan` (8 evenly-sampled frames → VLM judge; NEVER throws — failure reports "unmeasured"). |
+| T-49.1 the policy module | ✅ Done | `src/lib/ibismuh/restricted-subjects.ts`: `ContentPolicyId` (standard \| islamic-history), the registry (the Prophet ﷺ with transliterations + honorifics + the definite reference; the Ten Promised Paradise; the family; the Quranic prophets; angels; God; collectives), a compiled word-boundary detector (longest-alias-first; POSSESSIVES EXCLUDE — "the Prophet's mosque" names an artifact/place, and the system's own alternative-composition library leans on those), the alternative-composition clause library (12 person-free deterministically-picked substitutions), `sanitizePromptForPolicy` (sentence REPLACE, never delete + the hard negative clause; `appendNegative:false` for metadata fields), `policyVisualRules`/`policySystemOverlay`, and `runRestrictedVisualScan` (8 evenly-sampled frames → VLM judge; NEVER throws — failure reports "unmeasured"). |
 | T-49.2 the schema | ✅ Done | `Video.contentPolicy String?` (null = standard) in schema.prisma + the generated sqlite mirror; migration `20261107000000_s49_content_policy`. Set at create (validated snap in POST /api/videos); enforcement ALWAYS reads the column, never the profile. |
 | T-49.3 L1 compose | ✅ Done | `generateSceneScriptPackage` takes `contentPolicy`: policy rules appended to the VISUAL RULES, the "prefer faces/human-presence" visual-field rule INVERTED in policy mode, and `verifyScenePlan` gains audit rule 8 (rewrite non-compliant visuals). Wired through script-job.ts + the script + batch routes. |
 | T-49.4 L2 direct | ✅ Done | `directorSystemPrompt(profile, contentPolicy)` stacks the policy overlay on the profile voice; the parsed plan's shot imagePrompt/subject are sanitized BEFORE persist, substitutions ANNOUNCED via a warn-level activity row ("review before approving"); the plan carries `contentPolicy` provenance (parsePlan passthrough). |
@@ -1816,7 +1816,7 @@ drift to every scene). No schema change: the columns shipped in
 
 | Task | Status | Notes |
 |---|---|---|
-| T-51.1 cast reference writers | ✅ Done | `src/lib/tubeforge/references.ts` (shared seam) + `image-upload.ts` (the S43 sniff/HEIC decode moved DOWN out of story.ts so the seam can't cycle) + `reference-routes.ts` (ONE handler factory — cap, key validation, activity rows — so the three families can't drift) + 6 thin route files. Keys `characters|locations|props/<id>/ref-<n>.png`, oldest-first JSON arrays, caps 6/4/4; world `[id]` DELETEs now `removePrefix` (the orphan-file gap). `serializeCharacter` + the world list routes surface `referenceCount`/`referenceUrls`. |
+| T-51.1 cast reference writers | ✅ Done | `src/lib/ibismuh/references.ts` (shared seam) + `image-upload.ts` (the S43 sniff/HEIC decode moved DOWN out of story.ts so the seam can't cycle) + `reference-routes.ts` (ONE handler factory — cap, key validation, activity rows — so the three families can't drift) + 6 thin route files. Keys `characters|locations|props/<id>/ref-<n>.png`, oldest-first JSON arrays, caps 6/4/4; world `[id]` DELETEs now `removePrefix` (the orphan-file gap). `serializeCharacter` + the world list routes surface `referenceCount`/`referenceUrls`. |
 | T-51.2 references ride identity + the portrait-age fix | ✅ Done | `buildPortraitPrompt` (pure, unit-pinned): anchor LEADS (primacy — the S47 prompt led with the NAME), apparent-age fidelity clause mid-prompt, anchor ECHO before the close (recency). `generateCharacterPortrait` derives from the NEWEST user reference via imageEdit when refs exist (T2I fallback byte-identical when absent). `runPortraitJob` passes the column through. |
 | T-51.3 world reference writers + the set-piece seed | ✅ Done | Same seam for Location/Prop + `getApprovedLocationRefKey` (director-plan, plan-order wins, newest = array tail, props deliberately excluded) + `generateSceneImage` seeds NON-host scene edits with the location's newest ref under an approved plan (cast likeness > set-piece likeness; single fail-through law). No plan / no refs / edit-capable provider absent → byte-identical pre-S51 behavior. |
 | T-51.4 the live re-measurement | ✅ Done | `scripts/s51-continuity-benchmark.mts`, live on the Z.ai metered path. **Leg A (the S47 audition re-run, byte-identical anchor): the portrait-age finding DISSOLVED — zero age issues** (S47: 3/3 scenes flagged "appears 50s-60s"); overall 85/100 (78/85/93) vs S47's 88; the residual is a NEW recorded observation: hair hue drifts warm/golden under warm scene lighting vs the anchor's silver. **Leg B: reference-seeded portrait — VLM same_person=true, apparent_age="late-20s" (stated window), confidence 82.** **Leg C: location-seeded scene — VLM same_place=true, confidence 88** ("matching red lantern canopy, stall layout, signage, wet reflective pavement"). The run's 1 "failed" check was the script's own unanchored regex matching g(old)en-blonde — a false positive, fixed (word-bounded) post-run; the recorded issues prove no age flag. Baseline: `docs/baselines/s51-continuity-benchmark-2026-11-07.txt`. |
@@ -1859,7 +1859,7 @@ now has a check, a floor, and a judge that tells lighting from identity.
 
 | Task | Status | Notes |
 |---|---|---|
-| T-53.1 the visual QC seam | ✅ Done | `src/lib/tubeforge/visual-qc.ts`: `sampleFramesEvenly` (even ffmpeg sampling → in-memory base64 payloads, read BEFORE temp cleanup — no TOCTOU window; never-throws, [] = probe dead), `runSubjectContinuityScan` (VLM judge over the recurring subject's identity-defining features, anchor + name in the user prompt), `runTextArtifactScan` (VLM judge over gibberish pseudo-text/garbled signage/watermarks). Both follow the S49 L4 laws verbatim: STRICT-JSON judge at temperature 0, `parseJsonLoose` recovery, any failure → "unmeasured", NEVER a throw, NEVER a silent pass. |
+| T-53.1 the visual QC seam | ✅ Done | `src/lib/ibismuh/visual-qc.ts`: `sampleFramesEvenly` (even ffmpeg sampling → in-memory base64 payloads, read BEFORE temp cleanup — no TOCTOU window; never-throws, [] = probe dead), `runSubjectContinuityScan` (VLM judge over the recurring subject's identity-defining features, anchor + name in the user prompt), `runTextArtifactScan` (VLM judge over gibberish pseudo-text/garbled signage/watermarks). Both follow the S49 L4 laws verbatim: STRICT-JSON judge at temperature 0, `parseJsonLoose` recovery, any failure → "unmeasured", NEVER a throw, NEVER a silent pass. |
 | T-53.2 subject-continuity (the S51 threshold) | ✅ Done | `SUBJECT_CONSISTENCY_FLOOR = 70` + the pure `subjectVerdictFromJudge` law: pass ⟺ judge `consistent` ∧ score ≥ floor; the LIGHTING IS NOT IDENTITY clause leads the judge's prompt (hue shift under scene light reads in `notes`, never flips the verdict); b-roll frames without the subject are ignored; frames-free verdicts stand at the judge's own contract. Emitted only when the video has cast + identity anchor (caller owns applicability). REPORT severity — repaint-or-accept is the operator's call. |
 | T-53.3 text-artifacts | ✅ Done | The AI-imagery classic: gibberish lettering, pseudo-text on signs/screens, melted typography, watermarks. The caption-exclusion law rides the judge's prompt (this production burns captions on purpose — a lens that flagged them would cry wolf on every video). Runs on EVERY final render + QC re-run. REPORT severity until calibration evidence justifies a flip (a deliberate, versioned act). |
 | T-53.4 battery + gate wiring | ✅ Done | `runQcReport`/`qcForVideo` take `subjectScan`/`textScan` (same ride-the-report law as `restrictedScan`: emitted when and only when the caller ran the scan, counted toward `passed`). Both job paths (render + QC re-run) run textScan always, subjectScan for cast+anchor, sharing one materialized final.mp4. Matrix: 2 new REPORT rows, `QC_POLICY_VERSION` → **s53-v1**, blocking count stays 10 (pinned). Scorecard groups both ids under "Video". |
@@ -1919,7 +1919,7 @@ empty lookup was the short-SHA filter).
 | T-55.4 Islamic dense-frame QC | ✅ Done (2026-11-08) | The audit's core safety point, closed at the source: the S49 L4 scan sampled 8 frames evenly (a 60s render carried a **7.50s mean judged gap** — a 1.5s flash slipped through ~80% of the time). `runRestrictedVisualScan` (same signature, both call sites ride as-is) now runs a three-stage funnel, fail-closed at every seam: (1) **dense grid** — one frame per 0.50s (2 fps), capped at 240 with honest disclosed coarsening (300s → 1.25s); (2) **face tripwire** — python3 + OpenCV haar cascades probed per scan: a face ≥1.5% of frame area forces itself + neighbors into the judge set (top 12 anchors); a missing detector DEGRADES resolution (noted in the detail), never the verdict — anonymous people stay allowed content, the VLM decides reverence; (3) **batched VLM judge** — ≤48 frames in batches of 8, global frame labels + timestamps, temp 0, first fail short-circuits, any unreadable batch → unmeasured (fail-closed), pass only when every batch measured clean. The check detail carries the honest coverage (`grid 120 @0.50s · tripwire 3 hit(s) → 9 forced (cv2 4.13.0) · judged 48 ≈1.25s apart · 6/6 batch(es)`). Evidence (zero gateway spend): `docs/audits/s55-islamic-dense-qc.md` + `s55-dense-qc-data.json` (commit `f3b98b5`) — false-positive control 0 hits on a 40-frame testsrc2 grid; positive control skimage's astronaut (real face, BSD sample) → exactly 1 hit, areaFrac 0.0363 (2.4× threshold); 60s class judged gap 7.50s → **1.25s** (6×), local grid 15×. Margins on record: haar sees faces (silhouettes/light-bodies ride the even grid); sub-interval flashes at the cap; the VLM end-to-end verdict is T-55.5's acceptance to run. Gates: tsc 0 · eslint 0 errors/672 warnings (zero net) · **244/244 unit** (+4: grid plan, exact-cap selection, batch verdict law, real-detector controls). |
 | T-55.5 Islamic export acceptance test | ✅ Done (2026-11-08) | The owner's 7-step protocol executed END-TO-END on the real production code (runDirectorPass → runStoryboardJob → runRenderJob → runSceneJob → runQcJob → applyQcPolicy) against a LOCAL stand-in gateway speaking the Z.ai SDK's wire format — **0 gateway quota, 0 paid dispatches, spend gate untouched** (provider "zai" is ungated by law; the stand-in's VLM verdicts are SCRIPTED and disclosed: the funnel is proven, the real model's judgment stays behind the spend gate). **57/57 checks** (`docs/audits/s55-acceptance-data.json` + `s55-islamic-export-acceptance.md`): (1) adversarial plan naming the Prophet ﷺ/Abu Bakr/Umar/Jibril in all 9 shots → L2 sanitized BEFORE persist + announced (warn row) + approved; (2) storyboard paints through the real job — every wire prompt L3-sanitized, negative clause riding, quality gate consulted, dHash dedupe satisfied (lesson on record: textureless gradient stand-ins false-trip the freeze lens — testsrc2 lineage is the honest basis); (3) full 15.6s 1080p MP4 — scene 3 needsI2V animated through the REAL i2v channel: S50 motion prompt sanitized on the wire, clip downloaded + cached, and the final render's scene-3 window carries the clip's pixel marker (proof the clip PLAYED, not a Ken Burns degrade); dense scan PASS with honest coverage (grid 29 @0.50s · tripwire 12 hits → 15 forced, cv2 4.13.0 · 29 judged · 4/4 batches), text-artifacts pass, all 8 structural lenses green (T-55.3's fix holds on a second independent plan), **gate OPEN**; the export standard: the exported final.mp4 tripwired locally — 12 real haar hits, all the anonymous traveler (allowed content; hit timestamps recorded); (4) scene re-roll sanitized on the wire + **the AI-edit GAP found and fixed**: editSceneImage embedded the raw user instruction in its dispatch prompt with NO policy pass (S49 L3 covered generateSceneImage + ensureShotImages, never the edit path) — the fix rides the same sanitizer (standard = pre-S55 bytes, unit-pinned), and the re-run's adversarial instruction was verified sanitized on the wire; regeneration invalidated the standing render (new evidence required); (5) violation verdict → scan FAILS on the first batch (short-circuit), frames named with timestamps, **gate BLOCKED** with restricted-visual as the blocker, activity announces EXPORT ON HOLD; (6) garbage verdict → QC re-run reads UNMEASURED (fail-closed) → **gate STILL BLOCKED**; (7) the standard holds: export open ONLY on the end-to-end-clean render. Gates: tsc 0 · eslint 0 errors (zero net) · **245/245 unit** (+1: the edit-path sanitize contract). |
 | T-55.6 human cinematic evaluation kit | ✅ Done (2026-11-08) | **8/8 per-profile anchor renders** through the REAL production path (runDirectorPass → approve → runStoryboardJob → runRenderJob, kenburns 1080p, 2 neutral scenes each ≈9.9s) via `scripts/s55-eval-kit.mts` (stand-in gateway, zero gateway spend — the T-55.5 disclosure applies), plans built FROM THE LIVE PROFILE CATALOG: narrowed camera/framing vocabularies cycled, pacing bias, transition bias, AND shot-density bias (sparse 2 / normal 3 / dense 4 shots per scene — flattening density was caught making two pairs byte-identical; honored, 7 distinct renders remain, podcast+islamic-history coincide on this content — a finding, not a flaw: their difference is the L2 overlay + imagery tier). Every anchor passed ALL structural lenses (manifest `docs/baselines/s55-eval-kit-manifest.json`: per-profile sha, cameras exercised, pacing, lens table, render time). The rubric — `docs/runbooks/s55-human-evaluation-kit.md` — six axes (motion realism, camera movement, lighting, composition, scene relevance, AV sync) with anchored 1–5 descriptors, a blind-scoring protocol, advisory reading rules (mean ≥ 3.5, no axis ≤ 2; defect findings feed the forensics-first loop), the tier-2 gateway protocol for the imagery axes, and the S54 pending item (the 70-floor recheck on the first gateway-anchored render) folded in. **Scoring stays human** — the harness produces anchors + manifest, never verdicts. Anchors copied for review outside the repo (sandbox download dir). Gates: tsc 0 · eslint 0 errors (zero net) · 245/245 unit (no new tests — the kit is a runbook + harness, nothing in src/ changed). |
-| T-55.7 production reliability record | ✅ Done (2026-11-08) | `docs/audits/s55-reliability-record.md` — CI evidence via the REST API with FULL 40-char SHA filtering (the §6 lesson): every S55 commit on main carries a green run (77cad6f→42393750230 · 4371a88→42407150904 · cb2095d→42411521065 · cbe90c2→42416989318 · a84c668→42421819059, verified before close); **Dependabot re-verified 0 open** at record time (the 2026-11-08 re-verification holds; triage-order rule unchanged); **the spend-gate law on record and untouched**: TUBEFORGE_SPEND_GATE enabled (no =0 anywhere in S55), PRICING_STATUS stays "provisional" (paid external dispatch still blocked with SpendPricingUnverifiedError, no forced verification), overrides observable (spendOverrides() both false at record time), zai + local-server classes ungated — the acceptance's own spend accounting reads gatewayQuotaSpent 0 / paidDispatches 0. Plus the stage's reliability ledger: 245/245 unit (+6 S55) · tsc 0 · eslint 0 errors/672 warnings zero net · both §B failure classes closed at source and re-verified on a second independent plan · the L3 edit-path gap closed · known limitations and standing human items carried forward explicitly (the rotation, the 70-floor recheck + tier-2 scoring on the kit's first gateway round). |
+| T-55.7 production reliability record | ✅ Done (2026-11-08) | `docs/audits/s55-reliability-record.md` — CI evidence via the REST API with FULL 40-char SHA filtering (the §6 lesson): every S55 commit on main carries a green run (77cad6f→42393750230 · 4371a88→42407150904 · cb2095d→42411521065 · cbe90c2→42416989318 · a84c668→42421819059, verified before close); **Dependabot re-verified 0 open** at record time (the 2026-11-08 re-verification holds; triage-order rule unchanged); **the spend-gate law on record and untouched**: IBISMUH_STUDIO_SPEND_GATE enabled (no =0 anywhere in S55), PRICING_STATUS stays "provisional" (paid external dispatch still blocked with SpendPricingUnverifiedError, no forced verification), overrides observable (spendOverrides() both false at record time), zai + local-server classes ungated — the acceptance's own spend accounting reads gatewayQuotaSpent 0 / paidDispatches 0. Plus the stage's reliability ledger: 245/245 unit (+6 S55) · tsc 0 · eslint 0 errors/672 warnings zero net · both §B failure classes closed at source and re-verified on a second independent plan · the L3 edit-path gap closed · known limitations and standing human items carried forward explicitly (the rotation, the 70-floor recheck + tier-2 scoring on the kit's first gateway round). |
 
 Verification: forensic evidence `docs/audits/s55-render-forensics-data.json`
 (plan raw+parsed, shot tables, timeline, battery rows, freezes d=1.00/0.50,
@@ -1998,7 +1998,7 @@ Verification (the stage's evidence chain): the **build job** proven green in-san
 
 Sprint goal: close P0-7's in-repo half — structured logs WITH REQUEST IDS on
 the running app. The reconnaissance that set the scope: the Stage-3 logger
-(`src/lib/tubeforge/log.ts`) already exists — zero-dep pino-format JSON lines,
+(`src/lib/ibismuh/log.ts`) already exists — zero-dep pino-format JSON lines,
 secret-redacting, child-capable, with a `consoleBridge` nobody ever migrated
 onto — and the S56 census's 381 no-console warnings are **~378 scripts/e2e
 CLI sites** (operator-facing output by design) plus only 3 in src/. The REAL
@@ -2094,7 +2094,7 @@ commits in one bundle (`e2e7c1e..HEAD`).
 
 | Task | Status | Notes |
 |---|---|---|
-| T-58.1 the src/ tranche (43 sites, 22 files) | ✅ Done (2026-11-08) | provider registry: `providerMetaRequired` (fail-fast lookup) replaces 12 adapter `!`s; `must()` named-invariant helper (src/lib/tubeforge/must.ts) for the 3 provable map/find sites; restructures where total code is cleaner (render's pip closure + get-once shot-input loop with identical input order, assemble's permutation `flatMap`+`?? []`, export's in-loop guard, voice's match-once, zip's `splice(0)` drain); billing routes get real guards — **portal's `stripeGate().secret!` was a genuine latent bug** (undefined into the Stripe Authorization header when the key was missing; now the same operator-facing 503 checkout returns), checkout captures its price id; React narrows honestly (dialog's `currentVideo` const + qc IIFE capture, voice-view's `profile != null` alias, attention-panel's endpoint guard, settings-view's `?.` behind its guard); script-analysis merges `?? []` and reads the verdict its early return already narrowed. |
+| T-58.1 the src/ tranche (43 sites, 22 files) | ✅ Done (2026-11-08) | provider registry: `providerMetaRequired` (fail-fast lookup) replaces 12 adapter `!`s; `must()` named-invariant helper (src/lib/ibismuh/must.ts) for the 3 provable map/find sites; restructures where total code is cleaner (render's pip closure + get-once shot-input loop with identical input order, assemble's permutation `flatMap`+`?? []`, export's in-loop guard, voice's match-once, zip's `splice(0)` drain); billing routes get real guards — **portal's `stripeGate().secret!` was a genuine latent bug** (undefined into the Stripe Authorization header when the key was missing; now the same operator-facing 503 checkout returns), checkout captures its price id; React narrows honestly (dialog's `currentVideo` const + qc IIFE capture, voice-view's `profile != null` alias, attention-panel's endpoint guard, settings-view's `?.` behind its guard); script-analysis merges `?? []` and reads the verdict its early return already narrowed. |
 | T-58.2 the scripts/ tranche (116 sites, 15 files) | ✅ Done (2026-11-08) | **The discovery: the harness's `ok()` is `asserts cond`, so most of the 68 test-suite `!`s were vestigial** — `ok(x !== null)` above already narrows; verified empirically (incl. the closure-capture case) before relying on it, then dropped. The rest gained per-file `req()` helpers in the house style — a null fixture fails as `missing: <name>` instead of a TypeError at the deref. The probes' `spendState` globals, token/row bindings, s21's triple-`!` URL chain (now `??`-total), s55's scene lookup (imports `must`) all carry their invariants by name; m2-evidence restructured get-once, mirroring render.ts. The S57 lesson applied: the recon's `CAMERA_TO_MOVEove]` / `const a, hc]` lines were the known tooling rendering artifact — byte-verified by Read before editing; source was normal. |
 | T-58.3 the freeze + census | ✅ Done (2026-11-08) | `no-non-null-assertion` promoted warn → **error** repo-wide, no carve-outs (tests get `req()`, not exemptions). **En-route catch with real teeth: the config declared `prefer-const` and `no-useless-escape` twice** — "error" early, "warn" in the later General-JavaScript section; JS object literals keep the last key, so the T-56.6 freeze had been silently demoted to warn-only (a new violation would NOT have failed CI). Deduped, both stay error, the catch documented in the config comment. Census re-recorded: `docs/baselines/s58-lint-census-2026-11-08.txt` (0 errors · 62 warnings; remaining programme: set-state-in-effect 33, unused-expressions 11, exhaustive-deps 9, any 7, two singles). |
 | T-58.4 the gates | ✅ Done (2026-11-08) | tsc 0 · eslint **0 errors/62 warnings** (221→62; the 159 non-null warnings gone exactly) · **247/247 unit** · billing 40/40 · queue PASS · **the 11 migrated probes all PASS (304 checks)** · coverage **56.33% lines** (baseline 56.30, floor 50 holds) · `next build` exit 0, 57/57 pages, the SAME four documented Turbopack warnings. |
@@ -2205,7 +2205,7 @@ too.
 
 ## S60 — production incident: the Vercel dashboard 500s (opened + executed 2026-11-08 UTC, owner-directed "SOLVE")
 
-The owner reported the deployed app (tubeforge-ibismuh.vercel.app) showing
+The owner reported the deployed app (ibismuh-ibismuh.vercel.app) showing
 "Could not load dashboard — The stats service did not respond." The live
 triage (a registered probe account + the public /api/diag fingerprint)
 found the real shape within minutes: /api/stats was NEVER the failure —
@@ -2232,7 +2232,7 @@ The deployed database HEALS ITSELF on the first deploy of this fix
 documented in the delivery for the owner.
 
 Owner-side findings surfaced by the incident (not code): the Vercel
-deployment runs without TUBEFORGE_ENCRYPTION_KEY (diag: encryptionKey false
+deployment runs without IBISMUH_STUDIO_ENCRYPTION_KEY (diag: encryptionKey false
 — provider-credential encryption and the security card need it); /api/diag
 is still public (close it once this incident is confirmed healed);
 DEPLOYMENT.md's doctrine stands — Vercel is a preview surface, Fly+Neon is
@@ -2267,9 +2267,9 @@ automated coverage."
 | Task | Status | Notes |
 |---|---|---|
 | T-61.1 close the public /api/diag exposure | ✅ Done (2026-11-08) | Removed from the middleware's PUBLIC_API set (S60's owner checklist + the route's own header both called for it once the heal was confirmed — it was, ~4 min after the S60 deploy). The route itself stays for AUTHENTICATED incident triage. Verified live on the rebuilt sandbox preview: /api/diag → 401 "Authentication required"; /api/auth/status still public 200. |
-| T-61.2 encryption-key watchlight | ✅ Done (2026-11-08) | instrumentation register() logs a loud, remediation-exact warning when NODE_ENV=production boots with TUBEFORGE_ENCRYPTION_KEY missing/short (the S60 record's owner-side finding #1 — the key IS absent on Vercel). Never fatal (the hook's fault-tolerance law). The actual env set + credential re-store remain OWNER actions (Vercel dashboard). |
+| T-61.2 encryption-key watchlight | ✅ Done (2026-11-08) | instrumentation register() logs a loud, remediation-exact warning when NODE_ENV=production boots with IBISMUH_STUDIO_ENCRYPTION_KEY missing/short (the S60 record's owner-side finding #1 — the key IS absent on Vercel). Never fatal (the hook's fault-tolerance law). The actual env set + credential re-store remain OWNER actions (Vercel dashboard). |
 | T-61.3 the PostgreSQL CI lane | ✅ Done (2026-11-08) | ci.yml gains the `postgres` job (services: postgres:17): DATABASE_URL set before `npm ci` so postinstall picks prisma/schema.prisma, TWO authentic postinstall passes (clean chain wedges at auth_setting → self-heal), then `scripts/pg-ci-verify.mts` asserts: _prisma_migrations managed · every one of the 18 chain migrations finished · nothing stuck · Setting_pkey on Setting + LegacySetting_pkey on LegacySetting · no surviving Setting_pkey on LegacySetting · Video.qcOverrideAt + Video.contentPolicy exist (the P2022 columns) · the REAL usage sparkline SQL (now shared, T-61.4) runs on PG with seeded boolean roundtrip (NOT "ok", the 42883 fix) · full-select Video create+read (the P2022 query shape). |
-| T-61.4 single-source the sparkline SQL | ✅ Done (2026-11-08) | Extracted the daily-usage sparkline from the route into src/lib/tubeforge/usage-sql.ts (dailyUsageSparkline) — the route and the CI probe call ONE function, so CI verifies the exact production SQL; drift is structurally impossible. The S60 portability law is documented at the single source. |
+| T-61.4 single-source the sparkline SQL | ✅ Done (2026-11-08) | Extracted the daily-usage sparkline from the route into src/lib/ibismuh/usage-sql.ts (dailyUsageSparkline) — the route and the CI probe call ONE function, so CI verifies the exact production SQL; drift is structurally impossible. The S60 portability law is documented at the single source. |
 | T-61.5 virgin-database deploy bug — found by the new lane's own local drill | ✅ Done (2026-11-08) | Reproducing the CI job locally (embedded Postgres) caught a REAL latent bug: pgRepairMissingInitTables (b8ec16f, built for PARTIAL legacy schemas) ran on a VIRGIN database first — creating VoiceProfile with no _prisma_migrations — so `migrate deploy` refused forever with P3005 ("The database schema is not empty"): a brand-new Postgres deployment could NEVER migrate. Fix: virgin (zero public tables) → deploy directly, no repairs; PLUS the in-run heal — the clean chain wedges at auth_setting MID-deploy (the survivor constraint only exists after stage2 runs), so postgresMigrate now catches the wedge fingerprint, repairs, resolves the stuck row, and redeploys ONCE. Verified end-to-end on embedded PG: one postinstall pass → wedge (P3018/42P07) → repair → all 18 migrations applied → 27/27 battery assertions → second postinstall a clean no-op. Fresh deployments now self-heal within a single build (S60's story took two). |
 | T-61.6 gates | ✅ Done (2026-11-08) | tsc 0 · eslint 0/20 (census unchanged) · unit 247/247 · billing 40/40 · queue 39/39 exit 0 (one first-run ✗ was the live preview server's claim loop winning a race on the shared dev DB — environment interference, clean on rerun) · build 57/57 (the same four documented warnings) · the embedded-PG drill above. |
 | T-61.7 landing + CI evidence | ✅ Done (2026-11-08) | The rotated PAT arrived; S61 landed as 3938ed0 (implementation) + 5571b86 (workflow-parse fix, T-61.8). GREEN run 42496779198 — 6/6 jobs (secrets · check · build · coverage · postgres · e2e); the postgres job reproduced the S60 incident IN CI: clean chain → P3018/42P07 at auth_setting → mid-deploy self-heal → 18/18 applied → 27/27 battery assertions held. |
@@ -2279,7 +2279,7 @@ S61 CLOSED on CI evidence (2026-11-08): run 42496779198, 6/6 jobs green on
 5571b86. The audit's code-side P0s are all landed; the blind spot that let
 the S60 incident ship is now a permanent CI job.
 
-Owner actions outstanding (restated): set TUBEFORGE_ENCRYPTION_KEY on the
+Owner actions outstanding (restated): set IBISMUH_STUDIO_ENCRYPTION_KEY on the
 Vercel deployment and re-store any saved credentials (the S61 watchlight
 warns until then). The GitHub PAT WAS rotated (2026-11-08) but arrived via
 chat — one transit against the record's zero-transit standard; rotate it

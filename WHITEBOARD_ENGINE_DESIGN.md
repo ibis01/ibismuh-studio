@@ -1,4 +1,4 @@
-# TubeForge Whiteboard Engine — E1 Technical Design
+# Ibismuh Studio Whiteboard Engine — E1 Technical Design
 
 Status: **E1 deliverable (S65)** — architecture for the product-integration
 phase, submitted for owner review. Per the plan's own law, product
@@ -160,7 +160,7 @@ registration is the single source; no hand-maintained list).
 - **Heavy kind.** `HEAVY_KINDS` gains `"whiteboard"` alongside
   `render`/`short`/`convert` — chromium + ffmpeg is the same class of
   CPU/RAM bound work, and the per-org cap
-  (`TUBEFORGE_MAX_RENDER_CONCURRENCY`, default 2) must count it.
+  (`IBISMUH_STUDIO_MAX_RENDER_CONCURRENCY`, default 2) must count it.
 - **Attempts: default (2).** Unlike `voiceover`/`director` (maxAttempts 1
   because a whole-job re-run re-pays AI calls), a whiteboard re-run is
   deterministic local work at zero marginal API cost — a crashed worker
@@ -215,7 +215,7 @@ like the scene editor — it lives in the video detail studio, shown when
 `renderMode === "whiteboard"`):
 
 ```
-src/components/tubeforge/whiteboard/
+src/components/ibismuh/whiteboard/
 ├── whiteboard-studio.tsx   the surface: palette + canvas + timeline
 ├── wb-canvas.tsx           playback canvas — SVG DOM + rAF
 ├── wb-timeline.tsx         event lanes (draw/text/color/move + camera)

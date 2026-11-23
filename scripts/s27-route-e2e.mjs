@@ -14,13 +14,13 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //
 // S32 — the gate now persists reservations (SpendReservation table), so the
 // hammering survives a daemon restart. The daemon MUST run with
-// TUBEFORGE_PRICING_VERIFIED=1 for this suite (the pricing-unverified block
+// IBISMUH_STUDIO_PRICING_VERIFIED=1 for this suite (the pricing-unverified block
 // is exercised separately by s32-route-e2e). Restart the daemon with that
 // env before running.
 // The route-level dispatches carry NO UsageRecord rows (the settings test
 // calls chatComplete directly, outside aiCall), but S32's SpendReservation
 // rows ARE written — the gate's durability no longer depends on UsageRecord.
-// Run after a daemon restart with TUBEFORGE_PRICING_VERIFIED=1:
+// Run after a daemon restart with IBISMUH_STUDIO_PRICING_VERIFIED=1:
 //   node scripts/s27-route-e2e.mjs
 
 // S28 — baseline-relative end state, captured BEFORE the suite creates

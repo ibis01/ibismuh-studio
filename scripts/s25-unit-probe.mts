@@ -22,7 +22,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 // component contract (the exports the layout and the card consume).
 // Run: node --import tsx scripts/s25-unit-probe.mts
 
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import fs from "node:fs";
 import { claimLegacyForOwner, pendingLegacyRows } from "../src/lib/ibismuh/claim";
@@ -61,7 +61,7 @@ const suffix = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   };
   walk("src/app");
   const offenders = [...src.map((f) => `src/lib/ibismuh/${f}`), ...routeFiles].filter((f) =>
-    fs.readFileSync(f, "utf8").includes('tubeforge/tts"')
+    fs.readFileSync(f, "utf8").includes('ibismuh/tts"')
   );
   check("1.3  no source file imports the buried module", offenders.length === 0, offenders);
 }

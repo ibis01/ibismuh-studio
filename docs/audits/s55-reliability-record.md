@@ -31,14 +31,14 @@ order (direct · runtime · high severity first), never by blanket upgrade.
 
 ## The spend-gate law (unchanged, on record)
 
-- `TUBEFORGE_SPEND_GATE` stays **enabled** — no `=0` anywhere in S55's
+- `IBISMUH_STUDIO_SPEND_GATE` stays **enabled** — no `=0` anywhere in S55's
   work; the probes and the acceptance all ran on the Z.ai-shaped local
   stand-in or metered-only paths, and the acceptance's spend accounting is
   in its evidence JSON (`gatewayQuotaSpent: 0, paidDispatches: 0`).
 - `PRICING_STATUS` stays **"provisional"** — paid dispatch (external
   chat/vision providers) remains blocked with `SpendPricingUnverifiedError`
   until an operator reconciles every registry row against its authoritative
-  source. No S55 work forced `TUBEFORGE_PRICING_VERIFIED`.
+  source. No S55 work forced `IBISMUH_STUDIO_PRICING_VERIFIED`.
 - The overrides stay **observable**: `spendOverrides()` reports both
   hatches, `admitDispatch` announces any active override once per process
   on stderr (verified in this record's run: both false).

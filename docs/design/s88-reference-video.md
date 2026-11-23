@@ -5,7 +5,7 @@ route, the Director integration, the pins, and the real-artifact smoke
 (`scripts/s88-reference-smoke.mts`, green 2026-11-11). Spec source: the
 S76 adoption decision §5 P1 (`docs/audits/s76-openmontage-adoption-decision.md`).
 
-**The question it answers:** "Can TubeForge learn from a video the user
+**The question it answers:** "Can Ibismuh Studio learn from a video the user
 already knows works — legally?" The reference pipeline extracts
 STRUCTURE (scene map, pacing, transcript, treatment, beat shape) and the
 Director mirrors the ABSTRACT characteristics in an original concept.

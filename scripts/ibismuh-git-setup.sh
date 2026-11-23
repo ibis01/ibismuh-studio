@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tf-git-setup.sh — prepare ~/tubeforge for GitHub and make the first push.
+# ibismuh-git-setup.sh — prepare ~/ibismuh-studio for GitHub and make the first push.
 #
 # Safe to re-run. What it does:
 #   1. Fixes .gitignore footguns + appends a hygiene block
@@ -11,15 +11,15 @@
 #   4. Pushes with the GitHub CLI if you are logged in,
 #      otherwise prints the exact manual steps.
 #
-# Usage:  bash tf-git-setup.sh [repo-name]        (default repo name: tubeforge)
+# Usage:  bash ibismuh-git-setup.sh [repo-name]  (default repo name: ibismuh-studio)
 set -euo pipefail
 
 command -v git >/dev/null 2>&1 || { echo "!! git is not installed (sudo apt install git)"; exit 1; }
-DIR="${TUBEFORGE_DIR:-$HOME/tubeforge}"
-REPO="${1:-tubeforge}"
+DIR="${IBISMUH_STUDIO_DIR:-$HOME/ibismuh}"
+REPO="${1:-ibismuh}"
 cd "$DIR" 2>/dev/null || { echo "!! $DIR not found"; exit 1; }
 
-echo "== TubeForge -> GitHub =="
+echo "== Ibismuh Studio -> GitHub =="
 
 # ---------- 1. .gitignore ----------
 [ -f .gitignore ] || touch .gitignore
@@ -28,9 +28,9 @@ sed -i '/^test$/d; /^prompt$/d' .gitignore
 # ignore db/uploads contents but keep the placeholder dirs in git
 sed -i 's#^/db/$#/db/*\n!/db/.gitkeep#' .gitignore
 sed -i 's#^/uploads/$#/uploads/*\n!/uploads/.gitkeep#' .gitignore
-if ! grep -q '# --- tf-git-setup ---' .gitignore 2>/dev/null; then
+if ! grep -q '# --- ibismuh-git-setup ---' .gitignore 2>/dev/null; then
   cat >> .gitignore <<'EOF'
-# --- tf-git-setup ---
+# --- ibismuh-git-setup ---
 # keep the env template, never the real thing (the .env* rule above hides it)
 !.env.example
 # sqlite / archives
@@ -41,8 +41,8 @@ if ! grep -q '# --- tf-git-setup ---' .gitignore 2>/dev/null; then
 /upload/
 /forensics/
 # packaging artifacts
-public/tubeforge-local.zip
-public/tubeforge/
+public/ibismuh-local.zip
+public/ibismuh/
 # editor / OS
 .vscode/
 .idea/
@@ -56,7 +56,7 @@ touch db/.gitkeep uploads/.gitkeep
 # ---------- 2. .env.example ----------
 if [ ! -f .env.example ]; then
   cat > .env.example <<'EOF'
-# TubeForge environment template — copy to .env and fill in your own values.
+# Ibismuh Studio environment template — copy to .env and fill in your own values.
 # Your real .env is gitignored and will never be pushed.
 
 # SQLite database (created on first `prisma db push`)
@@ -64,7 +64,7 @@ DATABASE_URL=file:./db/custom.db
 
 # Secret that signs auth tokens for the optional studio lock screen.
 # Generate your own:  openssl rand -hex 32
-TUBEFORGE_AUTH_SECRET=replace-with-openssl-rand-hex-32
+IBISMUH_STUDIO_AUTH_SECRET=replace-with-openssl-rand-hex-32
 EOF
   echo "  [ok] .env.example created"
 fi
@@ -79,7 +79,7 @@ if [ ! -d .git ]; then
 fi
 
 # re-run safety: drop known secrets/workspace dirs from the index if tracked before
-for p in .env .env.local db uploads upload forensics download tool-results skills backups pack public/tubeforge-local.zip public/tubeforge; do
+for p in .env .env.local db uploads upload forensics download tool-results skills backups pack public/ibismuh-local.zip public/ibismuh; do
   git rm -r -q --cached "$p" >/dev/null 2>&1 || true
 done
 
@@ -112,7 +112,7 @@ fi
 if git diff --cached --quiet; then
   echo "  [ok] nothing new to commit"
 else
-  git commit -q -m "TubeForge: initial import (app source, pipeline libs, prisma schema, dev scripts)"
+  git commit -q -m "Ibismuh Studio: initial import (app source, pipeline libs, prisma schema, dev scripts)"
   echo "  [ok] commit $(git rev-parse --short HEAD) — $(git ls-files | wc -l) files tracked"
 fi
 git branch -M main 2>/dev/null || true

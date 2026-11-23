@@ -13,7 +13,6 @@
 // refuses to serve any non-auth endpoint (503). Local development without a
 // secret warns once and stays open (npm run setup provisions one).
 
-import "./lib/ibismuh/compat-env";
 import { NextRequest, NextResponse } from "next/server";
 import {
   pickSessionCookie,

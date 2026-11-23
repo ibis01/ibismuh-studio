@@ -1,7 +1,7 @@
 # S136 — the Stabilisation Wave (the Gate's first repair cycle)
 
 **Date:** 2026-11-15 · **Baseline:** `f9f57c1` (S135) · **Feature freeze:** HELD
-**Companion (operator-side):** `/home/z/tubeforge-gate-reports/2026-11-15-stabilisation-gate.md`
+**Companion (operator-side):** `/home/z/ibismuh-gate-reports/2026-11-15-stabilisation-gate.md`
 
 ## 1. The audit
 
@@ -32,7 +32,7 @@ baseline commit. CI run #323 on the same commit: Success, 4m53s, 8/8 jobs.
 | W1-5 | the E12 queue drill joins the e2e job (`test:queue-drill`) | local: PASS in 23s ("Stop really stops") |
 | B2 | the S135 receipt-ordering guard ported to render/storyboard/scene/short/convert | repo-wide source pin (guards ≥ 5, retried ≥ 5, best-effort ≥ 5, lanes named) |
 | W2 | the PATCH concurrency gate moved UP-FRONT (same 409 shape, before ANY mutation); the scene editor sends `expectedSceneVersion`; `GraphicsImport` + `WhiteboardAssetUpload` join `ORG_SCOPED_MODELS`; the schema-scan pin; SQLite `busy_timeout=10000` + one-shot WAL | ordering pin; scope pins (the scan found the sixth carrier the manual audit missed) |
-| W3 | worklog + this record; README/ROADMAP/ARCHITECTURE/s120-doc/external-doc/SECURITY reconciled; `public/tubeforge.zip` untracked; `public/*.patch` gitignored | the divergence list closed |
+| W3 | worklog + this record; README/ROADMAP/ARCHITECTURE/s120-doc/external-doc/SECURITY reconciled; `public/ibismuh.zip` untracked; `public/*.patch` gitignored | the divergence list closed |
 
 ## 4. The zip investigation (before removal, as mandated)
 

@@ -1,4 +1,4 @@
-# TubeForge — Master Plan
+# Ibismuh Studio — Master Plan
 
 > **Where this document stands (2026-11-14).** This is the ORIGINAL November
 > 2026 programme, preserved as the historical record of how the build was
@@ -27,7 +27,7 @@ implementation in progress.
 
 ## 1. The destination
 
-TubeForge should ultimately be six connected systems that feel like one coherent product, not six unrelated tools:
+Ibismuh Studio should ultimately be six connected systems that feel like one coherent product, not six unrelated tools:
 
 1. **Intelligence Studio** — research, ideas, scripts and storytelling.
 2. **AI Director** — creative direction, shot planning and scene consistency.
@@ -36,15 +36,15 @@ TubeForge should ultimately be six connected systems that feel like one coherent
 5. **Rendering Engine** — professional exports, quality assurance and recovery.
 6. **Creator Intelligence** — publishing, analytics and continuous improvement.
 
-The final objective: a user should be able to enter one idea into TubeForge and receive a professionally directed, edited, narrated, quality-checked and publish-ready video with minimal manual work.
+The final objective: a user should be able to enter one idea into Ibismuh Studio and receive a professionally directed, edited, narrated, quality-checked and publish-ready video with minimal manual work.
 
 ---
 
 ## 2. Current state (post-audit)
 
-The audit (`FOUNDATION_AUDIT.md`) confirmed TubeForge is a working single-user AI video production studio. The pipeline is real and well-instrumented per stage: jobbed routes, persistent `Job` rows with restart-recovery, a retry/budget layer for AI calls, a 12-check QC battery, and render-time shot/motion planners. The application can already take an idea through script, storyboard, voiceover, render, QC and export.
+The audit (`FOUNDATION_AUDIT.md`) confirmed Ibismuh Studio is a working single-user AI video production studio. The pipeline is real and well-instrumented per stage: jobbed routes, persistent `Job` rows with restart-recovery, a retry/budget layer for AI calls, a 12-check QC battery, and render-time shot/motion planners. The application can already take an idea through script, storyboard, voiceover, render, QC and export.
 
-The audit identified four blocking seams that must be addressed before TubeForge can be a multi-user SaaS product:
+The audit identified four blocking seams that must be addressed before Ibismuh Studio can be a multi-user SaaS product:
 
 1. **Single-tenant schema.** Every Prisma model lacks `userId`/`tenantId`. The `Setting` table is a singleton per key — one owner password, one YouTube OAuth grant, one set of provider keys per install. Every one of the 110 endpoints assumes one user.
 2. **Synchronous-in-request heavy work.** Single-video script generation (`POST /api/videos`), research, greenlight and character bible all block the HTTP request through multi-minute LLM calls. The worker body that would fix this (`script-job.ts`) exists but is dead code.
@@ -114,7 +114,7 @@ Do not set final prices until we know the real cost per generated minute, includ
 
 ## 6. The target architecture
 
-TubeForge Premium Interface (Dashboard · Studio · Projects · Analytics · Admin)
+Ibismuh Studio Premium Interface (Dashboard · Studio · Projects · Analytics · Admin)
 ↓
 Application & API Layer (Authentication · Permissions · Projects · Billing · Provider integrations)
 ↓
@@ -151,7 +151,7 @@ User enters an idea
   → Improve future productions
 ```
 
-**One architectural rule is essential:** each stage must save its outputs independently. If scene 14 fails, TubeForge should not regenerate scenes 1–13.
+**One architectural rule is essential:** each stage must save its outputs independently. If scene 14 fails, Ibismuh Studio should not regenerate scenes 1–13.
 
 The audit confirmed the current code does save outputs independently at the per-scene level (scene PNGs, scene WAVs are per-scene files). It does NOT save outputs independently at the stage level: scene assembly + transition stitching + music + captions + loudnorm are all rolled into the monolithic `renderVideo` orchestrator. Stage 6 introduces a separate scene-assembly stage where the user can reorder scenes, trim timing, or substitute assets before the final render commits.
 
@@ -219,6 +219,6 @@ A new user can:
 5. Export it,
 6. Manage their subscription securely.
 
-That is when TubeForge Premium is ready for launch.
+That is when Ibismuh Studio Premium is ready for launch.
 
 The next step is to execute the Stage 1 task backlog in `TASKS.md`.

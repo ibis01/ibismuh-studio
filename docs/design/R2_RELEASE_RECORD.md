@@ -19,7 +19,7 @@
 | `src/components/ibismuh/views/calendar-view.tsx` | Load failure toasted once, then the mobile agenda showed "Nothing scheduled" and the sidebar "No videos are ready yet" while nothing loaded. Both branches now render compact `ErrorState` with retry; toast kept for immediacy. Sidebar list scrolls under `.tf-scroll-bar`. |
 | `src/components/ibismuh/production-board.tsx` | Proven palette violation: the running stage used **indigo** (dot + spinner). Live-state indicators ride `primary` everywhere else in the studio — board now matches the law. |
 | `src/components/ibismuh/shared.tsx` | `ErrorState` accepts className overrides via `twMerge` (the compact calendar-sidebar variant needs it). Enabler for the four view changes; no other primitive touched. |
-| `public/offline.html` + `public/sw.js` | The offline fallback was still TubeForge-branded (a rebrand gap outside R1's audited file list, surfaced live during this session's evidence run when the app's SW served the cached shell). Title/heading now say Ibismuh Studio; the SW cache name bumped to `ibismuh-studio-v2` so every client evicts the stale `tubeforge-v1` shell on next load. Mechanics unchanged. |
+| `public/offline.html` + `public/sw.js` | The offline fallback was still Ibismuh Studio-branded (a rebrand gap outside R1's audited file list, surfaced live during this session's evidence run when the app's SW served the cached shell). Title/heading now say Ibismuh Studio; the SW cache name bumped to `ibismuh-studio-v2` so every client evicts the stale `ibismuh-v1` shell on next load. Mechanics unchanged. |
 
 ## Deliberately unchanged (audited, the no-churn law applied)
 

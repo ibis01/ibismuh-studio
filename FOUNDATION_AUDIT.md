@@ -1,4 +1,4 @@
-# TubeForge Foundation Audit — Stage 1
+# Ibismuh Studio Foundation Audit — Stage 1
 
 **Audited:** 2026-11-01
 **Codebase:** `/home/z/my-project/` (Next.js 16, Prisma, TypeScript)
@@ -9,9 +9,9 @@
 
 ## Executive summary
 
-TubeForge is a working single-user AI video production studio. The pipeline is real and well-instrumented per stage: jobbed routes, persistent `Job` rows with restart-recovery, a retry/budget layer for AI calls, a 10-check QC battery, and render-time shot/motion planners. The application can already take an idea through script, storyboard, voiceover, render, QC and export.
+Ibismuh Studio is a working single-user AI video production studio. The pipeline is real and well-instrumented per stage: jobbed routes, persistent `Job` rows with restart-recovery, a retry/budget layer for AI calls, a 10-check QC battery, and render-time shot/motion planners. The application can already take an idea through script, storyboard, voiceover, render, QC and export.
 
-The audit identified **four blocking seams** that must be addressed before TubeForge can be a multi-user SaaS product:
+The audit identified **four blocking seams** that must be addressed before Ibismuh Studio can be a multi-user SaaS product:
 
 1. **Single-tenant schema.** Every Prisma model lacks `userId`/`tenantId`. The `Setting` table is a singleton per key — one owner password, one YouTube OAuth grant, one set of provider keys per install. Every one of the 110 endpoints assumes one user.
 2. **Synchronous-in-request heavy work.** Single-video script generation (`POST /api/videos`), research, greenlight and character bible all block the HTTP request through multi-minute LLM calls. The worker body that would fix this (`script-job.ts`) exists but is dead code.
@@ -50,7 +50,7 @@ Beyond these, the "AI Director" stage from the target pipeline is only present a
 - **Database:** Prisma 6 with two parallel schemas — `prisma/schema.prisma` (PostgreSQL, default) and `prisma/schema.sqlite.prisma` (local dev). No `prisma/migrations/` directory; schema management is `prisma db push` only.
 - **Auth:** Self-rolled HMAC-SHA256 signed cookies + Bearer tokens, PBKDF2-SHA256 120k iterations for the owner password. `next-auth` is in `package.json` but not wired — the studio uses its own opt-in lock model.
 - **UI:** Tailwind v4 (CSS-based config in `src/app/globals.css`), shadcn/ui-style components in `src/components/ui/`, framer-motion, Zustand store, TanStack Query.
-- **AI providers:** `src/lib/tubeforge/providers/` has adapters for `chat`, `tts`, `image`, `video`, `asr`, `vision`. Default Z.ai SDK (`z-ai-web-dev-sdk`); OpenAI/Anthropic/Gemini-compatible via baseUrl overrides.
+- **AI providers:** `src/lib/ibismuh/providers/` has adapters for `chat`, `tts`, `image`, `video`, `asr`, `vision`. Default Z.ai SDK (`z-ai-web-dev-sdk`); OpenAI/Anthropic/Gemini-compatible via baseUrl overrides.
 - **Media pipeline:** FFmpeg + ffprobe via the zombie-aware `runProcess` wrapper (`proc.ts`). Playwright/Chromium for keynote slides. CogVideoX i2v for "animated" render mode.
 - **Test runner:** `bun scripts/test-unit.ts` (726 lines, custom harness, ~342 checks).
 
@@ -61,9 +61,9 @@ Source lives entirely under `src/`. Top-level modules:
 - `src/app/api/` — 71 route files, 110 endpoints (full inventory in §2).
 - `src/app/page.tsx`, `src/app/layout.tsx`, `src/app/globals.css`, `src/login/page.tsx` — the single-page studio shell.
 - `src/components/ui/` — shadcn/ui-style primitives (45 files).
-- `src/components/tubeforge/` — studio views (`dashboard-view.tsx`, `create-view.tsx`, `library-view.tsx`, `channels-view.tsx`, `cast-view.tsx`, `calendar-view.tsx`, `research-view.tsx`, `analytics-view.tsx`, `settings-view.tsx`), plus `app-sidebar.tsx`, `scene-editor.tsx`, `auth-gate.tsx`, `video-detail-dialog.tsx`, `motion-controls.tsx`, `transition-controls.tsx`, `music-controls.tsx`, `brand-kit.tsx`, `attention-panel.tsx`, `pwa.tsx`, `security-card.tsx`, `logo.tsx`, `brand.tsx`, `shared.tsx`.
-- `src/lib/tubeforge/` — 53 library modules (full list in §3 of the pipeline trace).
-- `src/lib/tubeforge/providers/` — 8 provider adapters.
+- `src/components/ibismuh/` — studio views (`dashboard-view.tsx`, `create-view.tsx`, `library-view.tsx`, `channels-view.tsx`, `cast-view.tsx`, `calendar-view.tsx`, `research-view.tsx`, `analytics-view.tsx`, `settings-view.tsx`), plus `app-sidebar.tsx`, `scene-editor.tsx`, `auth-gate.tsx`, `video-detail-dialog.tsx`, `motion-controls.tsx`, `transition-controls.tsx`, `music-controls.tsx`, `brand-kit.tsx`, `attention-panel.tsx`, `pwa.tsx`, `security-card.tsx`, `logo.tsx`, `brand.tsx`, `shared.tsx`.
+- `src/lib/ibismuh/` — 53 library modules (full list in §3 of the pipeline trace).
+- `src/lib/ibismuh/providers/` — 8 provider adapters.
 - `src/middleware.ts` — opt-in API gatekeeper.
 - `prisma/schema.prisma`, `prisma/schema.sqlite.prisma` — 11 models, no migration history.
 
@@ -113,7 +113,7 @@ This is the per-endpoint inventory. **Auth** = `✓` (middleware-gated when lock
 
 **CRITICAL (1)**
 
-- `src/app/api/auth/setup/route.ts:15` — `POST /api/auth/setup` is publicly reachable on a fresh install and creates the owner password (first-come race). Mitigations exist (403s after configured; requires `TUBEFORGE_AUTH_SECRET`; production fail-safe 503s everything else). **Mitigation for Stage 2:** add a `TUBEFORGE_OWNER_TOKEN` env bootstrap so the first call must present it, or require the setup to happen during a one-time install window.
+- `src/app/api/auth/setup/route.ts:15` — `POST /api/auth/setup` is publicly reachable on a fresh install and creates the owner password (first-come race). Mitigations exist (403s after configured; requires `IBISMUH_STUDIO_AUTH_SECRET`; production fail-safe 503s everything else). **Mitigation for Stage 2:** add a `IBISMUH_STUDIO_OWNER_TOKEN` env bootstrap so the first call must present it, or require the setup to happen during a one-time install window.
 
 **HIGH (28)** — selected highlights (full list in [Appendix A](#appendix-a--full-route-table)):
 
@@ -148,10 +148,10 @@ Every external server-side fetch is either to a hardcoded upstream (Google OAuth
 | Surface | Guard |
 | --- | --- |
 | User-supplied audio URL (`POST /api/voices/clone`, `POST /api/videos/[id]/voiceover` mode=url) | `safeFetch` via `net-guard.ts` — http(s) only, private-IP blocklist, manual redirect re-resolve, byte cap, timeout. |
-| User-supplied provider baseUrl (`POST /api/settings/ai`, `PUT /api/settings/tts`) | `providerFetch → safeFetch`. `TUBEFORGE_ALLOW_PRIVATE_HOSTS=1` opt-out exists for self-hosted/Ollama. |
+| User-supplied provider baseUrl (`POST /api/settings/ai`, `PUT /api/settings/tts`) | `providerFetch → safeFetch`. `IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS=1` opt-out exists for self-hosted/Ollama. |
 | Hardcoded upstreams | Google OAuth token exchange + YouTube Data API, Pexels, Pixabay, Zhipu. |
 
-**Residual risk:** the `TUBEFORGE_ALLOW_PRIVATE_HOSTS=1` opt-out bypasses the private-IP blocklist for provider calls. Voice/media URLs stay locked regardless.
+**Residual risk:** the `IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS=1` opt-out bypasses the private-IP blocklist for provider calls. Voice/media URLs stay locked regardless.
 
 ### 2.5 Routes that write to local disk (serverless blocker)
 
@@ -161,7 +161,7 @@ Every external server-side fetch is either to a hardcoded upstream (Google OAuth
 
 ### 2.6 Routes that spawn long jobs (need queue migration)
 
-15 endpoints use `lib/tubeforge/jobs.ts#startJob()` — fire-and-forget inside the Node process, deduped via a `globalThis` map, with `Job` table rows for crash recovery. None are queue-backed. Serverless cold-start kills running jobs (the `runRecovery()` function marks them `interrupted` on next request).
+15 endpoints use `lib/ibismuh/jobs.ts#startJob()` — fire-and-forget inside the Node process, deduped via a `globalThis` map, with `Job` table rows for crash recovery. None are queue-backed. Serverless cold-start kills running jobs (the `runRecovery()` function marks them `interrupted` on next request).
 
 10 additional endpoints do synchronous heavy work in-request (LLM, TTS, ffmpeg) that should also be jobbed but isn't:
 
@@ -219,14 +219,14 @@ The actual code implements these stages as follows.
 | `POST /api/videos/batch` | **Yes** — `startJob(videoId, "script", …)` × N | `src/app/api/videos/batch/route.ts:82-252` |
 | `POST /api/videos/[id]/script` (re-roll) | Yes — `startJob(id, "script", …)` | `src/app/api/videos/[id]/script/route.ts:44` |
 
-**Dead code:** `src/lib/tubeforge/script-job.ts:35-174` — `runScriptJob(videoId)` implements the correct worker pattern (6 storm rounds × ~16.5 min backoff, escalating 3/6/10/15/20 min cool-downs ≈ 2.5 h auto-patience, cancellation support). Grep confirmed it is referenced only inside its own file. The single-video create path should call it the way `batch/route.ts:156` already does.
+**Dead code:** `src/lib/ibismuh/script-job.ts:35-174` — `runScriptJob(videoId)` implements the correct worker pattern (6 storm rounds × ~16.5 min backoff, escalating 3/6/10/15/20 min cool-downs ≈ 2.5 h auto-patience, cancellation support). Grep confirmed it is referenced only inside its own file. The single-video create path should call it the way `batch/route.ts:156` already does.
 
 **Provider & retry layer:** all `providers/chat.ts` calls go through `budget.ts#aiCall(service, label, fn)` — pacing (per-minute budget), concurrency caps (`MAX_CONCURRENT`), shared 429 cool-downs, 3-attempt exponential backoff. 5-minute timeout via `AbortSignal.timeout` in `http.ts:7,92`.
 
 ### 3.2 Storyboard / Scene planning
 
 - Route: `POST /api/videos/[id]/storyboard` (`storyboard/route.ts:34-217`) — **jobbed**. Full storyboard via `startJob(id, "storyboard", …)`; single-scene re-roll via `startJob(\`${id}#scene${sceneIndex}\`, "scene", …)`. Returns 202 immediately. Cancellation checkpoints at `route.ts:152,164`.
-- Scene representation: `prisma/schema.prisma:60` — `scenes String?` is a JSON-encoded array of `Scene` (`src/lib/tubeforge/types.ts:209-226`): `{index, title, narration, visual, camera, mood, caption, hostInScene, rehook, sfx, focal?, stock?, style?, seedVariant?}`.
+- Scene representation: `prisma/schema.prisma:60` — `scenes String?` is a JSON-encoded array of `Scene` (`src/lib/ibismuh/types.ts:209-226`): `{index, title, narration, visual, camera, mood, caption, hostInScene, rehook, sfx, focal?, stock?, style?, seedVariant?}`.
 
 **Is there an "AI Director" today? — No.**
 
@@ -234,8 +234,8 @@ The LLM emits the flat per-scene fields (`visual`, `camera`, `mood`, `caption`, 
 
 The closest thing to a "Director" is two **heuristic, render-time** planners (no LLM):
 
-- `src/lib/tubeforge/shots.ts:54-83` — `planShots(dur)` subdivides each scene into ≤3 s shots with rotated framings (`SHOT_FRAMINGS` lines 30-37) and camera moves (`SHOT_CAMERAS` line 40). Invoked at render time only.
-- `src/lib/tubeforge/motion.ts` — `planSceneMovements` picks per-scene Ken Burns moves from scene metadata (face/map/landscape/action classification is heuristic, not LLM).
+- `src/lib/ibismuh/shots.ts:54-83` — `planShots(dur)` subdivides each scene into ≤3 s shots with rotated framings (`SHOT_FRAMINGS` lines 30-37) and camera moves (`SHOT_CAMERAS` line 40). Invoked at render time only.
+- `src/lib/ibismuh/motion.ts` — `planSceneMovements` picks per-scene Ken Burns moves from scene metadata (face/map/landscape/action classification is heuristic, not LLM).
 
 Stage 5 of the roadmap will need to build the AI Director from scratch.
 
@@ -261,7 +261,7 @@ Image provider abstraction: `providers/image.ts:105-130` dispatches to 8 provide
 - Voice cloning: `voice-clone.ts` — Zhipu GLM-TTS-Clone API; VoiceProfile rows persist `providerVoiceId`, `sampleWav` (base64) for self-hosted re-send per synthesis.
 - Audiomix: `audiomix.ts` — single source of truth. Delivery targets: integrated LUFS -16, truePeak -1 dBTP, LRA 11. Ducking via `sidechaincompress`. Linear two-pass loudnorm.
 - SFX: `sfx.ts` — 4 cues (whoosh/boom/riser/sting) **synthesized from ffmpeg filters** (no third-party audio). Royalty-free by construction.
-- Music: `music.ts` — library tracks under `uploads/_music/`. TubeForge-original beds synthesized in-app from pure oscillators. Per-video overrides via Video columns.
+- Music: `music.ts` — library tracks under `uploads/_music/`. Ibismuh Studio-original beds synthesized in-app from pure oscillators. Per-video overrides via Video columns.
 
 ### 3.5 Scene assembly / editing / rendering
 
@@ -310,7 +310,7 @@ Each check has 3-state status: `pass | fail | unmeasured`. QC runs **inline insi
 ### 3.7 YouTube publishing — dead scaffolding
 
 - OAuth flow: `POST /api/youtube/connect` builds Google consent URL (sets `ytOAuthState` Setting for CSRF); `GET /api/youtube/callback` verifies state, exchanges code, stores `ytRefreshToken`, `ytChannelTitle`, `ytChannelThumb` in the `Setting` table.
-- All credentials live as flat `Setting` rows: `ytClientId`, `ytClientSecret`, `ytRefreshToken`, `ytChannelTitle`, `ytChannelThumb`, `ytPrivacyStatus`, `ytCategoryId`. **This is the single-tenant blocker** — one TubeForge install = one YouTube channel.
+- All credentials live as flat `Setting` rows: `ytClientId`, `ytClientSecret`, `ytRefreshToken`, `ytChannelTitle`, `ytChannelThumb`, `ytPrivacyStatus`, `ytCategoryId`. **This is the single-tenant blocker** — one Ibismuh Studio install = one YouTube channel.
 - Access token cache: `youtube.ts:105-106` — `__tfYtToken` on `globalThis`; refreshed every ~50 min. On `invalid_grant` the refresh token is cleared so the UI can prompt reconnect.
 - **`uploadToYouTube(input)` is defined at `youtube.ts:292-382`** (resumable upload: init at 314, PUT bytes at 336-343, set custom thumbnail at 362-372). **Grep confirmed it is referenced only inside its own file — never called from any route.**
 - `JobKind "upload"` is defined (`jobs.ts:26, 85, 116, 130, 321`) and listed in `cancel/route.ts:27`. `pollUpload(videoId)` exists in `poll.ts:224-231` polling for `v.youtubeUrl`. But `Video.youtubeUrl` is **never written** anywhere.
@@ -345,20 +345,20 @@ Each check has 3-state status: `pass | fail | unmeasured`. QC runs **inline insi
 - `src/app/api/videos/analyze-script/route.ts:41` — `analyzeScript` LLM round-trip.
 - `src/app/api/research/route.ts:38` — `generateTopicResearch`.
 - `src/app/api/youtube/sync/route.ts:19` — `syncYouTubeStats` (acknowledged in comment as "Fast enough to run synchronously" — defensible).
-- `src/lib/tubeforge/script-job.ts:35-174` is **dead code** — the correct worker pattern, never invoked.
+- `src/lib/ibismuh/script-job.ts:35-174` is **dead code** — the correct worker pattern, never invoked.
 
 **B. In-memory state that won't survive restart** — see §3.9.
 
 **C. Local filesystem writes that won't work on serverless**
 
-- `src/lib/tubeforge/ai.ts:19-25` — `UPLOAD_ROOT = process.cwd() + "/uploads"`. Every stage writes here: `scene-NN.png`, `scene-NN.wav`, `voiceover.wav`, `final.mp4`, `preview.mp4`, `subtitles.srt`, `short.mp4`, `shot-NN-k.png`, `slide-NN.png`, `slides.json`, `stock-NN.mp4`, `render-tmp/*`, `brand-logo.*`.
-- `src/lib/tubeforge/sfx.ts:28` — `uploads/_sfx/<kind>.wav` (cross-video cache).
-- `src/lib/tubeforge/music.ts:36` — `uploads/_music/` (library tracks).
-- `src/lib/tubeforge/proc.ts:55-56` — `os.tmpdir() + "tf-run-*.out/.err"`.
-- `src/lib/tubeforge/slides.ts:886` — `tmp-<stamp>.html` written into `videoDir` for Playwright `file://` load.
+- `src/lib/ibismuh/ai.ts:19-25` — `UPLOAD_ROOT = process.cwd() + "/uploads"`. Every stage writes here: `scene-NN.png`, `scene-NN.wav`, `voiceover.wav`, `final.mp4`, `preview.mp4`, `subtitles.srt`, `short.mp4`, `shot-NN-k.png`, `slide-NN.png`, `slides.json`, `stock-NN.mp4`, `render-tmp/*`, `brand-logo.*`.
+- `src/lib/ibismuh/sfx.ts:28` — `uploads/_sfx/<kind>.wav` (cross-video cache).
+- `src/lib/ibismuh/music.ts:36` — `uploads/_music/` (library tracks).
+- `src/lib/ibismuh/proc.ts:55-56` — `os.tmpdir() + "tf-run-*.out/.err"`.
+- `src/lib/ibismuh/slides.ts:886` — `tmp-<stamp>.html` written into `videoDir` for Playwright `file://` load.
 - `src/app/api/videos/[id]/mp4/route.ts:12-87` and `render.ts:729` — `fs.readFileSync(final.mp4)` for streaming (memory-bound + local FS).
 - `next.config.ts:4` — `output: "standalone"` (Node server target, NOT Vercel serverless), but routes still call `fs.writeFileSync` directly which serverless would reject at runtime.
-- `src/lib/tubeforge/proc.ts:37-46` — `/proc/<pid>/stat` zombie watchdog is **Linux-only** (will not run on macOS/Windows hosts).
+- `src/lib/ibismuh/proc.ts:37-46` — `/proc/<pid>/stat` zombie watchdog is **Linux-only** (will not run on macOS/Windows hosts).
 
 **D. Provider calls without timeout/retry**
 
@@ -446,8 +446,8 @@ Mixed. Three PMs are touched:
 
 | Category | Vars |
 | --- | --- |
-| Required for boot | `DATABASE_URL`, `TUBEFORGE_AUTH_SECRET` (required for auth; absence silently opens the studio in dev mode), `NODE_ENV` |
-| Optional behavior toggles | `TUBEFORGE_LOCK=1`, `TUBEFORGE_REQUIRE_LOCK=0`, `TUBEFORGE_LOG_QUERIES=1`, `TUBEFORGE_ALLOW_PRIVATE_HOSTS=1`, `TUBEFORGE_RATE_READ`, `TUBEFORGE_RATE_WRITE`, `TUBEFORGE_ACCESS_TOKEN`, `TUBEFORGE_DIR`, `VERCEL`, `NOW_BUILDER` |
+| Required for boot | `DATABASE_URL`, `IBISMUH_STUDIO_AUTH_SECRET` (required for auth; absence silently opens the studio in dev mode), `NODE_ENV` |
+| Optional behavior toggles | `IBISMUH_STUDIO_LOCK=1`, `IBISMUH_STUDIO_REQUIRE_LOCK=0`, `IBISMUH_STUDIO_LOG_QUERIES=1`, `IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS=1`, `IBISMUH_STUDIO_RATE_READ`, `IBISMUH_STUDIO_RATE_WRITE`, `IBISMUH_STUDIO_ACCESS_TOKEN`, `IBISMUH_STUDIO_DIR`, `VERCEL`, `NOW_BUILDER` |
 | AI providers | **none via env** — all provider keys live in the `Setting` table or `.z-ai-config` JSON |
 | Scripts only | `NEON_URL` (manual Neon sync), `BASE` (E2E test base URL) |
 
@@ -496,11 +496,11 @@ These are recorded as-is before any Stage 1 work, per the master plan's instruct
 | D-03 | `POST /api/research/[id]/greenlight` runs script generation synchronously | `src/app/api/research/[id]/greenlight/route.ts:127,141` | HIGH | Same as D-01 |
 | D-04 | `POST /api/characters/bible` runs LLM call synchronously | `src/app/api/characters/bible/route.ts:13` | HIGH | ~5-8s LLM call |
 | D-05 | `DELETE /api/videos/[id]` does not clean up `uploads/<id>/` | `src/app/api/videos/[id]/route.ts:207` | MEDIUM | Orphaned files on disk |
-| D-06 | `uploadToYouTube` implemented but never called | `src/lib/tubeforge/youtube.ts:292-382` | HIGH | Publish stage is dead scaffolding |
+| D-06 | `uploadToYouTube` implemented but never called | `src/lib/ibismuh/youtube.ts:292-382` | HIGH | Publish stage is dead scaffolding |
 | D-07 | `Video.youtubeUrl` is never written by any code path | grep confirmed | HIGH | Consequence of D-06 |
-| D-08 | `runScriptJob` is dead code | `src/lib/tubeforge/script-job.ts:35-174` | MEDIUM | The fix for D-01 already exists |
-| D-09 | YouTube fetch calls have no timeout/retry | `src/lib/tubeforge/youtube.ts:123,166,218,314,336,362` | HIGH | A single Google 500 fails the upload |
-| D-10 | `/proc/<pid>/stat` zombie watchdog is Linux-only | `src/lib/tubeforge/proc.ts:37-46` | MEDIUM | Won't work on macOS/Windows hosts |
+| D-08 | `runScriptJob` is dead code | `src/lib/ibismuh/script-job.ts:35-174` | MEDIUM | The fix for D-01 already exists |
+| D-09 | YouTube fetch calls have no timeout/retry | `src/lib/ibismuh/youtube.ts:123,166,218,314,336,362` | HIGH | A single Google 500 fails the upload |
+| D-10 | `/proc/<pid>/stat` zombie watchdog is Linux-only | `src/lib/ibismuh/proc.ts:37-46` | MEDIUM | Won't work on macOS/Windows hosts |
 | D-11 | `npm run setup` is broken for SQLite local dev | `package.json:14` | MEDIUM | Should auto-detect URL protocol like `postinstall.mjs` does |
 | D-12 | `npm run backup` and `npm run auth:reset` reference missing files | `package.json:16,17` | MEDIUM | `scripts/backup.sh` and `scripts/auth-reset.mjs` absent |
 | D-13 | Two lockfiles committed (`bun.lock` + `package-lock.json`) | repo root | LOW | PM-of-record unclear |
@@ -510,17 +510,17 @@ These are recorded as-is before any Stage 1 work, per the master plan's instruct
 | D-17 | No `prisma/migrations/` directory | `prisma/` | HIGH | Schema management is `db push` only; no migration history |
 | D-18 | No CI of any kind | (no `.github/workflows/`) | HIGH | Tests only run when a human remembers |
 | D-19 | No security headers configured | `next.config.ts` | MEDIUM | CSP, X-Frame-Options, etc. all missing |
-| D-20 | Login brute-force counters reset on restart | `src/lib/tubeforge/auth.ts:189-190` | MEDIUM | `__tfAuthLimit` is in-memory only |
-| D-21 | API rate-limit buckets reset on restart | `src/lib/tubeforge/rate-limit.ts:18-21` | MEDIUM | `__tfRateBuckets` is in-memory only |
-| D-22 | AI budget pacing state resets on restart | `src/lib/tubeforge/budget.ts:45-54` | MEDIUM | Thundering-herd risk on fresh process |
-| D-23 | `GET /api/videos/[id]/mp4` reads entire file into memory | `src/lib/tubeforge/render.ts:729` | MEDIUM | Memory-bound for large videos |
+| D-20 | Login brute-force counters reset on restart | `src/lib/ibismuh/auth.ts:189-190` | MEDIUM | `__tfAuthLimit` is in-memory only |
+| D-21 | API rate-limit buckets reset on restart | `src/lib/ibismuh/rate-limit.ts:18-21` | MEDIUM | `__tfRateBuckets` is in-memory only |
+| D-22 | AI budget pacing state resets on restart | `src/lib/ibismuh/budget.ts:45-54` | MEDIUM | Thundering-herd risk on fresh process |
+| D-23 | `GET /api/videos/[id]/mp4` reads entire file into memory | `src/lib/ibismuh/render.ts:729` | MEDIUM | Memory-bound for large videos |
 | D-24 | `GET /api/videos/[id]/export` buffers entire ZIP in memory | `src/app/api/videos/[id]/export/route.ts:248` | MEDIUM | Memory-bound for large exports |
 | D-25 | `params.n` not strictly validated as positive integer | `src/app/api/videos/[id]/storyboard/[n]/route.ts` etc. | LOW | `Number(n)` produces `NaN` for non-integer; no traversal but wrong filenames |
 | D-26 | No input validation framework (zero `zod` use across 110 endpoints) | `src/app/api/**` | HIGH | Hand-rolled validation has known weaknesses |
 | D-27 | `POST /api/auth/setup` first-come race on a fresh install | `src/app/api/auth/setup/route.ts:15` | CRITICAL | Documented; mitigations exist but not eliminated |
 | D-28 | No `userId`/`tenantId` on any Prisma model | `prisma/schema.prisma` (entire file) | CRITICAL | Multi-tenant migration blocker — touches every endpoint |
 | D-29 | `Setting` table is singleton per key | `prisma/schema.prisma:184-188` | CRITICAL | One owner password, one YouTube grant, one set of provider keys per install |
-| D-30 | `TUBEFORGE_AUTH_SECRET` absent from local `.env` | (local dev only) | LOW | Studio runs open by default (documented dev mode) |
+| D-30 | `IBISMUH_STUDIO_AUTH_SECRET` absent from local `.env` | (local dev only) | LOW | Studio runs open by default (documented dev mode) |
 
 ---
 
@@ -530,7 +530,7 @@ The full per-endpoint table (113 rows, method-separated) is in the route audit w
 
 ## Appendix B — Files read during the audit
 
-71 route files under `src/app/api/`; 53 library modules under `src/lib/tubeforge/`; 8 provider adapters under `src/lib/tubeforge/providers/`; `prisma/schema.prisma` + `prisma/schema.sqlite.prisma`; `package.json`, `tsconfig.json`, `eslint.config.mjs`, `next.config.ts`, `tailwind.config.ts`, `postcss.config.mjs`, `src/middleware.ts`, `src/lib/tubeforge/auth.ts`, `src/lib/tubeforge/auth-token.ts`, `src/lib/tubeforge/jobs.ts`, `src/lib/tubeforge/poll.ts`, `src/lib/tubeforge/net-guard.ts`, `src/lib/tubeforge/rate-limit.ts`, `src/lib/tubeforge/budget.ts`, `src/lib/tubeforge/render.ts`, `src/lib/tubeforge/qc.ts`, `src/lib/tubeforge/verify.ts`, `src/lib/tubeforge/youtube.ts`, `src/lib/tubeforge/script-job.ts`, `src/lib/tubeforge/shots.ts`, `src/lib/tubeforge/motion.ts`, `src/lib/tubeforge/transitions.ts`, `src/lib/tubeforge/captions.ts`, `src/lib/tubeforge/proc.ts`, `src/lib/tubeforge/voice.ts`, `src/lib/tubeforge/voice-clone.ts`, `src/lib/tubeforge/audiomix.ts`, `src/lib/tubeforge/sfx.ts`, `src/lib/tubeforge/music.ts`, `src/lib/tubeforge/stock.ts`, `src/lib/tubeforge/slides.ts`, `src/lib/tubeforge/story.ts`, `src/lib/tubeforge/script-analysis.ts`, `src/lib/tubeforge/convert.ts`, `src/lib/tubeforge/types.ts`, `src/lib/tubeforge/quality.ts`, `src/lib/tubeforge/providers/{chat,tts,image,asr,vision,video,http,settings,registry,config}.ts`, `src/lib/db.ts`, `SETUP.md`, `SECURITY.md`, `worklog.md` (first 200 lines), `scripts/postinstall.mjs`, `scripts/test-unit.ts`.
+71 route files under `src/app/api/`; 53 library modules under `src/lib/ibismuh/`; 8 provider adapters under `src/lib/ibismuh/providers/`; `prisma/schema.prisma` + `prisma/schema.sqlite.prisma`; `package.json`, `tsconfig.json`, `eslint.config.mjs`, `next.config.ts`, `tailwind.config.ts`, `postcss.config.mjs`, `src/middleware.ts`, `src/lib/ibismuh/auth.ts`, `src/lib/ibismuh/auth-token.ts`, `src/lib/ibismuh/jobs.ts`, `src/lib/ibismuh/poll.ts`, `src/lib/ibismuh/net-guard.ts`, `src/lib/ibismuh/rate-limit.ts`, `src/lib/ibismuh/budget.ts`, `src/lib/ibismuh/render.ts`, `src/lib/ibismuh/qc.ts`, `src/lib/ibismuh/verify.ts`, `src/lib/ibismuh/youtube.ts`, `src/lib/ibismuh/script-job.ts`, `src/lib/ibismuh/shots.ts`, `src/lib/ibismuh/motion.ts`, `src/lib/ibismuh/transitions.ts`, `src/lib/ibismuh/captions.ts`, `src/lib/ibismuh/proc.ts`, `src/lib/ibismuh/voice.ts`, `src/lib/ibismuh/voice-clone.ts`, `src/lib/ibismuh/audiomix.ts`, `src/lib/ibismuh/sfx.ts`, `src/lib/ibismuh/music.ts`, `src/lib/ibismuh/stock.ts`, `src/lib/ibismuh/slides.ts`, `src/lib/ibismuh/story.ts`, `src/lib/ibismuh/script-analysis.ts`, `src/lib/ibismuh/convert.ts`, `src/lib/ibismuh/types.ts`, `src/lib/ibismuh/quality.ts`, `src/lib/ibismuh/providers/{chat,tts,image,asr,vision,video,http,settings,registry,config}.ts`, `src/lib/db.ts`, `SETUP.md`, `SECURITY.md`, `worklog.md` (first 200 lines), `scripts/postinstall.mjs`, `scripts/test-unit.ts`.
 
 ---
 

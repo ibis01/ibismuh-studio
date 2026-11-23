@@ -144,8 +144,8 @@ are covered by CI's E2E job on landing.
 
 ## The spend-gate law — untouched, observable
 
-- No `TUBEFORGE_SPEND_GATE=0` anywhere in S59.
-- No forced `TUBEFORGE_PRICING_VERIFIED`; zero gateway quota, zero paid
+- No `IBISMUH_STUDIO_SPEND_GATE=0` anywhere in S59.
+- No forced `IBISMUH_STUDIO_PRICING_VERIFIED`; zero gateway quota, zero paid
   dispatches — S59 touched only client-side React code; no provider path.
 
 ## The landing — pushed, CI-verified, closed (2026-11-08, later the same day)

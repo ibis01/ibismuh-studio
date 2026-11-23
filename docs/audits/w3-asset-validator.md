@@ -4,7 +4,7 @@
 
 ## What landed
 
-**`src/lib/tubeforge/whiteboard/asset-validate.ts`** — pure, deterministic, no fs/clock/randomness. Six checks over the extracted geometry, each returning `{ok, reason, pathId?}`, aggregated by `validateAsset(asset) → {assetId, ok, findings}`:
+**`src/lib/ibismuh/whiteboard/asset-validate.ts`** — pure, deterministic, no fs/clock/randomness. Six checks over the extracted geometry, each returning `{ok, reason, pathId?}`, aggregated by `validateAsset(asset) → {assetId, ok, findings}`:
 
 | Check | Law | Fires on |
 | --- | --- | --- |

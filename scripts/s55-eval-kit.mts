@@ -22,11 +22,11 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //   S55_KIT_PROFILES=narrative,documentary,explainer node --import tsx …
 //   S55_KIT_LEG=report …   (assemble the manifest + copy anchors)
 // State: /tmp/s55-kit-state.json · Anchors: uploads/s55-evalkit/<profile>.mp4
-// + copied for review to TUBEFORGE_KIT_OUT (default ../../download/s55-eval-kit).
+// + copied for review to IBISMUH_STUDIO_KIT_OUT (default ../../download/s55-eval-kit).
 //
 // Usage: node --import tsx scripts/s55-eval-kit.mts
 
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { execFile } from "child_process";
 import crypto from "node:crypto";
@@ -50,7 +50,7 @@ const ONLY = (process.env.S55_KIT_PROFILES ?? "")
 const STATE_PATH = process.env.S55_KIT_STATE ?? "/tmp/s55-kit-state.json";
 const MANIFEST_PATH = process.env.S55_KIT_MANIFEST ?? "docs/baselines/s55-eval-kit-manifest.json";
 const ANCHOR_DIR = "uploads/s55-evalkit";
-const OUT_DIR = process.env.TUBEFORGE_KIT_OUT ?? "/home/z/my-project/download/s55-eval-kit";
+const OUT_DIR = process.env.IBISMUH_STUDIO_KIT_OUT ?? "/home/z/my-project/download/s55-eval-kit";
 const ASSETS_DIR = "/tmp/s55-acc-assets"; // shared with the T-55.5 probe (same synthetics)
 const ZAI_CONFIG = path.join(process.cwd(), ".z-ai-config");
 const SUFFIX = `s55kit-${Date.now().toString(36)}`;

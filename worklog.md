@@ -3,14 +3,14 @@
 ---
 Task ID: 1
 Agent: main (Z.ai)
-Task: Build "TubeForge" — a fully-automated faceless YouTube content platform (Next.js web app) with AI script generation, TTS voiceover, AI thumbnails, dark premium YouTube-inspired design.
+Task: Build "Ibismuh Studio" — a fully-automated faceless YouTube content platform (Next.js web app) with AI script generation, TTS voiceover, AI thumbnails, dark premium YouTube-inspired design.
 
 Work Log:
 - Clarified requirements via AskUserQuestion: web platform, AI content gen as core feature, fully automated pipeline, faceless/generic niche, dark premium style, MVP 5-7 screens, built-in Z.ai SDK.
 - Loaded skills: fullstack-dev, LLM, TTS, image-generation, agent-browser.
 - Verified SDK in sandbox: GLM chat, TTS (24kHz 16-bit mono WAV), CogView (1344x768 PNG) all working.
 - Defined Prisma schema (Channel, Video, Activity, Setting) and pushed to SQLite.
-- Built server libs in src/lib/tubeforge/: types.ts (shared constants/DTOs), wav.ts (WAV parse + merge for multi-chunk TTS), ai.ts (script generation via GLM with loose-JSON parsing, TTS chunking ≤950 chars with sentence splitting, WAV merge, thumbnail gen), status.ts (derived pipeline status).
+- Built server libs in src/lib/ibismuh/: types.ts (shared constants/DTOs), wav.ts (WAV parse + merge for multi-chunk TTS), ai.ts (script generation via GLM with loose-JSON parsing, TTS chunking ≤950 chars with sentence splitting, WAV merge, thumbnail gen), status.ts (derived pipeline status).
 - Built API routes: /api/videos (list + create-with-script), /api/videos/[id] (GET/PATCH/DELETE), /api/videos/[id]/voiceover (POST gen + GET stream WAV), /api/videos/[id]/thumbnail (POST gen + GET stream PNG), /api/stats, /api/channels (+[id]), /api/settings (key-value with defaults).
 - Created dark premium forced theme in globals.css: near-black background, YouTube red primary (oklch 0.628/0.258/29.23), glassmorphism utilities (.glass, .glow-red, .text-gradient, .bg-grid), custom scrollbars, pulse-dot keyframes.
 - Built app shell (single / route): AppSidebar (desktop) + Sheet nav (mobile), sticky header, sticky footer, Zustand store for view switching.
@@ -25,19 +25,19 @@ Work Log:
 - Verified golden path through UI: filled topic in Create → "Run Full Auto-Pilot" → GLM script (286 words) → TTS voiceover (2m43s WAV) → CogView thumbnail → stepper all-green "Package complete — ready to upload". Verified dialog, filters, channels, settings persistence, mobile 375px layout with hamburger drawer. No JS errors, no page errors, lint clean.
 
 Stage Summary:
-- Deliverable: TubeForge — fully-automated faceless YouTube content engine at / (Next.js 16, TypeScript, Tailwind 4, shadcn/ui, Prisma/SQLite, z-ai-web-dev-sdk).
+- Deliverable: Ibismuh Studio — fully-automated faceless YouTube content engine at / (Next.js 16, TypeScript, Tailwind 4, shadcn/ui, Prisma/SQLite, z-ai-web-dev-sdk).
 - Core capability: topic → complete video package (script + title + description + tags + voiceover WAV + 16:9 thumbnail) via one click, with per-stage control and resumable pipeline.
-- Key artifacts: src/lib/tubeforge/* (AI pipeline), src/app/api/* (8 route files), src/components/tubeforge/* (5 views + dialog + shared), uploads/{videoId}/ (generated media).
+- Key artifacts: src/lib/ibismuh/* (AI pipeline), src/app/api/* (8 route files), src/components/ibismuh/* (5 views + dialog + shared), uploads/{videoId}/ (generated media).
 - Status: all browser-verified (dashboard, library, detail dialog, auto-pilot golden path, channels, settings, mobile) — task complete.
 
 ---
 Task ID: 2
 Agent: main (Z.ai)
-Task: TubeForge Phase 2 "Growth Suite" — Topic Radar (AI keyword research), Publishing Calendar, Thumbnail A/B variants, and upload-ready ZIP export, following the 4 suggested next steps from Phase 1.
+Task: Ibismuh Studio Phase 2 "Growth Suite" — Topic Radar (AI keyword research), Publishing Calendar, Thumbnail A/B variants, and upload-ready ZIP export, following the 4 suggested next steps from Phase 1.
 
 Work Log:
 - Extended Prisma schema with ResearchSession (JSON ideas) and ScheduleSlot (videoId/channelId/slotDate/timeOfDay/note/done) + inverse Video.slots relation; db push + client regenerate. Dev server needed restart + .next wipe to pick up new client (stale-client pitfall: db.scheduleSlot undefined).
-- Built src/lib/tubeforge/zip.ts — dependency-free ZIP writer (zlib deflateRaw, CRC32 table, local headers + central dir + EOCD). Fixed JS gotcha: `0o100644 << 16` is a NEGATIVE signed int32 → writeUInt32LE ERR_OUT_OF_RANGE; fixed with `>>> 0`.
+- Built src/lib/ibismuh/zip.ts — dependency-free ZIP writer (zlib deflateRaw, CRC32 table, local headers + central dir + EOCD). Fixed JS gotcha: `0o100644 << 16` is a NEGATIVE signed int32 → writeUInt32LE ERR_OUT_OF_RANGE; fixed with `>>> 0`.
 - Extended ai.ts: generateTopicResearch (GLM strategist returns 8 ideas w/ title, angle, keywords, searchVolume, competition, viralScore, suggestedLength, why + nicheSummary), generateThumbnail(variant) saves variant-<style>.png, pickVariantStyles (chosen style + 2 others), listVariants, promoteVariant (copy → thumbnail.png). readMedia type widened.
 - New shared libs: research.ts (serializeSession), schedule.ts (serializeSlot + parseDay) — helpers moved OUT of route.ts files (Next.js forbids extra exports from route files).
 - New API routes: /api/research (GET list, POST live scan), /api/research/[id] (DELETE); /api/schedule (GET range + ?limit upcoming + schedulable videos, POST create), /api/schedule/[id] (PATCH move/done/markVideoPublished, DELETE); /api/videos/[id]/variants (GET list, POST generate 3-style set ~2.5min, PATCH promote), /api/videos/[id]/variants/[style] (PNG stream), /api/videos/[id]/export (ZIP: upload-metadata.txt + script + description + tags.csv + metadata.json + voiceover.wav + thumbnail.png + variant files).
@@ -50,8 +50,8 @@ Work Log:
 - Verification: lint clean; API smoke suite (schedule CRUD, live research scan = 8 real Finance/money-psychology ideas, export ZIP validated by python zipfile incl. 4.2MB wav, variants GET/POST/PATCH with on-disk md5 verification of promoted thumbnail); browser E2E via agent-browser + VLM subagents: dashboard 7-item sidebar PASS, Topic Radar PASS, idea→Create prefill PASS, calendar grid + slots PASS, slot mark-uploaded→done+published PASS, new slot via day "+" PASS, detail-dialog Schedule handoff PASS, A/B promote in dialog PASS (thumbnail.png == variant-cinematic.png), mobile 375px research PASS; found+fixed 1 real bug (Card base flex-col vs agenda row merge conflict → clipped titles + 19px overflow; fixed with explicit flex-row, scrollWidth 375==375 after).
 
 Stage Summary:
-- TubeForge now ships 7 views (added Topic Radar + Publishing Calendar) with full research→create→schedule→export loop: niche scan → idea → Auto-Pilot package → A/B thumbnail test → calendar slot → ZIP export for manual YouTube upload.
-- Key artifacts: src/lib/tubeforge/{zip,research,schedule}.ts, src/app/api/{research,schedule,videos/[id]/{variants,export}}/routes, src/components/tubeforge/views/{research,calendar}-view.tsx.
+- Ibismuh Studio now ships 7 views (added Topic Radar + Publishing Calendar) with full research→create→schedule→export loop: niche scan → idea → Auto-Pilot package → A/B thumbnail test → calendar slot → ZIP export for manual YouTube upload.
+- Key artifacts: src/lib/ibismuh/{zip,research,schedule}.ts, src/app/api/{research,schedule,videos/[id]/{variants,export}}/routes, src/components/ibismuh/views/{research,calendar}-view.tsx.
 - All flows verified desktop + mobile, lint clean, no page errors. Real YouTube Data API v3 OAuth upload remains the only future step (needs user credentials; ZIP export bridges the gap today).
 
 ---
@@ -62,7 +62,7 @@ Task: Fix "voiceover and thumbnail not working" — diagnose + repair + harden p
 Work Log:
 - Diagnosed via dev.log + DB: video cmvmjupoy0001ritgx1m4aytm hit transient upstream TTS 500 ("network error, please retry later"); voiceover.wav was actually saved on the first pass, but a subsequent call failed and marked the video "failed", blocking the thumbnail stage. No retry logic existed — one blip killed the stage.
 - Verified upstream health directly with SDK sandbox script (scripts/test-ai-services.mjs): TTS OK (1.6s), image OK (27s) — outage was transient and had recovered.
-- Hardened src/lib/tubeforge/ai.ts with withRetry() helper (3 attempts, exponential backoff 2s/4s, console.warn logging) wrapping all 4 AI call sites: script LLM, TTS chunks, CogView thumbnail, research LLM.
+- Hardened src/lib/ibismuh/ai.ts with withRetry() helper (3 attempts, exponential backoff 2s/4s, console.warn logging) wrapping all 4 AI call sites: script LLM, TTS chunks, CogView thumbnail, research LLM.
 - Repaired the failed video via API: regenerated thumbnail (146KB PNG), status → ready, error cleared; re-ran voiceover through the new retry path (200 in 73s, 151.1s audio) to prove the hardening works.
 - Verified both media streaming endpoints return 200 with correct content-type/size.
 
@@ -77,10 +77,10 @@ Task: Fix HTTP 502 on Generate Voiceover/Thumbnail — gateway kills long-runnin
 Work Log:
 - Root cause chain: user clicks Generate → TTS/image API returns 429 rate-limit → retry backoff stretches request past gateway timeout → preview proxy returns 502 to browser while server keeps processing. dev.log confirmed server-side 200-in-72s/53s responses that the gateway swallowed as 502s.
 - Architecture fix (async job pattern):
-  - NEW src/lib/tubeforge/jobs.ts — in-memory job registry (running map + lastError map, dedupe via startJob(), jobSnapshot() for GETs).
+  - NEW src/lib/ibismuh/jobs.ts — in-memory job registry (running map + lastError map, dedupe via startJob(), jobSnapshot() for GETs).
   - voiceover/thumbnail/variants POST routes now clear stale errors, start a background job via startJob(), return 202 in <100ms; job updates DB (hasVoiceover/hasThumbnail/status/error + activity) in-process, immune to client/proxy disconnects.
   - variants GET now returns {variants, generating, error}; videos/[id] GET returns {video, generating:{voiceover,thumbnail,variants}} so spinners survive reloads.
-  - NEW src/lib/tubeforge/poll.ts — client pollers (pollVoiceover/pollThumbnail 2.5s interval + 6min cap; pollVariants on GET flags).
+  - NEW src/lib/ibismuh/poll.ts — client pollers (pollVoiceover/pollThumbnail 2.5s interval + 6min cap; pollVariants on GET flags).
   - Clients: create-view startVoiceover/startThumbnail and detail-dialog runStage/generateVariants now POST (fast) then poll; 429-aware backoff upgraded in withRetry (x4 multiplier on 429; TTS 5 attempts/6s base, image 4 attempts/5s base).
 - Verification: E2E async test (202 in 19-90ms → poll → ready), both user-stuck videos repaired concurrently via the async API (32s/65s incl. one silent 429 retry), eslint clean, browser check: library renders 6 videos, repaired video detail dialog shows thumbnail + Ready + 2m57s audio player, zero console errors.
 
@@ -104,27 +104,27 @@ Stage Summary:
 ---
 Task ID: 6
 Agent: main (Z.ai)
-Task: Package TubeForge for local machine deployment + setup guide.
+Task: Package Ibismuh Studio for local machine deployment + setup guide.
 
 Work Log:
 - Inspected runtime deps: Node >=20 (SDK requirement), npm/bun install, Prisma/SQLite (file-based), .env DATABASE_URL (was absolute sandbox path -> .env.example uses relative file:../db/custom.db).
 - SDK auth research: z-ai-web-dev-sdk reads .z-ai-config JSON (baseUrl, apiKey, chatId, token, userId) from project dir -> home dir -> /etc; sandbox copy at /etc/.z-ai-config. Credentials NOT included in package (sensitive); .z-ai-config.example template + instructions provided instead.
 - Wrote LOCAL-SETUP.md: prerequisites, install, env, db push, credential setup, run (dev/prod), first-run checklist, troubleshooting table (incl. 429 + stuck-job guidance).
-- Built download/tubeforge-local.zip (249KB, 144 files): src, prisma, public, scripts (tests, no screenshots), configs, bun.lock, .env.example, .z-ai-config.example, LOCAL-SETUP.md, .gitkeep placeholders; excluded node_modules/.next/db/uploads/skills/examples/worklog.
+- Built download/ibismuh-local.zip (249KB, 144 files): src, prisma, public, scripts (tests, no screenshots), configs, bun.lock, .env.example, .z-ai-config.example, LOCAL-SETUP.md, .gitkeep placeholders; excluded node_modules/.next/db/uploads/skills/examples/worklog.
 - Cleaned scripts/test-clip.mp4 (9.8MB test artifact).
 
 Stage Summary:
-- Deliverable: download/tubeforge-local.zip + LOCAL-SETUP.md. Local run needs: npm install -> cp .env.example .env -> db:generate + db:push -> cp .z-ai-config.example .z-ai-config (fill credentials) -> npm run dev. App works without credentials for UI; AI stages need valid Z.ai config values.
+- Deliverable: download/ibismuh-local.zip + LOCAL-SETUP.md. Local run needs: npm install -> cp .env.example .env -> db:generate + db:push -> cp .z-ai-config.example .z-ai-config (fill credentials) -> npm run dev. App works without credentials for UI; AI stages need valid Z.ai config values.
 
 ---
 Task ID: 7
 Agent: main (Z.ai)
-Task: TubeForge Phase 1 — Characters ("Cast"): character model, GLM character bible, CogView reference portraits, identity-consistent pose sheets via image editing, cast integration across the video pipeline.
+Task: Ibismuh Studio Phase 1 — Characters ("Cast"): character model, GLM character bible, CogView reference portraits, identity-consistent pose sheets via image editing, cast integration across the video pipeline.
 
 Work Log:
 - Verified SDK image-edit capability first (scripts/test-character-edit.mjs): `zai.images.generations.edit` requires `images: [{ url: dataUrl }]` (NOT `image: string` — SDK types are wrong); portrait (48s) + identity-preserving pose edit (14s) both confirmed visually.
 - Prisma: new Character model (name/role/personality/appearance/identityAnchor/voice/artStyle/hasPortrait) + Video.characterId (SetNull). db push + client regen + dev server restart with .next wipe (stale-client pitfall avoided).
-- New src/lib/tubeforge/characters.ts: serializeCharacter (DTO with poseUrls/generating flags), file helpers (uploads/characters/<id>/portrait.png + pose-<pose>.png), generateCharacterBible (GLM persona designer -> role/personality/appearance/identityAnchor/voice/artStyle), generateCharacterPortrait (CogView 1024x1024), generateCharacterPoses (3 identity-locked poses via images.edit seeded from portrait, 2s pacing), characterSceneFragment, buildAnchorFallback.
+- New src/lib/ibismuh/characters.ts: serializeCharacter (DTO with poseUrls/generating flags), file helpers (uploads/characters/<id>/portrait.png + pose-<pose>.png), generateCharacterBible (GLM persona designer -> role/personality/appearance/identityAnchor/voice/artStyle), generateCharacterPortrait (CogView 1024x1024), generateCharacterPoses (3 identity-locked poses via images.edit seeded from portrait, 2s pacing), characterSceneFragment, buildAnchorFallback.
 - ai.ts: exported getZAI/withRetry/parseJsonLoose; generateThumbnail now accepts character — PREFERS images.edit with the reference portrait as visual seed (true likeness in thumbnails) and falls back to text identity-anchor prompting when no portrait exists.
 - jobs.ts generalized to arbitrary entity ids (+ portrait/poses kinds, characterJobSnapshot).
 - API: /api/characters (GET/POST), /api/characters/[id] (GET/PATCH/DELETE incl. file cleanup), /api/characters/[id]/portrait (POST 202 job + GET PNG stream), /api/characters/[id]/poses (POST 202 job + GET list), /api/characters/[id]/poses/[pose] (GET PNG), /api/characters/bible (sync GLM, applies to existing character when characterId given). Videos API: characterId in POST (validated)/PATCH, character fields in all serializers; thumbnail route passes character; export ZIP now includes CAST line + cast block in metadata.json.
@@ -135,22 +135,22 @@ Work Log:
 - Browser E2E via agent-browser: Cast grid renders both characters, Character Studio shows portrait + 3/3 locked poses + editable fields, Create cast selector with voice adoption + helper text, detail dialog cast badge, export ZIP carries cast metadata, mobile 375px Cast layout OK. Zero page errors, lint clean.
 
 Stage Summary:
-- TubeForge now has a recurring-cast system: GLM designs the persona (character bible), CogView paints a canonical reference portrait, and image-editing derives an identity-locked consistency sheet (explaining/thinking/welcoming) that becomes the storyboard brick set for Phase 2 scene rendering. Thumbnails featuring the cast use the portrait as a visual seed for true likeness.
-- Key artifacts: src/lib/tubeforge/characters.ts, src/app/api/characters/**, src/components/tubeforge/views/cast-view.tsx, Prisma Character model, Video.characterId.
+- Ibismuh Studio now has a recurring-cast system: GLM designs the persona (character bible), CogView paints a canonical reference portrait, and image-editing derives an identity-locked consistency sheet (explaining/thinking/welcoming) that becomes the storyboard brick set for Phase 2 scene rendering. Thumbnails featuring the cast use the portrait as a visual seed for true likeness.
+- Key artifacts: src/lib/ibismuh/characters.ts, src/app/api/characters/**, src/components/ibismuh/views/cast-view.tsx, Prisma Character model, Video.characterId.
 - Demo state: Professor Vex fully generated (portrait + 3 poses + hosted demo video with cast-likeness thumbnail cmvmsjntl0004nfu7c6ollyhx); Nova awaiting portrait generation (one click in Cast).
 - Next: Phase 2 Story Engine — scene-based scripts {scenes:[narration,visual,camera,mood]}, storyboard generation reusing pose sheet + identity anchor, Ken Burns vs full i2v render modes, ffmpeg compositor.
 
 ---
 Task ID: 8
 Agent: main (Z.ai)
-Task: TubeForge Phase 2 — Story Engine: scene-based scripts, identity-locked storyboards, per-scene TTS, dual-mode rendering (Ken Burns / CogVideoX i2v) with ffmpeg compositor (captions + music), full UI integration.
+Task: Ibismuh Studio Phase 2 — Story Engine: scene-based scripts, identity-locked storyboards, per-scene TTS, dual-mode rendering (Ken Burns / CogVideoX i2v) with ffmpeg compositor (captions + music), full UI integration.
 
 Work Log:
 - Verified Phase 1 (Cast system, Task 7) fully present in code + worklog; continued with confirmed Phase 2 roadmap.
 - Prisma: Video += {format, renderMode, scenes(JSON), hasStoryboard, hasVideo, videoDuration}; db push + client regen + daemonized dev-server restart with .next wipe (stale-client pitfall avoided).
 - types.ts: FORMATS, RENDER_MODES, CAMERAS, SCENE_COUNTS (short 4 / medium 6 / long 8), Scene + SceneDTO; VideoDTO extended (scenes only populated in detail/create responses to keep list payloads light).
-- NEW src/lib/tubeforge/story.ts: generateSceneScriptPackage (GLM returns {title, description, tags, scenes[{title,narration,visual,camera,mood,caption,hostInScene}]}, narration joined into classic script field), generateSceneImage (host scenes + cast portrait -> images.edit identity lock; else CogView text gen), generateStoryboard (2s pacing), generateSceneVoiceovers (per-scene TTS -> scene-XX.wav + merged voiceover.wav for compat), buildSrtFromSegments, parseScenes/serializeScenes/storyboardComplete, scene file helpers.
-- NEW src/lib/tubeforge/render.ts: ffmpeg compositor via execFile (no shell). probeDuration (ffprobe); Ken Burns zoompan chains per camera (pre-upscaled 3840x2160, deterministic on/(N-1) expressions, d=1 trick); animated mode: ensureSceneClip (zai.video.generations.create cogvideox-3 1920x1080, 10s poll, download, cache scene-XX.mp4) + stream_loop fill; segments = max(wav + 0.35 lead + 0.85 tail, 2s); concat demuxer; finalize pass burns SRT (force_style Noto Sans SC) + aevalsrc ambient drone (A1+A2detune+E3, fade in/out, amix weights 1/0.32, alimiter) + faststart; pure remux when no effects. renderVideo orchestrator with onProgress + preview (sceneLimit -> preview.mp4, never sets hasVideo).
+- NEW src/lib/ibismuh/story.ts: generateSceneScriptPackage (GLM returns {title, description, tags, scenes[{title,narration,visual,camera,mood,caption,hostInScene}]}, narration joined into classic script field), generateSceneImage (host scenes + cast portrait -> images.edit identity lock; else CogView text gen), generateStoryboard (2s pacing), generateSceneVoiceovers (per-scene TTS -> scene-XX.wav + merged voiceover.wav for compat), buildSrtFromSegments, parseScenes/serializeScenes/storyboardComplete, scene file helpers.
+- NEW src/lib/ibismuh/render.ts: ffmpeg compositor via execFile (no shell). probeDuration (ffprobe); Ken Burns zoompan chains per camera (pre-upscaled 3840x2160, deterministic on/(N-1) expressions, d=1 trick); animated mode: ensureSceneClip (zai.video.generations.create cogvideox-3 1920x1080, 10s poll, download, cache scene-XX.mp4) + stream_loop fill; segments = max(wav + 0.35 lead + 0.85 tail, 2s); concat demuxer; finalize pass burns SRT (force_style Noto Sans SC) + aevalsrc ambient drone (A1+A2detune+E3, fade in/out, amix weights 1/0.32, alimiter) + faststart; pure remux when no effects. renderVideo orchestrator with onProgress + preview (sceneLimit -> preview.mp4, never sets hasVideo).
 - jobs.ts: kinds += storyboard/render/scene (single-scene re-roll keyed `${videoId}#scene${n}`), setJobProgress/jobProgress map; snapshot extended to 5 flags.
 - poll.ts: pollStoryboard (hasStoryboard), pollRender (GET /render with onTick progress callback, 50-min cap for animated), pollScene (per-scene flag).
 - NEW serialize.ts: shared serializeVideo (fs-checks final.mp4/preview.mp4 for videoUrl/previewUrl) — replaced 4 duplicated per-route serializers.
@@ -163,15 +163,15 @@ Work Log:
 - VLM visual verification: Professor Vex identity locked across storyboard (same glasses/beard/maroon cardigan confirmed), all rendered frames have burned captions + clean composition.
 
 Stage Summary:
-- TubeForge now produces complete MP4 videos, not just packages: topic -> scene script -> identity-locked storyboard -> per-scene narration -> composed 1080p30 video with burned captions, ambient bed, faststart streaming. Two render modes: Ken Burns (~1.5 min) and full CogVideoX animation (~35s-4min per scene) + 1-scene preview renders. Auto-Pilot runs the full Ken Burns chain end-to-end.
-- Key artifacts: src/lib/tubeforge/{story,render,serialize}.ts, api/videos/[id]/{storyboard,storyboard/[n],render,mp4}, create-view story mode + 5-stage stepper, detail-dialog 3-tab refactor.
+- Ibismuh Studio now produces complete MP4 videos, not just packages: topic -> scene script -> identity-locked storyboard -> per-scene narration -> composed 1080p30 video with burned captions, ambient bed, faststart streaming. Two render modes: Ken Burns (~1.5 min) and full CogVideoX animation (~35s-4min per scene) + 1-scene preview renders. Auto-Pilot runs the full Ken Burns chain end-to-end.
+- Key artifacts: src/lib/ibismuh/{story,render,serialize}.ts, api/videos/[id]/{storyboard,storyboard/[n],render,mp4}, create-view story mode + 5-stage stepper, detail-dialog 3-tab refactor.
 - Demo state: 11 videos in library incl. "The Vanishing Medieval Library" (Professor Vex, 4 scenes, rendered Ken Burns MP4 143.6s + animated preview).
 - Next: Phase 3 robustness — persistent job queue (in-memory jobs die on restart), global AI rate budget, VLM quality gating; Phase 4 — retention comments, radar->outline, ASR caption sync.
 
 ---
 Task ID: 9
 Agent: main (Z.ai)
-Task: TubeForge Phase 3 — Robustness: persistent job queue with crash recovery, global AI rate budget, VLM quality gate, ASR narration proofreading.
+Task: Ibismuh Studio Phase 3 — Robustness: persistent job queue with crash recovery, global AI rate budget, VLM quality gate, ASR narration proofreading.
 
 Work Log:
 - Verified Phases 1-2 (Tasks 7-8) fully present; proceeded with confirmed roadmap Phase 3.
@@ -187,15 +187,15 @@ Work Log:
 - Browser verified (agent-browser + GLM vision): zero page errors; Settings robustness card complete (gate "Thumbnails only", threshold 6/10, budget on, 4 rates) + jobs panel populated (Done chips, durations); detail dialog Package tab shows narration report (Good badge, 95%, scene chips, transcript) + Re-check button; dashboard regression clean (quality gate entries visible in activity feed); mobile 375px scrollWidth 375 (no overflow); eslint clean.
 
 Stage Summary:
-- TubeForge's pipeline is now self-healing and self-policing: jobs survive restarts (interrupted stages are detected and explained instead of vanishing), every AI call passes a global rate budget (pacing + concurrency + shared 429 cool-downs, settings-tunable), generated art is inspected by a vision model and auto re-rolled when defective (proved live: 2/10 → 9/10), and narration is ASR-proofread with per-scene similarity reports before rendering/upload.
-- Key artifacts: src/lib/tubeforge/{budget,quality,verify}.ts, rewritten jobs.ts, api/{jobs,videos/[id]/verify}, settings-view robustness+jobs UI, detail-dialog narration check, scripts/test-phase3.mjs.
+- Ibismuh Studio's pipeline is now self-healing and self-policing: jobs survive restarts (interrupted stages are detected and explained instead of vanishing), every AI call passes a global rate budget (pacing + concurrency + shared 429 cool-downs, settings-tunable), generated art is inspected by a vision model and auto re-rolled when defective (proved live: 2/10 → 9/10), and narration is ASR-proofread with per-scene similarity reports before rendering/upload.
+- Key artifacts: src/lib/ibismuh/{budget,quality,verify}.ts, rewritten jobs.ts, api/{jobs,videos/[id]/verify}, settings-view robustness+jobs UI, detail-dialog narration check, scripts/test-phase3.mjs.
 - Demo state: story video "The Vanishing Medieval Library" carries a 95% narration match report; 2 fresh quality-gated thumbnails; job history populated with real lifecycle data.
 - Next: Phase 4 — retention comments, topic-radar→story-outline pipeline, ASR-timed caption sync, YouTube Data API OAuth upload.
 
 ---
 Task ID: 10
 Agent: main (Z.ai)
-Task: TubeForge Phase 4 — Growth Engine: engagement kit (retention comments), Topic Radar greenlight pipeline, ASR-timed smart captions, YouTube OAuth upload.
+Task: Ibismuh Studio Phase 4 — Growth Engine: engagement kit (retention comments), Topic Radar greenlight pipeline, ASR-timed smart captions, YouTube OAuth upload.
 
 Work Log:
 - Confirmed Phases 1-3 (Tasks 7-9) complete via worklog + filesystem; proceeded with the roadmap's Phase 4 as the user's "next".
@@ -212,15 +212,15 @@ Work Log:
 - Browser verified (agent-browser): research idea cards show Greenlight + Classic buttons; settings YouTube card renders (inputs, redirect URI, disabled-until-configured Connect, privacy select); story dialog Package tab shows populated kit (copy buttons, replies, playbook) + Video tab ASR-synced cues switch on; footer hides Upload while disconnected; mobile 375px scrollWidth 375; zero page/console errors; eslint clean; stale incident activities cleaned from demo DB.
 
 Stage Summary:
-- TubeForge now closes the loop from research to audience: a radar idea becomes a scripted scene story in one click, captions change exactly when the narration moves (ASR-aligned, 41 cues vs 4), every video ships a paste-ready launch-day engagement kit, and connected channels get a real resumable YouTube upload (title + description + tags + thumbnail, privacy-selectable) that flips the video to Published with its live URL.
-- Key artifacts: src/lib/tubeforge/{comments,captions,youtube}.ts, api/{videos/[id]/{comments,upload}, research/[id]/greenlight, youtube/*}, captions wired in render.ts, engagement-kit in export route, detail-dialog kit panel + cue toggle + upload buttons, settings YouTube card, scripts/test-phase4.mjs, hardened scripts/restart-dev.py.
+- Ibismuh Studio now closes the loop from research to audience: a radar idea becomes a scripted scene story in one click, captions change exactly when the narration moves (ASR-aligned, 41 cues vs 4), every video ships a paste-ready launch-day engagement kit, and connected channels get a real resumable YouTube upload (title + description + tags + thumbnail, privacy-selectable) that flips the video to Published with its live URL.
+- Key artifacts: src/lib/ibismuh/{comments,captions,youtube}.ts, api/{videos/[id]/{comments,upload}, research/[id]/greenlight, youtube/*}, captions wired in render.ts, engagement-kit in export route, detail-dialog kit panel + cue toggle + upload buttons, settings YouTube card, scripts/test-phase4.mjs, hardened scripts/restart-dev.py.
 - Demo state: story video "The Vanishing Medieval Library" carries a full engagement kit + a 41-cue ASR-synced subtitles.srt; YouTube card in clean onboarding state (fake test credentials cleared).
 - Next (Phase 5 candidates): analytics feedback loop (YouTube Data API stats back into Topic Radar scoring), multi-channel OAuth account switching, auto-generated Shorts (9:16 re-crop + punch-in edits), team/batch greenlight queue.
 
 ---
 Task ID: 11
 Agent: main (Z.ai)
-Task: TubeForge Phase 5 — Performance Loop & Auto-Shorts: YouTube stats sync (VideoStat snapshots), Analytics view, deterministic performance boost feeding Topic Radar, and 9:16 vertical Short rendering.
+Task: Ibismuh Studio Phase 5 — Performance Loop & Auto-Shorts: YouTube stats sync (VideoStat snapshots), Analytics view, deterministic performance boost feeding Topic Radar, and 9:16 vertical Short rendering.
 
 Work Log:
 - Confirmed Phases 1-4 (Tasks 7-10) complete via worklog + filesystem; proceeded with the roadmap's Phase 5 candidates (analytics feedback loop + auto-Shorts chosen as the two highest-impact items).
@@ -239,18 +239,18 @@ Work Log:
 Stage Summary:
 - The growth engine now closes its loop: upload → sync real stats → winners feed both the GLM strategist prompt and a deterministic, explainable score boost on radar ideas (with visible +N badges); underperformer clones get dinged.
 - Every rendered story video can be recycled into a Shorts-ready 9:16 vertical (punch-in, karaoke captions, fades, ≤45s) from the detail dialog with auto or pinned scene selection.
-- Key artifacts: src/lib/tubeforge/{analytics,shorts}.ts, youtube.ts stats section, api/{analytics,analytics/rescore,youtube/sync,videos/[id]/short}, serialize/poll/jobs updates, views/analytics-view.tsx, detail-dialog Shorts panel, research badges, scripts/test-phase5.mjs.
+- Key artifacts: src/lib/ibismuh/{analytics,shorts}.ts, youtube.ts stats section, api/{analytics,analytics/rescore,youtube/sync,videos/[id]/short}, serialize/poll/jobs updates, views/analytics-view.tsx, detail-dialog Shorts panel, research badges, scripts/test-phase5.mjs.
 - Seeded demo state: 3 videos published with fake youtu.be urls + 2 stat rounds each so the Analytics view demos populated; fresh radar scan carries 7 boosted ideas. Remaining Phase 5 candidates for a future phase: multi-channel OAuth account switching, team/batch greenlight queue, Shorts auto-upload.
 
 ---
 Task ID: 12
 Agent: main (Z.ai)
-Task: TubeForge — "IT STILL DOESN'T GENERATE VIDEOS" triage + fix: make animated MP4 generation the default path, un-block classic videos, harden TTS.
+Task: Ibismuh Studio — "IT STILL DOESN'T GENERATE VIDEOS" triage + fix: make animated MP4 generation the default path, un-block classic videos, harden TTS.
 
 Work Log:
 - User reported videos still not generating ("LIKE ANimated video not just a thumbnail") with screenshots: voiceover failing 429 / HTTP 502. Live probes showed LLM (574ms) + TTS (2-4s) healthy NOW — the 429/502 toasts were upstream rate-limit storms from earlier.
 - Root cause found in the product flow, not the services: (1) Create view defaulted to format "script" (classic) — classic videos have NO render path at all (script + voiceover + thumbnail only); (2) Auto-Pilot explicitly skipped the animated render (toast: "launch it from the Library"); (3) TTS retries gave up after ~6 min of 429s.
-- NEW src/lib/tubeforge/convert.ts — classic→scene upgrade: splitScriptIntoScenes (GLM copies narration VERBATIM into N scenes + art direction; mechanical sentence-split fallback with word-coverage check ≥60%), cutVoiceoverIntoScenes (ffprobe duration → silencedetect -35dB/0.30s speech runs → cumulative word-fraction cut points snapped to nearest silence gap ±2.5s → ffmpeg per-scene pcm cuts; monotonic + ≥2s guards), convertClassicToScenes orchestrator (flips format to story, resets storyboard/video flags, preserves voiceover, clears stale render artifacts). Zero TTS calls — the voice the user already has is kept.
+- NEW src/lib/ibismuh/convert.ts — classic→scene upgrade: splitScriptIntoScenes (GLM copies narration VERBATIM into N scenes + art direction; mechanical sentence-split fallback with word-coverage check ≥60%), cutVoiceoverIntoScenes (ffprobe duration → silencedetect -35dB/0.30s speech runs → cumulative word-fraction cut points snapped to nearest silence gap ±2.5s → ffmpeg per-scene pcm cuts; monotonic + ≥2s guards), convertClassicToScenes orchestrator (flips format to story, resets storyboard/video flags, preserves voiceover, clears stale render artifacts). Zero TTS calls — the voice the user already has is kept.
 - NEW api/videos/[id]/convert (POST 202 job + GET status) with 400 guardrails (already story / no script).
 - jobs.ts: JobKind += "convert", STAGE_LABEL, jobSnapshot.convert flag, crash-recovery guard (artifact-landed = format === "story").
 - poll.ts: GeneratingFlags.convert + pollConvert (format === "story" predicate, 6-min timeout).
@@ -264,30 +264,30 @@ Work Log:
 
 Stage Summary:
 - Every video can now become an animated MP4: new videos default to scene format and Auto-Pilot renders full AI animation end-to-end; existing classic videos get a one-click upgrade that splits the script verbatim and reuses the existing voiceover (no TTS re-spend, 0.0% drift); TTS survives ~16-min rate-limit storms.
-- Key artifacts: src/lib/tubeforge/convert.ts, api/videos/[id]/convert, dialog upgrade card, create-view story-default + animated Auto-Pilot, patient TTS retries.
+- Key artifacts: src/lib/ibismuh/convert.ts, api/videos/[id]/convert, dialog upgrade card, create-view story-default + animated Auto-Pilot, patient TTS retries.
 - Demo state: "The 5 Morning Habits That Rewire Your Brain" converted (6 scenes, storyboard painted) with an animated 13.2s scene-1 preview rendered via CogVideoX.
 - Next: full animated render of the remaining 5 scenes on request (~4 min/scene), or Phase 6 candidates (Shorts auto-upload, multi-channel switching, batch greenlight queue).
 
 ---
 Task ID: 13
 Agent: main (Z.ai)
-Task: TubeForge — local-PC package refresh + voice freedom ("i don't like the voices... let me use voice from internet"): Bring-Your-Own-Voice (upload / URL ingest), voice panel UI, fresh tubeforge-local.zip.
+Task: Ibismuh Studio — local-PC package refresh + voice freedom ("i don't like the voices... let me use voice from internet"): Bring-Your-Own-Voice (upload / URL ingest), voice panel UI, fresh ibismuh-local.zip.
 
 Work Log:
 - Restored context post-compaction: worklog Tasks 6-12 (animated render already default per Task 12; Task 6 ZIP stale), ai.ts/story.ts/convert.ts/render routes/jobs.ts/serialize.ts + both voice-pickers.
 - Prisma: Video += voiceSource ("tts"|"custom", default tts) + voiceLabel; db push + generate; dev server restarted via hardened restart-dev.py to pick up the new Prisma client (stale client silently dropped the new fields).
-- NEW src/lib/tubeforge/voice.ts — BYOV ingest: downloadAudio (http/https, 2-min timeout, 100 MB cap via content-length AND bytes, content-type + extension audio sniff, readable errors) → ffprobe validation (real audio stream, 1s..30min) → ffmpeg normalize to the exact TTS studio format (24 kHz mono PCM-16 voiceover.wav, atomic-ish with staged temp + prev-restore) → story videos auto-run convert.ts cutVoiceoverIntoScenes so the brought voice is cut across scenes with the same silence-snapping cutter (0 TTS calls, voice kept verbatim).
+- NEW src/lib/ibismuh/voice.ts — BYOV ingest: downloadAudio (http/https, 2-min timeout, 100 MB cap via content-length AND bytes, content-type + extension audio sniff, readable errors) → ffprobe validation (real audio stream, 1s..30min) → ffmpeg normalize to the exact TTS studio format (24 kHz mono PCM-16 voiceover.wav, atomic-ish with staged temp + prev-restore) → story videos auto-run convert.ts cutVoiceoverIntoScenes so the brought voice is cut across scenes with the same silence-snapping cutter (0 TTS calls, voice kept verbatim).
 - Voiceover route rewritten to 3 modes: bodyless/JSON {mode:"tts"} = existing TTS paths (flips voiceSource back, invalidates stale story artifacts incl. short); multipart "file" = upload (100 MB guard); JSON {mode:"url"} = internet ingest. Custom mode needs NO script. setJobProgress labels stream into the jobs panel; activities record source + duration + scene cut count.
 - DTOs: types.ts VideoDTO += voiceSource/voiceLabel; serialize.ts maps them.
 - UI (video-detail-dialog): Package tab Voiceover section rebuilt — source badge (fuchsia "Custom voice — <label>" vs "TTS · <voice>"), collapsible "Change the voice" panel with 3 modes (AI voices: full 7-voice Select + regenerate via PATCH voice + POST mode tts; Upload: file picker, 15 format accept list; From URL: input + Enter submit + direct-link hint), story-format hint about auto scene cutting; footer button relabels to "Switch to AI voice" for custom-voiced videos; header description shows "Custom voice — <label>". Create view: hint under Narrator voice pointing at the Package-tab voice panel.
 - E2E scripts/test-byov.mjs (35 asserts, ALL PASS after fixing 3 test-semantics issues): TTS sample from the video's own script (46.5s); guardrails (invalid URL 400, bodyless POST = TTS path flipping voiceSource back to tts, example.com text/html rejected with readable error); upload mode (custom + label + duration ≈ sample ±0s + scene WAVs re-cut); URL mode (real internet mp3 — samplelib 15s file decodes to 19.2s, VBR header lie, converted WAV is truth); kenburns render on the custom-cut audio → final.mp4 26.4s h264+aac, detail DTO reflects it.
 - Browser verified (agent-browser): library → Morning Habits dialog Package tab shows "Custom voice — sample-15s.mp3" badge + "VOICEOVER · 19S"; Change-the-voice panel renders all 3 modes (AI combobox with 7 voices + Regenerate, Upload chooser with disabled-until-file apply, From URL input + Fetch button + hint); footer "Switch to AI voice"; Create view hint present; zero page/console errors; scrollWidth 375 at 375px. Screenshots scripts/byov-dialog-panel.png, scripts/byov-create-hint.png.
 - Demo state restored: bodyless POST re-ran TTS (kazi, 168.2s) riding out a live 429 storm (budget cool-down + attempt 2/6 → recovered), render artifacts cleared → Morning Habits back to pre-test state.
-- Packaging: NEW scripts/package-local.mjs (repeatable: ROOT_FILES + src/public/scripts/prisma walks, scripts code-only filter, prisma .db filter, db/uploads .gitkeep placeholders, staged zip); recreated missing .env.example (DATABASE_URL file:../db/custom.db); LOCAL-SETUP.md rewritten (current feature list incl. animated render + BYOV how-to, ffmpeg now REQUIRED, updated troubleshooting); download/tubeforge-local.zip rebuilt — 228 files, 410 KB, leak-checked (no .env/.z-ai-config/db/uploads/worklog inside).
+- Packaging: NEW scripts/package-local.mjs (repeatable: ROOT_FILES + src/public/scripts/prisma walks, scripts code-only filter, prisma .db filter, db/uploads .gitkeep placeholders, staged zip); recreated missing .env.example (DATABASE_URL file:../db/custom.db); LOCAL-SETUP.md rewritten (current feature list incl. animated render + BYOV how-to, ffmpeg now REQUIRED, updated troubleshooting); download/ibismuh-local.zip rebuilt — 228 files, 410 KB, leak-checked (no .env/.z-ai-config/db/uploads/worklog inside).
 
 Stage Summary:
-- TubeForge now speaks with ANY voice: upload a recording or paste a direct link to any mp3/wav/m4a on the internet and it becomes the video's narration — normalized to studio WAV, auto-cut across scenes, rendered into the final MP4. Built-in 7 voices remain one click away (footer flip-back).
-- Key artifacts: src/lib/tubeforge/voice.ts, voiceover route 3-mode rewrite, dialog voice panel + create hint, schema voiceSource/voiceLabel, scripts/test-byov.mjs, scripts/package-local.mjs, LOCAL-SETUP.md, download/tubeforge-local.zip (228 files).
+- Ibismuh Studio now speaks with ANY voice: upload a recording or paste a direct link to any mp3/wav/m4a on the internet and it becomes the video's narration — normalized to studio WAV, auto-cut across scenes, rendered into the final MP4. Built-in 7 voices remain one click away (footer flip-back).
+- Key artifacts: src/lib/ibismuh/voice.ts, voiceover route 3-mode rewrite, dialog voice panel + create hint, schema voiceSource/voiceLabel, scripts/test-byov.mjs, scripts/package-local.mjs, LOCAL-SETUP.md, download/ibismuh-local.zip (228 files).
 - Local run: unzip → npm install → cp .env.example .env → npx prisma generate+db push → cp .z-ai-config.example .z-ai-config (fill creds) → npm run dev. ffmpeg required for render/BYOV/ASR.
 - Next candidates: per-scene voice files (upload one audio per scene), voice cloning provider integration, Shorts auto-upload, multi-channel OAuth switching.
 
@@ -304,11 +304,11 @@ Work Log:
 - Added scripts/verify-config.mjs (config shape check + live chat test; --all adds tts/image/video task tests)
 - Rewrote LOCAL-SETUP.md §4 (field table, where to get key, sandbox-credentials caveat, verify step) + troubleshooting row for 401/403
 - Tested verify-config.mjs live: chat replied pong, exit 0
-- Rebuilt download/tubeforge-local.zip (includes updated template, guide, verify script)
+- Rebuilt download/ibismuh-local.zip (includes updated template, guide, verify script)
 
 Stage Summary:
 - User needs exactly 2 values from their own Z.ai API account: baseUrl + apiKey; other 3 fields optional/removable
-- tubeforge-local.zip refreshed at download/tubeforge-local.zip
+- ibismuh-local.zip refreshed at download/ibismuh-local.zip
 - If user's public key can't serve /audio/tts or /video/generation routes, next step is provider adapters (alternative TTS/video APIs)
 
 ---
@@ -319,18 +319,18 @@ Task: Default to free GLM flash models + make API key/baseURL/model editable fro
 Work Log:
 - (Note: environment partially reset between turns — pack/, download/, worklog rolled back; source code + dev server survived)
 - types.ts: added CHAT_MODELS registry, DEFAULT_CHAT_MODEL=glm-4.5-flash (free), DEFAULT_ZAI_BASE_URL
-- NEW src/lib/tubeforge/zai-config.ts: Setting-table keys (zai.baseUrl/apiKey/chatModel/visionModel), syncZaiConfigFile() materializes .z-ai-config from DB (SDK create() takes no params, only reads the file), getChatModel/getVisionModel, createZaiForTest
+- NEW src/lib/ibismuh/zai-config.ts: Setting-table keys (zai.baseUrl/apiKey/chatModel/visionModel), syncZaiConfigFile() materializes .z-ai-config from DB (SDK create() takes no params, only reads the file), getChatModel/getVisionModel, createZaiForTest
 - ai.ts: getZAI() syncs config file before first create; added resetZAIClient()
 - Wired model into all 7 chat call sites (ai.ts x2, story, convert, comments, characters = text; quality.ts = conditional vision model with cast to preserve gateway-default behavior)
 - NEW /api/settings/ai: GET (masked key, never full), PUT (save + sync file + reset client), POST (test connection with overrides; finally-block re-syncs so tests never poison the live client)
 - settings-view.tsx: new "AI Provider (Z.ai)" card — base URL, masked API key, chat model select (free default), optional vision model, Save & apply + Test connection buttons, link to get a free key
 - Verified: tsc clean for all new code (pre-existing errors elsewhere only), GET/PUT/POST endpoints 200, dev server compiles clean
-- Rebuilt portable package via NEW scripts/package-local.sh (persistent one-command rebuild): download/tubeforge-local.zip (383KB, 227 files) with SETUP.md documenting the Settings UI flow
+- Rebuilt portable package via NEW scripts/package-local.sh (persistent one-command rebuild): download/ibismuh-local.zip (383KB, 227 files) with SETUP.md documenting the Settings UI flow
 
 Stage Summary:
 - Script writing now defaults to FREE glm-4.5-flash — $0 on a fresh Z.ai key
 - Users change API key/endpoint/model from Settings → AI Provider without touching files; changes apply to the very next AI call
-- Deliverable: download/tubeforge-local.zip refreshed; packaging recipe persisted at scripts/package-local.sh
+- Deliverable: download/ibismuh-local.zip refreshed; packaging recipe persisted at scripts/package-local.sh
 
 ---
 Task ID: multi-provider-adapters
@@ -339,7 +339,7 @@ Task: "switch to any ai of my choice if capable of doing the task" — capabilit
 
 Work Log:
 - Read all 13 AI call sites (ai.ts ×4, story ×3, convert, comments, characters ×3, quality, render, verify) + settings route/UI + voice pickers.
-- NEW src/lib/tubeforge/providers/: registry.ts (provider metadata per capability, model suggestions, key URLs, OpenAI voice catalog), settings.ts (ai.chat/tts/image/video JSON rows in Setting table + read-time migration from legacy zai.chatModel/visionModel + zai creds never stored per-capability), http.ts (timeout/readable-error fetch), chat.ts (zai SDK unchanged shape | openai /chat/completions WITHOUT the zai-only `thinking` field | anthropic /v1/messages x-api-key+max_tokens+system | gemini :generateContent x-goog-api-key+systemInstruction+responseMimeType json), vision.ts (all 4 providers; quality gate fails open as before), tts.ts (zai 7 voices | openai /audio/speech response_format wav, voice sanitization + classic-6 rule for tts-1), asr.ts (zai file_base64 | openai whisper multipart), image.ts (zai CogView create+edit | openai generations with size mapping 1344x768→1792x1024 dall-e-3 / 1536x1024 gpt-image-1, b64_json handling, multipart /images/edits for gpt-image-1 only; imageEditSupported() so dall-e-3/pose-sheet callers fall back or error clearly).
+- NEW src/lib/ibismuh/providers/: registry.ts (provider metadata per capability, model suggestions, key URLs, OpenAI voice catalog), settings.ts (ai.chat/tts/image/video JSON rows in Setting table + read-time migration from legacy zai.chatModel/visionModel + zai creds never stored per-capability), http.ts (timeout/readable-error fetch), chat.ts (zai SDK unchanged shape | openai /chat/completions WITHOUT the zai-only `thinking` field | anthropic /v1/messages x-api-key+max_tokens+system | gemini :generateContent x-goog-api-key+systemInstruction+responseMimeType json), vision.ts (all 4 providers; quality gate fails open as before), tts.ts (zai 7 voices | openai /audio/speech response_format wav, voice sanitization + classic-6 rule for tts-1), asr.ts (zai file_base64 | openai whisper multipart), image.ts (zai CogView create+edit | openai generations with size mapping 1344x768→1792x1024 dall-e-3 / 1536x1024 gpt-image-1, b64_json handling, multipart /images/edits for gpt-image-1 only; imageEditSupported() so dall-e-3/pose-sheet callers fall back or error clearly).
 - Rewired all call sites through chatComplete/visionComplete/ttsSynthesize/imageGenerate/imageEdit/asrTranscribe; aiCall budget retry unchanged (wraps adapters identically). characters.ts bible prompt now lists the ACTIVE provider's voice ids. render.ts uses video capability model (default cogvideox-3) + actionable error when video provider ≠ zai.
 - zai-config.ts slimmed to global-creds + syncZaiConfigFile + createZaiForTest (SDK edit body `images` cast: .d.ts wrongly says `image`, runtime posts body verbatim — proven live before).
 - API: /api/settings/ai v2 (GET: zai creds + 4 capability configs masked + provider registry; PUT scope zai|capability + copyCredsFrom:"chat" account sharing; POST test per capability incl. hidden vision/imageEdit kinds + confirmCost guard for image tests) + NEW /api/settings/voices (catalog for active tts provider).
@@ -349,12 +349,12 @@ Work Log:
 - Browser verified: provider switch to OpenAI-compatible reveals endpoint/key/model+suggestions/vision fields, model auto-prefill; zero console/page errors; scrollWidth 375 at 375px (screenshots scripts/providers-ui-final.png, providers-ui-mobile.png).
 - Cleanup: test videos + test keys scrubbed from db (zai provider rows strip creds by design); PUT/GET roundtrip + copyCredsFrom verified live; all capabilities restored to zai defaults.
 - Docs: LOCAL-SETUP.md §4 rewritten (provider matrix, key sources, UI-wins-over-file note, checklist step 2) + scripts/SETUP-local.md (provider table, mix-and-match flow).
-- Repackaged via scripts/package-local.sh → download/tubeforge-local.zip (406 KB, 239 files; providers/, voices route, test-providers.mjs included; db verified clean inside zip; packaged app boot-tested on :3011 — settings/voices/library all 200).
+- Repackaged via scripts/package-local.sh → download/ibismuh-local.zip (406 KB, 239 files; providers/, voices route, test-providers.mjs included; db verified clean inside zip; packaged app boot-tested on :3011 — settings/voices/library all 200).
 
 Stage Summary:
-- TubeForge is now provider-agnostic per task: scripts on any of Z.ai/OpenAI-compatible/Anthropic/Gemini, voice on Z.ai/OpenAI, art on Z.ai/OpenAI (edits: CogView or gpt-image-1), video Z.ai-only with Ken Burns as the no-AI fallback. Free end-to-end possible: GLM-4.5-Flash scripts + Gemini free tier / BYOV custom voices / Ken Burns renders.
+- Ibismuh Studio is now provider-agnostic per task: scripts on any of Z.ai/OpenAI-compatible/Anthropic/Gemini, voice on Z.ai/OpenAI, art on Z.ai/OpenAI (edits: CogView or gpt-image-1), video Z.ai-only with Ken Burns as the no-AI fallback. Free end-to-end possible: GLM-4.5-Flash scripts + Gemini free tier / BYOV custom voices / Ken Burns renders.
 - Z.ai path byte-identical to before (same SDK calls); every non-zai adapter wire format verified against a capture stub (55 checks).
-- Deliverable: download/tubeforge-local.zip — unzip, npm install, npm run dev, Settings → AI Providers.
+- Deliverable: download/ibismuh-local.zip — unzip, npm install, npm run dev, Settings → AI Providers.
 
 ---
 Task ID: generate-script-retry-button
@@ -371,13 +371,13 @@ Work Log:
 - Browser (agent-browser): created a real failed video ("the battle of hud"), opened its dialog — Package tab shows error box + "No script yet" empty state + Generate script button in 3 places (section header, empty-state CTA, footer); clicked it → spinner → script landed (title/status/script/voice-button all updated); Storyboard tab shows 4 scenes + Generate storyboard; Re-generate script → fresh v2 take; zero console/page errors. Screenshots: scripts/regen-{1..6}-*.png
 - tsc: zero errors in all changed files (pre-existing errors elsewhere untouched)
 - Cleanup: test video deleted, stub stopped, chat provider restored to zai/glm-4.5-flash (verified via GET)
-- Repackaged via scripts/package-local.sh → download/tubeforge-local.zip (415 KB, 243 files — new route + updated jobs/poll/dialog + test script included)
+- Repackaged via scripts/package-local.sh → download/ibismuh-local.zip (415 KB, 243 files — new route + updated jobs/poll/dialog + test script included)
 
 Stage Summary:
 - Script generation failures are now recoverable in one click from the video detail dialog (no re-entering the topic in Create), and existing scripts can be re-rolled with a fresh AI take
 - Story re-rolls reset scene-bound media honestly (voiceover/storyboard/renders invalidated by new scene boundaries); classic re-rolls keep old artifacts until the user re-runs them
 - The button appears in 3 places for scriptless videos: script-section header, empty-state CTA, footer; in-flight jobs are adopted when the dialog re-opens
-- Deliverable: download/tubeforge-local.zip refreshed
+- Deliverable: download/ibismuh-local.zip refreshed
 
 ---
 Task ID: voice-preview-audition
@@ -386,7 +386,7 @@ Task: User request — "for voice one should be able to try and hear how it soun
 
 Work Log:
 - Surveyed all 5 voice pickers (create-view Narrator voice, settings-view Default narrator, cast-view create+edit character Voice, video-detail-dialog AI-voices mode) — all Radix Select → shared component extracted to avoid 5x duplication
-- NEW src/lib/tubeforge/voice-preview.ts — VOICE_PREVIEW_TEXT (one neutral sample line), getVoicePreview(): memory Map (32 entries LRU) + disk cache under uploads/_voicepreviews keyed by provider|baseUrl|keyFingerprint|model|voice (everything that can change the sound — caught via test flake that an endpoint/key switch would have served a stale sample), synthesized through aiCall("tts") so previews get the same pacing/concurrency/shared-429-penalty treatment as pipeline TTS
+- NEW src/lib/ibismuh/voice-preview.ts — VOICE_PREVIEW_TEXT (one neutral sample line), getVoicePreview(): memory Map (32 entries LRU) + disk cache under uploads/_voicepreviews keyed by provider|baseUrl|keyFingerprint|model|voice (everything that can change the sound — caught via test flake that an endpoint/key switch would have served a stale sample), synthesized through aiCall("tts") so previews get the same pacing/concurrency/shared-429-penalty treatment as pipeline TTS
 - NEW src/app/api/settings/voices/preview/route.ts — POST {voice} → WAV stream (Content-Type audio/wav); 400 unknown voice / no key for non-zai provider; 502 readable upstream errors
 - shared.tsx: NEW useVoicePreview() (useSyncExternalStore over a module-level pub/sub store + ONE singleton HTMLAudioElement + blob-URL + inflight-dedup caches — starting a new preview stops the previous across ALL pickers; stale-load guard so clicking voice B while A fetches plays only B) + NEW VoiceSelectWithPreview (raw Radix SelectPrimitive.Item — NOT shadcn SelectItem, which wraps ALL children in ItemText that Radix clones into the trigger; label-only ItemText asChild span keeps the trigger clean, play/stop button sits outside with pointerdown/pointerup/touchend/click stopPropagation so auditioning never selects/closes, per-item CheckIcon indicator preserved)
 - Rewired all 5 pickers to VoiceSelectWithPreview (+ "Tap the ▶ next to a voice to hear how it sounds" hints in create/settings/dialog)
@@ -395,12 +395,12 @@ Work Log:
 - Browser (agent-browser) across Create/Settings/video-detail-dialog: dropdown shows ▶ per voice; clicking ▶ plays (Stop state), menu STAYS OPEN, voice NOT selected; switching ▶ to another voice stops the previous (shared singleton); Stop button toggles off; clicking the option row itself selects + closes; trigger shows the CLEAN label (SelectItemText fix); disk-cache second-session instant hits; mobile 375px scrollWidth 375 + Settings picker preview works; zero console/page errors. Screenshots: scripts/voice-preview-dropdown.png, voice-preview-settings-mobile.png, voice-preview-dialog.png
 - Fixed a transient swallowed click during verification (Fast-Refresh rebuild window) — re-verified deterministic across a fresh reload: pointerdown/up/click instrumentation confirmed events reach the button with target=polygon and toggle correctly
 - Cleanup: tts capability restored to zai (7 studio voices verified), stub killed, uploads/_voicepreviews test cache removed, browser closed
-- Repackaged via scripts/package-local.sh → download/tubeforge-local.zip (435 KB; voice-preview.ts, preview route, updated shared.tsx/views, test-voice-preview.mjs included; verified inside zip)
+- Repackaged via scripts/package-local.sh → download/ibismuh-local.zip (435 KB; voice-preview.ts, preview route, updated shared.tsx/views, test-voice-preview.mjs included; verified inside zip)
 
 Stage Summary:
-- Every voice picker in TubeForge is now a try-before-you-commit booth: tap ▶ next to any voice to hear a short sample while the menu stays open, audition several voices, then pick — works for Z.ai's 7 studio voices AND any OpenAI-compatible TTS provider (provider-correct catalog), with server-side caching so repeat auditions never re-spend TTS calls
+- Every voice picker in Ibismuh Studio is now a try-before-you-commit booth: tap ▶ next to any voice to hear a short sample while the menu stays open, audition several voices, then pick — works for Z.ai's 7 studio voices AND any OpenAI-compatible TTS provider (provider-correct catalog), with server-side caching so repeat auditions never re-spend TTS calls
 - Previews respect the AI rate budget (shared 429 cool-downs), survive dev-server restarts on disk, and invalidate honestly when the user switches provider/endpoint/key/model
-- Deliverable: download/tubeforge-local.zip refreshed — same local flow as before (unzip → npm install → npm run dev)
+- Deliverable: download/ibismuh-local.zip refreshed — same local flow as before (unzip → npm install → npm run dev)
 
 ---
 Task ID: quality-overhaul-10of10
@@ -419,13 +419,13 @@ Work Log:
 - Tests: NEW scripts/test-shotchain.mjs (standalone ffmpeg proof: 11/11 — cuts land exactly at shot boundaries 3.07s/6.13s, zero black frames, SFX +50.5dB over no-sfx control, bed ducks −33.9dB under speech vs −16.2dB in gaps, exact segment duration); NEW scripts/test-quality-overhaul.mjs (app E2E via OpenAI-compatible stub: 38/38 — scene counts 8/12/16 for short/medium/long, scene-1 rehook + rehook-sfx auto-upgrade, thumbnail prompt contains the scene-1 story moment, preview render 14.4s with cuts every ≤2.43s and 0 black frames, whoosh audible at the opener, limiter holds, re-roll deletes the stale thumbnail + resets the flag); test-script-regen.mjs re-run 25/25 after giving its stub a 600ms pace (sub-ms stub finished the job before the 409-probe — test race, not a regression).
 - Bug found by tests & fixed: opening a scene with its own pan camera at z=1.0 froze the pan (zero travel range) and made the first internal cut invisible → pan/tilt openers now start at z=1.10; amix default normalize was burying SFX by 1/(1+w) → normalize=0 everywhere weights are used.
 - Housekeeping: fixed pre-existing tsc errors in touched routes (video.title narrowing into closures, THUMB_STYLES literal union); test videos + settings restored/cleaned (db verified: 16 demo videos, 0 test rows, zai defaults); _sfx cache persisted.
-- Repackaged via scripts/package-local.sh → download/tubeforge-local.zip (includes sfx.ts, updated render/story/convert/ai, routes, tests; db inside verified clean of test rows).
+- Repackaged via scripts/package-local.sh → download/ibismuh-local.zip (includes sfx.ts, updated render/story/convert/ai, routes, tests; db inside verified clean of test rows).
 
 Stage Summary:
 - Every render now changes framing at least every ~2.7s (hard camera cuts at verified boundaries), opens on a punch-zoom hook with a whoosh, resets attention with sting-punctuated rehooks every ~4 scenes, keeps a broadcast-style ducked music bed, and never shows a black frame.
 - Thumbnails are derived from the script itself — story videos paint their opening scene, classic videos paint the script's most striking moment — and a script re-roll invalidates the old cover automatically.
 - Scene density doubled-to-doubled-again (8/12/16 for short/medium/long) with per-scene SFX cues chosen by the script writer.
-- Deliverable: download/tubeforge-local.zip refreshed; verification persisted in scripts/test-shotchain.mjs (11/11) + scripts/test-quality-overhaul.mjs (38/38).
+- Deliverable: download/ibismuh-local.zip refreshed; verification persisted in scripts/test-shotchain.mjs (11/11) + scripts/test-quality-overhaul.mjs (38/38).
 
 ---
 Task ID: regression-fix-final-worse
@@ -442,7 +442,7 @@ Work Log:
 - convert.ts: both split paths route through applyRetentionRules; LLM split prompt aligned; rehook map + boom opener in mechanical fallback.
 - render.ts: SFX mix weight 0.55→0.35 (synth accents ~9dB under voice); music bed re-tuned 0.10/0.07/0.05 → 0.045/0.032/0.022 with a 0.07Hz breathing LFO + lowpass 900Hz (measured mean −28dB vs −21dB before — pad, not hum); ducking chain unchanged.
 - Tests: test-quality-overhaul.mjs updated + extended (stub now models an over-eager writer: scene-5 rehook gets demoted, stray sfx stripped, none-sfx rehook upgraded, formula/chart fixture) → 47/47 PASS live (scene counts 8/12/16, rehooks [1,4,7]/[1,4,7,10]/[1,4,7,10,13,16], notation spoken, visual hardening, thumbnail still paints the script moment + no-charts negative, cuts every ≤2.43s, 0 black frames, opener boom −10.2dB, limiter holds, re-roll invalidates thumbnail); NEW scripts/test-caption-decimals.ts (bun, real scene narrations → "$6.5 million each." stays whole).
-- Repackaged via scripts/package-local.sh → download/tubeforge-local.zip.
+- Repackaged via scripts/package-local.sh → download/ibismuh-local.zip.
 
 Stage Summary:
 - The "worse" video was hurt by caption number-butchering + slop prompts + over-dense SFX/rehooks, NOT by the camera engine (multi-shot cuts verified smooth).
@@ -478,7 +478,7 @@ Agent: main (Z.ai)
 Task: Audit roadmap priorities — P0 security hardening + P1 reliability (cancellation, QC gate) + background-music system (licensed library, mood matching, mix controls) + branding + release hygiene.
 
 Work Log:
-- P0 AUTH: NEW src/lib/tubeforge/auth-token.ts (edge-safe HMAC-SHA256 signed tokens, session 7d / api 90d, b64url) + auth.ts (PBKDF2-120k password in Setting "auth.password", login rate-limit 5/10min/IP, cookie helpers) + src/middleware.ts (locks ALL /api/* except /api/auth/{status,setup,login,logout}; Bearer or tf_session cookie; CSRF Origin check on cookie-authed mutations; open only when TUBEFORGE_AUTH_SECRET unset — documented dev mode) + /api/auth/* routes (status/setup/login/logout/token — token mints Bearer for scripts) + AuthGate lock-screen component (first-run "create password" vs "sign in", branded, reveal toggle, error box) wrapping page.tsx + global window.fetch 401 watcher (session expiry re-locks via reload) + Sign out button in sidebar. Secret generated into .env. Live-verified: anonymous /api/stats 401 -> setup 200+cookie -> 200 with cookie -> wrong-pw 401 + rate limit -> logout -> login again.
+- P0 AUTH: NEW src/lib/ibismuh/auth-token.ts (edge-safe HMAC-SHA256 signed tokens, session 7d / api 90d, b64url) + auth.ts (PBKDF2-120k password in Setting "auth.password", login rate-limit 5/10min/IP, cookie helpers) + src/middleware.ts (locks ALL /api/* except /api/auth/{status,setup,login,logout}; Bearer or session cookie; CSRF Origin check on cookie-authed mutations; open only when IBISMUH_STUDIO_AUTH_SECRET unset — documented dev mode) + /api/auth/* routes (status/setup/login/logout/token — token mints Bearer for scripts) + AuthGate lock-screen component (first-run "create password" vs "sign in", branded, reveal toggle, error box) wrapping page.tsx + global window.fetch 401 watcher (session expiry re-locks via reload) + Sign out button in sidebar. Secret generated into .env. Live-verified: anonymous /api/stats 401 -> setup 200+cookie -> 200 with cookie -> wrong-pw 401 + rate limit -> logout -> login again.
 - P0 SSRF: voice.ts downloadAudio rebuilt — http(s) only, BLOCKED_HOST_RE (localhost/.local/.internal/metadata), isPrivateAddress (v4 0/10/127/169.254/172.16/192.168/100.64 + v6 loopback/ULA/link-local/mapped), assertPublicHost via DNS all-address re-check (rebinding guard), MANUAL redirect loop (max 4 hops, each re-validated), size/type caps unchanged.
 - P0 TSC STRICT: ignoreBuildErrors removed from next.config; tsconfig excludes examples/pack/skills/scripts/db/uploads; fixed all 5 real errors (ScheduleSlotGetPayload wrapper, readMedia variant cast, form?.get, voiceover mode union narrowing via customMode).
 - P0 RELEASE HYGIENE: .gitignore + git untrack db/ uploads/ pack/ download/ tool-results/; NEW SECURITY.md (rotate-any-shared-key warning, protection matrix, checklist); package-local.sh NO LONGER ships live db/custom.db (fresh .env with generated per-package secret, bun.lock copied, setup script added, post-zip security scan compares against live secret + scans for db/uploads).
@@ -486,7 +486,7 @@ Work Log:
 - MUSIC UI: settings-music.tsx (MusicLibrarySection: defaults card with mode/volume/fade sliders saved to Setting keys, library rows with LicenseBadge colors by commercial/attribution state, preview singleton audio, active switch, delete, upload dialog with full license record fields incl. attribution-text requirement gate, Restore originals reseed) + music-controls.tsx (shared MusicPickerCard: enable switch, Auto/pinned track select + preview, volume + fade sliders showing Settings defaults; useMusicLibrary hook; TrackPreviewButton singleton) wired into create-view (create payload) and video-detail-dialog (debounced 600ms PATCH; replaced the old plain music switch; render POST music flag = enabled!==false).
 - RELIABILITY: jobs.ts JobCancelledError + cancelled Set + requestJobCancel (all running kinds per video) + isJobCancelled + "cancelled" JobStatus + NEW /api/videos/[id]/cancel; render route checks cancel in onProgress (between scenes/steps), storyboard route passes shouldCancel+onSceneDone per-scene progress into generateStoryboard (cancelled scenes kept, hasStoryboard partial state); NEW qc.ts battery (playable h264+aac, duration-vs-narration drift, blackdetect 0.25s, volumedetect peak -0.5 max, silencedetect 1.5s dead-air, ebur128 integrated [-19,-9], SRT monotonic/in-range) -> qcReport JSON on the video + activity message; render route runs QC after full renders (progress label "Running quality checks"); serializeVideo parses qcReport safely + music fields; types.ts VideoDTO + QcReportDTO.
 - RELIABILITY UI: detail dialog QC panel (Passed/flagged badge + all checks with values/details) + Cancel render button while busy; NEW attention-panel.tsx on Dashboard — "Generating now" (live 8s poll, per-job cancel) + "Needs attention" (failed/interrupted with per-kind one-click Resume hitting the stage endpoints) — the Mission Control audit asks.
-- BRANDING: NEW red-orange flame-play mark (src/app/icon.svg favicon + logo.tsx shared TubeForgeLogo/Wordmark) — sidebar + mobile nav + lock screen splash; layout.tsx z-cdn icon reference removed.
+- BRANDING: NEW red-orange flame-play mark (src/app/icon.svg favicon + logo.tsx shared Ibismuh StudioLogo/Wordmark) — sidebar + mobile nav + lock screen splash; layout.tsx z-cdn icon reference removed.
 - FIXES DURING VERIFY: my render-route rewrite dropped sceneLimit from renderVideo (suite caught it — full render ran instead of preview; restored); attention cards + AI provider grids overflowed at 375px (grid min-width:auto vs nowrap min-content — fixed with [&>*]:min-w-0; scrollWidth 375=375); crashed-suite leftovers (capabilities pointing at dead stub 127.0.0.1:3975) restored to zai defaults incl. glm-4.5-flash.
 - TESTS: suites made auth-aware (TF_API_TOKEN bearer in jfetch/api helpers); NEW scripts/verify.mjs (lint+tsc+auth-gate-live+shotchain; --full adds app suites) + backup.sh (sqlite VACUUM INTO hot copy + integrity check + uploads manifest/--media + .env mode 600) + package.json typecheck/verify/verify:full/backup. RESULTS: verify fast suite green (ESLint 0, tsc 0, gate 401, shotchain 11/11); quality-overhaul 47/47; BYOV 36/36 (SSRF-guarded internet mp3 import + full custom-voice render); live E2E re-render of cmvqvgzau auto-picked "Sunrise Drive" (Motivation) -> QC 7/7 PASS (-14.5 LUFS, -0.6 peak, 0 black, no dead air, 39 cues); browser E2E via agent-browser: first-run setup -> unlock -> dashboard attention/Resume -> Settings library previews (play/stop singleton) -> Create picker -> dialog QC panel 7 rows -> mobile 375 clean -> sign-out/in cycle -> zero console/page errors.
 - CLEANUP: test password cleared (user gets first-run setup on next visit), orphan test videos deleted, providers on zai defaults, zip repackaged 538KB/284 files with 0 db files inside, git commit af3da27.
@@ -500,10 +500,10 @@ Stage Summary:
 ---
 Task ID: kenburns-smart-motion
 Agent: main (Z.ai)
-Task: Make Ken Burns movement a core TubeForge feature — scene-aware "Smart Motion" engine per the product spec: intentional (not uniform) movement, subtle default amplitude (1.00→1.12×), movement plans per scene type, focal-point preservation, Create-page controls, safe borders, 16:9 + 9:16.
+Task: Make Ken Burns movement a core Ibismuh Studio feature — scene-aware "Smart Motion" engine per the product spec: intentional (not uniform) movement, subtle default amplitude (1.00→1.12×), movement plans per scene type, focal-point preservation, Create-page controls, safe borders, 16:9 + 9:16.
 
 Work Log:
-- MOTION ENGINE (NEW src/lib/tubeforge/motion.ts, pure/unit-tested): classifyScene (7 kinds — emotional/establishing/detail/suspense/action/text/standard from scene words + tone/niche, text-legibility wins); focalForScene (LLM "focal" token > composition keywords > center, faces anchor high); planSceneMovements — per-scene camera plans honoring the spec table (emotional→slow zoom-in, landscape→zoom-out, map/document→pan across details, suspense→0.6× gradual zoom, action→1.9s deliberate cuts, text→≤3% drift, standard→LLM camera intent) with cross-scene direction queue (vary flips pan/tilt/zoom between scenes), punch opener preserved on rehook beats (senior to the movement table), wide↔tight re-framing bands (start zoom chosen to maximize cut delta ≈11-20% FOV) so cuts read as cuts while within-shot amplitude stays subtle, creep continuation across long-scene cuts (ZOOM_CEIL 1.24); sceneFilterGraph — 2× supersample (3840×2160 / 2160×3840) → per-shot zoompan (smooth cosine easing via 0.5-0.5*cos(PI*on/last) or linear) → concat → grade; focal-locked x/y = clip(f*iw−iw/(2*zoom),0,iw−iw/zoom) (zoom≥1 ⇒ focal mathematically cannot leave frame) and pan sweeps clamped to an 8% focal pad (panEndpoints exported for tests); mode overrides smart|zoom|pan|off, off/0% → static (no zoompan).
+- MOTION ENGINE (NEW src/lib/ibismuh/motion.ts, pure/unit-tested): classifyScene (7 kinds — emotional/establishing/detail/suspense/action/text/standard from scene words + tone/niche, text-legibility wins); focalForScene (LLM "focal" token > composition keywords > center, faces anchor high); planSceneMovements — per-scene camera plans honoring the spec table (emotional→slow zoom-in, landscape→zoom-out, map/document→pan across details, suspense→0.6× gradual zoom, action→1.9s deliberate cuts, text→≤3% drift, standard→LLM camera intent) with cross-scene direction queue (vary flips pan/tilt/zoom between scenes), punch opener preserved on rehook beats (senior to the movement table), wide↔tight re-framing bands (start zoom chosen to maximize cut delta ≈11-20% FOV) so cuts read as cuts while within-shot amplitude stays subtle, creep continuation across long-scene cuts (ZOOM_CEIL 1.24); sceneFilterGraph — 2× supersample (3840×2160 / 2160×3840) → per-shot zoompan (smooth cosine easing via 0.5-0.5*cos(PI*on/last) or linear) → concat → grade; focal-locked x/y = clip(f*iw−iw/(2*zoom),0,iw−iw/zoom) (zoom≥1 ⇒ focal mathematically cannot leave frame) and pan sweeps clamped to an 8% focal pad (panEndpoints exported for tests); mode overrides smart|zoom|pan|off, off/0% → static (no zoompan).
 - SCHEMA: Video.motionMode/motionIntensity(0..30)/motionCurve/motionVary (all nullable = defaults), db pushed, client regenerated. POST/PATCH /api/videos accept+clamp the four fields; serializeVideo emits them; render route passes sanitizeMotion(video)+motionContext{tone,niche}; short route passes them to renderShort.
 - RENDER: render.ts old kenBurnsFilter/shotSequence/multiShotFilter deleted; buildSegment renders sceneFilterGraph(plan) — Smart Motion on by default for kenburns mode (MOTION_DEFAULTS smart/12/smooth/vary). STORYBOARD: Scene.focal? + SceneDTO.focal + parseScenes/normalizeScene/serializeScenes carry it; script prompt now asks the LLM for a "focal" token (center/left/right/upper/lower/corners) per scene.
 - SHORTS (9:16): blind center-crop replaced with focal-centered cover crop (cropX/cropY from focalForScene against probed master dims) + smooth cosine-eased punch-in (amplitude = video motion intensity clamped ≤16%, linear option, 0% = still); vertical plan shape swaps lateral pans→tilts.
@@ -524,7 +524,7 @@ Agent: main (Z.ai)
 Task: User blocked by forced password popup — make the lock screen OPT-IN (studio open by default; owner enables protection when they choose, from Settings).
 
 Work Log:
-- MODEL FLIP: protection is no longer forced by TUBEFORGE_AUTH_SECRET presence. Setting "auth.enabled" is the source of truth, mirrored to db/auth.lock flag file; src/middleware.ts now nodejs runtime and hot-checks the flag per request (existsSync is microsecond-scale — no cache, so toggling bites the very next call; a 1.5s TTL cache version failed the live suite and was removed). Secret still required to SIGN sessions; removing flag file or secret re-opens the studio instantly.
+- MODEL FLIP: protection is no longer forced by IBISMUH_STUDIO_AUTH_SECRET presence. Setting "auth.enabled" is the source of truth, mirrored to db/auth.lock flag file; src/middleware.ts now nodejs runtime and hot-checks the flag per request (existsSync is microsecond-scale — no cache, so toggling bites the very next call; a 1.5s TTL cache version failed the live suite and was removed). Secret still required to SIGN sessions; removing flag file or secret re-opens the studio instantly.
 - API: new POST /api/auth/lock ({enabled:true,password} first-enable creates the password, re-enable demands the existing one so a LAN stranger cannot claim a configured studio; {enabled:false,clearPassword?} reopens + optionally forgets the hash; the enabling browser always gets a fresh session cookie — can't lock yourself out of the tab you enabled from). /api/auth/status now reports gateEnabled from the opt-in state.
 - UI: AuthGate renders children directly when gateEnabled=false (no popup, no splash beyond the brief checking state) and broadcasts tf-gate events; app-sidebar listens and hides "Sign out" while the studio is open. NEW security-card.tsx ("Studio access" in Settings, after Auto-Pilot): switch, inline create/confirm password form, toast feedback, `bun run auth:reset` recovery hint.
 - RECOVERY: scripts/auth-reset.ts (bun:sqlite; resolves DB from DATABASE_URL; --purge also deletes the password hash) + package.json "auth:reset". First draft had TS-in-.mjs and a Setting.updatedAt NOT NULL miss — both fixed.
@@ -541,18 +541,18 @@ Stage Summary:
 ---
 Task ID: local-run-package
 Agent: main (Z.ai)
-Task: User wants TubeForge running on their local PC — refresh and verify the portable package.
+Task: User wants Ibismuh Studio running on their local PC — refresh and verify the portable package.
 
 Work Log:
 - NEW scripts/auth-reset.mjs: Node/cross-platform recovery command (no bun needed on the user's PC) — flips auth.enabled via `prisma db execute`, removes db/auth.lock, supports --purge. Tested against the live sandbox DB.
 - package-local.sh updated: ships only runtime helpers (backup.sh + auth-reset.mjs) instead of all sandbox test suites; portable package.json gains "auth:reset": "node scripts/auth-reset.mjs"; ships empty db/ (.gitkeep) so prisma's relative file:../db/custom.db resolves; header comments now describe the opt-in lock.
 - SETUP-local.md rewritten: fresh/empty studio (no live DB shipped — it held keys/tokens), setup is now 5 steps incl. `npm run setup` (prisma db push), new "Protecting your studio" section (Settings → Studio access opt-in lock + auth:reset recovery), scripts/ tree updated, Windows note for the cp-based build/start, backup note.
 - SECURITY.md: recovery line now covers both bun (sandbox) and npm (local package) variants.
-- PACKAGE VERIFIED END-TO-END: rebuilt download/tubeforge-local.zip (491KB, 261 files), secret scan clean (no live db/uploads/live secret), then unzipped to /tmp and simulated the user's machine: npm install OK → npx prisma db push creates db/custom.db inside the package → next dev on :3100 → /api/auth/status {configured:false, gateEnabled:false} (no popup), / 200, /api/videos 200 with empty library. Caught + dismissed a false negative: the sandbox shell exports DATABASE_URL which overrode the package .env (env -u reproduces the user's clean environment where the relative path resolves correctly).
-- Test server killed, /tmp artifacts removed. Deliverable: /home/z/my-project/download/tubeforge-local.zip.
+- PACKAGE VERIFIED END-TO-END: rebuilt download/ibismuh-local.zip (491KB, 261 files), secret scan clean (no live db/uploads/live secret), then unzipped to /tmp and simulated the user's machine: npm install OK → npx prisma db push creates db/custom.db inside the package → next dev on :3100 → /api/auth/status {configured:false, gateEnabled:false} (no popup), / 200, /api/videos 200 with empty library. Caught + dismissed a false negative: the sandbox shell exports DATABASE_URL which overrode the package .env (env -u reproduces the user's clean environment where the relative path resolves correctly).
+- Test server killed, /tmp artifacts removed. Deliverable: /home/z/my-project/download/ibismuh-local.zip.
 
 Stage Summary:
-- The user can now run TubeForge locally: download tubeforge-local.zip → unzip → npm install → npm run setup → npm run dev → paste their own Z.ai key in Settings. Open studio by default, opt-in lock, npm run auth:reset recovery — all shipped and boot-verified from a cold extraction.
+- The user can now run Ibismuh Studio locally: download ibismuh-local.zip → unzip → npm install → npm run setup → npm run dev → paste their own Z.ai key in Settings. Open studio by default, opt-in lock, npm run auth:reset recovery — all shipped and boot-verified from a cold extraction.
 
 ---
 Task ID: provider-neutral-rebrand
@@ -564,45 +564,45 @@ Work Log:
 - types.ts: CHAT_MODELS refreshed to the 2026-10 platform lineup — added glm-5.3-flash ("Current flash generation — native multimodal, budget tier") and glm-5.3 (flagship), glm-4.5-flash hint now honestly says "Legacy — delisted from docs but still served, $0".
 - providers/chat.ts: thinking param is now model-aware — /^glm-(4\.7|5\.3)/ models get { type: "enabled" } (they FORCE thinking; disabled errors with code 1210 per docs.z.ai/guides/capabilities/thinking), all other models keep the fast { type: "disabled" }. Fixes the user's local glm-5.3-flash 1210 failure without changing sandbox 4.5-flash behavior.
 - VERIFY: bunx tsc --noEmit → exit 0.
-- PACKAGING: rebuilt download/tubeforge-local.zip (491KB, 261 files, integrity OK) with all changes baked in; copied over public/tubeforge-local.zip. Staged the 3 changed files individually at public/tubeforge/{settings-view.tsx,types.ts,chat.ts} so the user can curl-patch their local install without re-downloading the zip.
+- PACKAGING: rebuilt download/ibismuh-local.zip (491KB, 261 files, integrity OK) with all changes baked in; copied over public/ibismuh-local.zip. Staged the 3 changed files individually at public/ibismuh/{settings-view.tsx,types.ts,chat.ts} so the user can curl-patch their local install without re-downloading the zip.
 
 Stage Summary:
 - Settings now reads brand-neutral ("Shared AI credentials", "Paste your API key") while keeping the provider names in per-task dropdowns (those are accurate identities, not branding).
 - Model dropdown matches today's platform; glm-5.3-flash is selectable directly and the 1210 thinking error is auto-avoided by chat.ts.
-- User apply path: 3 short curl commands from the preview site (settings-view.tsx → src/components/tubeforge/views/, types.ts → src/lib/tubeforge/, chat.ts → src/lib/tubeforge/providers/), then restart dev server. chat.ts overwrite supersedes the earlier manual nano step (idempotent, strictly better).
+- User apply path: 3 short curl commands from the preview site (settings-view.tsx → src/components/ibismuh/views/, types.ts → src/lib/ibismuh/, chat.ts → src/lib/ibismuh/providers/), then restart dev server. chat.ts overwrite supersedes the earlier manual nano step (idempotent, strictly better).
 
 ---
 Task ID: github-push-prep
 Agent: main (Z.ai)
-Task: Prepare TubeForge for its first GitHub push ("let push to git hub")
+Task: Prepare Ibismuh Studio for its first GitHub push ("let push to git hub")
 
 Work Log:
-- Audited sandbox repo: 634 tracked files incl. 429 workspace/debug artifacts (forensics/ frames, upload/ pastes, scripts/ screenshots, public zip+patches) and a REAL .env (TUBEFORGE_AUTH_SECRET); git history also contains committed .env/db — sandbox history must never be pushed
-- Hardened .gitignore: removed bare `test`/`prompt` footgun patterns; /db/ and /uploads/ changed to keep .gitkeep placeholders; appended hygiene block (!.env.example, *.sqlite*, /upload/, /forensics/, /scripts/, public/tubeforge-local.zip, public/tubeforge/, *.tar, .vscode/, .idea/, Thumbs.db)
+- Audited sandbox repo: 634 tracked files incl. 429 workspace/debug artifacts (forensics/ frames, upload/ pastes, scripts/ screenshots, public zip+patches) and a REAL .env (IBISMUH_STUDIO_AUTH_SECRET); git history also contains committed .env/db — sandbox history must never be pushed
+- Hardened .gitignore: removed bare `test`/`prompt` footgun patterns; /db/ and /uploads/ changed to keep .gitkeep placeholders; appended hygiene block (!.env.example, *.sqlite*, /upload/, /forensics/, /scripts/, public/ibismuh-local.zip, public/ibismuh/, *.tar, .vscode/, .idea/, Thumbs.db)
 - Untracked .env + workspace dirs from index; added placeholder-only .env.example; committed → tracked set now 205 files, working tree clean
-- Wrote scripts/tf-git-setup.sh for the user's local ~/tubeforge: fixes .gitignore footguns, creates .env.example, git init on main, re-run-safe untracking of known secrets, HARD secret gate (.env*/z-ai-config/db/sqlite/tar, --diff-filter=ACMR) + 5MB size gate, single commit, push via gh CLI (private) or printed manual PAT steps
+- Wrote scripts/tf-git-setup.sh for the user's local ~/ibismuh-studio: fixes .gitignore footguns, creates .env.example, git init on main, re-run-safe untracking of known secrets, HARD secret gate (.env*/z-ai-config/db/sqlite/tar, --diff-filter=ACMR) + 5MB size gate, single commit, push via gh CLI (private) or printed manual PAT steps
 - Wrote scripts/test-git-setup.sh: scratch tree mirrors the shipped zip (old .gitignore via git show HEAD~1, fake .env/db/renders/artifacts); 4 scenarios: happy path, idempotent re-run, gate refusal, recovery from previously-tracked .env. Fixed 1 bug found by tests (gate false-triggered on deletions). Final: 22/22 PASS
 - Delivered: download/tf-git-setup.sh + public/tf-git-setup.sh (curl-able)
 
 Stage Summary:
-- Push source is the user's LOCAL ~/tubeforge (newer 14-provider code, clean fresh history) — not the sandbox (history has secrets)
+- Push source is the user's LOCAL ~/ibismuh-studio (newer 14-provider code, clean fresh history) — not the sandbox (history has secrets)
 - Script gates guarantee .env, db/custom.db, uploads/, archives never reach GitHub; .env.example + .gitkeep placeholders do
 - Next: user runs tf-git-setup.sh (gh authed → auto private repo + push; else manual remote+PAT); optional README/LICENSE follow-up; reminder to rm -rf ~/tf-pkg (557MB tar with credentials)
 
 ---
 Task ID: github-push-done
 Agent: main (Z.ai)
-Task: User executed tf-git-setup.sh on local ~/tubeforge — first GitHub push
+Task: User executed tf-git-setup.sh on local ~/ibismuh-studio — first GitHub push
 
 Work Log:
 - User curl'd https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/tf-git-setup.sh (md5 verified against sandbox copy before handing over the URL)
 - Script ran clean: .gitignore hardened, git init on main, commit af7e12d (221 files tracked), gh CLI authed
-- gh created PRIVATE repo ibis01/tubeforge, pushed 292 objects / 618 KiB, main tracking origin/main
+- gh created PRIVATE repo ibis01/ibismuh, pushed 292 objects / 618 KiB, main tracking origin/main
 - No gate triggers → .env, db/custom.db, uploads/ confirmed absent from the push
 
 Stage Summary:
-- TubeForge source now lives at https://github.com/ibis01/tubeforge (private)
-- Future updates: cd ~/tubeforge && git add -A && git commit -m "..." && git push
+- Ibismuh Studio source now lives at https://github.com/ibis01/ibismuh (private)
+- Future updates: cd ~/ibismuh-studio && git add -A && git commit -m "..." && git push
 - Pending user actions: delete ~/tf-pkg (557MB tar with credentials); optional README/LICENSE; optional first end-to-end video test
 
 ---
@@ -613,7 +613,7 @@ Task: User sent screenshot — browser shows DNS_PROBE_POSSIBLE for "random-word
 Work Log:
 - Diagnosed: "random-words.trycloudflare.com" is the placeholder example from my earlier chat message, NOT a real assigned URL (matches user's known habit of pasting placeholders literally). DNS_PROBE_POSSIBLE is expected — that domain doesn't exist.
 - Real URL source: tf-go-public.sh greps cloudflared's log and prints it in the "YOUR PUBLIC URL" box (verified script logic in public/tf-go-public.sh lines 44-62). Tunnel is alive only while that terminal stays open.
-- Advised user: (1) go back to the running tf-go-public.sh terminal, copy the boxed URL; (2) if terminal was closed, re-run `bash ~/tf-go-public.sh` — old URL dies, new one prints; (3) liveness check `pgrep -af cloudflared`; (4) app origin must be running too (`cd ~/tubeforge && npm run dev` in a second terminal if port 3000 died).
+- Advised user: (1) go back to the running tf-go-public.sh terminal, copy the boxed URL; (2) if terminal was closed, re-run `bash ~/tf-go-public.sh` — old URL dies, new one prints; (3) liveness check `pgrep -af cloudflared`; (4) app origin must be running too (`cd ~/ibismuh-studio && npm run dev` in a second terminal if port 3000 died).
 - Re-issued security push: local studio lock screen is still OFF (user chose "y" earlier) — must enable Settings → Studio access + password BEFORE sharing the real URL, since API key/credits (db/custom.db) are exposed otherwise.
 - Offered follow-up: permanent address via ngrok free static domain (URL stops changing every run); also pending README/LICENSE + rm -rf ~/tf-pkg cleanup reminders.
 
@@ -623,11 +623,11 @@ Stage Summary:
 ---
 Task ID: go-public-eaddrinuse
 Agent: main (Z.ai)
-Task: User hit EADDRINUSE when running `npm run dev` on local ~/tubeforge.
+Task: User hit EADDRINUSE when running `npm run dev` on local ~/ibismuh-studio.
 
 Work Log:
 - Diagnosed: EADDRINUSE on port 3000 = their dev server was already running from earlier — not a failure. Advised: verify with `curl -s localhost:3000/api/auth/status`, then check tunnel with `pgrep -af cloudflared`; restart tunnel via `bash ~/tf-go-public.sh` only if pgrep prints nothing.
-- Gave clean-restart sequence for when a fresh app start is genuinely wanted: `fuser -k 3000/tcp` then `cd ~/tubeforge && npm run dev`, with note that the tunnel 502s while the app is down.
+- Gave clean-restart sequence for when a fresh app start is genuinely wanted: `fuser -k 3000/tcp` then `cd ~/ibismuh-studio && npm run dev`, with note that the tunnel 502s while the app is down.
 - Repeated lock-screen reminder (still OFF on user's local studio).
 
 Stage Summary:
@@ -640,13 +640,13 @@ Task: User hit a 429 mid-way through a 16-scene storyboard (scenes 1-4 painted, 
 
 Work Log:
 - Diagnosed: 429 = z.ai upstream rate limit on the image endpoint. Existing retry (4 attempts, 5s base × 4 on 429 → up to ~75s of waits) plus the 45s shared cool-down in budget.ts is correct — but the 16-scene storyboard loops through ALL scenes every run, so a 429 at scene 5 meant re-clicking would re-paint scenes 1-4 too (wasteful, plus more 429s).
-- Code patch src/lib/tubeforge/story.ts::generateStoryboard — added `force?: boolean` (default false) and a resume check at loop top: if `!force` AND scene-XX.png exists on disk AND size ≥ 1000 bytes, call onSceneDone, sleep 2s, continue. Per-scene re-roll endpoint (POST {scene:N}) is unaffected (it calls generateSceneImage directly, not generateStoryboard). No API or DB schema change.
-- Typecheck: project `bunx tsc --noEmit` clean (the staged public/tubeforge/*.ts snapshots show context-only errors because they live outside the src tree — those are intentional curl artifacts).
-- Staged at public/tubeforge/story.ts (md5 a737f9ff439ca2a3fb6d112c5b80efc9, verified identical to src), preview-host URL serves 200 with the same md5.
+- Code patch src/lib/ibismuh/story.ts::generateStoryboard — added `force?: boolean` (default false) and a resume check at loop top: if `!force` AND scene-XX.png exists on disk AND size ≥ 1000 bytes, call onSceneDone, sleep 2s, continue. Per-scene re-roll endpoint (POST {scene:N}) is unaffected (it calls generateSceneImage directly, not generateStoryboard). No API or DB schema change.
+- Typecheck: project `bunx tsc --noEmit` clean (the staged public/ibismuh/*.ts snapshots show context-only errors because they live outside the src tree — those are intentional curl artifacts).
+- Staged at public/ibismuh/story.ts (md5 a737f9ff439ca2a3fb6d112c5b80efc9, verified identical to src), preview-host URL serves 200 with the same md5.
 - Restarted sandbox dev server via scripts/restart-dev.py to wake the preview proxy after a transient 403 (preview host needs the dev server up).
 
 Stage Summary:
-- User apply path: `curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/tubeforge/story.ts -o ~/tubeforge/src/lib/tubeforge/story.ts` then restart the local dev server (fuser -k 3000/tcp && npm run dev). After the patch, clicking "Generate Storyboard" again only paints scenes whose image file is missing — scenes 1-4 are skipped, scene 5+ resumes. Per-scene "重新生成" buttons still force a single scene to repaint as before.
+- User apply path: `curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/ibismuh/story.ts -o ~/ibismuh-studio/src/lib/ibismuh/story.ts` then restart the local dev server (fuser -k 3000/tcp && npm run dev). After the patch, clicking "Generate Storyboard" again only paints scenes whose image file is missing — scenes 1-4 are skipped, scene 5+ resumes. Per-scene "重新生成" buttons still force a single scene to repaint as before.
 - Reminders still pending: enable Settings → Studio access lock before sharing the public URL; optional ngrok free static domain for a permanent address; README/LICENSE; rm -rf ~/tf-pkg cleanup.
 
 ---
@@ -657,13 +657,13 @@ Task: User's storyboard crashed with "Cannot read properties of undefined (readi
 Work Log:
 - Forensics: the exact error string "Cannot read properties of undefined (reading 'map')" is thrown inside `node_modules/z-ai-web-dev-sdk/dist/index.js` at line 269 (createImage) and line 316 (createImageEdit) — both do `result.data.map(...)` with no guard. When z.ai returns HTTP 200 with a body that has NO `data` field (capacity / soft-rate-limit envelope), the SDK crashes with that TypeError. The error bubbles up through `aiCall` → `generateSceneImage` → `generateStoryboard`, lands in the storyboard route's catch block (line 181), and gets saved to `video.error`. The dialog then displays it via the `{video.error && !renderLabel && ...}` banner at line 2157 — exactly what the screenshot shows.
 - Why retry didn't save it: `budget.ts` `withRetry` only escalates backoff when the error message matches `/429|too many requests/i`. A bare TypeError doesn't match, so the retry layer treats it as a terminal error and gives up after 4 attempts without waiting for the upstream to recover.
-- Fix `src/lib/tubeforge/providers/image.ts`: added `callZaiImage<T>(label, fn)` wrapper that catches the malformed-response TypeError (`/reading 'map'/i`) and rethrows as `429 too many requests — <label> returned a malformed response (no data field), treating as rate limit`. Now the budget.ts retry layer sees "429", triggers the 45-second shared cool-down (`noteRateLimit`), and uses the x4 backoff multiplier — so the storyboard loop will wait out the upstream storm instead of failing the video.
+- Fix `src/lib/ibismuh/providers/image.ts`: added `callZaiImage<T>(label, fn)` wrapper that catches the malformed-response TypeError (`/reading 'map'/i`) and rethrows as `429 too many requests — <label> returned a malformed response (no data field), treating as rate limit`. Now the budget.ts retry layer sees "429", triggers the 45-second shared cool-down (`noteRateLimit`), and uses the x4 backoff multiplier — so the storyboard loop will wait out the upstream storm instead of failing the video.
 - Wrapped both SDK call sites: `zai.images.generations.create` and `zai.images.generations.edit`. The OpenAI-compatible path was already safe (uses `data?.` optional chaining).
-- Typecheck: src tree clean (the public/tubeforge/*.ts snapshot errors are expected — those files are curl-distribution copies outside src).
-- Staged at public/tubeforge/image.ts (md5 84a6baf09bfe1ad697f9e81e4487324a), preview host serving same md5.
+- Typecheck: src tree clean (the public/ibismuh/*.ts snapshot errors are expected — those files are curl-distribution copies outside src).
+- Staged at public/ibismuh/image.ts (md5 84a6baf09bfe1ad697f9e81e4487324a), preview host serving same md5.
 
 Stage Summary:
-- User apply path (one command, then restart): `curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/tubeforge/image.ts -o ~/tubeforge/src/lib/tubeforge/providers/image.ts` then `fuser -k 3000/tcp && cd ~/tubeforge && npm run dev`. After the patch, malformed z.ai responses are treated as 429s — the storyboard will pause and retry instead of marking the video "Failed".
+- User apply path (one command, then restart): `curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/ibismuh/image.ts -o ~/ibismuh-studio/src/lib/ibismuh/providers/image.ts` then `fuser -k 3000/tcp && cd ~/ibismuh-studio && npm run dev`. After the patch, malformed z.ai responses are treated as 429s — the storyboard will pause and retry instead of marking the video "Failed".
 - Combined with the earlier story.ts resumable patch, even if the storm is bad enough that the storyboard eventually fails after the full retry window, re-clicking will only paint scenes that didn't finish. Two patches, same one-line curl flow.
 - Recommended pairing: lower Settings → AI Budget → "Image per minute" to 5-6 for the heaviest storyboards. Pending: lock-screen enable, public URL confirmation, README/LICENSE, rm -rf ~/tf-pkg cleanup.
 
@@ -675,32 +675,32 @@ Task: User said "let use another alternative ai" after another storyboard 429 �
 Work Log:
 - Network probe: curl'd Pollinations directly. Confirmed: returns JPEG bytes (not PNG as URL implies), downscales 1344x768 → 1015x580, free tier is 1 image / 45s / IP (returned 402 with "Free limit reached"), 503 SERVICE_UNAVAILABLE when at capacity. Both error responses carry JSON bodies with "Retry after Ns" hints.
 - Code changes (4 files):
-  1. src/lib/tubeforge/providers/registry.ts — added "pollinations" to ProviderId union; added a Pollinations entry to IMAGE_PROVIDERS with models [flux, turbo, flux-realism], note honestly explaining the 45s/IP limit.
-  2. src/lib/tubeforge/providers/image.ts — added pollinationsImage() that builds the URL `${baseUrl}/prompt/{enc(prompt)}?width=W&height=H&model={model}&nologo=true&seed={rand}` and fetches via providerFetch; converts JPEG → PNG via sharp (Next.js ships sharp, dynamic import keeps cold-start clean). Catches 503/429/402 from Pollinations and rethrows as a "429 too many requests — Pollinations rate-limited (HTTP N)" message so budget.ts triggers the 45s shared cool-down (which exactly matches Pollinations' free-tier window). imageGenerate routes to pollinationsImage when provider==="pollinations"; imageEdit returns null (caller falls back to prompt-seeded fresh generation with cast fragment, which lands back here); imageEditSupported returns false.
-  3. src/components/tubeforge/views/settings-view.tsx — hide the "API key" Input when provider==="pollinations" (no key needed); test button caption switches from "generates one small image (real cost)" to "generates one image — free, no key" when provider is pollinations.
+  1. src/lib/ibismuh/providers/registry.ts — added "pollinations" to ProviderId union; added a Pollinations entry to IMAGE_PROVIDERS with models [flux, turbo, flux-realism], note honestly explaining the 45s/IP limit.
+  2. src/lib/ibismuh/providers/image.ts — added pollinationsImage() that builds the URL `${baseUrl}/prompt/{enc(prompt)}?width=W&height=H&model={model}&nologo=true&seed={rand}` and fetches via providerFetch; converts JPEG → PNG via sharp (Next.js ships sharp, dynamic import keeps cold-start clean). Catches 503/429/402 from Pollinations and rethrows as a "429 too many requests — Pollinations rate-limited (HTTP N)" message so budget.ts triggers the 45s shared cool-down (which exactly matches Pollinations' free-tier window). imageGenerate routes to pollinationsImage when provider==="pollinations"; imageEdit returns null (caller falls back to prompt-seeded fresh generation with cast fragment, which lands back here); imageEditSupported returns false.
+  3. src/components/ibismuh/views/settings-view.tsx — hide the "API key" Input when provider==="pollinations" (no key needed); test button caption switches from "generates one small image (real cost)" to "generates one image — free, no key" when provider is pollinations.
   4. src/app/api/settings/ai/route.ts — skip the cost-confirmation gate for the test endpoint when provider==="pollinations" (otherwise the user can't test the free provider without clicking "Confirm — runs a paid test" which is misleading).
 - End-to-end test (scripts/test-pollinations.mjs): real network call through the live adapter — imageGenerate({size:"1344x768"}) returned 766,631 bytes PNG (sharp converted from JPEG), 7.2s latency. imageEditSupported returned false ✓. imageEdit returned null ✓. Caught 402/503 mid-test and rethrew as 429-flavored errors (budget layer will handle). One test-script-side bug at the very end (named vs default fs import) — production code unaffected.
-- Typecheck: src tree clean (the staged public/tubeforge/*.ts snapshots show expected context errors because they live outside src — those are intentional curl artifacts).
-- Staged for curl-patch at public/tubeforge/{registry.ts, image.ts, settings-view.tsx, ai-route.ts}. All four md5s verified identical between src/ and preview-host responses.
+- Typecheck: src tree clean (the staged public/ibismuh/*.ts snapshots show expected context errors because they live outside src — those are intentional curl artifacts).
+- Staged for curl-patch at public/ibismuh/{registry.ts, image.ts, settings-view.tsx, ai-route.ts}. All four md5s verified identical between src/ and preview-host responses.
 
 Stage Summary:
 - User apply path (4 curls + restart):
-  curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/tubeforge/registry.ts       -o ~/tubeforge/src/lib/tubeforge/providers/registry.ts
-  curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/tubeforge/image.ts          -o ~/tubeforge/src/lib/tubeforge/providers/image.ts
-  curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/tubeforge/settings-view.tsx -o ~/tubeforge/src/components/tubeforge/views/settings-view.tsx
-  curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/tubeforge/ai-route.ts        -o ~/tubeforge/src/app/api/settings/ai/route.ts
-  fuser -k 3000/tcp && cd ~/tubeforge && npm run dev
+  curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/ibismuh/registry.ts       -o ~/ibismuh-studio/src/lib/ibismuh/providers/registry.ts
+  curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/ibismuh/image.ts          -o ~/ibismuh-studio/src/lib/ibismuh/providers/image.ts
+  curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/ibismuh/settings-view.tsx -o ~/ibismuh-studio/src/components/ibismuh/views/settings-view.tsx
+  curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/ibismuh/ai-route.ts        -o ~/ibismuh-studio/src/app/api/settings/ai/route.ts
+  fuser -k 3000/tcp && cd ~/ibismuh-studio && npm run dev
 - Then: Settings → AI Providers → Artwork → provider dropdown → pick "Pollinations.ai (free, no key)" → leave API key blank (field is hidden) → Save. Storyboard scenes will now generate via Pollinations. The 45s/IP limit means a 16-scene storyboard takes ~12 minutes; Pollinations 402/503 errors auto-trigger the 45s budget cool-down so the pipeline paces itself without failing.
 - Honest tradeoff the user needs to know: free Pollinations is slower than z.ai CogView (z.ai can do 8/min = 16 scenes in 2 min when not rate-limited; Pollinations is hard-capped at ~1.3/min). For users who want speed, options: (a) keep z.ai but drop AI Budget → Image per minute to 5-6 + rely on the new resumable+429 patches from the previous turns; (b) buy a Pollinations pollen key at enter.pollinations.ai for unlimited; (c) use the OpenAI-compatible image provider with a paid DALL·E / gpt-image key.
 
 ---
 Task ID: stock-broll-plus-series-batch
 Agent: main (Z.ai)
-Task: User: "let make tubeforge better than this" (vs MoneyPrinterTurbo). Close the two remaining feature gaps: stock footage b-roll (MPT's hallmark) and batch generation — TubeForge already led on everything else (story engine, Smart Motion, cast, research radar, analytics loop, YouTube upload).
+Task: User: "let make ibismuh better than this" (vs MoneyPrinterTurbo). Close the two remaining feature gaps: stock footage b-roll (MPT's hallmark) and batch generation — Ibismuh Studio already led on everything else (story engine, Smart Motion, cast, research radar, analytics loop, YouTube upload).
 
 Work Log:
-- Researched MPT current state (WebFetch): script→TTS→footage→subtitles pipeline; footage = stock (Pexels/Pixabay/Coverr) + AI i2v; batch generation; multi-provider. Mapped against TubeForge: everything already covered except stock footage + batch.
-- NEW src/lib/tubeforge/stock.ts (~420 lines): Pexels Video API + Pixabay Video API adapters (auth, timeouts, 401/429 mapping); deterministic scene→query derivation (stop-word stripped content words from scene.visual + title, 2-4 queries, zero LLM cost); clip scoring (HD ≥1280 landscape, duration-fit vs estimated narration length, resolution); download with 200KB sanity floor → uploads/<videoId>/stock-XX.mp4; fetchStockForScenes (resumable, per-scene DB persistence, cancel support, force/single-scene modes); clearStock; key management (Setting keys stock.pexelsKey/stock.pixabayKey, masked).
+- Researched MPT current state (WebFetch): script→TTS→footage→subtitles pipeline; footage = stock (Pexels/Pixabay/Coverr) + AI i2v; batch generation; multi-provider. Mapped against Ibismuh Studio: everything already covered except stock footage + batch.
+- NEW src/lib/ibismuh/stock.ts (~420 lines): Pexels Video API + Pixabay Video API adapters (auth, timeouts, 401/429 mapping); deterministic scene→query derivation (stop-word stripped content words from scene.visual + title, 2-4 queries, zero LLM cost); clip scoring (HD ≥1280 landscape, duration-fit vs estimated narration length, resolution); download with 200KB sanity floor → uploads/<videoId>/stock-XX.mp4; fetchStockForScenes (resumable, per-scene DB persistence, cancel support, force/single-scene modes); clearStock; key management (Setting keys stock.pexelsKey/stock.pixabayKey, masked).
 - types.ts: StockRef interface; Scene.stock optional field; SceneDTO +hasStock/stockUrl/stockSource/stockQuery/stockCredit; RENDER_MODES + "stock" entry (label "Stock b-roll", icon Film) — third render mode alongside kenburns/animated.
 - story.ts: parseStockRef validator + parseScenes preserves stock refs; serializeScenes emits stock fields.
 - render.ts: mode "stock" — per-scene branch: matched stock clip → stream_loop to scene duration + GRADE + narration/SFX audio chain; no clip → Smart Motion Ken Burns fallback. Camera plans computed only for fallback scenes. Progress label "Cutting stock footage — scene N".
@@ -716,56 +716,56 @@ Work Log:
 - Note: real Pexels/Pixabay keys needed for actual clip downloads (free, instant signup; Settings → Stock footage has the links + test buttons). Two demo batch videos left in Library.
 
 Stage Summary:
-- TubeForge now covers 100% of MoneyPrinterTurbo's headline features (stock b-roll + batch) while keeping its own leads: scene-based story engine, Smart Motion camera language, consistent cast, SFX synthesis, ASR-verified narration, QC gate, research radar w/ performance feedback loop, YouTube OAuth upload + stats sync, budget/rate-limit resilience.
+- Ibismuh Studio now covers 100% of MoneyPrinterTurbo's headline features (stock b-roll + batch) while keeping its own leads: scene-based story engine, Smart Motion camera language, consistent cast, SFX synthesis, ASR-verified narration, QC gate, research radar w/ performance feedback loop, YouTube OAuth upload + stats sync, budget/rate-limit resilience.
 - User flow: Settings → Stock Footage → paste free Pexels (and/or Pixabay) key → Test → Save. Then Create → Render mode "Stock b-roll" → Auto-Pilot. Or Series batch: one topic → 2-6 distinct videos with scripts written automatically.
 
 ## Security & Ops Remediation (audit response) — 2026-10-28
 
-External static audit flagged: opt-in auth boundary unsafe in production, Prisma query logging on by default, provider errors leaking URLs (potential key-bearing query strings), SSRF check-then-fetch DNS-rebinding TOCTOU, weak duplicate IP-range logic in voice.ts, missing `test` script/release gate, backup script assumptions + .env copied into backups. Baseline also had 4 broken typecheck refs (llm.ts→allowPrivateProviderHosts, jobs cancel route→cancelJob, music preview→presetBedGraph/customBedFile, tts.ts→pcmToWav), tsconfig ES2017 breaking net-guard BigInt literals, and public/tubeforge/* curl-artifacts breaking tsc.
+External static audit flagged: opt-in auth boundary unsafe in production, Prisma query logging on by default, provider errors leaking URLs (potential key-bearing query strings), SSRF check-then-fetch DNS-rebinding TOCTOU, weak duplicate IP-range logic in voice.ts, missing `test` script/release gate, backup script assumptions + .env copied into backups. Baseline also had 4 broken typecheck refs (llm.ts→allowPrivateProviderHosts, jobs cancel route→cancelJob, music preview→presetBedGraph/customBedFile, tts.ts→pcmToWav), tsconfig ES2017 breaking net-guard BigInt literals, and public/ibismuh/* curl-artifacts breaking tsc.
 
-- middleware.ts: PRODUCTION FAIL-SAFE — when NODE_ENV=production and the gate is disabled, every /api/* except the auth bootstrap set (status/setup/login/logout/lock) returns 503 with an explanatory error; once-per-process console warning; explicit opt-out TUBEFORGE_REQUIRE_LOCK=0 for intentionally-open deployments; dev open mode unchanged. /api/auth/lock included in the bootstrap set only while the gate is OFF (enable is password-checked on configured studios; disable is a no-op while unlocked).
-- NEW scripts/auth-enable.ts + `auth:enable` npm script — headless production bootstrap/recovery: sets the password (pbkdf2$120000$, same format auth.ts verifies), flips auth.enabled, creates db/auth.lock; --off mirrors auth:reset; creates the DB on fresh installs; refuses to run without TUBEFORGE_AUTH_SECRET.
+- middleware.ts: PRODUCTION FAIL-SAFE — when NODE_ENV=production and the gate is disabled, every /api/* except the auth bootstrap set (status/setup/login/logout/lock) returns 503 with an explanatory error; once-per-process console warning; explicit opt-out IBISMUH_STUDIO_REQUIRE_LOCK=0 for intentionally-open deployments; dev open mode unchanged. /api/auth/lock included in the bootstrap set only while the gate is OFF (enable is password-checked on configured studios; disable is a no-op while unlocked).
+- NEW scripts/auth-enable.ts + `auth:enable` npm script — headless production bootstrap/recovery: sets the password (pbkdf2$120000$, same format auth.ts verifies), flips auth.enabled, creates db/auth.lock; --off mirrors auth:reset; creates the DB on fresh installs; refuses to run without IBISMUH_STUDIO_AUTH_SECRET.
 - auth-token.ts verifyToken: STRICT contract — exp must be a positive safe integer in the future (exp=0/undefined used to slip past the falsy check), jti required (≥6 chars). Regression-tested.
 - net-guard.ts: DNS-REBINDING TOCTOU CLOSED — safeFetch now connects through an undici Agent whose `connect.lookup` hook validates EVERY resolved address and hands the socket one vetted IP (single-address, autoSelectFamily off); TLS SNI/cert verification unchanged; rebuilt Response carries the real final `url` property. undici@8.12.3 added.
 - voice.ts: downloadAudio rebuilt on net-guard safeFetch (pinned connections, re-validated redirects, 2-min timeout, streaming 100MB cap); deleted the weaker duplicate isPrivateAddress/assertPublicHost blocklist (was missing multicast/TEST-NET/benchmarking/IETF ranges); isValidAudioUrl now reuses net-guard isPrivateHostname.
-- providers/http.ts: NEW sanitizeUrlForError — errors show protocol//host/path only (query strings with api_key=… and basic-auth credentials never reach the activity feed/logs); added the missing allowPrivateProviderHosts() helper (TUBEFORGE_ALLOW_PRIVATE_HOSTS=1, provider calls only).
-- db.ts: `query` logging is dev-only now (production logs `error`; opt back in with TUBEFORGE_LOG_QUERIES=1) — SQL with bound params no longer hits prod logs.
+- providers/http.ts: NEW sanitizeUrlForError — errors show protocol//host/path only (query strings with api_key=… and basic-auth credentials never reach the activity feed/logs); added the missing allowPrivateProviderHosts() helper (IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS=1, provider calls only).
+- db.ts: `query` logging is dev-only now (production logs `error`; opt back in with IBISMUH_STUDIO_LOG_QUERIES=1) — SQL with bound params no longer hits prod logs.
 - scripts/backup.sh: resolves the DB from DATABASE_URL (same candidate logic as auth-reset.ts; verified db/custom.db is picked), REFUSES non-SQLite engines instead of silently producing a DB-less backup, copies .env ONLY with --secrets (backups with keys must be encrypted), --media/--secrets flags, and a bun:sqlite fallback (scripts/backup-vacuum.ts) for hosts without the sqlite3 CLI. Tested end-to-end: 348K backup, integrity ok, secrets excluded by default.
-- tsconfig: target ES2020 (fixes net-guard BigInt literals); public/tubeforge excluded from tsc (intentional curl-distribution artifacts, not app code). eslint ignores pack/** + scripts/*.cjs (standalone CommonJS ops scripts). Fixed the 4 broken refs: allowPrivateProviderHosts (http.ts), requestJobCancel (jobs cancel route), resolveBedPreview (music.ts + preview route; presets use the exact aevalsrc graph, original rows recovered by slug, customs sliced + loudness-boosted only for non-presets), pcmToWav (wav.ts, canonical 44-byte RIFF builder).
+- tsconfig: target ES2020 (fixes net-guard BigInt literals); public/ibismuh excluded from tsc (intentional curl-distribution artifacts, not app code). eslint ignores pack/** + scripts/*.cjs (standalone CommonJS ops scripts). Fixed the 4 broken refs: allowPrivateProviderHosts (http.ts), requestJobCancel (jobs cancel route), resolveBedPreview (music.ts + preview route; presets use the exact aevalsrc graph, original rows recovered by slug, customs sliced + loudness-boosted only for non-presets), pcmToWav (wav.ts, canonical 44-byte RIFF builder).
 - package.json: NEW `test` (offline unit suite + SSRF suite), `test:live` (auth contract), `check` = typecheck + lint + test — the one-command release gate.
 - NEW scripts/test-unit.ts: 59 offline tests — token expiry contract (expired/missing/zero/float exp, missing jti, tampered sig), secret length guard, full IPv4/IPv6 special-purpose table (incl. ::ffff: mapped, NAT64, ULA, multicast, TEST-NETs), URL sanitizer, voice URL guard.
-- Verification: tsc clean (was 4 errors at baseline), eslint 0 errors, 59+16 tests pass (incl. live pinned safeFetch against example.com), production build OK, live smoke: prod+gate-off → /api/videos 503 + /api/auth/status 200; TUBEFORGE_REQUIRE_LOCK=0 → APIs open; dev open mode unchanged; db schema pushed (musicEnabled/motion columns were missing — pre-existing drift).
+- Verification: tsc clean (was 4 errors at baseline), eslint 0 errors, 59+16 tests pass (incl. live pinned safeFetch against example.com), production build OK, live smoke: prod+gate-off → /api/videos 503 + /api/auth/status 200; IBISMUH_STUDIO_REQUIRE_LOCK=0 → APIs open; dev open mode unchanged; db schema pushed (musicEnabled/motion columns were missing — pre-existing drift).
 
 ## Critical Bug Fixes: upload route + settings leak — 2026-10-29
 
 Second-pass audit verified two real bugs in the running app: the flagship "Upload to YouTube" button POSTs to a route that didn't exist (404), and GET /api/settings serialized the ENTIRE Setting table — OAuth client secret + refresh token, zai + provider API keys, the studio password hash — to any browser. Both fixed, both regression-tested.
 
-- NEW src/lib/tubeforge/settings-public.ts — single allow-list (DEFAULT_SETTINGS) of the preference keys the settings UI actually consumes (defaults, quality gate, AI budget, music.*) + publicSettingsMap() which merges DB rows through the allow-list and DROPS everything else. DB-free module so the offline unit suite can regression-test it. Credentials remain surfaced ONLY masked via /api/settings/ai (hasKey/maskedKey) and /api/youtube/status.
+- NEW src/lib/ibismuh/settings-public.ts — single allow-list (DEFAULT_SETTINGS) of the preference keys the settings UI actually consumes (defaults, quality gate, AI budget, music.*) + publicSettingsMap() which merges DB rows through the allow-list and DROPS everything else. DB-free module so the offline unit suite can regression-test it. Credentials remain surfaced ONLY masked via /api/settings/ai (hasKey/maskedKey) and /api/youtube/status.
 - src/app/api/settings/route.ts — GET + PUT responses now go through publicSettingsMap(); PUT's allowed-keys set derives from the same exported DEFAULT_SETTINGS (one source of truth). A future Setting key can never leak by default — unknown keys are dropped server-side.
 - NEW src/app/api/videos/[id]/upload/route.ts — the missing route, wired to the already-complete uploadToYouTube() (youtube.ts, resumable API + thumbnail set): POST validates video exists (404), final.mp4 exists + non-empty (400), channel connected (400), no duplicate upload (409 — YouTube has no in-place update; UI already swaps the button for a "Live on YouTube" link), clears stale error, then startJob("upload") builds metadata from the AI package itself (title/description/tags — same fields the export ZIP documents) and on success sets youtubeUrl + status "published" + activity log; failure path records video.error + error activity + job-registry failure (pollUpload's fail predicate fires). GET returns upload status (generating/error/youtubeUrl/serialized video) like the other stage routes. Job kind "upload" was already registered in jobs.ts (snapshot, history, crash recovery).
 - scripts/test-unit.ts — +25 offline tests: planted secret rows (zai.apiKey, ytClientSecret, ytRefreshToken, auth.password, chat/tts provider keys, a hypothetical future key) must be dropped and their values must never serialize; saved prefs merge in; empty table → defaults. Suite now 84 + 16.
 - NEW scripts/test-critical-fixes.ts — live-server verification (19 checks): plants fake secrets in the real DB → GET /api/settings leaks none of them while public prefs still work; POST upload on unknown id → 404; on a real video → validation chain + 202 accepted path + background job recording its error on the video + activity feed (proved end-to-end with a planted then-removed fake token; probe artifacts cleaned up afterwards). Restores pre-existing setting rows.
 - Ops note: /api/videos had been 500ing (P2022 "column musicEnabled does not exist") — stale dev server holding port 3000 with a pre-push schema cache + an EADDRINUSE double-start in dev.log; fixed via scripts/restart-dev.py (kills servers, wipes .next, daemonizes fresh). Schema itself was already in sync.
 - Verification: typecheck clean, eslint 0 errors on touched files (4 pre-existing warnings elsewhere), unit+net-guard 84+16 green, live fixes suite 19/19, dev server healthy (GET /api/videos 200).
-- Net effect: the flagship one-click OAuth upload now actually works, and the settings endpoint can no longer hand studio credentials to the network. Feature parity with MoneyPrinterTurbo was already complete (stock b-roll + batch); this closes the two gaps that kept TubeForge from being certifiably production-usable.
+- Net effect: the flagship one-click OAuth upload now actually works, and the settings endpoint can no longer hand studio credentials to the network. Feature parity with MoneyPrinterTurbo was already complete (stock b-roll + batch); this closes the two gaps that kept Ibismuh Studio from being certifiably production-usable.
 
 ## Full Pipeline Re-Certification E2E — 2026-10-29
 
 Both fixes verified against the live app, then the whole story pipeline re-certified end-to-end.
 
 - Batch committed: auto-snapshot c005b51 carries the src fixes + worklog; labeled milestone commit e7d3b91 on top. /scripts/ is intentionally local-only per the repo hygiene rules (test suites stay untracked).
-- NEW scripts/test-pipeline-e2e.mjs (+ scripts/run-e2e.sh) — full story-pipeline E2E: create (sync script) -> storyboard (REAL Pollinations art, 4 images in ~4 min on the free 1/45s tier) -> voiceover (OpenAI-compatible TTS stub, 4 per-scene tones -> 5s audio) -> thumbnail (real art) -> Ken Burns render (real ffmpeg + Smart Motion + ASR caption sync + ducked music bed) -> QC battery -> MP4 stream check -> upload-route probe. Chat/TTS use the repo's existing stub servers (stub-openai-chat.mjs :3972, stub-tts-server.mjs :3973) with TUBEFORGE_ALLOW_PRIVATE_HOSTS=1; image uses the keyless Pollinations provider — so no API key is needed for a genuine pipeline run.
+- NEW scripts/test-pipeline-e2e.mjs (+ scripts/run-e2e.sh) — full story-pipeline E2E: create (sync script) -> storyboard (REAL Pollinations art, 4 images in ~4 min on the free 1/45s tier) -> voiceover (OpenAI-compatible TTS stub, 4 per-scene tones -> 5s audio) -> thumbnail (real art) -> Ken Burns render (real ffmpeg + Smart Motion + ASR caption sync + ducked music bed) -> QC battery -> MP4 stream check -> upload-route probe. Chat/TTS use the repo's existing stub servers (stub-openai-chat.mjs :3972, stub-tts-server.mjs :3973) with IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS=1; image uses the keyless Pollinations provider — so no API key is needed for a genuine pipeline run.
 - RESULT: 🚀 PASSED — create/story format + sync script ✓; storyboard 4/4 real images ✓; voiceover per-scene ✓; thumbnail ✓; render 10s MP4 (2.4 MB) streams HTTP 200 ✓; NEW upload route validation fires correctly on a CLEAN state (400 "YouTube channel is not connected") + GET status shape ✓. QC battery: 6/7 checks pass (playable, duration within tolerance, no black frames, peak -6.8 dBFS, no dead-air, loudness -13.0 LUFS vs -14 target); the one FAIL is "captions: overlapping cues" — an ASR-on-440Hz-tone stub artifact that the QC gate CORRECTLY flagged (proof the gate catches bad caption timing rather than rubber-stamping). E2E video kept in Library as evidence (The Last Signal (v5)).
 - E2E harness bug found+fixed: scenes not yet attempted also report generating:false — "done" must count scenes with imageUrl, not non-generating count.
 - No Z.ai key configured in this environment (hasKey false everywhere) — live LLM/TTS/animation stages need the owner's key in Settings -> AI Providers. Everything else is proven.
-- Cleanup: stubs killed, TUBEFORGE_ALLOW_PRIVATE_HOSTS=1 removed from .env, capabilities restored to zai/no-key, server restarted clean (app 200).
+- Cleanup: stubs killed, IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS=1 removed from .env, capabilities restored to zai/no-key, server restarted clean (app 200).
 
 ## Production Hardening: API rate limiting + error redaction — 2026-10-29
 
 The two remaining audit items (beyond the deferred live OAuth upload) closed out.
 
-- NEW src/lib/tubeforge/rate-limit.ts — per-IP sliding-window limiter (60s windows, globalThis registry, clock-injectable for tests). Wired into src/middleware.ts as the coarse public gate BEFORE auth: reads 600/min, writes 90/min per IP (TUBEFORGE_RATE_READ / TUBEFORGE_RATE_WRITE env-tunable, 0 disables a tier); OPTIONS exempt; 429 carries Retry-After. Finer layers untouched (login lockout in auth.ts, provider budget in budget.ts). Live-proven: 95-POST burst → 90×400 admitted + 5×429 with retry-after: 59; reads unaffected; restart clears buckets.
-- NEW src/lib/tubeforge/redact.ts — error redaction, the last line of defence before provider/infra failure text is persisted (video.error / Job.error / activity rows) or returned: Google AIza keys → <google-key>, sk- keys → <api-key>, JWTs → <jwt>, Bearer/Basic → <redacted>, URL credential params (?code= / &key= / &access_token= … value consumed, name kept) → <redacted>, unknown opaque tokens ≥48 chars + hex ≥32 → <token>, local paths → <path>, length capped 500. ffmpeg diagnostics intentionally survive ("exited with code=ENOSPC" stays readable — [?&] context required for the param scrub).
+- NEW src/lib/ibismuh/rate-limit.ts — per-IP sliding-window limiter (60s windows, globalThis registry, clock-injectable for tests). Wired into src/middleware.ts as the coarse public gate BEFORE auth: reads 600/min, writes 90/min per IP (IBISMUH_STUDIO_RATE_READ / IBISMUH_STUDIO_RATE_WRITE env-tunable, 0 disables a tier); OPTIONS exempt; 429 carries Retry-After. Finer layers untouched (login lockout in auth.ts, provider budget in budget.ts). Live-proven: 95-POST burst → 90×400 admitted + 5×429 with retry-after: 59; reads unaffected; restart clears buckets.
+- NEW src/lib/ibismuh/redact.ts — error redaction, the last line of defence before provider/infra failure text is persisted (video.error / Job.error / activity rows) or returned: Google AIza keys → <google-key>, sk- keys → <api-key>, JWTs → <jwt>, Bearer/Basic → <redacted>, URL credential params (?code= / &key= / &access_token= … value consumed, name kept) → <redacted>, unknown opaque tokens ≥48 chars + hex ≥32 → <token>, local paths → <path>, length capped 500. ffmpeg diagnostics intentionally survive ("exited with code=ENOSPC" stays readable — [?&] context required for the param scrub).
 - Wired across ALL error paths: codemod (scripts/codemod-error-text.mjs, local-only) converted 41 catch-sites across 33 files (`err instanceof Error ? err.message : X` → `errorText(err, X)`); manual wraps for the 4 template-shaped sites (jobs.ts job-failure registry, youtube.ts resumable-upload catch, providers/http.ts fetch-fail + ProviderHttpError body, providers/image.ts Pollinations 429).
 - Repo hygiene — identity crisis resolved: package-lock.json deleted (bun.lock is the single source; .gitignore now keeps npm metadata out). No packageManager field needed (bun ignores it).
 - Regression: test-unit.ts +19 checks (redact patterns incl. the value-consumption bug caught in review, OAuth code scrub, ffmpeg-diagnostic preservation, 500 cap; sliding-window accept/deny/slide/independence/disable/90-burst math) → 103 unit + 16 net-guard, typecheck + eslint clean, `bun run check` exit 0.
@@ -774,7 +774,7 @@ The two remaining audit items (beyond the deferred live OAuth upload) closed out
 
 Three product gaps closed: scene transitions (previously hard cuts only), per-scene storyboard art editing, and a musical layer for the background-music library.
 
-- NEW src/lib/tubeforge/transitions.ts — pure engine for real scene transitions: 15-style curated xfade catalog (cut, fade, fadeblack, fadewhite, dissolve, hblur, wipes/slides/smooths, circleopen, radial, pixelize), sanitize + clamp (0.2–1.5s), chained-offset math (offset_b = Σ durations[0..b] − (b+1)·d), and buildTransitionGraph() producing one chained xfade (video) + acrossfade (audio) filter_complex over the segment inputs. Default look = crossfade 0.5s; "cut" keeps the legacy stream-copy concat.
+- NEW src/lib/ibismuh/transitions.ts — pure engine for real scene transitions: 15-style curated xfade catalog (cut, fade, fadeblack, fadewhite, dissolve, hblur, wipes/slides/smooths, circleopen, radial, pixelize), sanitize + clamp (0.2–1.5s), chained-offset math (offset_b = Σ durations[0..b] − (b+1)·d), and buildTransitionGraph() producing one chained xfade (video) + acrossfade (audio) filter_complex over the segment inputs. Default look = crossfade 0.5s; "cut" keeps the legacy stream-copy concat.
 - render.ts: stitchSegments() replaces concat whenever a blend is active — one full re-encode with segment-matched codec settings; caption building now consumes shiftSegmentsForBlend()-rebased segments (each boundary pulls later scenes d seconds earlier on the blended timeline — without this, burned/exported cues drift late and run past the end; caught by the QC gate on the first live render: "captions — cues run past the end", fixed, re-render → 7/7 PASS).
 - Schema: Video.transitionStyle / Video.transitionDuration (per-video overrides, null = default fade); wired through serialize.ts, video PATCH (unknown ids ignored, duration clamped), video POST, and the render route (activity log now names the transition; POST response echoes it).
 - Shorts cutter made transition-aware: sceneTimeline(scenes, wavs, loss) shifts starts by −i·d and trims the blend window off non-final tails so cuts stay inside clean content; short route passes the video's transition settings. Live: short cut from the fadeblack master = 40.13s vs 40.82s raw scene — exactly the trimmed window.
@@ -788,7 +788,7 @@ Three product gaps closed: scene transitions (previously hard cuts only), per-sc
 
 A workspace crash took out two tracked routes (restored from git: the YouTube upload route + Scene Studio upload route) and the entire local-only scripts/ harness. Everything was rebuilt, then the full pipeline was re-certified live against real providers — and per the owner's direction ("verify the existing modules before rebuilding"), the re-cert surfaced FIVE real integration bugs, all fixed and re-verified.
 
-- HARNESS REBUILT (scripts/, local-only): test-unit.ts (342 checks — token contract, full IPv4/IPv6 table, URL sanitizer, voice guard, settings allow-list, redact incl. value-consumption, rate-limit window math, transitions offsets/graph/blend/fadeblack-windows, 60s bed+arp loop quantization, RIFF round-trip, blended-timeline SRT non-overlap), test-net-guard.ts (18 — live DNS-pinned safeFetch against example.com, byte cap at read time), restart-dev.py (port+cmdline kill via /proc cwd match; pid=0 self-kill bug caught and guarded), stub-openai-chat :3972 + stub-tts :3973 (real 5s WAVs), test-pipeline-e2e.mjs — now STAGED (A-D) with scripts/e2e-state.json because the sandbox reaps detached process trees; run-e2e.sh wrapper snapshots the Setting table + manages TUBEFORGE_ALLOW_PRIVATE_HOSTS, plus ops scripts (auth-reset, auth-enable, backup.sh + bun:sqlite backup-vacuum, verify.mjs, test-auth-optin).
+- HARNESS REBUILT (scripts/, local-only): test-unit.ts (342 checks — token contract, full IPv4/IPv6 table, URL sanitizer, voice guard, settings allow-list, redact incl. value-consumption, rate-limit window math, transitions offsets/graph/blend/fadeblack-windows, 60s bed+arp loop quantization, RIFF round-trip, blended-timeline SRT non-overlap), test-net-guard.ts (18 — live DNS-pinned safeFetch against example.com, byte cap at read time), restart-dev.py (port+cmdline kill via /proc cwd match; pid=0 self-kill bug caught and guarded), stub-openai-chat :3972 + stub-tts :3973 (real 5s WAVs), test-pipeline-e2e.mjs — now STAGED (A-D) with scripts/e2e-state.json because the sandbox reaps detached process trees; run-e2e.sh wrapper snapshots the Setting table + manages IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS, plus ops scripts (auth-reset, auth-enable, backup.sh + bun:sqlite backup-vacuum, verify.mjs, test-auth-optin).
 - RE-CERT: PASSED end-to-end with REAL Pollinations art (storyboard, re-roll, thumbnail), REAL ffmpeg compositing, stub chat/TTS: create→storyboard→Scene Studio (text PATCH / upload replacement / per-scene re-roll)→voiceover→thumbnail→Ken Burns render (fadeblack 0.7s + mood-matched library track + burned captions)→QC→MP4 stream→Shorts blend-trim→upload-route validation. Evidence video in Library: "The Lighthouse That Never Slept" (qc.passed=true).
 - FIX 1 — QC vs transitions: blackdetect flagged fadeblack's DESIGNED dips as defects. renderVideo now returns fadeblackWindows(durations, d) (transitions.ts, offset±0.15 windows) and the render route feeds them to qcForVideo; the black-frames check exempts designed windows and reports "N designed transition dips only".
 - FIX 2 — caption overlap on blended timelines: buildSrtFromSegments emitted raw start+duration windows, so every adjacent cue pair overlapped by exactly the transition length (the real cause of the earlier "overlapping cues" QC flag, previously misattributed to the ASR stub). Cues are now capped at the next cue's start minus a 50ms refresh gap (readable-min floor), matching the smart-caption builder's design. Unit-tested.
@@ -813,7 +813,7 @@ The two owner P0s after the transitions/Scene Studio batch: a recurring host tha
 - Activity feed now reports the audit: "plan audit fixed N scenes (script/art mismatch caught before painting)" or "plan audit: every scene matches its narration" on the create + script lines.
 - HARNESS: E2E extended — stage A asserts the audit activity row (the stub echoes the plan; the no-op guard must hold fixes at 0); stage B captures the original scene-3 take hash into e2e-state.json (staged processes can't share variables — learned live); stage C asserts the re-roll paints a NEW take via a hash TRIPLE (original ≠ uploaded ≠ re-rolled) — without the variant bump, pinned seeds would return the original take byte-for-byte. run-e2e.sh fixed twice: stage loop (it predated the A-D staging and would have crashed on "unknown stage"), and the Setting snapshot/restore now carries updatedAt (NOT NULL without default — the old restore failed the constraint mid-transaction and left the table WIPED; hit live, fixed, re-restored).
 - Verification: unit suite +39 (seed determinism/pinning/take-bumps/clamps, parseScenes round-trip, fragment contract, fix-applier incl. echoes/junk/clamps/no-crash) → 381 unit + 18 net-guard, typecheck + eslint clean, `bun run check` exit 0. LIVE re-cert (staged A-D): create with real audit call (two chat-stub POSTs observed) → 4× real Pollinations images through seeded generation → Scene Studio (text PATCH / upload / re-roll with hash-triple PASS) → voiceover → thumbnail → fadeblack 0.7s render + music bed + captions → QC → MP4 stream (4.6 MB) → blend-trimmed short → upload-route validation. E2E PASSED, evidence video "The Lighthouse That Never Slept" (cmvsx43y40001r23yuqbb0a5w) in the Library; studio settings + .env restored, server restarted clean.
-- MPT comparison note: MoneyPrinterTurbo has neither per-scene identity locking nor any pre-render plan audit — both now ship in TubeForge, on top of the earlier Scene Studio / transitions / musical-bed parity wins.
+- MPT comparison note: MoneyPrinterTurbo has neither per-scene identity locking nor any pre-render plan audit — both now ship in Ibismuh Studio, on top of the earlier Scene Studio / transitions / musical-bed parity wins.
 
 ## U1 Polish — visual transition previews, Scene Studio swatches, music picker refinements — 2026-10-29
 
@@ -842,7 +842,7 @@ The one capability MoneyPrinterTurbo (and most rivals) don't ship: clone a speak
 
 Continuation of the Stage 3 sprint (T-3.1…T-3.6 landed earlier: logging, cross-platform reaper, timeout matrix, durable queue, streaming delivery). This session closed the remaining six tasks.
 
-- **T-3.7 storage abstraction** — `src/lib/tubeforge/storage.ts`. Keys mirror the historical uploads layout so the local driver needs ZERO data migration; s3 driver is a zero-dep SigV4 signer (fetch-only, path-style, R2/MinIO OK). Per-org byte counter (`StorageUsage`) backs a 10 GiB default quota, O(1) per put; `system` assets (music library) skip it. ffmpeg constraint honored via `scratchDir`/`materialize`/`putFromPath` (same-path no-op locally, upload-from-scratch under s3, scratch copy RETAINED for downstream QC/Short steps). All ~20 `UPLOAD_ROOT` call sites migrated; asset presence in DTOs now DB flags (`Video.hasPreview` added; hasVideo/hasShort already existed — the old existsSync probes lied under s3 and cost a stat per list row). `GET /api/videos/[id]/mp4` 302s to a presigned URL under s3. 6 new unit tests.
+- **T-3.7 storage abstraction** — `src/lib/ibismuh/storage.ts`. Keys mirror the historical uploads layout so the local driver needs ZERO data migration; s3 driver is a zero-dep SigV4 signer (fetch-only, path-style, R2/MinIO OK). Per-org byte counter (`StorageUsage`) backs a 10 GiB default quota, O(1) per put; `system` assets (music library) skip it. ffmpeg constraint honored via `scratchDir`/`materialize`/`putFromPath` (same-path no-op locally, upload-from-scratch under s3, scratch copy RETAINED for downstream QC/Short steps). All ~20 `UPLOAD_ROOT` call sites migrated; asset presence in DTOs now DB flags (`Video.hasPreview` added; hasVideo/hasShort already existed — the old existsSync probes lied under s3 and cost a stat per list row). `GET /api/videos/[id]/mp4` 302s to a presigned URL under s3. 6 new unit tests.
 - **T-3.8 UsageRecord** — `aiCall()` meters every AI call (capability, provider+model via the user's config, latency, ok) fire-and-forget; `GET /api/account/usage?days=N` (groupBy aggregates + daily SQL sparkline + storage footprint).
 - **T-3.9 SMTP** — `email.ts`: console default / smtp via env. Zero-dep ESMTP client: EHLO, opportunistic STARTTLS, implicit TLS on 465, AUTH LOGIN, dot-stuffing, 15s step timeouts, CRLF header-injection guard. register + reset-password deliver through it; smtp responses never echo the link. 2 unit tests.
 - **T-3.10 per-user Z.ai** — `zai-client.ts`: acting user's ProviderCredential wins (capability-preferred, any-capability fallback), else platform client. SDK's file-only config handled with per-(user,key-hash) client cache + GLOBAL MUTEX around write→create. saveCapability stores zai keys now (Stage 2 carve-out removed); Settings UI gained the optional per-account Z.ai key field; caches invalidate on save. Live PUT→GET roundtrip verified (masked readback).
@@ -987,9 +987,9 @@ Push status: 5 Stage 6 commits pushed cleanly to origin/main across this session
 
 ## Stage 6 T-6.9 — Editing Studio UI (the big UI task) — 2026-11-02
 
-The Stage 6 ROADMAP completion gate is "a user can edit, render, review, export and publish a finished video without leaving TubeForge". The server-side surface (T-6.1–T-6.8, T-6.10) was already in place; this task delivered the UI that consumes it.
+The Stage 6 ROADMAP completion gate is "a user can edit, render, review, export and publish a finished video without leaving Ibismuh Studio". The server-side surface (T-6.1–T-6.8, T-6.10) was already in place; this task delivered the UI that consumes it.
 
-- **Component: `src/components/tubeforge/editing-studio.tsx`** (~430 lines, self-contained). Uses `@dnd-kit/core` + `@dnd-kit/sortable` (already in deps). Mounted at the top of the Video tab in `video-detail-dialog.tsx`, above the existing render controls — so the user trims the timeline BEFORE the render commits the trims to disk.
+- **Component: `src/components/ibismuh/editing-studio.tsx`** (~430 lines, self-contained). Uses `@dnd-kit/core` + `@dnd-kit/sortable` (already in deps). Mounted at the top of the Video tab in `video-detail-dialog.tsx`, above the existing render controls — so the user trims the timeline BEFORE the render commits the trims to disk.
 
 - **Data flow.** Auto-loads `GET /api/videos/[id]/assemble` on mount. The "Re-assemble" button `POST`s (refresh from current scenes + plan). The "Save" button `PUT`s the edited timeline (so the render job's T-6.10 consumption honors the trims). The render button (existing, untouched) sends `POST /api/videos/[id]/render` without the `ignoreTimeline` flag → the saved trims survive.
 
@@ -1021,7 +1021,7 @@ Stage 7 is the final ROADMAP stage ("Before launch, we must prove that the entir
 
 - **T-7.4 — k6 load test scaffold (`scripts/load-test.js`)**. The ROADMAP §7 list: "Concurrent user workloads (load test with k6 or similar)". 20 VUs ramping 30s + holding 1m + ramping down 30s. Thresholds: < 2% error rate (the ROADMAP's "≥ 98% successful core production jobs" metric) + p95 < 500ms. Exercises the deterministic hot paths: register → create (custom-script) → GET video → auth/status → logout. Plain JS (k6's runtime is goja — no TS).
 
-- **T-7.5 — Stripe billing scaffolding (the big one)**. New Prisma models `Plan`, `Subscription`, `CreditGrant`, `CreditLedger` (migration `20261102010000_stage7_billing`; SQLite mirror regenerated; User model gained the three new relations). New module `src/lib/tubeforge/billing.ts`: `resolveUserPlan(userId)` returns the user's plan + subscription + credit balance (Starter default when no row — fresh installs never need to seed rows); `recordCreditSpend` appends to the ledger; `sumAICallSpends` is the reconciliation helper; `planSupportsResolution` + `hasCredits` are the gating functions; `handleStripeEvent` is the webhook body (handles checkout.session.completed / customer.subscription.updated / customer.subscription.deleted / invoice.paid); `verifyStripeSignature` uses Web Crypto HMAC SHA-256 to verify the `stripe-signature` header. Two new routes: `POST /api/billing/webhook` (PUBLIC — Stripe can't auth the session cookie, the signature is the auth; handler in billing.ts because routes can't import @/lib/db directly) and `GET /api/billing/plan` (auth-required — returns the user's plan + balance for the Settings UI). The webhook is the SOLE source of truth for Subscription status; billing writes go through this endpoint, never the user's session. What's NOT here (deliberate scope): Stripe Checkout / Customer Portal integration — those are wired in a follow-up; this is the foundation + the reconciliation target.
+- **T-7.5 — Stripe billing scaffolding (the big one)**. New Prisma models `Plan`, `Subscription`, `CreditGrant`, `CreditLedger` (migration `20261102010000_stage7_billing`; SQLite mirror regenerated; User model gained the three new relations). New module `src/lib/ibismuh/billing.ts`: `resolveUserPlan(userId)` returns the user's plan + subscription + credit balance (Starter default when no row — fresh installs never need to seed rows); `recordCreditSpend` appends to the ledger; `sumAICallSpends` is the reconciliation helper; `planSupportsResolution` + `hasCredits` are the gating functions; `handleStripeEvent` is the webhook body (handles checkout.session.completed / customer.subscription.updated / customer.subscription.deleted / invoice.paid); `verifyStripeSignature` uses Web Crypto HMAC SHA-256 to verify the `stripe-signature` header. Two new routes: `POST /api/billing/webhook` (PUBLIC — Stripe can't auth the session cookie, the signature is the auth; handler in billing.ts because routes can't import @/lib/db directly) and `GET /api/billing/plan` (auth-required — returns the user's plan + balance for the Settings UI). The webhook is the SOLE source of truth for Subscription status; billing writes go through this endpoint, never the user's session. What's NOT here (deliberate scope): Stripe Checkout / Customer Portal integration — those are wired in a follow-up; this is the foundation + the reconciliation target.
 
 - **T-7.6 — worker failure recovery**. Already covered by `scripts/test-queue.mts` (Phase A: registry + payload delivery; Phase B: worker process restart recovery). The Stage 6 additions (`qc`, `upload`) are registered in `queue-handlers.ts` so they get the same boot-recovery path; the resumableKinds contract test pins this. No new test needed — noted in TASKS.md.
 
@@ -1037,7 +1037,7 @@ Stage 7 is the final ROADMAP stage ("Before launch, we must prove that the entir
 
 The pre-launch review found five billing production blockers. All five are fixed, each pinned by a regression test, plus the two hardening asks (concurrent-spend safety, lifecycle tests).
 
-- **B-1 — webhook auth fail-closed (`src/app/api/billing/webhook/route.ts`)**. The old route skipped verification whenever the `stripe-signature` header was missing — even with the secret configured — and accepted everything when the secret was absent. Now: secret set → header REQUIRED (missing = 401, invalid = 401); secret unset → 401 in dev / 500 under `NODE_ENV=production`; the ONLY unsigned path is `TUBEFORGE_ALLOW_UNSIGNED_WEBHOOKS=1`, refused outright in production. `verifyStripeSignature` adds a 300s replay window and constant-time comparison.
+- **B-1 — webhook auth fail-closed (`src/app/api/billing/webhook/route.ts`)**. The old route skipped verification whenever the `stripe-signature` header was missing — even with the secret configured — and accepted everything when the secret was absent. Now: secret set → header REQUIRED (missing = 401, invalid = 401); secret unset → 401 in dev / 500 under `NODE_ENV=production`; the ONLY unsigned path is `IBISMUH_STUDIO_ALLOW_UNSIGNED_WEBHOOKS=1`, refused outright in production. `verifyStripeSignature` adds a 300s replay window and constant-time comparison.
 - **B-2 — canonical credit unit (`billing.ts`, schema)**. The ledger mixed UI credits (grants) with microCredits (spends) in one sum — a full Creator allowance (10,000 credits) could not pass the 50,000-microCredit render pre-check. One canonical unit now: the microCredit (`MICROS_PER_CREDIT = 1000`). `CreditGrant.grantedCredits` renamed → `grantedMicroCredits` (migration `20261102020000_stage71_billing_integrity`), allowances convert at grant time, display converts back (`microToCredits`, floored) only at the API/UI edge (`/api/billing/plan` also returns `creditBalanceMicro` + the new `access` field).
 - **B-3 — ledger linkage (`billing.ts`, `budget.ts`, `video-jobs.ts`)**. Both spend writers passed `subscriptionId: null` while the resolver summed `subscription.ledger` — paid users kept spent credits. The ledger writers now resolve the user's active subscription internally (canceled subs collect nothing), and `resolveUserPlan` computes the balance USER-SCOPED (grants + ledger by userId, never via relations) so legacy null-linked rows still count.
 - **B-4 — subscription status rules (`billing.ts`, `plan-card.tsx`)**. New `subscriptionAccess(status)`: active/trialing → full; past_due → grace (dunning keeps the plan; the Settings card shows a payment-failed banner); canceled/unpaid/incomplete/paused/unknown → none → Starter fallback, fail-closed on statuses Stripe adds later. Tested for every status + renewal (invoice.paid clears past_due back to active).
@@ -1061,19 +1061,19 @@ The user's ask: "voice cloning is very important to me". Cloning EXISTED (upload
   - `VOICE_THREADS` env caps torch threads (sandbox runs `VOICE_THREADS=1` so synthesis leaves a core for the web app — unbounded it starved the dev server and a preview synthesis blew its 300 s timeout).
   - Disk hygiene: the HF cache layout stores weights in a GLOBAL sharded blob store under different hash names than the per-model symlinks — a naive "delete unreferenced blobs" pass nuked turbo's own weights (re-downloaded). Base model dropped in favor of turbo (~2 GB reclaimed).
 
-- **Platform-shared voice server (the product feature).** New `src/lib/tubeforge/shared-voice.ts` (env-only, no imports → no cycles): `TUBEFORGE_SHARED_VOICE_URL` + `TUBEFORGE_SHARED_VOICE_KEY` give every user a working selfhost endpoint when they haven't configured their own. Precedence everywhere: the user's OWN saved server > the shared env > nothing.
+- **Platform-shared voice server (the product feature).** New `src/lib/ibismuh/shared-voice.ts` (env-only, no imports → no cycles): `IBISMUH_STUDIO_SHARED_VOICE_URL` + `IBISMUH_STUDIO_SHARED_VOICE_KEY` give every user a working selfhost endpoint when they haven't configured their own. Precedence everywhere: the user's OWN saved server > the shared env > nothing.
   - `providers/tts.ts`: `selfhostTts` + `probeSelfhostHealth` resolve via `selfhostEndpoint()`; the cloned-voice ROUTING in `ttsSynthesize` falls back to the shared server (previously a selfhost clone with active provider zai silently fell back to a stock voice); the 503 cold-start path now polls every 6 s for ~70 s instead of one 4 s retry; the synth call carries `{ capability: "tts" }` (was falling to the 300 s generic timeout); `describeVoiceHealth` labels the turbo model.
   - `voice-clone.ts`: `pickCloneProvider` treats the shared server as ready; `cloneVoiceSelfhost` synthesizes a clone-time AUDITION through the reachable server (best-effort, 120 s cap — previously only the Zhipu path had one); new `cloneSynthesisAvailable()` powers the preview gate.
   - `voice-preview.ts`: cloned ids count as "known" when their OWNING provider can speak them (not just when the ACTIVE provider is clone-capable); selfhost clones use the short preview line.
   - `/api/settings/voices` (every voice picker): the shared server makes selfhost clones speakable → they appear in pickers with active provider Z.ai (was: only with saved per-user creds).
   - `voice-view.tsx`: header badge counts ALL clones (`profiles.length`) not just picker-visible ones — was "7 studio · 0 cloned" while the management list showed 1.
-  - `instrumentation.ts` + `spawn-voice-server.ts`: env-gated (`TUBEFORGE_SPAWN_VOICE_SERVER=1`) supervisor — on boot, if the shared URL is loopback and /health is down, spawn the server detached (logs → voice-server/server.log, HF_HOME + VOICE_THREADS passed, `unref`d, never blocks or throws). Verified live: boots report `{"spawned":false,"detail":"voice server already up"}`.
+  - `instrumentation.ts` + `spawn-voice-server.ts`: env-gated (`IBISMUH_STUDIO_SPAWN_VOICE_SERVER=1`) supervisor — on boot, if the shared URL is loopback and /health is down, spawn the server detached (logs → voice-server/server.log, HF_HOME + VOICE_THREADS passed, `unref`d, never blocks or throws). Verified live: boots report `{"spawned":false,"detail":"voice server already up"}`.
 
 - **THE BUILD INCIDENT (lesson recorded).** `rm -rf .next` (to clear a stale cache) destroyed the only standalone build — and a cold Turbopack `next build` OOM-kills at the 4 GB cgroup ceiling (peak observed 3.7 GB with nothing else running; `--webpack` fails on the app's server-only instrumentation imports). The preview now runs `next dev` (per-route compile, low RAM) via `scripts/start-sandbox.sh`; production builds happen on Vercel CI on push. NEVER wipe `.next` on this box without a replacement plan.
 
 - **Verified end-to-end.** E2E script (`scripts/e2e-voice-clone.mjs`): register → clone-providers reports `selfhost/ready/"Clones speak through this platform's shared voice server."` → clone (hasAudition: true) → audition WAV (574 KB RIFF) → ▶ preview WAV (309 KB RIFF) → voice list. The cloned preview TRANSCRIBES PERFECTLY via Z.ai ASR ("Hi, this is how I'll narrate your video."). Real-browser pass through the preview domain (minted session, revoked after): Voice Studio shows the shared-server hint, Sara (the user's own 17:09 clone) in the catalog + management list with "7 studio · 1 cloned", audition + preview requests both 200, no console errors. Sara's preview is pre-cached on disk (0.13 s serves) and her missing audition backfilled from it.
 
-- **Ops notes.** Single-threaded turbo synthesis ≈ 3-5× real-time clean, up to ~50× under dev-compile contention; `TUBEFORGE_TIMEOUT_TTS=600000` covers long narrations. The venv (2.1 GB) + hf-cache (3.9 GB) persist under `voice-server/` (gitignored). `.env.example` documents the operator feature.
+- **Ops notes.** Single-threaded turbo synthesis ≈ 3-5× real-time clean, up to ~50× under dev-compile contention; `IBISMUH_STUDIO_TIMEOUT_TTS=600000` covers long narrations. The venv (2.1 GB) + hf-cache (3.9 GB) persist under `voice-server/` (gitignored). `.env.example` documents the operator feature.
 
 - **Tests.** 2 new unit tests (shared-voice precedence matrix; turbo health label). Suite: **112/112 passing**. tsc 0, eslint 0 errors.
 
@@ -1089,7 +1089,7 @@ Source: the improvement roadmap (the S32-snapshot assessment, 2026-11-05). Its v
 
 - **README.md (P0-4).** The public repository had no README — the landing page rendered SECURITY.md and release notes to every visitor. New README: one-paragraph positioning, what's inside (studio loop, SaaS foundation, money, evidence discipline), the tested quickstart (`npm ci` → postinstall bootstraps SQLite + Prisma + dev secrets + next-env.d.ts → `npm run dev`), the test table (`check` / `test:e2e` / `test:queue` / `backup`), the CI contract, a repository tour, the documentation index, the deployment story (linking DEPLOYMENT.md), and an honest License section (decision pending — all rights reserved until a LICENSE lands).
 
-- **DEPLOYMENT.md (P0-6).** One topology, decided and written down: Fly.io web + worker process groups from one image (fly.toml already encodes this — verified against the actual file), Neon Postgres via `prisma migrate deploy`, Cloudflare R2 for media (S3 env names verified against `storage.ts`: `TUBEFORGE_S3_BUCKET/ACCESS_KEY_ID/SECRET_ACCESS_KEY/REGION/ENDPOINT`), voice server on its own persistent box. `vercel.json` demoted to preview-builds-only (marked, not deleted — it carries no data and removing it risks nothing but gains nothing). Includes the provisioning checklist with real commands, the operational layer (billing/email/YouTube/backups/observability/tags), and the staging spec (Fly staging app + Neon branch + separate R2 bucket + Stripe TEST mode + fresh secrets — staging never shares production secrets) that every remaining "operational" launch item drills against.
+- **DEPLOYMENT.md (P0-6).** One topology, decided and written down: Fly.io web + worker process groups from one image (fly.toml already encodes this — verified against the actual file), Neon Postgres via `prisma migrate deploy`, Cloudflare R2 for media (S3 env names verified against `storage.ts`: `IBISMUH_STUDIO_S3_BUCKET/ACCESS_KEY_ID/SECRET_ACCESS_KEY/REGION/ENDPOINT`), voice server on its own persistent box. `vercel.json` demoted to preview-builds-only (marked, not deleted — it carries no data and removing it risks nothing but gains nothing). Includes the provisioning checklist with real commands, the operational layer (billing/email/YouTube/backups/observability/tags), and the staging spec (Fly staging app + Neon branch + separate R2 bucket + Stripe TEST mode + fresh secrets — staging never shares production secrets) that every remaining "operational" launch item drills against.
 
 - **Production Postgres backups (P0-8).** New `scripts/backup-postgres.sh` (`npm run db:backup:pg`): `pg_dump --format=custom` + immediate verification via `pg_restore --list` (a dump that cannot be read is a failure, not a backup) + `.sha256` sidecar + optional off-box upload when `BACKUP_S3_URI` is set (aws CLI preferred, rclone fallback) + local retention pruning (default 14 days). Refuses SQLite URLs (points at `npm run backup` — that path keeps its tested roundtrip via test-backup.mts). New `docs/runbooks/backup-restore.md`: the three backup layers (provider PITR, nightly logical dump, pre-migration snapshot), the nightly cron options on the Fly worker machine, and the quarterly RESTORE DRILL (scratch Neon branch → pg_restore → boot the app → five smoke checks across five table families → record measured RTO in the drill log → destroy). The drill log starts empty — first drill against staging.
 
@@ -1097,9 +1097,9 @@ Source: the improvement roadmap (the S32-snapshot assessment, 2026-11-05). Its v
 
 **Files:** `.github/workflows/ci.yml` (e2e condition + secrets job + comment updates), `README.md` (new), `DEPLOYMENT.md` (new), `scripts/backup-postgres.sh` (new, executable), `docs/runbooks/backup-restore.md` (new), `package.json` (+`db:backup:pg`), `TASKS.md` (S-series index + S33+ backlog + S33 record), this entry.
 
-**Tests + the e2e proof.** No runtime code touched, but the e2e-on-main change demanded proof BEFORE the push turns it on for every future commit: the full Playwright suite was run locally (first complete run since S26) — **26/26 green in 1.0m**. One sandbox finding on the way: with a platform-provided `DATABASE_URL` env var and no `.env`, postinstall skips `.env` creation entirely, so `TUBEFORGE_AUTH_SECRET` is never provisioned and the middleware fails every `/api` route closed with 503 — 17 specs failed until the `.env` was provisioned. CI is unaffected (no platform env there; postinstall creates the `.env` and provisions the secrets — exactly why S26 was green), and the platform-env path is documented as best-effort in postinstall itself. The new artifacts are exercised by inspection: `bash -n scripts/backup-postgres.sh` (syntax), `npm run db:backup:pg` against a SQLite URL (verified: refuses with the pointer to `npm run backup` — the fail-closed path).
+**Tests + the e2e proof.** No runtime code touched, but the e2e-on-main change demanded proof BEFORE the push turns it on for every future commit: the full Playwright suite was run locally (first complete run since S26) — **26/26 green in 1.0m**. One sandbox finding on the way: with a platform-provided `DATABASE_URL` env var and no `.env`, postinstall skips `.env` creation entirely, so `IBISMUH_STUDIO_AUTH_SECRET` is never provisioned and the middleware fails every `/api` route closed with 503 — 17 specs failed until the `.env` was provisioned. CI is unaffected (no platform env there; postinstall creates the `.env` and provisions the secrets — exactly why S26 was green), and the platform-env path is documented as best-effort in postinstall itself. The new artifacts are exercised by inspection: `bash -n scripts/backup-postgres.sh` (syntax), `npm run db:backup:pg` against a SQLite URL (verified: refuses with the pointer to `npm run backup` — the fail-closed path).
 
-**Final gate:** tsc 0 · eslint 0 errors / 621 warnings · **146/146 unit** · **40/40 billing** · **26/26 e2e** (local, CI-equivalent env). Push status: committed locally as `f49cf60`; push PENDING — the sandbox recycle lost the stored GitHub credential, and per P0-1 the old exposed PAT must NOT be re-used anyway (rotate it, then push). A `git format-patch` artifact ships in the delivery folder so the commit can be applied and pushed from any authenticated clone: `git am tubeforge-s33-front-door.patch && git push origin main`.
+**Final gate:** tsc 0 · eslint 0 errors / 621 warnings · **146/146 unit** · **40/40 billing** · **26/26 e2e** (local, CI-equivalent env). Push status: committed locally as `f49cf60`; push PENDING — the sandbox recycle lost the stored GitHub credential, and per P0-1 the old exposed PAT must NOT be re-used anyway (rotate it, then push). A `git format-patch` artifact ships in the delivery folder so the commit can be applied and pushed from any authenticated clone: `git am ibismuh-s33-front-door.patch && git push origin main`.
 
 ## S33 roll-out — the push, the gate's first fire, and the runner image that moved — 2026-11-05
 
@@ -1125,7 +1125,7 @@ Source: the follow-up question to the 2026-11-05 remote audit ("has the Stage 7.
 
 - **The drift family, closed.** jobs.ts STAGE_LABEL was also missing director/continuity (an interrupted director pass would read "this director was running" via the raw-kind fallback), and the recovery surface-the-error list omitted them too. Both fixed; both branches unreachable today (every kind is handler-registered) — defense for the day one isn't.
 
-**Files:** `src/lib/tubeforge/queue-handlers.ts` (resumableKinds registry-derived), `scripts/test-unit.mts` (contract test → 20 kinds, exhaustive), `scripts/test-queue.mts` (Phase A exhaustiveness + Phase B legacy-probe), `src/lib/tubeforge/jobs.ts` (STAGE_LABEL + recovery surface list), `TASKS.md` (record), this entry.
+**Files:** `src/lib/ibismuh/queue-handlers.ts` (resumableKinds registry-derived), `scripts/test-unit.mts` (contract test → 20 kinds, exhaustive), `scripts/test-queue.mts` (Phase A exhaustiveness + Phase B legacy-probe), `src/lib/ibismuh/jobs.ts` (STAGE_LABEL + recovery surface list), `TASKS.md` (record), this entry.
 
 **Final gate:** tsc 0 · eslint 0 errors (65 warnings on the touched files — pre-existing classes) · **146/146 unit** · **queue integration PASS** (Phases A + B incl. the new assertions) · **40/40 billing**. Push status: pending — committed locally, push awaits a fresh scoped PAT per the standing hygiene rule (P0-1).
 
@@ -1141,9 +1141,9 @@ Source: the improvement roadmap's P2-1, itself the deferral S32's own commit mes
 
 - **PRICING_STATUS stays "provisional".** The sources are now reconciled, but the audit's P2-1 condition is "proven against real invoices" — invoices only exist after paid calls, and enabling those is the owner's call (no paid keys are configured; the gate also carries the env override for pre-activation sanity checks). The flip is now a one-word edit that waits on one real invoice reconciled against the SpendReservation ledger.
 
-**Files:** `src/lib/tubeforge/spend.ts` (script-aware `estimateInputTokens` + `estimateDispatchMicroUsd`; `sinkBaseline`/`usageSinceBaseline`; `peekLastUsage` removed; legacy rows removed; PRICING_SOURCES re-dated + tombstone), `scripts/test-unit.mts` (+6 S34 units: ASCII law unchanged, CJK/kana/Hangul/Thai/Cyrillic/Arabic floors, astral-plane pairs, mixed-script sums, dispatch-level CJK>ASCII with the exact 14000µ$ delta, per-hold slice semantics incl. the stale-read regression and no-ctx no-op), `scripts/s34-unit-probe.mts` (NEW — real admitDispatch holds against a real DB: reported-usage settle 9400µ$, no-usage settle at estimate ≠ stale 9400, double-emit settle sums 1050µ$, recorded total reconciles), `scripts/s32-unit-probe.mts` (provenance section updated: retrievedAt 2026-11-06, tombstone check, legacy→fallback check), `scripts/s27-unit-probe.mts` (legacy row checks updated to the fallback expectation), `TASKS.md` (P2-1 status + S34 record), this entry.
+**Files:** `src/lib/ibismuh/spend.ts` (script-aware `estimateInputTokens` + `estimateDispatchMicroUsd`; `sinkBaseline`/`usageSinceBaseline`; `peekLastUsage` removed; legacy rows removed; PRICING_SOURCES re-dated + tombstone), `scripts/test-unit.mts` (+6 S34 units: ASCII law unchanged, CJK/kana/Hangul/Thai/Cyrillic/Arabic floors, astral-plane pairs, mixed-script sums, dispatch-level CJK>ASCII with the exact 14000µ$ delta, per-hold slice semantics incl. the stale-read regression and no-ctx no-op), `scripts/s34-unit-probe.mts` (NEW — real admitDispatch holds against a real DB: reported-usage settle 9400µ$, no-usage settle at estimate ≠ stale 9400, double-emit settle sums 1050µ$, recorded total reconciles), `scripts/s32-unit-probe.mts` (provenance section updated: retrievedAt 2026-11-06, tombstone check, legacy→fallback check), `scripts/s27-unit-probe.mts` (legacy row checks updated to the fallback expectation), `TASKS.md` (P2-1 status + S34 record), this entry.
 
-**Final gate:** tsc 0 · eslint 0 errors (89 warnings on the touched files — pre-existing classes) · **152/152 unit** (146 + 6 new) · **s27 probe ALL PASS** (with TUBEFORGE_ENCRYPTION_KEY provisioned — the fresh-clone .env gap is the documented platform-env path, not a regression) · **s32 probe ALL PASS** · **s34 probe ALL PASS** · **queue PASS** · **40/40 billing**. Push status: pending below.
+**Final gate:** tsc 0 · eslint 0 errors (89 warnings on the touched files — pre-existing classes) · **152/152 unit** (146 + 6 new) · **s27 probe ALL PASS** (with IBISMUH_STUDIO_ENCRYPTION_KEY provisioned — the fresh-clone .env gap is the documented platform-env path, not a regression) · **s32 probe ALL PASS** · **s34 probe ALL PASS** · **queue PASS** · **40/40 billing**. Push status: pending below.
 
 ## S35 — Universal Scene Liveliness: the Director's true-motion pick finally steers the render — 2026-11-06
 
@@ -1151,7 +1151,7 @@ Source: the owner's 2026-11-05 audit priority order (security/CI → S34 spend-g
 
 - **The loop that stayed open.** The Director pass writes per-scene `needsI2V` ("true motion is the point — action, weather, crowds, vehicles"), the human approves the plan, and the QC pacing gate (planStaticRuns) has ALWAYS treated that flag as a motion channel — but the default render mode (Ken Burns) never consumed it. An approved "this scene needs real motion" decision died in the data: the scene still rendered as a camera move over a still. Same story for the i2v motion prompt: render.ts mapped FIVE legacy storyboard camera ids and degraded everything else — an approved `crane-up`, `handheld` or `drone` camera animated as "subtle cinematic camera drift".
 
-- **The selector.** NEW `src/lib/tubeforge/liveliness.ts` (pure — no fs/DB/AI): `selectChannels()` derives ONE execution channel per scene, honoring the studio's precedence law. 1) slides → the deck; 2) mode animated → i2v everywhere (unchanged); 3) stock mode + clip on disk → real footage; 4) explicit human contracts pin Ken Burns — the video-level stills contract (motion off / intensity 0), the doc's studio camera keys (a user edit is senior by definition, S2's law), the plan's own motion:"off", the human's per-scene motion-map "off"; 5) **plan needsI2V + a configured video provider → i2v — the loop-closure**; 6) everything else → Ken Burns. Every branch carries a human-readable reason; `RenderResult.liveliness` reports the ledger of what PLAYED (a mid-render i2v→KB fallback mutates its decision), so the selector's calls are auditable against the pixels.
+- **The selector.** NEW `src/lib/ibismuh/liveliness.ts` (pure — no fs/DB/AI): `selectChannels()` derives ONE execution channel per scene, honoring the studio's precedence law. 1) slides → the deck; 2) mode animated → i2v everywhere (unchanged); 3) stock mode + clip on disk → real footage; 4) explicit human contracts pin Ken Burns — the video-level stills contract (motion off / intensity 0), the doc's studio camera keys (a user edit is senior by definition, S2's law), the plan's own motion:"off", the human's per-scene motion-map "off"; 5) **plan needsI2V + a configured video provider → i2v — the loop-closure**; 6) everything else → Ken Burns. Every branch carries a human-readable reason; `RenderResult.liveliness` reports the ledger of what PLAYED (a mid-render i2v→KB fallback mutates its decision), so the selector's calls are auditable against the pixels.
 
 - **Camera execution for generative motion.** `i2vMotionPrompt(scene, planScene)` speaks the FULL Director vocabulary (push-in/pull-out/pan/tilt/dolly-in/handheld/crane-up/drone/static — the moves Ken Burns must approximate but a generative model can actually DO) plus the legacy five ids verbatim, and adds a per-SceneKind SUBJECT-motion clause (action bursts, faces breathe/blink, text stays perfectly static and legible, suspense creeps). The subject clause is the whole point: subject motion is the thing Ken Burns mathematically cannot produce.
 
@@ -1161,7 +1161,7 @@ Source: the owner's 2026-11-05 audit priority order (security/CI → S34 spend-g
 
 - **Known scope line.** `i2vReady` gates on provider "zai" (CogVideoX) — the fal/replicate/runway/luma adapters in providers/video.ts exist but ensureSceneClip's pipeline contract is Z.ai-only (its error message says so). Universal per-scene i2v on third-party providers is a deliberate follow-on, not an oversight: it drags external paid APIs through the spend gate first.
 
-**Files:** `src/lib/tubeforge/liveliness.ts` (NEW — selector + prompt tables + `LivelinessDecision`), `src/lib/tubeforge/render.ts` (S35 orchestrator block; channel-keyed plans/shots/overrides/labels; buildSegment channel + honest fallback; RenderResult.liveliness; motionPrompt removed — replaced by the plan-aware prompt), `scripts/test-unit.mts` (+7 S35 units: mode wins, stock precedence, the loop-closure, human seniority ×4, legacy camera phrases, the full Director vocabulary, scene-kind subject clauses), `scripts/s35-unit-probe.mts` (NEW — the REAL derivation chain: a realistic shotList through the real parsePlan → the render's exact input mapping → the selector → the prompt → the ledger mutation; 17 checks), `TASKS.md` (record), this entry.
+**Files:** `src/lib/ibismuh/liveliness.ts` (NEW — selector + prompt tables + `LivelinessDecision`), `src/lib/ibismuh/render.ts` (S35 orchestrator block; channel-keyed plans/shots/overrides/labels; buildSegment channel + honest fallback; RenderResult.liveliness; motionPrompt removed — replaced by the plan-aware prompt), `scripts/test-unit.mts` (+7 S35 units: mode wins, stock precedence, the loop-closure, human seniority ×4, legacy camera phrases, the full Director vocabulary, scene-kind subject clauses), `scripts/s35-unit-probe.mts` (NEW — the REAL derivation chain: a realistic shotList through the real parsePlan → the render's exact input mapping → the selector → the prompt → the ledger mutation; 17 checks), `TASKS.md` (record), this entry.
 
 **Final gate:** tsc 0 · eslint 0 errors (71 warnings on the touched files — pre-existing classes; verified via git-diff that none are new) · **159/159 unit** (152 + 7 new) · **s35 probe 17/17** · **queue PASS** · **40/40 billing**. Push status: pending — the working PAT from the S33/S34 pushes is now invalid (Bad credentials; likely rotated — the standing hygiene rule working as intended), so this push awaits a fresh scoped token from the owner.
 
@@ -1173,7 +1173,7 @@ classes the S33-era battery could not see. freezedetect catches EXACT freezes
 and the static-run scan catches "nothing happens", but luminance pumping
 reads as neither; broken frame pacing reads as judder while every frame is
 unique; and nothing held the rendered pixels to the assembled timeline's own
-cut list. NEW `src/lib/tubeforge/render-qc.ts`: three pure cores behind thin
+cut list. NEW `src/lib/ibismuh/render-qc.ts`: three pure cores behind thin
 ffmpeg shells, wired into `runQcReport` as checks 11-13 (never failing the
 render — the badge asks a human, as always).
 
@@ -1212,14 +1212,14 @@ render — the badge asks a human, as always).
   cut-alignment (three-state chips, "unmeasured" still amber). The spend
   law untouched: QC probes are local ffmpeg — $0. No new JobKind.
 
-**Files:** `src/lib/tubeforge/render-qc.ts` (NEW — FLICKER_SAMPLE /
+**Files:** `src/lib/ibismuh/render-qc.ts` (NEW — FLICKER_SAMPLE /
 STUTTER_LIMITS / CUT_TOL_SEC, pure cores, parsers, shells,
-expectedCutsForTimeline over the render's own offsets), `src/lib/tubeforge/
+expectedCutsForTimeline over the render's own offsets), `src/lib/ibismuh/
 qc.ts` (checks 11-13 + opts.expectedCuts/frameRate + qcForVideo passthrough
-+ header doc), `src/lib/tubeforge/render.ts` (RenderResult.expectedCuts),
-`src/lib/tubeforge/video-jobs.ts` (render call site passes it + frameRate;
++ header doc), `src/lib/ibismuh/render.ts` (RenderResult.expectedCuts),
+`src/lib/ibismuh/video-jobs.ts` (render call site passes it + frameRate;
 re-run site rebuilds the expectation from the doc), `src/components/
-tubeforge/video-detail-dialog.tsx` (Video group ids), `scripts/test-unit.mts`
+ibismuh/video-detail-dialog.tsx` (Video group ids), `scripts/test-unit.mts`
 (+5 S36 units on captured ffmpeg-7.1.5 fixtures), `scripts/s36-unit-probe.mts`
 (NEW — 38 pure property checks around the live-calibrated points),
 TASKS.md (record), this entry.
@@ -1251,8 +1251,8 @@ audit implied.
   reconciliation is anchored to commit 1e24911 (authored
   2026-11-05T19:20:00Z — independently checkable with `git show -s
   --format=%aI 1e24911`).
-- **Overrides announce themselves.** TUBEFORGE_SPEND_GATE=0 and
-  TUBEFORGE_PRICING_VERIFIED=1 are documented escape hatches, but until
+- **Overrides announce themselves.** IBISMUH_STUDIO_SPEND_GATE=0 and
+  IBISMUH_STUDIO_PRICING_VERIFIED=1 are documented escape hatches, but until
   now they left no trace. New `spendOverrides()` export plus a
   once-per-process stderr announcement at the admitDispatch choke point —
   a degraded protection state can never again be silent.
@@ -1262,7 +1262,7 @@ audit implied.
   contract (real worker restart) after the unit suite, so the queue gate
   is CI-proven on every push instead of commit-reported.
 
-**Files:** `src/lib/tubeforge/spend.ts` (stamp convention + UTC stamps +
+**Files:** `src/lib/ibismuh/spend.ts` (stamp convention + UTC stamps +
 `spendOverrides()`/`announceOverridesOnce()` + error-message pointer),
 `scripts/test-unit.mts` (+1 test on the override surface),
 `.github/workflows/ci.yml` (queue step + header note), TASKS.md (record),
@@ -1310,9 +1310,9 @@ surfaces, one fake.
   bodies; preview renders write no qcReport. All three are backlog, not
   blockers.
 
-**Files:** `src/lib/tubeforge/providers/zai-video-core.ts` (NEW),
-`src/lib/tubeforge/providers/video.ts` (stub → real),
-`src/lib/tubeforge/render.ts` (inline loop → core),
+**Files:** `src/lib/ibismuh/providers/zai-video-core.ts` (NEW),
+`src/lib/ibismuh/providers/video.ts` (stub → real),
+`src/lib/ibismuh/render.ts` (inline loop → core),
 `scripts/test-unit.mts` (+3 S37 tests), TASKS.md (record), this entry.
 
 **Final gate:** tsc 0 · eslint 0 errors · **168/168 unit** (165 + 3) ·
@@ -1329,7 +1329,7 @@ Step 1 ("AI Script + Metadata failed / Cross-origin request rejected")
 before the SDK was ever reached. S30 had fixed this same wire-up at the
 env-config level (proxy rewrites Host, Origin mismatch → 403) — but the
 chat-bot preview platform serves every deployment at `preview-<id>.space-z.ai`
-and operators cannot provision `TUBEFORGE_ALLOWED_ORIGINS` on it. The
+and operators cannot provision `IBISMUH_STUDIO_ALLOWED_ORIGINS` on it. The
 SDK wiring was unreachable from the preview.
 
 **Fix.** Built-in default trust in `origin-trust.ts`: the regex
@@ -1347,7 +1347,7 @@ chat-bot preview deployment pattern is well-defined; the cookie's
 SameSite attribute is the first CSRF line of defense — this is the
 second, scoped to the operator's own platform. Operators with stricter
 requirements deploy elsewhere (production Vercel/custom domain still
-needs TUBEFORGE_ALLOWED_ORIGINS as before).
+needs IBISMUH_STUDIO_ALLOWED_ORIGINS as before).
 
 **Probe.** +14 cases in scripts/s30-unit-probe.mts: the headline pass
 (preview-<uuid>.space-z.ai with empty env), the actual screenshot URL
@@ -1359,7 +1359,7 @@ break host extraction. C.1/C.2 swapped off the preview pattern so they
 still exercise the forwarded-host path (without this they'd pass for
 the wrong reason — D-bis.11 nails that interaction).
 
-**Files:** `src/lib/tubeforge/origin-trust.ts` (+ "builtin-preview" via,
+**Files:** `src/lib/ibismuh/origin-trust.ts` (+ "builtin-preview" via,
 + BUILTIN_PREVIEW_HOST_RE + isBuiltinTrustedPreviewHost, + doc),
 `src/middleware.ts` (comment refreshed for the new path),
 `scripts/s30-unit-probe.mts` (+14 D-bis cases, C.1/C.2 hostnames
@@ -1417,7 +1417,7 @@ cancel.ts audited: already globalThis-backed. No public-surface change.
 parse variance (parseJsonLoose already in use; residual LLM variance);
 preview renders write no qcReport.
 
-**Files:** `src/lib/tubeforge/tenant.ts` (ALS → globalThis), 
+**Files:** `src/lib/ibismuh/tenant.ts` (ALS → globalThis), 
 `scripts/test-unit.mts` (+1 S39 test), `scripts/test-queue.mts` (+render
 recovery probe, header), TASKS.md (record), this entry.
 
@@ -1449,7 +1449,7 @@ qcOverrideForCheckedAt on the row — anchored to EXACTLY the report the
 human saw, so the next re-render or QC re-run re-arms the gate. The gate
 sits on the two ship surfaces (GET /export, POST /publish) and nowhere
 else; a valid override also writes a QC OVERRIDE line into the exported
-bundle's metadata. `TUBEFORGE_QC_ENFORCEMENT=report` (exact match; junk
+bundle's metadata. `IBISMUH_STUDIO_QC_ENFORCEMENT=report` (exact match; junk
 fails closed to enforce) restores the old advisory behavior for operators.
 The DTO carries a server-computed `qcGate` (serialize.ts, one source with
 the badge's parser — parseQcReport moved into qc-policy.ts), and the detail
@@ -1474,19 +1474,19 @@ buttons and the publish panel respect the verdict.
 
 **Sandbox note (local only, not a repo defect):** the recycled sandbox
 exports its own DATABASE_URL, so postinstall's .env fallback never fired
-and the e2e webServer booted without TUBEFORGE_AUTH_SECRET (503s).
+and the e2e webServer booted without IBISMUH_STUDIO_AUTH_SECRET (503s).
 Writing .env with the two provisioned secrets (exactly what postinstall
 does on a clean checkout / CI) took the suite to 26/26.
 
-**Files:** `src/lib/tubeforge/qc-policy.ts` (new — matrix, applyQcPolicy,
+**Files:** `src/lib/ibismuh/qc-policy.ts` (new — matrix, applyQcPolicy,
 override rule, mode switch, parseQcReport), `prisma/schema.prisma` +
 `schema.sqlite.prisma` + `migrations/20261106000000_s40_qc_enforcement/`
-(+3 nullable override columns), `src/lib/tubeforge/types.ts` (QcGateDTO),
-`src/lib/tubeforge/serialize.ts` (qcGate + shared parser),
+(+3 nullable override columns), `src/lib/ibismuh/types.ts` (QcGateDTO),
+`src/lib/ibismuh/serialize.ts` (qcGate + shared parser),
 `src/app/api/videos/[id]/export/route.ts` (GET gate, POST override,
 bundle metadata line), `src/app/api/videos/[id]/publish/route.ts` (gate),
-`src/lib/tubeforge/video-jobs.ts` (render + QC-re-run activity name a
-hold), `src/components/tubeforge/video-detail-dialog.tsx` (Ship-gate card,
+`src/lib/ibismuh/video-jobs.ts` (render + QC-re-run activity name a
+hold), `src/components/ibismuh/video-detail-dialog.tsx` (Ship-gate card,
 Ship anyway flow, gated buttons), `.env.example` (S40 block),
 `scripts/test-unit.mts` (+5), `scripts/s40-unit-probe.mts` (new),
 TASKS.md (record), this entry.
@@ -1540,7 +1540,7 @@ full-width uncropped, pills + title + tabs visible, tidy wrapped rows,
 no overlap. (Select labels still ellipsize inside their fixed widths —
 the designed compact picks; tooltips carry the full text.)
 
-**Files:** `src/components/tubeforge/timeline-studio.tsx` (wrap the
+**Files:** `src/components/ibismuh/timeline-studio.tsx` (wrap the
 picker row + 9 groups, S41 comment), `src/components/ui/dialog.tsx`
 (grid-cols-1, drop sm:max-w-lg, S41/S41b comments),
 `src/components/ui/command.tsx` (restate confirm-dialog width),
@@ -1606,11 +1606,11 @@ rotates — the exact bug; art removed → null again). Gate: tsc 0 ·
 eslint 0 errors (touched files: same warning count before/after) ·
 **176/176 unit** (174 + the 2 new).
 
-**Files:** `src/lib/tubeforge/story.ts` (stat + `sceneArtVersion` +
+**Files:** `src/lib/ibismuh/story.ts` (stat + `sceneArtVersion` +
 stamped DTO), `src/app/api/videos/[id]/storyboard/[n]/route.ts`
-(ETag/304), `src/components/tubeforge/views/create-view.tsx` (DTO
-URL), `src/components/tubeforge/timeline-studio.tsx` (pool carries
-URL), `src/components/tubeforge/scene-editor.tsx` (save-before-art),
+(ETag/304), `src/components/ibismuh/views/create-view.tsx` (DTO
+URL), `src/components/ibismuh/timeline-studio.tsx` (pool carries
+URL), `src/components/ibismuh/scene-editor.tsx` (save-before-art),
 `scripts/test-unit.mts` (S42 tests), TASKS.md (record), this entry.
 
 ## S43 (2026-11-06 UTC) — the boom, the caption that wouldn't stick, and the iPhone photo
@@ -1677,14 +1677,14 @@ voice", (3) HEIC uploads rejected.
    test proves decode → 1344x768 crop end-to-end.
 4. Client accept attr + copy updated for HEIC.
 
-**Files:** `src/lib/tubeforge/settings-public.ts`, `src/lib/tubeforge/music.ts`
-(sfx default), `src/lib/tubeforge/story.ts` (HEIF sniff + decode +
-captionUser passthrough), `src/lib/tubeforge/captions.ts`
-(`captionOverridesFor`), `src/lib/tubeforge/timeline.ts` (doc seeding),
-`src/lib/tubeforge/render.ts` (chain swap), `src/lib/tubeforge/types.ts`
+**Files:** `src/lib/ibismuh/settings-public.ts`, `src/lib/ibismuh/music.ts`
+(sfx default), `src/lib/ibismuh/story.ts` (HEIF sniff + decode +
+captionUser passthrough), `src/lib/ibismuh/captions.ts`
+(`captionOverridesFor`), `src/lib/ibismuh/timeline.ts` (doc seeding),
+`src/lib/ibismuh/render.ts` (chain swap), `src/lib/ibismuh/types.ts`
 (Scene.captionUser), `src/app/api/videos/[id]/scenes/route.ts` (flag +
 doc write-through + render-only invalidation),
-`src/components/tubeforge/scene-editor.tsx` (copy + toast + accept),
+`src/components/ibismuh/scene-editor.tsx` (copy + toast + accept),
 `src/types/heic-convert.d.ts` (new), `scripts/fixtures/scene-upload.heic`
 (new), `scripts/test-unit.mts` (5 new S43 tests + the assembleTimeline
 caption test re-pinned to the new contract), package.json (+heic-convert).
@@ -1703,7 +1703,7 @@ Background Music, three screens away from where a video's track is chosen.
 
 **Fix:** the licensed-track upload dialog is lifted out of
 settings-music.tsx into a shared `MusicUploadDialog`
-(src/components/tubeforge/music-upload-dialog.tsx, onUploaded now carries
+(src/components/ibismuh/music-upload-dialog.tsx, onUploaded now carries
 the new track's id). Settings uses it as before; the per-video
 MusicPickerCard (Create form + video detail) gains a "My own" button next
 to the track Select — upload lands the track in the library AND pins it
@@ -1783,12 +1783,12 @@ gate exists to prevent.
   only)" for scoped reports; the Re-run QC button was already
   final-render-only (its tooltip says so).
 
-**Files:** `src/lib/tubeforge/ai.ts` (parser ladder + aiCallJson + script
-migration), `src/lib/tubeforge/director.ts` (closure migration),
-`src/lib/tubeforge/qc.ts` (scope + qcForPreview), `src/lib/tubeforge/
-qc-policy.ts` (preview guard), `src/lib/tubeforge/types.ts` (DTO scope),
-`src/lib/tubeforge/video-jobs.ts` (preview branch + previewQcPatch),
-`src/components/tubeforge/video-detail-dialog.tsx` (scope chip),
+**Files:** `src/lib/ibismuh/ai.ts` (parser ladder + aiCallJson + script
+migration), `src/lib/ibismuh/director.ts` (closure migration),
+`src/lib/ibismuh/qc.ts` (scope + qcForPreview), `src/lib/ibismuh/
+qc-policy.ts` (preview guard), `src/lib/ibismuh/types.ts` (DTO scope),
+`src/lib/ibismuh/video-jobs.ts` (preview branch + previewQcPatch),
+`src/components/ibismuh/video-detail-dialog.tsx` (scope chip),
 `scripts/test-unit.mts` (+10 S45 tests).
 
 **Verification:** tsc 0 · eslint 0 errors (670 warnings, the exact
@@ -1834,7 +1834,7 @@ owns:
    read-modify-write could), and a true sliding window falls out for
    free: count the key's rows newer than `now − 10 min`.
 2. The law lives in ONE pure function, `loginWindowDecision()` (new
-   `src/lib/tubeforge/auth-throttle.ts`): ≥5 in-window failures block
+   `src/lib/ibismuh/auth-throttle.ts`): ≥5 in-window failures block
    until the OLDEST ages out; `retryAfterSec` floors at 1 (a 0s
    Retry-After header would be a lie). Burst behavior is identical to
    the S16 era (5 rapid failures → ~10-min lock); the straddle hole is
@@ -1873,8 +1873,8 @@ signup abuse.
 
 **Files:** `prisma/schema.prisma` + regenerated `schema.sqlite.prisma`
 (AuthAttempt), `prisma/migrations/20261107000000_s46_auth_attempt/`
-(Postgres), `src/lib/tubeforge/auth-throttle.ts` (NEW — law + shell),
-`src/lib/tubeforge/tenant.ts` + `src/lib/tubeforge/auth.ts` (both
+(Postgres), `src/lib/ibismuh/auth-throttle.ts` (NEW — law + shell),
+`src/lib/ibismuh/tenant.ts` + `src/lib/ibismuh/auth.ts` (both
 in-memory lockouts removed), `src/app/api/auth/login/route.ts` +
 `src/app/api/auth/change-password/route.ts` (await the async shell),
 `scripts/test-unit.mts` (+3), `scripts/s16-unit-probe.mts` (layer 2
@@ -2106,7 +2106,7 @@ layered restricted-subject enforcement.
 
 S49 — Islamic visual protection, the sprint the whole transformation
 exists to make safe. The doctrine (docs/design/s48-s49-schema.md §3):
-in islamic-history policy mode, TubeForge never paints a face (or
+in islamic-history policy mode, Ibismuh Studio never paints a face (or
 figure) of the Prophet Muhammad ﷺ, his family, the Ten Promised
 Paradise, the Quranic prophets, the angels, or God — and no single
 layer is trusted alone.
@@ -2721,7 +2721,7 @@ landed the surviving value directly on main:
 - **CI evidence:** run 42651425835 on `8d974d1` — all six jobs green
   (Production build · Typecheck·Lint·Unit · Secret scan (gitleaks) ·
   Money-path coverage · PostgreSQL integration · E2E):
-  https://github.com/ibis01/tubeforge/actions/runs/42651425835
+  https://github.com/ibis01/ibismuh/actions/runs/42651425835
 
 E-series follow-up: pick the engine that carries E3+ (main's P0/E1 engine vs
 the prototype's path-following hand + asset library), port the winner's gaps,
@@ -2734,7 +2734,7 @@ Engine's first product integration landed with it:
 
 - **`e2a20e1` — feat(s67): whiteboard reconciliation — the canonical engine
   wins, E9 Phase A lands.** 55 files +1983/−5559. RECONCILIATION:
-  `src/lib/tubeforge/whiteboard/` is the one engine (E3+, CI-evidenced since
+  `src/lib/ibismuh/whiteboard/` is the one engine (E3+, CI-evidenced since
   S64/S65); `contrib/whiteboard-e2/` is retired in full — the
   capability-by-capability verdict + supersession map live in
   `docs/audits/s67-whiteboard-e9a-record.md`. Ported: the prototype's 8
@@ -2765,11 +2765,11 @@ Engine's first product integration landed with it:
 - **CI evidence:** run 42670081950 on `7644690` — all six jobs green
   (Typecheck·Lint·Unit · Production build · Secret scan (gitleaks) ·
   PostgreSQL integration · Money-path coverage · E2E (Playwright)):
-  https://github.com/ibis01/tubeforge/actions/runs/42670081950
+  https://github.com/ibis01/ibismuh/actions/runs/42670081950
 
 Follow-ups: E11 asset routes (§7's seven-gate hardening first), Phase B
 event editing, and the standing risks unchanged (gateway 429 → S63 resume
-gated on a green probe; production `TUBEFORGE_ENCRYPTION_KEY` on Vercel;
+gated on a green probe; production `IBISMUH_STUDIO_ENCRYPTION_KEY` on Vercel;
 the 8 open dependency PRs — majors tested individually). The landing PAT
 transited chat again — rotate/revoke it now.
 
@@ -2812,7 +2812,7 @@ both chat-exposed tokens are revoked; a fresh one is needed for the push):
   which brushes the middleware's per-IP WRITE_LIMIT (90/min) — victims
   alternated by file order (whiteboard once, premium-ux the next run).
   The playwright webServer now boots its own server with raised
-  `TUBEFORGE_RATE_*` ceilings; production defaults untouched.
+  `IBISMUH_STUDIO_RATE_*` ceilings; production defaults untouched.
 
 One anomaly, watched: `storyboard/upload/route.ts` vanished from the
 working tree mid-session (git checkout restored it; no recurrence through
@@ -2849,7 +2849,7 @@ same token worked immediately after). Two CI rounds were spent learning:
 **CI evidence: run 42697192000 on `5fce4d7` (attempt 2) — all six jobs
 green** (Typecheck·Lint·Unit · Production build · Secret scan (gitleaks) ·
 PostgreSQL integration · Money-path coverage · E2E (Playwright), 27 tests):
-https://github.com/ibis01/tubeforge/actions/runs/42697192000
+https://github.com/ibis01/ibismuh/actions/runs/42697192000
 
 Landing-gate state: origin/main = `5fce4d7`, S67 + S68(E9 Phase B) both
 closed on green CI. The landing PAT transited chat — rotate/revoke it now.
@@ -2958,7 +2958,7 @@ What landed (`773072e`, one commit):
 **Run 42709763518 on `773072e` — all six jobs green** (Typecheck·Lint·Unit ·
 Secret scan (gitleaks) · PostgreSQL integration · Money-path coverage ·
 Production build · E2E (Playwright), 28 tests):
-https://github.com/ibis01/tubeforge/actions/runs/42709763518
+https://github.com/ibis01/ibismuh/actions/runs/42709763518
 
 Landing-gate state: origin/main = `773072e`; S67 + S68 + S69(E9 Phase B
 remainder: palette/asset management behind §7's seven gates + the
@@ -3113,7 +3113,7 @@ Live probe (`scripts/s73-llm-planner-probe.mts`): planner=llm, served
 **CI evidence: run 42728369983 on `f5fe442` — all six jobs green**
 (Typecheck·Lint·Unit · Secret scan (gitleaks) · PostgreSQL integration ·
 Money-path coverage · Production build · E2E (Playwright), 30 tests):
-https://github.com/ibis01/tubeforge/actions/runs/42728369983
+https://github.com/ibis01/ibismuh/actions/runs/42728369983
 Battery: tsc 0 · eslint 0 (20 baseline warnings) · unit 343/343 · queue
 PASS · billing 40/40 · build 0 · e2e 30/30.
 
@@ -3228,7 +3228,7 @@ ffmpeg-install apt-mirror flake rerun — the same S68-round-2 shape, now
 three occurrences across the S74 push cycle; a candidate CI-hardening
 follow-up to give the apt step per-request timeouts is noted but not
 taken in this commit to keep scope tight):
-https://github.com/ibis01/tubeforge/actions/runs/42816234222
+https://github.com/ibis01/ibismuh/actions/runs/42816234222
 
 Landing-gate state: origin/main = `c6db273`; S74 code + review fixes
 LANDED on green CI. The measurement (8 paired i2v renders + 16 blind
@@ -3250,7 +3250,7 @@ execution-time one. Confirmed, and the whole family had the same defect:
   environment variable; git auth rides a one-shot GIT_ASKPASS helper
   (mktemp, chmod 700, body contains NO secret — it reads the inherited
   environment when git asks); every git command uses the plain
-  `https://github.com/ibis01/tubeforge.git` URL; GIT_TERMINAL_PROMPT=0
+  `https://github.com/ibis01/ibismuh.git` URL; GIT_TERMINAL_PROMPT=0
   (fail, never hang); trap removes the helper and unsets TF_TOKEN. The
   optional arg keeps the one-shot family's drift guard; without it, git's
   own non-fast-forward rejection is the guard. If the machine has a real
@@ -3596,10 +3596,10 @@ done instead:
 
 - **Dockerfile (runner stage):** `ENV PLAYWRIGHT_BROWSERS_PATH=
   /opt/ms-playwright` in the base env block; `RUN npx playwright
-  install --with-deps chromium && chown -R tubeforge:tubeforge
+  install --with-deps chromium && chown -R ibismuh:ibismuh
   /opt/ms-playwright` placed AFTER the node_modules COPY (npx resolves
   the pinned playwright from the image's own node_modules) and BEFORE
-  `USER tubeforge`, exactly per §5.1's "as root" contract. The stale
+  `USER ibismuh`, exactly per §5.1's "as root" contract. The stale
   "no browser here" comment (the old slides-only world) is rewritten;
   the browser install got its own apt layer so the ffmpeg layer stays
   cached across browser bumps.
@@ -3638,7 +3638,7 @@ and the check caught something the audit itself had missed:
 **The cron dump.** A commit with a UUID for a message (d5e49e2,
 "…-cron") sat queued locally on top of f7bfe47 — 1520 files, ~326k
 insertions: `work/yamama/webchunks/*.mp4` binaries (~28 MB single
-file), nested repo copies (`tubeforge/src`, `work/tubeforge`,
+file), nested repo copies (`ibismuh/src`, `work/ibismuh`,
 `work/tf-verify`), and a 1165-line contrib/whiteboard-e2 PLAN. It was
 NEVER pushed (origin was still f7bfe47), and it was never part of the
 product. Quarantined intact to branch `quarantine/cron-d5e49e2`
@@ -3668,7 +3668,7 @@ then Visual Consistency → Video Critic & Repair → Universal Timeline
 as shared infrastructure; reference-video intelligence, stock and
 provider intelligence after; 3D/character deferred until the timeline
 contract is stable. AGPL-3.0 reuse policy: study, never copy, until
-licensing is reviewed; TubeForge needs its own LICENSE before
+licensing is reviewed; Ibismuh Studio needs its own LICENSE before
 commercial distribution. The governing rule is §8: no engine without
 the shared contracts — no isolated production pipelines.
 
@@ -3951,7 +3951,7 @@ the host could invent a new face, a new outfit and new set pieces while
 the scene art beside it obeyed the cast portrait, the logged outfit and
 the World library.
 
-The fix (src/lib/tubeforge/shots.ts, self-contained — the render call
+The fix (src/lib/ibismuh/shots.ts, self-contained — the render call
 site is unchanged):
 
 - `composeLockedShotPrompt` (PURE): the shot's own prompt leads (M2 law),
@@ -3991,7 +3991,7 @@ The question the per-video engine could not answer: a channel's cast
 character is a BRAND — is the host of video 1 still the host of video 30?
 Identity was judged within one video's scenes only.
 
-New module src/lib/tubeforge/character-identity.ts (the S77 laws cited in
+New module src/lib/ibismuh/character-identity.ts (the S77 laws cited in
 its header):
 
 - ONE batched VLM call per run (aiCall, "cross-video identity VLM"):
@@ -4063,7 +4063,7 @@ just scene stills. Today the QC battery judged the file's technical
 health and the VCE judged scene stills — nobody judged the final cut as
 a STORY.
 
-New module src/lib/tubeforge/video-critic.ts + route
+New module src/lib/ibismuh/video-critic.ts + route
 /api/videos/[id]/critic + job kind "critic" (contract:
 docs/design/s84-video-critic.md):
 
@@ -4096,7 +4096,7 @@ touched files. New contract doc, ROADMAP #5, this log.
 ## S85 — the Video Critic card (ROADMAP #5 tail, P0)
 
 S84 shipped the API; this is its human surface. New
-`src/components/tubeforge/critic-card.tsx` + the dialog/panel wiring:
+`src/components/ibismuh/critic-card.tsx` + the dialog/panel wiring:
 
 - The card lives in the video detail dialog's Video tab, right after
   the QC scorecard, story-format only (the POST refuses non-story
@@ -4853,7 +4853,7 @@ local main is now exactly a2eabd8 + priors + nothing else.
 The handbook re-stamp: cover and body carried 42238f7, which the
 rebase orphaned (now d03bed9) — every hash in a maintenance handbook
 must resolve on origin, so body.py and cover.html were re-stamped
-and the 22-page PDF rebuilt (download/TubeForge_Maintenance_Handbook
+and the 22-page PDF rebuilt (download/Ibismuh Studio_Maintenance_Handbook
 .pdf; merge_final.py gained render_cover.js for the Playwright cover).
 
 Green at 2e62e5a: all six jobs, run 43193109971.
@@ -4958,7 +4958,7 @@ unit, coverage 54.47% (floor 50%), queue, billing, production build.
 confirmed against the provider's current state: the API moved to
 gen.pollinations.ai behind sk_ keys, and the old anonymous watermark
 scheme (nologo=true on keyless calls) no longer applies. Every image
-TubeForge generated on the pollinations lane carried a watermark.
+Ibismuh Studio generated on the pollinations lane carried a watermark.
 
 **THE FIX — a better free lane, not a workaround.** Together AI offers
 black-forest-labs/FLUX.1-schnell-Free: $0, un-watermarked, real FLUX,
@@ -5089,7 +5089,7 @@ docs/production-readiness.md: major feature development is FROZEN at
 S98 — only security fixes, reliability improvements, bug fixes, and
 maintenance until the P0.1–P1.2 gates close; no new video engine
 before the exit criteria pass. The 13-engine roadmap is complete;
-TubeForge's next advantage is operational reliability, not another
+Ibismuh Studio's next advantage is operational reliability, not another
 engine. The doc carries the eight validated priorities, the
 P0.1→P2 stage table with exit conditions, and the P0.6 target
 topology (web + Postgres + worker + FFmpeg/Chromium + object storage,
@@ -5108,7 +5108,7 @@ non-deterministic client output. Closed with three layers:
    playwright-report/.vercel absent, db/ holds only .gitkeep); the
    boot proof (npm ci with NO injected DATABASE_URL → postinstall
    creates .env with file:../db/custom.db, provisions
-   TUBEFORGE_AUTH_SECRET + TUBEFORGE_ENCRYPTION_KEY, creates
+   IBISMUH_STUDIO_AUTH_SECRET + IBISMUH_STUDIO_ENCRYPTION_KEY, creates
    next-env.d.ts, pushes db/custom.db); the boot probe (the generated
    client queries the pushed Stage-2 schema — organization.count());
    the determinism law (SQLite regenerate → byte-identical sha256
@@ -5158,7 +5158,7 @@ heartbeats — Stage 3 part 2."
 a renewable LEASE with a monotonic FENCING TOKEN:
 - claimJob (the atomic primitive, extracted + exported for the
   battery): WHERE status=pending → stamps claimedBy + leaseToken
-  INCREMENT + leaseExpiresAt = now + TTL (TUBEFORGE_LEASE_TTL_MS,
+  INCREMENT + leaseExpiresAt = now + TTL (IBISMUH_STUDIO_LEASE_TTL_MS,
   default 90s), then reads the token back (updateMany returns no row;
   a stolen-between read is detected via claimedBy).
 - renewLease: WHERE leaseToken = mine AND status=running → extends the
@@ -5229,7 +5229,7 @@ drops it — a hold never moved the committed counter, so dropping one
 frees exactly the bytes it reserved, never lies about stored state
 (accepted drift: an object written but never settled undercounts until
 overwritten — the sweep errs toward freeing quota, not stranding it).
-TTL is TUBEFORGE_STORAGE_RESERVATION_TTL_MS (default 1h); the sweep
+TTL is IBISMUH_STUDIO_STORAGE_RESERVATION_TTL_MS (default 1h); the sweep
 runs lazily from the queue tick (~1/min per process, indexed scan,
 dynamic import to avoid a load cycle).
 
@@ -5267,7 +5267,7 @@ each got their own idea of "too many".
 **THE TRUST LAW (proxy-trust.ts — pure, edge-safe).** Walk the
 X-Forwarded-For chain RIGHT to LEFT (the closest proxy appends the
 rightmost entry), skip TRUSTED proxies (loopback + private + link-
-local + CGNAT by default; TUBEFORGE_TRUSTED_PROXIES adds CIDRs), and
+local + CGNAT by default; IBISMUH_STUDIO_TRUSTED_PROXIES adds CIDRs), and
 the first untrusted entry is the client. A spoofed leftmost value is
 ignored whenever a real proxy appended a public IP — which is every
 supported topology. All-trusted chains (direct private traffic) fall
@@ -5296,7 +5296,7 @@ for forensics).
 **THE EVIDENCE (the P0.4 exit condition).** test-rate-limit.mts joins
 the check job: 10 pure spoofing assertions (leftmost spoof ignored,
 private hops skipped, all-trusted fallback, IPv6, real-ip fallback,
-TUBEFORGE_TRUSTED_PROXIES CIDR mask honored) + the shared law against
+IBISMUH_STUDIO_TRUSTED_PROXIES CIDR mask honored) + the shared law against
 the real DB (12 concurrent racers against a 5-hit window: exactly 5
 admitted; an INDEPENDENT client reads the same counter — no in-memory
 truth; the next window admits again; two forged chains from
@@ -5350,7 +5350,7 @@ route 500s, the S60 P2022 class); pending-backlog age (a wedged
 queue); stale-lease count (S100's dead-worker signal); migration-chain
 stuckness (Postgres — the S60 self-heal hint is in the alert text);
 the fail-closed secrets; disk headroom on the upload root; and —
-opt-in via TUBEFORGE_ALERT_BACKUPS_DIR — the backup-artifact freshness
+opt-in via IBISMUH_STUDIO_ALERT_BACKUPS_DIR — the backup-artifact freshness
 check that closes the runbook's "nightly dump missing" loop. The
 probe reads .env directly (the postinstall parse) so it runs OUTSIDE
 the Next runtime — a cron job or uptime monitor can call it against
@@ -5442,7 +5442,7 @@ ffmpeg (in-image) renders a real mp4; the artifact round-trips
 put→get through the s3 driver into MinIO with the S101 reservation
 lifecycle settled (usage committed, 0 holds); a stock job is enqueued
 and the WORKER container executes it cross-process (the dedicated-
-worker topology, TUBEFORGE_NO_CLAIM=1 on web); then the worker is
+worker topology, IBISMUH_STUDIO_NO_CLAIM=1 on web); then the worker is
 STOPPED, an expired-lease RUNNING job (the S100 dead-worker
 fingerprint, leaseToken 5) and a pending job are seeded, the worker
 STARTS, and the reaper bumps the token (5 → ≥6) and lands both jobs
@@ -5764,7 +5764,7 @@ provisioning is one command the day they exist, and every drill on the
 `fly.staging.toml` — the staging overlay: same image, same process
 groups, same health checks and machine sizing as fly.toml (the drill
 ground must match production shape, not be a cheaper cousin), deltas
-exactly three: the app name, `TUBEFORGE_EMAIL_MODE=console` (drill
+exactly three: the app name, `IBISMUH_STUDIO_EMAIL_MODE=console` (drill
 links land in `fly logs`), and fresh secrets by construction.
 `scripts/staging-provision.sh` — the one-command provisioner: sources
 gitignored `.env.staging`, preflights flyctl auth + every required
@@ -5937,7 +5937,7 @@ points resolve to their recommended defaults, recorded here:
    fresh ids, retired lines simply stop. Per-scene diffs there would
    have tripled Stage 1's surface for no creative value.
 
-**THE LAWS** (src/lib/tubeforge/scene-revisions.ts, each pinned by test):
+**THE LAWS** (src/lib/ibismuh/scene-revisions.ts, each pinned by test):
 
 - **APPEND-ONLY.** One immutable row per (video, scene, version). The
   only UPDATE in the codebase on this table is the head→superseded
@@ -6052,7 +6052,7 @@ what was produced — plus the fix of the cost bug the reconciliation
 called "measurable re-render cost on a 20-scene video for a one-scene
 fix" (§8.3).
 
-**THE DECLARATIVE MAP (src/lib/tubeforge/scene-deps.ts).** The proposal's
+**THE DECLARATIVE MAP (src/lib/ibismuh/scene-deps.ts).** The proposal's
 requirement B — "narration → voice audio/captions/timing; transition →
 boundary; …" — was scattered if-branches: surgical in PATCH /scenes,
 wrong in blast radius at the storyboard job. Now ONE exported table,
@@ -6091,7 +6091,7 @@ scene 2's + the renders die, the read + art untouched. The render
 already reuses cached clips (ensureSceneClip), so every surviving clip
 is a skipped paid i2v generation — real money, not tidiness.
 
-**THE PROVENANCE REGISTRY (src/lib/tubeforge/scene-artifacts.ts +
+**THE PROVENANCE REGISTRY (src/lib/ibismuh/scene-artifacts.ts +
 SceneArtifact).** S111's finding: "generation prompts are discarded;
 cost records are not linked to scenes or artifacts". Now: the FULL
 composed prompt (visual + topic-world + style + director addendum +
@@ -6640,7 +6640,7 @@ kenburns click (honest story gate 400 + row flips back) → explicit
 whiteboard click (202 + row pins — the exact click that used to degrade)
 → render completes → sampled frames 98.4–99.3% near-white (the broken
 output measured 0.3–1.8%) — the render IS whiteboard ink. The sample
-ships to `download/tubeforge-whiteboard-sample.mp4` (3 beats of the
+ships to `download/ibismuh-whiteboard-sample.mp4` (3 beats of the
 user's own Al-Andalus → Reconquista topic, 14.3s).
 
 **VERIFICATION.** tsc clean, eslint clean on every touched file,
@@ -6659,7 +6659,7 @@ determinism pin — so every W2+ iteration is MEASURED against the same
 artifacts instead of vibes. Exit criterion: iterations are measurable.
 
 **THE DELIVERABLES.**
-- `src/lib/tubeforge/whiteboard/benchmark-scenarios.ts` (NEW, PURE): the
+- `src/lib/ibismuh/whiteboard/benchmark-scenarios.ts` (NEW, PURE): the
   frozen definition — five hand-authored scenes on the library's own
   benchmark topic ("How Your Heart Works"), two design spaces (1600×900
   landscape, 900×1600 portrait) with a pure fit transform per aspect, explicit
@@ -6741,7 +6741,7 @@ earlier-ordered one), so hand-authored boards keep their intent and only
 gain narration alignment.
 
 **THE DELIVERABLES.**
-- `src/lib/tubeforge/whiteboard/beat-plan.ts` (NEW, PURE): `splitSentences`
+- `src/lib/ibismuh/whiteboard/beat-plan.ts` (NEW, PURE): `splitSentences`
   (THE segmentation — llm-planner shares it), sentence classification
   (emphasis/subject/action/setup/support from punctuation + cue regexes),
   the concept cue table (mirrors the planner's KEYWORD_PICKS — the planner
@@ -6827,7 +6827,7 @@ order, narration alignment — is the operator's next human step.
 
 ## 2026-11-13 — Stage S: the shared animation substrate (session 05, continued)
 
-- src/lib/tubeforge/anim/ — the ONE tiny pure engine-neutral motion substrate the new engines (G1, K1) share, so they never duplicate easing/keyframe/clock math (S120 §8). The whiteboard's timing.ts is deliberately NOT migrated (byte-identity beats elegance where determinism is pinned).
+- src/lib/ibismuh/anim/ — the ONE tiny pure engine-neutral motion substrate the new engines (G1, K1) share, so they never duplicate easing/keyframe/clock math (S120 §8). The whiteboard's timing.ts is deliberately NOT migrated (byte-identity beats elegance where determinism is pinned).
 - anim/easing.ts: five named curves (linear | ease-in-out | ease-out | pop | ease-back), pure + clamped + table-closed; easeInOut is the whiteboard's own cubic family (one motion feel, two consumers); pop/ease-back are the standard easeOutBack closed forms (~20% / ~10% overshoot, exact clamped boundaries — no fp residue). zoomProgressExpr compiles the curves to ffmpeg zoompan progress expressions — smooth/linear reproduce motion.ts's progressExpr BYTE-FOR-BYTE (source-pinned), the overshoot curves compile to closed-form pow().
 - anim/keyframe.ts: Keyframe (tMs, value, ease?) with clamped evaluation (segment ease = the DESTINATION key's), strict-ascent refusal, non-finite refusal, a structured-lerp hook, and the keyframes() builder sugar.
 - anim/clock.ts: ANIM_FRAME_BUDGET = 25_920 (ONE wall, two engines — equals the whiteboard's pinned WB_RENDER_FRAME_BUDGET), quantizeClock (the 2-dp contract), frameCountOf (the encoder's exact count), framePlanWindows (the generic framePlanClock — junk durations refuse loudly; contiguity by construction).
@@ -6861,7 +6861,7 @@ order, narration alignment — is the operator's next human step.
 ## 2026-11-14 — W4 slice 2 step 1: the committed glyph table + the pure layout (session 06, continued)
 
 - The external audit's #1 engineering priority was "finish W4". Slice 2 (glyph-outline text, decision §10.3's single-face route) starts with its foundation: the COMMITTED TABLE.
-- scripts/w4-generate-glyphs.py: the ONE place fontTools exists (not an npm dep). Pinned inputs — Caveat (OFL, vendored at public/fonts/caveat/ with its OFL.txt), weight 500 instanced from the variable font, ASCII 0x20–0x7E, 2dp precision — SVGPathPen outlines + advances emitted as src/lib/tubeforge/whiteboard/glyphs.ts (95 glyphs). Double-run byte-identical (--verify); receipt at docs/baselines/w4-glyph-table-receipt.json (font sha256, table sha256).
+- scripts/w4-generate-glyphs.py: the ONE place fontTools exists (not an npm dep). Pinned inputs — Caveat (OFL, vendored at public/fonts/caveat/ with its OFL.txt), weight 500 instanced from the variable font, ASCII 0x20–0x7E, 2dp precision — SVGPathPen outlines + advances emitted as src/lib/ibismuh/whiteboard/glyphs.ts (95 glyphs). Double-run byte-identical (--verify); receipt at docs/baselines/w4-glyph-table-receipt.json (font sha256, table sha256).
 - The runtime parses NO fonts: text-draw.ts grows textToGlyphPaths — pure layout (font-units → asset-space, y-flip, fixed 2dp, letterSpacing, width law without trailing spacing) reporting uncovered chars in `skipped` instead of guessing; the scheduler owns the marker-wipe fallback decision (honest degradation).
 - PROOF: 572 → 574 (the W4 slice-2 step-1 battery: the table hash pin — regeneration cannot land silently, full ASCII coverage, absolute M/L/Q/C/Z-only outlines, positive advances, exact advance/y-flip/spacing arithmetic, double-run byte-identity, honest skips incl. é/你, degenerate zero-size). eslint . clean repo-wide (the CI gate, not just touched files), tsc clean.
 - Honest edges: no kerning (GPOS) yet — plain advances (marker-hand tolerates it; noted for the fit check when the consumer lands); the table is 157KB of source (acceptable; it IS the artifact).
@@ -6917,21 +6917,21 @@ order, narration alignment — is the operator's next human step.
 - P4 (0a2f74e): the doc routes (GET validated doc + measured voMs + budgets + preflight/QC evidence; PUT the engine validator verbatim + writeGraphicsDoc's strict byte-stable write, LWW per the house rule), the scaffold route (native $0 or the metered LLM planner with the honest plannerReport; scaffolding pins the lane), the render/draft route (the full render's preflight at admission; the labelled drafts carry inheritedReviewCredit: false on the wire), the Graphics Studio (graphics-canvas.tsx — frameAt through the ONE applier in a same-origin srcdoc iframe, whole-doc playback on the doc clock; graphics-studio.tsx — scaffold → scrub/play → scene-level edits through the validated PUT → labelled drafts → full render, with the preflight + QC evidence surfaced BEFORE the click), the dialog mount, the create-route front-door gate, and e2e/graphics.spec.ts (the S68 suite mirrored onto the graphics contract).
 - P5 (this commit): scripts/s123-graphics-proof.mts (GATE GREEN — 21 assertions: the preflight matrix before the spend, the determinism sweep + the per-fps series on the 6-scene proof doc, the REAL render 576 frames/24s in 31.1s, the 0.5× labelled draft at 3.02× with the look-rate lever and the look spanning EXACTLY the program, and the full QC battery GREEN under the graphics-lane semantics) + scripts/s123-route-e2e.mjs (the durable-evidence probe: the draft artifact storage-checked, the draft NEVER certifying, the S117 manifest mode "graphics", the QC report's graphics semantics) + docs/audits/s123-motion-graphics.md (the close record) + docs/audits/s123-blind-rescore.md (the human gate, honestly PENDING) + README/S120 roadmap status.
 - THE PROOF'S FINDS (each fixed + pinned or calibrated, recorded in the audit §5): R-7 the applier's evaluate contract (the payload STRING must be double-encoded — the first real render died on it; the chromium loop is exactly what the unit battery cannot see); R-8 freezedetect's noise floor cannot see kinetic motion (a counting counter moves < 0.4% of pixels/frame — the graphics lane's frozen-frames semantics became DEAD-COMPOSITOR coverage, judgeGraphicsFreezes, with the sampled static lens carrying the in-scene truth; other lanes byte-identical); R-9 the scene-cut threshold (0.40) reads the format's subtle background cuts as "no cut" — the graphics lane calibrates 0.025, still above the format's in-scene per-frame motion; R-10 a synthetic bed must be mastered like a real one (the first bed synth measured −30 dB mean and the ducked arm fell below the −40 dB silence floor — the battery was right, the synth was unrealistic). Plus the draft look-rate lever (frameStep: 2 — every other frame at its EXACT doc time, encoded at doc.fps/2, program duration unchanged): the acceptance-7 probe recorded the 0.5× surface lever alone at ~1.4× and closed ≥ 2× honestly (3.02×) with the whiteboard preview's own rate-deviation precedent.
-- GATES: tsc clean; eslint clean on the touched trees; unit battery 597 → 685, 0 failed (resumableKinds 25 → 26; the ship-dark pin flipped to the lockstep-shipped pin); the regression law holds (git diff main..HEAD -- src/lib/tubeforge/whiteboard/ EMPTY — the whiteboard engine untouched; its normalizeVoSlot/probeDurationSec/WB_CHROMIUM_LAUNCH_ARGS imported, never copied). CI-only gates (Docker smoke, PostgreSQL integration, clean-clone bootstrap, Playwright e2e) run on push.
+- GATES: tsc clean; eslint clean on the touched trees; unit battery 597 → 685, 0 failed (resumableKinds 25 → 26; the ship-dark pin flipped to the lockstep-shipped pin); the regression law holds (git diff main..HEAD -- src/lib/ibismuh/whiteboard/ EMPTY — the whiteboard engine untouched; its normalizeVoSlot/probeDurationSec/WB_CHROMIUM_LAUNCH_ARGS imported, never copied). CI-only gates (Docker smoke, PostgreSQL integration, clean-clone bootstrap, Playwright e2e) run on push.
 - HONEST GAPS: the blind re-score needs ≥ 3 human scorers (docs/audits/s123-blind-rescore.md — PENDING, not fabricated); the element-level canvas editor is a follow-up slice (the studio edits scene-level doc fields through the validated PUT; the grammar already supports geometry edits); the graphics SFX cue layer is a future design-doc slice; the route probe runs against a live server (CI/manual).
 
 ## 2026-11-14 — S124 LANDED: the element-level graphics editor (drag · scale · z-order), the friction clean-room slice (session 09)
 
-- AUTHORIZATION + REFERENCE: the standing "continue building till you finish all" plus the operator's "Continue" with github.com/friction2d/friction supplied — the exact reference for the S123 close record's named follow-up (the element editor). The study (docs/audits/external-friction-editor-study.md) reads friction's canvas architecture read-only (tool-mode dispatch, handle model, pivot-anchored transforms, the four-action z-order vocabulary, the per-canvas undo stack) and draws the GPL-3.0 boundary hard: friction is GPL-3.0-only, TubeForge is proprietary — concepts restated against OUR contracts, zero source copied, no derivative modules. Adopted: the explicit geometry MODE, the four z-order actions, overlay handles reading the composed page's own geometry. Not adopted: the pivot handle, the undo stack, path editing, drag-create (each recorded with a reason).
+- AUTHORIZATION + REFERENCE: the standing "continue building till you finish all" plus the operator's "Continue" with github.com/friction2d/friction supplied — the exact reference for the S123 close record's named follow-up (the element editor). The study (docs/audits/external-friction-editor-study.md) reads friction's canvas architecture read-only (tool-mode dispatch, handle model, pivot-anchored transforms, the four-action z-order vocabulary, the per-canvas undo stack) and draws the GPL-3.0 boundary hard: friction is GPL-3.0-only, Ibismuh Studio is proprietary — concepts restated against OUR contracts, zero source copied, no derivative modules. Adopted: the explicit geometry MODE, the four z-order actions, overlay handles reading the composed page's own geometry. Not adopted: the pivot handle, the undo stack, path editing, drag-create (each recorded with a reason).
 - compose.ts (526d73b): placedGraphicsFrame — the PLACED state as a first-class frame (at, base opacity, progress 1, NO counter channel so the applier leaves the poster's baked end value); graphicsGroupClaims — the claim map extracted VERBATIM from the emission pass (ONE claim truth; the G1.3 bytes did not move). editor.ts (c91b7ff) — the PURE editor brain: doc-order topmost hit-test with an inclusive-edge hit slop (a bare <line> stays grabbable), exact unclamped move, placement-point-anchored scale clamped to {0.05, 20} (the validator collapses <=0 to 1 silently — the editor never ships a silent rewrite), applyZOrder's four actions over the unclaimed subsequence rebuilt under the SLOTS law (claimed children keep their exact array slots; the group's rank moves them; refusals name the owning group; input never mutated).
 - canvas + studio (016eb32): the S123 playback seam gains an OPTIONAL edit arm — Layout mode plays the PLACED state through the ONE applier (playback still rides frameAt exactly as before; the loop refuses to run while armed), the host-page overlay lives INSIDE the scaled wrapper (its units ARE doc units; the iframe is never polluted), bounds read the composed page's OWN #ge-{id} rects (the contract's geometry, never a second estimator), gestures preview through the applier and commit ONCE to the studio's buffer (a click commits nothing); the outline is handler-written state — no ref reads during render (the react-hooks/refs law caught the first draft). The studio's element strip lists doc order with the four z-order actions + exact placement fields (blur/Enter commit, the scale band), claimed members read-only with their owning group. Every edit rides the validated PUT — no new routes, no server changes.
-- PROOF: unit battery 685 → 699, 0 failed (14 S124 pins: the placed-frame one-truth pin — the skeleton's baked transform/opacity parses numerically equal to the placed frame; byte-stable payload; the claim map vs the emission; the hit-test laws; the placement math; the z-order matrix incl. the slots law and refusals; purity; the validator round-trip; the band edges keep the validator silent). tsc clean; eslint . clean repo-wide; billing 40; queue restart-recovery PASS; coverage 52.68% ≥ 50% floor; production build exit 0. THE REGRESSION LAW: git diff 37796ce..HEAD -- src/lib/tubeforge/whiteboard/ EMPTY.
+- PROOF: unit battery 685 → 699, 0 failed (14 S124 pins: the placed-frame one-truth pin — the skeleton's baked transform/opacity parses numerically equal to the placed frame; byte-stable payload; the claim map vs the emission; the hit-test laws; the placement math; the z-order matrix incl. the slots law and refusals; purity; the validator round-trip; the band edges keep the validator silent). tsc clean; eslint . clean repo-wide; billing 40; queue restart-recovery PASS; coverage 52.68% ≥ 50% floor; production build exit 0. THE REGRESSION LAW: git diff 37796ce..HEAD -- src/lib/ibismuh/whiteboard/ EMPTY.
 - e2e (API-level, the graphics spec's own shape): a z-reordered + re-placed doc PUTs and GETs back in the new order with the new placements — the wire contract the Layout commits ride.
 - HONEST GAPS: no undo/redo (the validated PUT is the wall; friction's command-stack concept recorded); no rotation handle (rotateDeg displays; the handle is a follow-up); no group editing (claimed members read-only); no element create/delete (scaffolding owns creation); the overlay's pointer interactions are pinned on the pure module + hand-verified (the repo's e2e pattern is API-level; the wire contract IS e2e-covered). Delivery: s124/element-editor rides on s123/full-execution, packaged as s124-execution.bundle + s124-push.sh; the chat-leaked token remains unused here and MUST still be revoked.
 
 ## S127 — the roadmap close: K1-ext, C2-ext, R, X-core, Q (the blanket run, continued)
 
-- THE RUN: the restored sandbox rebuilt /home/z/tubeforge from origin (main 37796ce) + the s124 bundle (s123/full-execution + s124/element-editor at 43556c3) — the chat-only commits (9ac6a2b, the six-repo reception) were LOST with the sandbox and are recreated verbatim in the S125 grammar commit. Baseline battery 699 green on the restored tree.
+- THE RUN: the restored sandbox rebuilt /home/z/ibismuh from origin (main 37796ce) + the s124 bundle (s123/full-execution + s124/element-editor at 43556c3) — the chat-only commits (9ac6a2b, the six-repo reception) were LOST with the sandbox and are recreated verbatim in the S125 grammar commit. Baseline battery 699 green on the restored tree.
 - S125 (K1, a36b4fe..410d7d9): the §6 spec executed file-by-file — rig2d (the grammar, the slots, the mouth-set law, the walls), rig-frame (poseAt FK + the W4 mouth beats inside word spans), rig-compose/tracks/preflight (the ONE applier, characterTracks, the R-1 wall), rig-director + rig-render (compile-only beats via the shared classifySentence, the chromium loop, the sha256-sidecar cache), liveliness rule 4.5 (native-first between the stills contract and i2v) + the render hook branch (the footage path, honest KB degradation), the rigDoc/parts TEXT columns + migration, the parts pass (LLM SVG fragments, per-part degradation, the partial-mouth drop), the routes (validator-gated PUT), the studio seat (the ONE-applier iframe preview + the pose-timeline strip), the smoke (23/23, REAL render). Battery 699 → 734.
 - S126 (1bc089e): the import lane — three formats, ONE runtime (WebM decodes at admission), the sprite grammar (11th kind), the seven gates mirrored for rasters, the ONE quota surface, provenance per the reception rule, G1-IMP-1 + the fail-closed render, the studio resolve seam. Battery 734 → 743. (A test-file corruption mid-slice was caught by the battery and restored from HEAD — no commit rode it.)
 - S125-ext (e787708): the FreeMoCap sidecar — the clean-room BVH parser (the documented format, no linkage), the slot mapping, the inline-joint rows (the authored-motion ladder rung > compiled beats), the mocap route (cast-only). Battery 743 → 748.
@@ -6943,7 +6943,7 @@ order, narration alignment — is the operator's next human step.
 ## S128 — the integration close: the PR #24 review, the Docker-smoke trigger, the re-score kit
 
 - THE AUDIT (2026-11-15, external): main unmoved at 37796ce; PR #24 (S123, 25 commits) and PR #23 (the K1 foundation) open with the Docker production smoke SKIPPED on both; the blind re-scores pending; K1-before-X the sequencing law. The user's directive: build what's left.
-- THE RESTORE: the sandbox was reset AGAIN — /home/z/tubeforge was rebuilt from the preserved s127-execution.bundle (the bundle's complete-history record verified: main 37796ce is an ancestor; the s124 tip carries the whole blanket run). Gates re-proven from the restored tree: battery 760 green, k1-rig-smoke 23/23 WITH the real 8.00s render, tsc + eslint clean.
+- THE RESTORE: the sandbox was reset AGAIN — /home/z/ibismuh was rebuilt from the preserved s127-execution.bundle (the bundle's complete-history record verified: main 37796ce is an ancestor; the s124 tip carries the whole blanket run). Gates re-proven from the restored tree: battery 760 green, k1-rig-smoke 23/23 WITH the real 8.00s render, tsc + eslint clean.
 - THE REVIEW (docs/audits/pr24-security-integration-review.md): the graphics route family read line-by-line from the bundle — tenant scoping (tenant-db's org filter, the 404 cross-tenant semantics), job isolation (the Stage-3 queue, the voiceover interlock), renderer limits (the R-1 delivered-frame wall at admission AND render, the WB launch-args parity, sanitize-first), invalidation (the graphics artifacts ride the S113-aware sweep), migration (additive, dual-dialect), rate limiting (both layers). FINDINGS F1 + F2: the grammar's walls bounded SHAPE, never CHAR content — textCharsMax 2000 (required content refuses, optional units warning-drop) + iconPathCharsMax 4096 (the command budget counted COMMANDS; a single megabyte literal rode under it as one command). Both fixed with named walls + 5 battery tests (760 → 765). F3 (a "broken" proof script) was DISMISSED after byte verification — an output-transport artifact of the review toolchain, not the repo; recorded, not hidden.
 - THE CI FIX (d9e3256, same commit): docker-smoke's if fired only on pushes to main — that is the audit's "skipped, not passed". workflow_dispatch (the full gate on any branch, on demand) + the docker-smoke label (a PR opts itself in) join the unchanged main-push trigger.
 - THE COMPENSATING SMOKE: Docker does not exist in the sandbox — the standalone production build was assembled and BOOTED locally instead (production server on :3100: / 200, /api 401, /api/diag 401, junk 404, queue init clean). The real container topology walk stays GitHub's job, now dispatchable.
@@ -6958,7 +6958,7 @@ order, narration alignment — is the operator's next human step.
   build+docker-smoke, whiteboard+graphics playability; K1 movement, scene-editing
   isolation, mixed-scene composition, data-integrity class, docs). Four parallel
   evidence legs; every claim carries file:line. Full record: `docs/audits/s136-stabilisation-gate.md`
-  + the operator-side report `/home/z/tubeforge-gate-reports/2026-11-15-stabilisation-gate.md`.
+  + the operator-side report `/home/z/ibismuh-gate-reports/2026-11-15-stabilisation-gate.md`.
 - B1 FIXED WITH ITS FAILING TEST: the mocap binding law — `buildMocapTimeline` writes
   inline joints keyed by rig SLOT; `poseAt` addressed them by PART ID. On any rig whose
   ids differ from its slots (the auto-rig's free-form kebab ids), an uploaded capture
@@ -6993,7 +6993,7 @@ order, narration alignment — is the operator's next human step.
   the SQLite datasource carries `busy_timeout=10000` + a one-shot WAL pragma (the
   engine-level contention floor under S135's transaction budgets).
 - WAVE 3: this worklog + the S136 audit record; README/ROADMAP/ARCHITECTURE/s120-doc/
-  external-doc/SECURITY reconciled to HEAD; `public/tubeforge.zip` untracked (scanned
+  external-doc/SECURITY reconciled to HEAD; `public/ibismuh.zip` untracked (scanned
   first: no secrets — stale source already public in a public repo) and patch artifacts
   gitignored out of `public/`.
 - FEATURE FREEZE HELD: no new features, no renderer, no second clock, no new runtime
@@ -7060,7 +7060,7 @@ order, narration alignment — is the operator's next human step.
   args, pinned) + the Inspector's Final mix preview card.
 - THE FLAKE THAT WASN'T: the e2e suite's alternating-victim 429 flake was a
   REAL post-rebrand escape — playwright.config.ts still raised the ceilings
-  under the dead legacy TUBEFORGE_RATE_* names, which rebrand stage-B left
+  under the dead legacy IBISMUH_STUDIO_RATE_* names, which rebrand stage-B left
   reading at NEITHER limiter layer. Fixed to the current names + a
   config-truth pin. E2E then 37/37 (2.0m).
 - THE PRODUCTION TEST (5f4d30a, docs/audits/b4-three-project-production-test
@@ -7265,13 +7265,13 @@ ASR, the leveled video lane, the dedupe, the capability language) rides CI.
 
 **Trigger.** The operator asked "are the two repos on equal" — the honest
 answer was: features/engines yes, dependencies NO (the U-series flowed
-tubeforge-ward only). This session ports the U1+U2+U3 modernization BACK
+ibismuh-ward only). This session ports the U1+U2+U3 modernization BACK
 to Studio. One commit: `85f385a` (102 files, +2765/−724), full provenance
 in the message.
 
 **Port mechanics.** Identity-mapped patch application + a codemod for the
 85 client-construction sites + wholesale copies for the five files whose
-Studio pre-state was byte-identical to tubeforge's pre-U2 state modulo
+Studio pre-state was byte-identical to ibismuh's pre-U2 state modulo
 names (migrate-stage2, postinstall, restore-drill, run-route-battery,
 s24-route-e2e) and the two brand-string stragglers (test-backup,
 test-clean-clone). The U1 discovery: the U-series grep missed U1
@@ -7279,8 +7279,8 @@ test-clean-clone). The U1 discovery: the U-series grep missed U1
 typecheck fingerprint (Panel order/defaultSize shapes), ported by hand.
 
 **Caught-and-mapped receipts (the identity law at work):**
-- `@/lib/tubeforge/` alias form (the sed map only covered relative paths)
-- `TubeForge backup` brand string riding test-backup's copied state
+- `@/lib/ibismuh/` alias form (the sed map only covered relative paths)
+- `Ibismuh Studio backup` brand string riding test-backup's copied state
 - 4 dynamic-import sites (`await import("@prisma/client")`) the codemod's
   static-import pattern missed — found by eslint, not tsc
 - The 4-panel `order` prop and number-size prop shapes in the workspace
@@ -7291,14 +7291,14 @@ green) · whiteboard-trace 25/25 · whiteboard-profiles 22/22 ·
 provider-registry 16/16 · production build exit 0.
 
 **Pre-existing residue observed, NOT this port's scope:** docker
-compose's postgres healthcheck speaks `tubeforge` user/db names
+compose's postgres healthcheck speaks `ibismuh` user/db names
 (self-consistent internally — the smoke is green), Dockerfile header
-says TubeForge, scripts/tf_s66_push.sh exists. Recorded for the
+says Ibismuh Studio, scripts/tf_s66_push.sh exists. Recorded for the
 identity-drift sweep.
 
 **Programme state:** both repos are now dependency-equal (prisma 7.10.1
 stack, panels 4, react-table 9, recharts 3, lucide 1.x, resolvers 7,
-playwright 1.65.1, next 16.4.6). Remaining deltas: tubeforge's docker
+playwright 1.65.1, next 16.4.6). Remaining deltas: ibismuh's docker
 deps-stage receipt chain (its Dockerfile layout differs structurally —
 Studio's one-node_modules pattern already satisfies the law), and the
 R3/R2 surface differences (operator-ordered exclusions). Push pending
@@ -7345,7 +7345,7 @@ header hides the button on Create); the corrected spec reloads and asserts
 the draft banner + topic straight away (verified against the twin's local
 run — the spec is byte-identical modulo the draft key).
 
-**Programme state:** the twin commit ports to tubeforge in the same session
+**Programme state:** the twin commit ports to ibismuh in the same session
 (provenance in its message). Push pending operator token; CI owns the evidence.
 
 ## 2026-11-22 — Studio session: the Magic Hour base-URL law + the full-width settings (twin port of fabde43 + d3fa00a)
@@ -7376,10 +7376,10 @@ main, so it was environmental, not a regression) · eslint 0 errors on all
 four changed files. CI owns the push evidence. Note: fly.io has no CI deploy
 job — the fly deployment picks this up on its next `fly deploy`.
 
-**Programme state:** twin commits tubeforge `fabde43` (normalization law)
+**Programme state:** twin commits ibismuh `fabde43` (normalization law)
 and `d3fa00a` (full-width settings) — provenance in their messages.
 
-## 2026-11-22 — Studio session: the provider shape audit — the kokoro law (twin port of tubeforge d8f9dcf)
+## 2026-11-22 — Studio session: the provider shape audit — the kokoro law (twin port of ibismuh d8f9dcf)
 
 **Trigger.** The operator asked to "verify all providers are in shape". The
 structural audit ran on BOTH twins: registry invariants, adapter export
@@ -7409,7 +7409,7 @@ file · tsc --noEmit clean · kokoro behavioral smoke passes (catalog, voice
 passthrough, fallback, openai unchanged). CI owns the push evidence. fly.io
 picks this up on its next manual `fly deploy`.
 
-## 2026-11-22 — Studio session: the six-type pipeline verification — the S153 kinetic compose law (twin port of tubeforge 31ef02b)
+## 2026-11-22 — Studio session: the six-type pipeline verification — the S153 kinetic compose law (twin port of ibismuh 31ef02b)
 
 **Trigger.** The operator asked to "verify all the 6 video types pipeline
 work perfectly". All six Create presets rode their FULL pipelines

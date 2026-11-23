@@ -1,5 +1,5 @@
 """
-TubeForge Voice-Clone API — PREVIEW BUILD
+Ibismuh Studio Voice-Clone API — PREVIEW BUILD
 Slimmed-down main.py that uses stub_tts instead of the real XTTS-v2 model.
 Same API surface as the production app so you can exercise every endpoint.
 """
@@ -34,13 +34,13 @@ from .storage import VoiceProfileStore
 # --------------------------------------------------------------------------- #
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
-log = logging.getLogger("tubeforge.voice")
+log = logging.getLogger("ibismuh.voice")
 
 app = FastAPI(
-    title="TubeForge Voice-Clone API (PREVIEW)",
+    title="Ibismuh Studio Voice-Clone API (PREVIEW)",
     version="0.1.0-preview",
     description=(
-        "Preview build of the TubeForge voice-clone backend. "
+        "Preview build of the Ibismuh Studio voice-clone backend. "
         "Same API surface as production, but uses a stub TTS engine that "
         "generates a short tone instead of running XTTS-v2. "
         "All endpoints work end-to-end — test the full clone -> synthesize -> "
@@ -132,7 +132,7 @@ def root():
 <!doctype html>
 <html><head>
 <meta charset="utf-8">
-<title>TubeForge Voice-Clone API (PREVIEW)</title>
+<title>Ibismuh Studio Voice-Clone API (PREVIEW)</title>
 <style>
 body {{ font-family: ui-sans-serif, system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #222; }}
 code, pre {{ background: #f4f4f4; padding: 4px 8px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 13px; }}
@@ -147,7 +147,7 @@ th {{ background: #fafafa; }}
 .api-key {{ font-weight: bold; color: #10b981; }}
 </style>
 </head><body>
-<h1>TubeForge Voice-Clone API (PREVIEW)</h1>
+<h1>Ibismuh Studio Voice-Clone API (PREVIEW)</h1>
 <div class="note">
 <b>Preview mode</b> — this build uses a stub TTS engine that generates a short
 sine tone instead of the real XTTS-v2 model. Every endpoint works end-to-end;
@@ -169,7 +169,7 @@ curl -X POST http://localhost:8000/clone \\
 curl -X POST http://localhost:8000/synthesize \\
   -H "X-API-Key: {API_KEY}" \\
   -H "Content-Type: application/json" \\
-  -d '{{"text":"Hello from TubeForge.","voice":"demo"}}'
+  -d '{{"text":"Hello from Ibismuh Studio.","voice":"demo"}}'
 
 # 3. Poll for completion (replace with the job_id returned above)
 curl http://localhost:8000/jobs/&lt;job_id&gt; -H "X-API-Key: {API_KEY}"

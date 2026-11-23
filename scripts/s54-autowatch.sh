@@ -41,7 +41,7 @@ esac
 HELPER
   chmod 700 "$ASKPASS"
   GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 \
-    git clone "https://github.com/ibis01/tubeforge.git" "$REPO" 2>&1 | tail -1
+    git clone "https://github.com/ibis01/ibismuh.git" "$REPO" 2>&1 | tail -1
   rm -f "$ASKPASS"
 fi
 cd "$REPO" || exit 2
@@ -53,9 +53,9 @@ if [ ! -f .env ] || [ ! -d node_modules ] || [ ! -d node_modules/.prisma/client 
 import secrets
 env = (
     "DATABASE_URL=file:./db/custom.db\n"
-    f"TUBEFORGE_AUTH_SECRET={secrets.token_hex(24)}\n"
-    f"TUBEFORGE_ENCRYPTION_KEY={secrets.token_hex(32)}\n"
-    "TUBEFORGE_EMAIL_MODE=console\n"
+    f"IBISMUH_STUDIO_AUTH_SECRET={secrets.token_hex(24)}\n"
+    f"IBISMUH_STUDIO_ENCRYPTION_KEY={secrets.token_hex(32)}\n"
+    "IBISMUH_STUDIO_EMAIL_MODE=console\n"
 )
 open(".env", "w").write(env)
 PY

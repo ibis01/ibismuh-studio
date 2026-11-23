@@ -21,7 +21,7 @@ decision is checked against them.
 
 1. **Universal platform.** One shared stack of contracts — project,
    asset, timeline, audio, rendering, quality — that every engine
-   consumes. TubeForge is NOT a collection of disconnected video
+   consumes. Ibismuh Studio is NOT a collection of disconnected video
    generators. The Whiteboard loop already proves the pattern: one
    JobKind, one budget choke point, one QC battery, one ship gate, one
    renderer seam (`RENDER_MODES`) — a whole engine added without a
@@ -86,7 +86,7 @@ delta style, rather than rewriting history.
   post-S47 addition is `WhiteboardAssetUpload`, S69's upload-palette
   table; S72's retentionReport is a doc column and Creator
   Intelligence's modules are pure functions, by design), 21 migrations,
-  117 `src/lib/tubeforge` modules, 116 API route files.
+  117 `src/lib/ibismuh` modules, 116 API route files.
 - New §1.9: the S48→S74 subsystem delta — the Whiteboard Engine
   (JobKind 21, `RENDER_MODES`, the whiteboard lib + component surface),
   Creator Intelligence, retention ingestion, the motion-vigor laws and

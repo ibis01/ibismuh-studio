@@ -1,7 +1,7 @@
 # W1 — Whiteboard Blind Rubric + Perceptual Baseline (2026-11-13)
 
 **Status:** LANDED. The fixed benchmark (`scripts/w1-whiteboard-benchmark.mts`
-+ the pure definition in `src/lib/tubeforge/whiteboard/benchmark-scenarios.ts`)
++ the pure definition in `src/lib/ibismuh/whiteboard/benchmark-scenarios.ts`)
 renders the SAME five scene types at the SAME three aspects every run; this
 document is the human scoring instrument and the record of the FIRST baseline
 scores — the honest "before" picture every W2+ stage must move.

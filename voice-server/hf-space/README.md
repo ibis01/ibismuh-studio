@@ -1,5 +1,5 @@
 ---
-title: TubeForge Voice Server
+title: Ibismuh Studio Voice Server
 emoji: 🎙️
 colorFrom: gray
 colorTo: purple
@@ -8,7 +8,7 @@ app_port: 7860
 pinned: false
 ---
 
-# TubeForge Voice Server — free cloud edition
+# Ibismuh Studio Voice Server — free cloud edition
 
 The same `voice_server.py` that runs on a laptop, packaged for a **free
 Hugging Face Space** (CPU basic: 2 vCPU, 16 GB RAM). No PC needed, no credit
@@ -17,7 +17,7 @@ card, no bill — Chatterbox is MIT-licensed, safe for monetized channels.
 ## Deploy it (5 minutes)
 
 1. Create a free account at https://huggingface.co (no card needed).
-2. **New Space** → name it `tubeforge-voice` → SDK: **Docker** → **Blank** → Create.
+2. **New Space** → name it `ibismuh-voice` → SDK: **Docker** → **Blank** → Create.
 3. In the Space → **Files** tab → upload these **3 files from this folder**:
    - `README.md` (this file — its YAML header configures the Space)
    - `Dockerfile`
@@ -28,13 +28,13 @@ card, no bill — Chatterbox is MIT-licensed, safe for monetized channels.
    Chatterbox, downloads the ~1.5 GB model). Status turns **Running**.
 
 Your endpoint is now permanent:
-`https://<your-username>-tubeforge-voice.hf.space`
+`https://<your-username>-ibismuh-voice.hf.space`
 
-## Wire it into TubeForge
+## Wire it into Ibismuh Studio
 
 Settings → AI Providers → Voiceover → **My Machine (self-hosted)**:
 
-- **Base URL** = `https://<your-username>-tubeforge-voice.hf.space`
+- **Base URL** = `https://<your-username>-ibismuh-voice.hf.space`
 - **API key** = the `VOICE_KEY` secret you set in step 4
 - Model: `chatterbox` (English) or `chatterbox-multilingual` (23 languages —
   redeploy with `--model chatterbox-multilingual` in the Dockerfile CMD)
@@ -46,7 +46,7 @@ laptop edition — only the host differs.
 
 - **Speed:** 2 shared vCPUs — expect roughly 2-4× slower than a Ryzen 7
   laptop. A 15-second narration paragraph can take 1-3 minutes. Fine for
-  batch rendering; the TubeForge pipeline sends short chunks and waits.
+  batch rendering; the Ibismuh Studio pipeline sends short chunks and waits.
 - **Sleep:** free Spaces sleep after ~48 h with zero traffic. The next
   request wakes the Space automatically (~2-4 min: container restart +
   model load). If the first call times out, just retry — or keep it warm

@@ -4,22 +4,22 @@
 // Two scopes: "session" (browser cookie, 7 days) and "api" (Bearer token, 90 days).
 // Stage 2: payloads carry uid (the user id); session tokens use jti = the
 // server-side Session row id so revocation is instant (see tenant.ts).
-// Rotating TUBEFORGE_AUTH_SECRET in .env invalidates every issued token.
+// Rotating IBISMUH_STUDIO_AUTH_SECRET in .env invalidates every issued token.
 import { log } from "./log";
 
 export const SESSION_COOKIE = "ibismuh_session";
-/** Pre-rebrand cookie name — accepted for reading until live sessions expire (the controlled rebrand keeps existing logins working). */
-export const LEGACY_SESSION_COOKIE = "tf_session";
 export const SESSION_MAX_AGE_SEC = 7 * 24 * 60 * 60; // 7 days
 export const API_TOKEN_MAX_AGE_SEC = 90 * 24 * 60 * 60; // 90 days
 
-/** Session-cookie dual-read: the new name wins; the legacy name keeps existing
- *  deployments and live sessions authenticated through their natural expiry.
- *  Pure-function so the battery can pin the law without a browser. */
+/** Session-cookie reader — pure-function so the battery can pin the law
+ * without a browser. (The pre-rebrand cookie name was dropped in the
+ * 2026-11-23 hardening pass: the rebrand shipped 2026-11-17 and session
+ * cookies live at most 7 days, so every pre-rebrand cookie has expired;
+ * stragglers simply log in again.) */
 export function pickSessionCookie(
   get: (name: string) => string | undefined
 ): string | undefined {
-  return get(SESSION_COOKIE) ?? get(LEGACY_SESSION_COOKIE);
+  return get(SESSION_COOKIE);
 }
 
 export interface TokenPayload {
@@ -136,11 +136,7 @@ export async function createSignedToken(
 let warnedWeakAuthSecret = false;
 
 export function getAuthSecret(): string | undefined {
-  // Dual-read (the controlled rebrand): IBISMUH_STUDIO_AUTH_SECRET is
-  // authoritative; a deployment still carrying only the legacy
-  // TUBEFORGE_AUTH_SECRET keeps working unchanged.
-  const s =
-    process.env.IBISMUH_STUDIO_AUTH_SECRET ?? process.env.TUBEFORGE_AUTH_SECRET;
+  const s = process.env.IBISMUH_STUDIO_AUTH_SECRET;
   if (!s || s.length < 16) return undefined;
   // P1-1 (external security review) — the DOCUMENTED floor is 32+ hex chars
   // (SECURITY.md) while the runtime accepted anything ≥16. The mismatch is

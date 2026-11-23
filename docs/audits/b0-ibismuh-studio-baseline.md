@@ -2,7 +2,7 @@
 
 **Status:** LANDED — all six B0 evidence items executed with receipts.
 **Date:** 2026-11-17. **Repo:** `ibis01/ibismuh-studio` at `main @ b06f222` (the
-exact-history mirror of `ibis01/tubeforge`), plus this documentation commit.
+exact-history mirror of `ibis01/ibismuh`), plus this documentation commit.
 
 ## Environment (matches CI pins)
 
@@ -65,7 +65,7 @@ exact-history mirror of `ibis01/tubeforge`), plus this documentation commit.
 - `docs/roadmap/master-product-roadmap.md`: present (ledger continues here).
 - `docs/design/`: present; this baseline's companion kickoff record now lives
   at `docs/design/IBISMUH_STUDIO_DESIGN_KICKOFF.md`.
-- `README.md`: retains TubeForge product naming — correct per the kickoff
+- `README.md`: retains Ibismuh Studio product naming — correct per the kickoff
   constraint (no global identifier rename).
 
 ## Deviations / honesty notes

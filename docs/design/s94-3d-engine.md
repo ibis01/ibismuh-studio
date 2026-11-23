@@ -10,7 +10,7 @@ rendered through the shared timeline — **No isolated rendering
 pipeline**") + the governing rule §8. The §5 P5 deferral ("until the
 Universal Timeline is stable") is MET (S87 closed + the battery).
 
-**The question it answers:** "Can TubeForge render a REAL 3D scene — and
+**The question it answers:** "Can Ibismuh Studio render a REAL 3D scene — and
 does it reach the delivered cut through the same contracts everything
 else uses?" Yes on both: a real WebGL 2 raster (three.js r187 under the
 headless chromium's SwiftShader — the S94 probe receipt), and the clip

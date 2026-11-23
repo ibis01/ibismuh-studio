@@ -1,33 +1,33 @@
 # S121 — the unified integration roadmap: decision, landed slices, deferred list
 
 Status: the INTEGRATE SELECTIVELY decision of the 2026-11-14 read-only audit
-(`TUBEFORGE_UNIFIED_INTEGRATION_AUDIT.md`) turned into shipped, pinned code.
+(`IBISMUH_STUDIO_UNIFIED_INTEGRATION_AUDIT.md`) turned into shipped, pinned code.
 Audited heads: VoiceStudio `dd0f6bde` (v0.5.9-beta.2, AGPL-3.0) · Stickman
-Video Director `1b73731f` (MIT) · TubeForge main `37796ce`.
+Video Director `1b73731f` (MIT) · Ibismuh Studio main `37796ce`.
 
 ## 1. The decision
 
 - **VoiceStudio integrates as an optional, separately-deployed audio
   provider** reached over its OpenAI-compatible API — never embedded, never
-  forked inside TubeForge. Headline wins: verified word-level ASR
+  forked inside Ibismuh Studio. Headline wins: verified word-level ASR
   timestamps (`verbose_json` + `timestamp_granularities[]=word`, whisperx
   ±10-30 ms) upgrading captions and the W4 anchor ladder from DERIVED to
-  MEASURED timing, and expressive multi-engine TTS behind TubeForge's
+  MEASURED timing, and expressive multi-engine TTS behind Ibismuh Studio's
   existing `TtsRequest → ttsSynthesize` choke point.
 - **Stickman Video Director contributes ALGORITHMS ONLY** — reimplemented
   independently in TypeScript (MIT source): word→cue caption grouping, the
   declarative scene-action semantics, the scene-scale-motion guard, the
   camera-keys model, two-bone planar IK, the contact/handoff timeline, the
   gait phase model, the evidence-bound review gate. No Autopilot port, no
-  second renderer, no stickman art constraints. TubeForge's own Director
+  second renderer, no stickman art constraints. Ibismuh Studio's own Director
   stays the only orchestrator.
 - **Rejected**: embedding VoiceStudio code (AGPL) into the product; using
   `commercial_use:false` weights commercially; adopting SVD's
-  agent-driven "intelligence" as TubeForge's Director.
+  agent-driven "intelligence" as Ibismuh Studio's Director.
 
 ## 2. The licensing policy (executable)
 
-`src/lib/tubeforge/providers/model-license-policy.ts` — FAIL-CLOSED: an
+`src/lib/ibismuh/providers/model-license-policy.ts` — FAIL-CLOSED: an
 engine reaches a paying render only when its cited license record says
 commercial use is safe. UNKNOWN = NOT SAFE. `omnivoice` (VoiceStudio's
 DEFAULT engine, CC-BY-NC weights) can never bill by silence; pyannote
@@ -78,7 +78,7 @@ word-start error; transcript similarity ≥ 0.97 on clean audio.
 
 1. **Dubbing** (VoiceStudio `/dub/*`): the PURE client builders +
    auth/job-id laws landed (`providers/voicestudio-extra.ts`), but NO
-   TubeForge job kind yet — the payload schemas and the `/dub/upload`
+   Ibismuh Studio job kind yet — the payload schemas and the `/dub/upload`
    multipart field names need a live server to contract-test (the
    never-guess law). Wiring point: a queue kind consuming the builders.
 2. **Diarization** (pyannote 3.1 / Sortformer): rides the dub pipeline in
@@ -122,15 +122,15 @@ middleware alone, and that with no `OMNIVOICE_API_KEY` configured remote
 connections keep their bootstrap behavior — the HTTP share PIN does not
 protect those lanes.
 
-The integration's exposure is bounded by what TubeForge's client speaks:
+The integration's exposure is bounded by what Ibismuh Studio's client speaks:
 HTTP only (`POST /v1/audio/speech`, the transcription lane, the deferred
-`/dub/*` builders). TubeForge never touches VoiceStudio's WebSocket lanes
+`/dub/*` builders). Ibismuh Studio never touches VoiceStudio's WebSocket lanes
 (`providers/voicestudio-extra.ts` + the TTS/ASR adapters are the whole
 surface). But the transport posture is the operator's, not the code's, and
-the deployment law for any server TubeForge reaches is therefore:
+the deployment law for any server Ibismuh Studio reaches is therefore:
 
 1. **Private network placement** — VoiceStudio listens only where
-   TubeForge can reach it over a trusted network (loopback, VPC, VPN);
+   Ibismuh Studio can reach it over a trusted network (loopback, VPC, VPN);
    never a public ingress. The client already assumes this shape: the
    default baseUrl is loopback (`127.0.0.1:3900`), and net-guard keeps
    everything ELSE (voice imports, media downloads) locked to public

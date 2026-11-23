@@ -13,7 +13,7 @@ recorded plainly: the owner re-sent the SAME S59 token as the green light
 ## The report
 
 The owner's screenshot: the deployed app
-(`tubeforge-ibismuh.vercel.app`, logged in) showing
+(`ibismuh-ibismuh.vercel.app`, logged in) showing
 "Could not load dashboard — The stats service did not respond. Please
 retry." on an otherwise-healthy shell.
 
@@ -137,7 +137,7 @@ auth_setting, `qcOverrideAt`/`contentPolicy` missing):
 
 ## The spend-gate law — untouched
 
-No `TUBEFORGE_SPEND_GATE=0`, no forced `TUBEFORGE_PRICING_VERIFIED`; zero
+No `IBISMUH_STUDIO_SPEND_GATE=0`, no forced `IBISMUH_STUDIO_PRICING_VERIFIED`; zero
 gateway quota, zero paid dispatches. The probe account on the deployment
 performed reads and was deleted through its own front door.
 
@@ -166,7 +166,7 @@ performed reads and was deleted through its own front door.
 
 ## Owner-side findings (not code)
 
-1. **`TUBEFORGE_ENCRYPTION_KEY` is absent** on the Vercel deployment (diag:
+1. **`IBISMUH_STUDIO_ENCRYPTION_KEY` is absent** on the Vercel deployment (diag:
    `encryptionKey: false`). Provider-credential encryption and the security
    card need it — set it (32+ chars) and re-store any saved credentials.
 2. `/api/diag` is public — close it after confirming the heal.

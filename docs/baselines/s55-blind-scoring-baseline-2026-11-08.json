@@ -41,7 +41,7 @@
     { "profile": "podcast", "mainWeakness": "minor appearance instability", "priority": "medium" },
     { "profile": "documentary", "mainWeakness": "weak environmental dynamics", "priority": "medium" }
   ],
-  "centralFinding": "TubeForge can produce visually attractive scenes, but it does not consistently produce meaningful motion. Camera movement alone must not qualify as successful animation (the VQ1 acceptance rule).",
+  "centralFinding": "Ibismuh Studio can produce visually attractive scenes, but it does not consistently produce meaningful motion. Camera movement alone must not qualify as successful animation (the VQ1 acceptance rule).",
   "engineeringPriorities": {
     "P1": "subject animation — facial expression systems, eye and mouth movement, object transformation, mechanical movement, character gestures",
     "P2": "temporal continuity — scene-entry and exit states, persistent object identity, no unexplained character appearances, stable geometry across frames",

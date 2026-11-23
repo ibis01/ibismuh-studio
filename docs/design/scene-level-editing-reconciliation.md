@@ -265,7 +265,7 @@ another revision or destroy approved work)
   `parentVersion`, `content` (the §5.2 union slice), `status`
   (draft/previewing/needs_repair/approved/superseded), `createdBy`,
   `createdAt`; Postgres migration + SQLite mirror via the sync law.
-- `src/lib/tubeforge/scene-revisions.ts` (new): `createRevision` (tx:
+- `src/lib/ibismuh/scene-revisions.ts` (new): `createRevision` (tx:
   verify expectedVersion → write row → supersede parent), `current`,
   `rollback` (new revision from old content, never a delete), conflict
   type → 409 shape matching the whiteboard precedent.
@@ -281,7 +281,7 @@ another revision or destroy approved work)
 
 **Stage 2 — Dependency + artifact tracking** (exit: changing one scene
 does not invalidate unrelated assets)
-- `src/lib/tubeforge/scene-deps.ts` (new): the declarative dependency
+- `src/lib/ibismuh/scene-deps.ts` (new): the declarative dependency
   map (the proposal's table, encoded: narration→{voice,captions,timing},
   visual→{art}, transition→{boundary}, audioMix→{mix}, …) with
   `planInvalidation(change) → {sceneArtifactKeys}`.
@@ -334,7 +334,7 @@ requests cannot silently incur duplicate costs)
 
 **Stage 5 — Scene QC + boundary validation** (exit: repaired scenes are
 checked before approval)
-- `src/lib/tubeforge/scene-qc.ts` (new): scope the whole-file probes to
+- `src/lib/ibismuh/scene-qc.ts` (new): scope the whole-file probes to
   a scene segment (black/frozen frames, loudness, static-shots,
   captions timing) + a boundary-pair check (cut-alignment generalized
   from whole-file to the seam); generalize the S79 targeted re-check

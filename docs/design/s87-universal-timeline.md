@@ -13,7 +13,7 @@ the S76 adoption decision §4.C
 quality system after the Visual Consistency Engine (S77–S83) and the Video
 Critic (S84–S86).
 
-**The question it answers:** "Can every TubeForge engine — today's and
+**The question it answers:** "Can every Ibismuh Studio engine — today's and
 every future one — describe its cut ONE way, so the compositor, the
 Studio, the QC battery and the critic all read the same composition
 truth?" Today the answer is no, and the Whiteboard engine is the proof.
@@ -261,7 +261,7 @@ refusal echoes the stored stamp) · the 409 names DELETE /assemble.
 
 ## 9. What slice 2 changed (code)
 
-- New `src/lib/tubeforge/composition-plan.ts` — the compositor's plan from
+- New `src/lib/ibismuh/composition-plan.ts` — the compositor's plan from
   the contract, pure and deterministic: `CompositionPlanScene` (position,
   sceneIndex, visual kind, asset source, window, boundary transitionIn) and
   `CompositionPlan { origin: "tracks" | "scenes", scenes, totalSec }`.
@@ -327,7 +327,7 @@ re-derives tracks, so junk-tracks fixtures are built on the in-memory doc
 
 ## 11. What slice 3 changed (code)
 
-- New `src/lib/tubeforge/whiteboard/tracks.ts` — the engine's frame plan
+- New `src/lib/ibismuh/whiteboard/tracks.ts` — the engine's frame plan
   in the contract's grammar, PURE and deterministic:
   - `framePlanClock(sceneMs, fps)` — THE one derivation of the shared
     frame-quantized clock: per scene `frames = frameCount(ms, fps)`, the

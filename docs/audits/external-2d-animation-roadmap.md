@@ -1,10 +1,10 @@
-# TubeForge — File-by-File Implementation Roadmap for the Complete 2D Animation System
+# Ibismuh Studio — File-by-File Implementation Roadmap for the Complete 2D Animation System
 
-**Ground truth:** verified against a shallow clone of `ibis01/tubeforge` at HEAD `e387287a2cb05b996b31af87b394cbe7f849b73d` (2026-11-13, 19:45 UTC — "feat(whiteboard): W2 the semantic beat compiler"). 755 tracked files. No repository files were modified during this audit; the roadmap below is delivered as a standalone document.
+**Ground truth:** verified against a shallow clone of `ibis01/ibismuh` at HEAD `e387287a2cb05b996b31af87b394cbe7f849b73d` (2026-11-13, 19:45 UTC — "feat(whiteboard): W2 the semantic beat compiler"). 755 tracked files. No repository files were modified during this audit; the roadmap below is delivered as a standalone document.
 
-**Re-baseline — 2026-11-14, verified at origin HEAD `37796ce` (fresh full clone):** the whiteboard finishing track and the shared animation substrate have LANDED since this document was drafted at `e387287`: W3 (`381e534`), W4 (three slices, closed `9f337c3`), W5 (`e6fafe6`), W6 (`712e0e5`), W7 (`b871e01` + `37796ce`), and Stage S (`14b67fe`, `src/lib/tubeforge/anim/{easing,keyframe,clock}.ts`). CI at `37796ce` is independently verified 8/8 green. Status of the stage specs below: **§3 W3–W7 = EXECUTED** (the drafts' shapes held; divergences are recorded in the companion document, Part G); **§8 Stage S = LANDED**; **§5 G1 = LANDED (S123) / §6 K1 = LANDED (S125) / §7 C2-ext + §9 R+X = LANDED (S127)** — reconciled 2026-11-15 (this document's own §5/§6/§7/§9 headers record the landings; this paragraph now agrees with them). G1.1 landed with S123; the blind re-score (§4) remains the humans' open item (no rescore artifacts in `docs/audits/` — the S128 kit owns the session). The S136 Stabilisation Gate (2026-11-15) fixed the mocap binding law (K1) and wired the rendered-movement proof into CI. The authoritative status table and the three post-landing findings (`directCamera` proven but unplugged; W5 behavior-preserving at HEAD; the shipped anchors contract leaner than the draft) live in the companion document, Part G.
+**Re-baseline — 2026-11-14, verified at origin HEAD `37796ce` (fresh full clone):** the whiteboard finishing track and the shared animation substrate have LANDED since this document was drafted at `e387287`: W3 (`381e534`), W4 (three slices, closed `9f337c3`), W5 (`e6fafe6`), W6 (`712e0e5`), W7 (`b871e01` + `37796ce`), and Stage S (`14b67fe`, `src/lib/ibismuh/anim/{easing,keyframe,clock}.ts`). CI at `37796ce` is independently verified 8/8 green. Status of the stage specs below: **§3 W3–W7 = EXECUTED** (the drafts' shapes held; divergences are recorded in the companion document, Part G); **§8 Stage S = LANDED**; **§5 G1 = LANDED (S123) / §6 K1 = LANDED (S125) / §7 C2-ext + §9 R+X = LANDED (S127)** — reconciled 2026-11-15 (this document's own §5/§6/§7/§9 headers record the landings; this paragraph now agrees with them). G1.1 landed with S123; the blind re-score (§4) remains the humans' open item (no rescore artifacts in `docs/audits/` — the S128 kit owns the session). The S136 Stabilisation Gate (2026-11-15) fixed the mocap binding law (K1) and wired the rendered-movement proof into CI. The authoritative status table and the three post-landing findings (`directCamera` proven but unplugged; W5 behavior-preserving at HEAD; the shipped anchors contract leaner than the draft) live in the companion document, Part G.
 
-**Purpose:** a file-by-file implementation plan that fits TubeForge's existing architecture — extending the proven engines instead of duplicating the renderer — covering the whiteboard finishing track (W3–W7), a motion-graphics engine, real 2D character animation, cinematic-2D extensions, the shared animation substrate, and the AI Director style router.
+**Purpose:** a file-by-file implementation plan that fits Ibismuh Studio's existing architecture — extending the proven engines instead of duplicating the renderer — covering the whiteboard finishing track (W3–W7), a motion-graphics engine, real 2D character animation, cinematic-2D extensions, the shared animation substrate, and the AI Director style router.
 
 ---
 
@@ -17,7 +17,7 @@ The prior audit's facts were mostly right, but four framing errors would produce
 3. **"2D character rigging: not established" is half-true.** What exists: AI-generated identity-locked portraits + pose sheets (`characters.ts`), a cross-video identity VCE (`character-identity.ts`, S82/S83), and the S93 "character rig" — a camera breath-cycle over still portraits, honestly documented as NOT skeletal ("a still portrait cannot blink or lip-sync, and the rig will not fake it"). Real 2D character animation is genuinely missing; the pose sheet + i2v lane are the recorded paths to real motion.
 4. **W1's 2.4/5 baseline is documented as NON-blind by design** (docs/audits/w1-blind-rubric.md §3: "operator proxy, AI-assisted, NON-blind for W1"). The rubric mandates blind kits with shuffled old/new artifacts from W2 onward. The gap is not "no independent score exists" — it is "the blind re-score that the protocol already prescribes has not been executed yet."
 
-Also verified: `TimelineTrackKind` already reserves the future engines' seats at `src/lib/tubeforge/types.ts:580` — `"video" | "image" | "whiteboard" | "3d" | "character" | "audio" | "subtitle" | "graphics"`. The 3D engine (S94) and whiteboard both ride the shared compositor today. The "one shared architecture" the prior audit drew is not a proposal in this repo — it is house law (ROADMAP.md: "shared contracts first, no parallel pipelines, quality infrastructure precedes engine expansion").
+Also verified: `TimelineTrackKind` already reserves the future engines' seats at `src/lib/ibismuh/types.ts:580` — `"video" | "image" | "whiteboard" | "3d" | "character" | "audio" | "subtitle" | "graphics"`. The 3D engine (S94) and whiteboard both ride the shared compositor today. The "one shared architecture" the prior audit drew is not a proposal in this repo — it is house law (ROADMAP.md: "shared contracts first, no parallel pipelines, quality infrastructure precedes engine expansion").
 
 ---
 
@@ -63,7 +63,7 @@ Each stage lands with unit pins, all gates green, CI-green push. Order is the re
 **Exit gate:** every validator check fires on a crafted-bad fixture; every library asset passes its own validator; upload lane rejects with readable errors.
 
 New files:
-- `src/lib/tubeforge/whiteboard/asset-validate.ts` — pure module. Checks, each returning `{ok, reason, pathId?}`:
+- `src/lib/ibismuh/whiteboard/asset-validate.ts` — pure module. Checks, each returning `{ok, reason, pathId?}`:
   - `checkTeleport(path)` — multi-subpath (`M` mid-path) rejection (the assets.ts:95-100 S67 receipt is the rationale);
   - `checkSelfIntersection(path)` — segment-pair intersection on flattened polylines (`svg.ts#flattenPath` provides geometry; O(n·m) is fine at the `WB_PATH_COMMAND_BUDGET = 512` cap);
   - `checkCaps(path)` — stroke-width / linecap consistency within a pen group;
@@ -74,8 +74,8 @@ New files:
 - `docs/audits/w3-asset-validator.md` — the stage record.
 
 Modified files:
-- `src/lib/tubeforge/whiteboard/assets.ts` — `WhiteboardAsset` gains additive optional metadata: `penGroups?`, `drawOrder?`, `role?: "outline"|"fill"|"label"|"arrow"|"emphasis"`, `durWeight?`, `framing?`, `alts?`, `a11y?` (reconciliation §5.3); `extractAsset` emits richer rejection reasons; starter pack extended (education/business/science/process) with golden-frame renders per asset;
-- `src/lib/tubeforge/whiteboard/asset-store.ts` + `upload.ts` — `loadLibrary` runs `validateAsset` warn-and-exclude; the S69 upload gate rejects with readable errors (7 existing gates + the new validator);
+- `src/lib/ibismuh/whiteboard/assets.ts` — `WhiteboardAsset` gains additive optional metadata: `penGroups?`, `drawOrder?`, `role?: "outline"|"fill"|"label"|"arrow"|"emphasis"`, `durWeight?`, `framing?`, `alts?`, `a11y?` (reconciliation §5.3); `extractAsset` emits richer rejection reasons; starter pack extended (education/business/science/process) with golden-frame renders per asset;
+- `src/lib/ibismuh/whiteboard/asset-store.ts` + `upload.ts` — `loadLibrary` runs `validateAsset` warn-and-exclude; the S69 upload gate rejects with readable errors (7 existing gates + the new validator);
 - `scripts/w1-whiteboard-benchmark.mts` — re-run against the new starter pack (baseline hashes stay frozen; new receipt file lands in `docs/baselines/`).
 
 Pins (in the house suite, `scripts/test-unit.mts` conventions): each check fires on a crafted-bad fixture; all 18 built-ins pass; warn-and-exclude does not mutate the doc; upload rejection copy is stable.
@@ -87,12 +87,12 @@ Rollback: the validator is an additive gate — revert the `loadLibrary`/upload 
 **Exit gate:** anchor alignment tolerance pinned; fill law byte-identical when anchors absent; readability threshold passes per aspect.
 
 New files:
-- `src/lib/tubeforge/whiteboard/text-draw.ts` — (a) glyph-outline mode: one handwriting face converted to SVG path outlines (deterministic, decision §10.3 recommends the single-face route over a font picker) emitted as `draw_path` events; (b) marker label mode (existing wipe) as fallback; (c) `checkReadability(textPlacement, camera, outputSize)` — pure check at final output scale, per aspect.
+- `src/lib/ibismuh/whiteboard/text-draw.ts` — (a) glyph-outline mode: one handwriting face converted to SVG path outlines (deterministic, decision §10.3 recommends the single-face route over a font picker) emitted as `draw_path` events; (b) marker label mode (existing wipe) as fallback; (c) `checkReadability(textPlacement, camera, outputSize)` — pure check at final output scale, per aspect.
 
 Modified files:
-- `src/lib/tubeforge/whiteboard/timing.ts` — `scheduleScene(scene, durationMs, geometry, anchors?)`: `anchors: WordAnchors` = `{ byWord: { index, startMs, endMs }[] }` passed as INPUT (never a doc field — reconciliation §5.4). Beat windows derive from anchor spans; emphasis beats fire after the spoken claim; final-idea hold preserved. Absent anchors → today's fill law **byte-for-byte** (this is a hard pin, not a hope);
+- `src/lib/ibismuh/whiteboard/timing.ts` — `scheduleScene(scene, durationMs, geometry, anchors?)`: `anchors: WordAnchors` = `{ byWord: { index, startMs, endMs }[] }` passed as INPUT (never a doc field — reconciliation §5.4). Beat windows derive from anchor spans; emphasis beats fire after the spoken claim; final-idea hold preserved. Absent anchors → today's fill law **byte-for-byte** (this is a hard pin, not a hope);
 - the whiteboard render job (whiteboard lane caller) — passes captions-lane anchors: `detectSpeechRuns` (silencedetect −35 dB / 0.30 s) + the ASR chunk-token alignment already in `captions.ts` (`chunkEndPositionsByTranscript`, `wordPosToTime`, `snapToPause`) produce per-word anchors per scene WAV; scenes without VO keep the estimator;
-- `src/lib/tubeforge/whiteboard/beat-plan.ts` — `beatSceneEvents` consumes anchor-derived windows when provided (W2's word-proportional windows become the no-anchor fallback);
+- `src/lib/ibismuh/whiteboard/beat-plan.ts` — `beatSceneEvents` consumes anchor-derived windows when provided (W2's word-proportional windows become the no-anchor fallback);
 - `wb-page.ts` — text reveal switches to glyph strokes when the asset carries outlines (the W1-caught reveal-rect bug class is covered by pins that LOOK at pixels).
 
 Pins: `|beatWindow − speechRun| ≤ tolerance` on fixture WAVs; determinism both modes; fallback byte-identity (serialize-hash the schedule with and without anchors present); readability check rejects scale-0.4 placements that fail the threshold; glyph geometry rides the hand exactly (the reconciliation §8.5 pen-drift defect closes).
@@ -104,10 +104,10 @@ Rollback: stop passing anchors → engine renders exactly as HEAD. Text mode is 
 **Exit gate:** QC green on the W1 benchmark with drift fully demoted; policy violations reject in validation.
 
 New files:
-- `src/lib/tubeforge/whiteboard/camera-director.ts` — pure: focus rects from beat placement/text bounds (geometry via `buildGeometry` + `svg.ts` bounds) → `CameraEvent[]` implementing: lead-in framing before a beat, eased travel between focus rects, stable writing window during draws (director camera must NOT move the world under the pen tip while a stroke is in progress — policy check), post-beat hold, safe margins per aspect. Policy set exported as pure checks (`cameraPolicies`): min travel duration, max zoom speed, focus-rect containment, text-readability margin.
+- `src/lib/ibismuh/whiteboard/camera-director.ts` — pure: focus rects from beat placement/text bounds (geometry via `buildGeometry` + `svg.ts` bounds) → `CameraEvent[]` implementing: lead-in framing before a beat, eased travel between focus rects, stable writing window during draws (director camera must NOT move the world under the pen tip while a stroke is in progress — policy check), post-beat hold, safe margins per aspect. Policy set exported as pure checks (`cameraPolicies`): min travel duration, max zoom speed, focus-rect containment, text-readability margin.
 
 Modified files:
-- `src/lib/tubeforge/whiteboard/timing.ts` — `cameraDrift` becomes the **no-camera-keys fallback only** (the drift tension, reconciliation §8.1: drift is load-bearing for `qc.ts` freezedetect/static-shot lenses, so director + demotion MUST land in the same stage — shipping the director alone changes nothing; demoting drift alone fails QC);
+- `src/lib/ibismuh/whiteboard/timing.ts` — `cameraDrift` becomes the **no-camera-keys fallback only** (the drift tension, reconciliation §8.1: drift is load-bearing for `qc.ts` freezedetect/static-shot lenses, so director + demotion MUST land in the same stage — shipping the director alone changes nothing; demoting drift alone fails QC);
 - `storyboard.ts` — camera validation consumes the new policy checks (invalid `CameraEvent[]` → validation error, not silent clamp).
 
 Pins: policy violations reject; determinism; QC green on the full W1 benchmark (3 aspects) with drift disabled; per-aspect framing receipts (label bounds inside safe margins); writing-window stability check.
@@ -119,11 +119,11 @@ Rollback: the drift fallback is one boolean branch — reverting the demotion re
 **Exit gate:** carried-state equality pinned; exit events deterministic; scene-card mode byte-identical to today.
 
 Modified files:
-- `src/lib/tubeforge/whiteboard/storyboard.ts` — additive `board` policy on `WhiteboardScene`: `{ mode: "clean"|"continuous"; carryPlacements?: string[]; exit?: "keep"|"fade"|"erase"|"pan-away"; transitionMs?: number }` (additive-parse law: v1 docs with no `board` = clean, unchanged);
-- `src/lib/tubeforge/whiteboard/timing.ts` — `FrameState` gains a carried-ink layer: incoming state resolved from the previous scene's placements (data, NOT page residue — per-scene chromium recycling stays untouched, the S75 OOM receipt is the reason);
-- `src/lib/tubeforge/whiteboard/wb-page.ts` — `composeScene` accepts carried placements (pre-rendered as resolved paths in the frame plan, same applier);
-- `src/lib/tubeforge/whiteboard/render.ts` — per-scene carry resolution before composition; the S117 render manifest records board state per scene (`render-assembly.ts` manifest schema +1 field, additive);
-- `src/lib/tubeforge/whiteboard/tracks.ts` — carried scenes still project as one clip per scene (no grammar change — the contract tension resolves the same way W2 did).
+- `src/lib/ibismuh/whiteboard/storyboard.ts` — additive `board` policy on `WhiteboardScene`: `{ mode: "clean"|"continuous"; carryPlacements?: string[]; exit?: "keep"|"fade"|"erase"|"pan-away"; transitionMs?: number }` (additive-parse law: v1 docs with no `board` = clean, unchanged);
+- `src/lib/ibismuh/whiteboard/timing.ts` — `FrameState` gains a carried-ink layer: incoming state resolved from the previous scene's placements (data, NOT page residue — per-scene chromium recycling stays untouched, the S75 OOM receipt is the reason);
+- `src/lib/ibismuh/whiteboard/wb-page.ts` — `composeScene` accepts carried placements (pre-rendered as resolved paths in the frame plan, same applier);
+- `src/lib/ibismuh/whiteboard/render.ts` — per-scene carry resolution before composition; the S117 render manifest records board state per scene (`render-assembly.ts` manifest schema +1 field, additive);
+- `src/lib/ibismuh/whiteboard/tracks.ts` — carried scenes still project as one clip per scene (no grammar change — the contract tension resolves the same way W2 did).
 
 Pins: carried-state equality (frame 0 of scene K+1 contains exactly scene K's carried ink, hash-pinned); fade/erase/pan-away deterministic; `board.mode:"clean"` scenes byte-identical to HEAD; frame budget accounting unchanged.
 
@@ -134,9 +134,9 @@ Rollback: delete the `board` fields from the doc → parse falls back to clean m
 **Exit gate:** no-teleport travel pinned; mix inside the loudness contract; editor round-trips new fields.
 
 Modified files:
-- `src/lib/tubeforge/whiteboard/timing.ts` — `handAt` extension: pose variants (`write|draw|point|circle|rest` — pose selected by role metadata from W3), pen-up travel between strokes (the hand follows the path between stroke end and next stroke start instead of vanish-reappear; travel is bounded and eased), smoothing, occlusion/scale rules, left/right hand variants (asset-level `hand.style` extension);
-- `src/lib/tubeforge/whiteboard/assets.ts` — hand asset variants (`hand-marker-l`, `hand-pencil`, poses as sub-assets with named tip points extending `HAND_TIP`);
-- `src/lib/tubeforge/sfx.ts` — whiteboard kinds added to the recipe table (`pen-stroke`, `pen-stop`, `page-turn`, `pop` — synthesized like the existing 4 kinds, 48 kHz PCM16), **OFF by default** (decision §10.4); events mixed under the existing bed/VO chain (`normalizeVoSlot`, −16 LUFS window enforced by the unchanged audiomix contract);
+- `src/lib/ibismuh/whiteboard/timing.ts` — `handAt` extension: pose variants (`write|draw|point|circle|rest` — pose selected by role metadata from W3), pen-up travel between strokes (the hand follows the path between stroke end and next stroke start instead of vanish-reappear; travel is bounded and eased), smoothing, occlusion/scale rules, left/right hand variants (asset-level `hand.style` extension);
+- `src/lib/ibismuh/whiteboard/assets.ts` — hand asset variants (`hand-marker-l`, `hand-pencil`, poses as sub-assets with named tip points extending `HAND_TIP`);
+- `src/lib/ibismuh/sfx.ts` — whiteboard kinds added to the recipe table (`pen-stroke`, `pen-stop`, `page-turn`, `pop` — synthesized like the existing 4 kinds, 48 kHz PCM16), **OFF by default** (decision §10.4); events mixed under the existing bed/VO chain (`normalizeVoSlot`, −16 LUFS window enforced by the unchanged audiomix contract);
 - `whiteboard-studio.tsx` — controls for beat order/timing (advisory beats surface), camera focus, board policy, hand style, SFX toggle; editor round-trip pins.
 
 Pins: travel paths contain no inter-stroke jumps > geometry bounds; sound mix passes loudness; editor round-trip of every new field; determinism (SFX never affect frames).
@@ -167,7 +167,7 @@ If the ≥4/5 gate fails, the failing dimensions route back into the W-track bef
 - **Phase 1 — peer lane** (exactly the whiteboard's integration): G1 renders whole graphics-led videos; `render-lane.ts` routes by mode; `render.ts` is untouched. This is the lowest-risk landing and matches the newest proven precedent.
 - **Phase 2 — compositor citizenship** (cross-engine videos): a `graphics`-kind segment builder in `render.ts` + schema-3 persisted tracks (Stage X). Phase 2 is gated on Phase 1 shipping and on Stage X's design.
 
-New files (`src/lib/tubeforge/graphics/`, leaf-module law):
+New files (`src/lib/ibismuh/graphics/`, leaf-module law):
 - `graphics/types.ts` — the GraphicsDoc grammar (versioned like `Scene3D`): `GraphicsScene { id, narration, durationMs?, background, elements: GraphicsElement[] }`; `GraphicsElement` variants: `headline`, `subhead`, `bullet`, `counter` (number tween + unit), `bar`/`barChart` (data-driven, not static HTML), `icon` (inline sanitized SVG paths — reuse `svg.ts#sanitizeSvg`/`parsePathData`), `callout`, `shape` (rect/line/circle), `group` (for enter/exit choreography); each element: `{ id, at: Placement, enter: ElementMotion, exit?: ElementMotion, emphasis?: ElementMotion }`; `ElementMotion = { kind: "fade"|"rise"|"slide"|"pop"|"wipe"|"count"|"grow"|"draw", durationMs, delayMs, ease }`; named walls mirroring `WB_BUDGETS` (`elementsPerScene`, `scenesPerProject`, `sceneDurationMsMax`, `GRAPHICS_FRAME_BUDGET`); `validateGraphicsDoc` (tolerant parse, strict write);
 - `graphics/anim.ts` — the shared animation substrate (see Stage S below): easing table, keyframe evaluation, clock quantization;
 - `graphics/frame.ts` — **the one source of motion truth**: `frameAt(doc, geometry, tMs): GraphicsFrameState` (element transforms/opacities/text states/counters), pure and deterministic; enter/exit/emphasis compose with a fixed precedence (emphasis > exit > enter); bar/count tweens are data-driven pure math;
@@ -181,8 +181,8 @@ New files (`src/lib/tubeforge/graphics/`, leaf-module law):
 - `docs/design/g1-motion-graphics.md` — the design record.
 
 Modified files:
-- `src/lib/tubeforge/types.ts` — `RENDER_MODES` gains `graphics` (types.ts:107; the lockstep law in `render-lane.ts#laneDecisionsComplete` must move in the SAME slice — the S88 CI lesson: both ledgers in one slice);
-- `src/lib/tubeforge/render-lane.ts` — `StoryRenderMode` + `RenderLane` + `resolveRenderLane` gain the graphics lane (peer-lane law);
+- `src/lib/ibismuh/types.ts` — `RENDER_MODES` gains `graphics` (types.ts:107; the lockstep law in `render-lane.ts#laneDecisionsComplete` must move in the SAME slice — the S88 CI lesson: both ledgers in one slice);
+- `src/lib/ibismuh/render-lane.ts` — `StoryRenderMode` + `RenderLane` + `resolveRenderLane` gain the graphics lane (peer-lane law);
 - `prisma/schema.prisma` — `Video.graphicsProject Json?` (the eleventh JSON doc column; additive migration, SQLite + PG);
 - queue wiring — a `graphics` job kind following the whiteboard job shape (crash-resumable, deterministic re-render on resume);
 - `render-assembly.ts` — manifest accepts graphics entries (additive).
@@ -204,19 +204,19 @@ Rollback: mode id removal reverts to lane refusal; the JSON column is nullable a
 - **K1-i2v (escalation, premium):** the existing i2v lane with rig-aware prompts (pose sheet + motion intent), consistency re-checked by the S83 cross-video VCE. This lane already exists; K1 only improves the prompt contract and QC.
 
 New files:
-- `src/lib/tubeforge/characters/rig2d.ts` — the `CharacterRigDoc` contract (versioned): `RigPart { id, svgRef, z, pivot: {x,y}, parent?: partId, rest: Placement }`; `RigPose { id, name, joints: Record<partId, {rotateDeg, x?, y?, scale?}> }`; standard slot names so pose sheets map: `mouth` set (`closed|open|wide|oh|smile` — 5 shapes is enough for honest narration-sync at explainer quality), `brow`, `arm-l/arm-r` 3-way (rest/raise/point); `validateRigDoc` (referential integrity to the character's parts, pivot sanity);
-- `src/lib/tubeforge/characters/rig-frame.ts` — `poseAt(rig, timeline, tMs): RigFrameState` — pure pose evaluation: keyframed joint states over the scene clock using the shared `anim.ts` easings; speaking = mouth-shape schedule derived from **W4 word anchors** (syllable-counted open/close beats inside each word span — the honest, deterministic alternative to phoneme lip-sync; scope-claimed as "beat-sync", not phoneme lip-sync, in all docs/UI);
-- `src/lib/tubeforge/characters/rig-render.ts` — chromium frame loop composing rig layers into scene SVG (reuse `svg.ts` sanitize/parse; the rig renders INTO the same frame pipeline as graphics, sharing `APPLY_FRAME_FN` discipline and the frame budget);
-- `src/lib/tubeforge/characters/rig-director.ts` — pure planner: narration + pose sheet → pose timeline (gesture beats from W2-style purpose classification: setup = welcoming pose, action = gesture on the action verb, emphasis = point/circle on the claim — reusing `beat-plan.ts#classifySentence` instead of duplicating it, one classifier, two consumers);
+- `src/lib/ibismuh/characters/rig2d.ts` — the `CharacterRigDoc` contract (versioned): `RigPart { id, svgRef, z, pivot: {x,y}, parent?: partId, rest: Placement }`; `RigPose { id, name, joints: Record<partId, {rotateDeg, x?, y?, scale?}> }`; standard slot names so pose sheets map: `mouth` set (`closed|open|wide|oh|smile` — 5 shapes is enough for honest narration-sync at explainer quality), `brow`, `arm-l/arm-r` 3-way (rest/raise/point); `validateRigDoc` (referential integrity to the character's parts, pivot sanity);
+- `src/lib/ibismuh/characters/rig-frame.ts` — `poseAt(rig, timeline, tMs): RigFrameState` — pure pose evaluation: keyframed joint states over the scene clock using the shared `anim.ts` easings; speaking = mouth-shape schedule derived from **W4 word anchors** (syllable-counted open/close beats inside each word span — the honest, deterministic alternative to phoneme lip-sync; scope-claimed as "beat-sync", not phoneme lip-sync, in all docs/UI);
+- `src/lib/ibismuh/characters/rig-render.ts` — chromium frame loop composing rig layers into scene SVG (reuse `svg.ts` sanitize/parse; the rig renders INTO the same frame pipeline as graphics, sharing `APPLY_FRAME_FN` discipline and the frame budget);
+- `src/lib/ibismuh/characters/rig-director.ts` — pure planner: narration + pose sheet → pose timeline (gesture beats from W2-style purpose classification: setup = welcoming pose, action = gesture on the action verb, emphasis = point/circle on the claim — reusing `beat-plan.ts#classifySentence` instead of duplicating it, one classifier, two consumers);
 - API: `src/app/api/characters/[id]/rig/route.ts` (GET/PUT rig doc), `.../rig/auto` (planner pass), plus per-video render hook;
 - `prisma/schema.prisma` — `Character.rigDoc Json?`, `Character.parts Json?` (additive);
 - Studio: extend the existing character surfaces (portrait/poses flow already exists) with the rig editor + pose-timeline strip;
 - `scripts/k1-rig-smoke.mts` + `docs/audits/k1-blind-rubric.md` — the S93 smoke pattern (4 unit pins + real-render smoke) extended: walk cycle renders, mouth beats land on anchors, identity VCE ≥80 on rig frames.
 
 Modified files:
-- `src/lib/tubeforge/characters.ts` — part decomposition prompt for the portrait flow (generate layered parts, not one flat PNG); pose-sheet generation targets rig slots;
-- `src/lib/tubeforge/composition-plan.ts` — `PlanVisualKind` gains `"character"` (types.ts:580 track kind already reserved) for cast scenes in mixed videos (Phase 2, with Stage X);
-- `src/lib/tubeforge/character-rig.ts` — S93 breath rig stays for still-portrait scenes; seniority ladder extended: explicit rig timeline > S93 breath > auto (the ladder pattern is preserved);
+- `src/lib/ibismuh/characters.ts` — part decomposition prompt for the portrait flow (generate layered parts, not one flat PNG); pose-sheet generation targets rig slots;
+- `src/lib/ibismuh/composition-plan.ts` — `PlanVisualKind` gains `"character"` (types.ts:580 track kind already reserved) for cast scenes in mixed videos (Phase 2, with Stage X);
+- `src/lib/ibismuh/character-rig.ts` — S93 breath rig stays for still-portrait scenes; seniority ladder extended: explicit rig timeline > S93 breath > auto (the ladder pattern is preserved);
 - `liveliness.ts` — channel precedence gains the native-rig channel for cast scenes (between `kenburns` and `i2v` — native-first).
 
 Pins: pose interpolation determinism; mouth beats inside word spans (tolerance pin from W4); rig part transforms never NaN; identity floor ≥80 via VCE on rendered frames; frame budget; tracks projection (`characterTracks`, the `tracks.ts` pattern).
@@ -232,11 +232,11 @@ Rollback: `rigDoc` absent → S93 still-portrait path byte-identical (additive p
 **Objective:** richer cinematic vocabulary in the existing, deepest subsystem. No new files except tests/docs unless noted.
 
 Modified files:
-- `src/lib/tubeforge/motion.ts` — `MoveKind` additions: `"shake"` (bounded jitter around the focal, amp tied to SFX `boom`/`sting` — visual-audio pairing like the `punch` pattern), `"push-follow"` (zoom + simultaneous focal travel — today zoom and pan are exclusive per shot), `"drift-crawl"` (slow constant-direction creep for ambient scenes); extend the easing expression builder beyond `smooth|linear|pop` with one new curve (`"ease-back"` — small overshoot on settle, one closed-form zoompan expression, keeping the compile-time-ffmpeg architecture);
-- `src/lib/tubeforge/shots.ts` — pseudo-crop additions (2 more windows for verticals), `CAMERA_TO_MOVE` mapping for the new verbs (v2 engine-verbatim row + legacy approximation row, the existing table pattern);
-- `src/lib/tubeforge/director-plan.ts` — `CAMERA_MOVES` vocabulary + the three new verbs (engine-verbatim, plus the LLM prompt list); `MOVE_SPEED_FACTOR` unchanged;
-- `src/lib/tubeforge/transitions.ts` — **catalog stays ffmpeg-xfade-native** (the 15 ids); custom shader wipes are explicitly out (a custom builder would fork the blend pipeline and its QC math);
-- `src/lib/tubeforge/character-rig.ts` — the recorded S93 tails: rig modulation on planned shots, pose-driven beats (consumes K1 pose timelines when present), per-video toggle already landed.
+- `src/lib/ibismuh/motion.ts` — `MoveKind` additions: `"shake"` (bounded jitter around the focal, amp tied to SFX `boom`/`sting` — visual-audio pairing like the `punch` pattern), `"push-follow"` (zoom + simultaneous focal travel — today zoom and pan are exclusive per shot), `"drift-crawl"` (slow constant-direction creep for ambient scenes); extend the easing expression builder beyond `smooth|linear|pop` with one new curve (`"ease-back"` — small overshoot on settle, one closed-form zoompan expression, keeping the compile-time-ffmpeg architecture);
+- `src/lib/ibismuh/shots.ts` — pseudo-crop additions (2 more windows for verticals), `CAMERA_TO_MOVE` mapping for the new verbs (v2 engine-verbatim row + legacy approximation row, the existing table pattern);
+- `src/lib/ibismuh/director-plan.ts` — `CAMERA_MOVES` vocabulary + the three new verbs (engine-verbatim, plus the LLM prompt list); `MOVE_SPEED_FACTOR` unchanged;
+- `src/lib/ibismuh/transitions.ts` — **catalog stays ffmpeg-xfade-native** (the 15 ids); custom shader wipes are explicitly out (a custom builder would fork the blend pipeline and its QC math);
+- `src/lib/ibismuh/character-rig.ts` — the recorded S93 tails: rig modulation on planned shots, pose-driven beats (consumes K1 pose timelines when present), per-video toggle already landed.
 
 Pins: every new move's zoompan expression is deterministic and edge-pinned (the 8% safety-pad law); QC flicker/stutter lenses pass on shake shots (shake amplitude bounded under the `FLICKER_SAMPLE` thresholds — this is the real risk of `shake`, pin it first); `expectedCutsForTimeline` accounts for new shot joins; the W1-style benchmark for cinematic moves is the existing E-series battery (no new harness).
 
@@ -249,9 +249,9 @@ Rollback: each verb is a table row + one branch in `shotZoompan`; delete rows to
 **Objective:** the ONE shared piece the prior audit's diagram implies that does not exist yet: a tiny, pure, engine-neutral motion substrate used by G1 and K1 so they do not duplicate easing/keyframe/clock math between themselves. (The whiteboard's `timing.ts` is deliberately NOT migrated onto it — determinism pins make byte-identity the priority; the substrate is for new engines only. The composition truth remains S87 tracks; the substrate is intra-clip motion truth.)
 
 New files:
-- `src/lib/tubeforge/anim/easing.ts` — named curves (`linear`, `ease-in-out`, `ease-out`, `pop`, `ease-back`) as pure functions + the zoompan-expression compiler used by G1/K1 frame math (whiteboard W5 may adopt the camera curves later as an OPTION — not in scope);
-- `src/lib/tubeforge/anim/keyframe.ts` — ordered keyframe lists, clamped evaluation, tween composition (`Keyframe<T>`, `evalAt(keys, tMs)`), the generic shape `frameAt` implementations for graphics/character consume;
-- `src/lib/tubeforge/anim/clock.ts` — frame quantization + the shared frame-budget wall constant (one wall, two engines) + `framePlanClock` semantics extracted as a generic helper (whiteboard keeps its own copy until its soak gate clears).
+- `src/lib/ibismuh/anim/easing.ts` — named curves (`linear`, `ease-in-out`, `ease-out`, `pop`, `ease-back`) as pure functions + the zoompan-expression compiler used by G1/K1 frame math (whiteboard W5 may adopt the camera curves later as an OPTION — not in scope);
+- `src/lib/ibismuh/anim/keyframe.ts` — ordered keyframe lists, clamped evaluation, tween composition (`Keyframe<T>`, `evalAt(keys, tMs)`), the generic shape `frameAt` implementations for graphics/character consume;
+- `src/lib/ibismuh/anim/clock.ts` — frame quantization + the shared frame-budget wall constant (one wall, two engines) + `framePlanClock` semantics extracted as a generic helper (whiteboard keeps its own copy until its soak gate clears).
 
 Pins: easing curves pure and table-complete; quantization matches `framePlanClock` byte-behavior; no fs, no clock, no randomness (the S64 law generalizes).
 
@@ -261,18 +261,18 @@ Pins: easing curves pure and table-complete; quantization matches `framePlanCloc
 
 ### R — per-scene style selection (the audit's "AI Director chooses the animation style")
 Modified files:
-- `src/lib/tubeforge/director-plan.ts` — `DirectorScene` gains advisory `engine?: "auto"|"kenburns"|"slides"|"whiteboard"|"graphics"|"character"` (tolerant parse; v2 plans read fine);
-- `src/lib/tubeforge/director.ts` — the director pass proposes per-scene engines from script/mood/profile (LLM), under "AI suggests, human approves": the proposal lands in `directorState: proposed` exactly like shots do today;
-- `src/lib/tubeforge/composition-plan.ts` — the plan→kind mapping consumes the approved engine per scene (kind = the S87 track kind; this is where mixed videos become real);
+- `src/lib/ibismuh/director-plan.ts` — `DirectorScene` gains advisory `engine?: "auto"|"kenburns"|"slides"|"whiteboard"|"graphics"|"character"` (tolerant parse; v2 plans read fine);
+- `src/lib/ibismuh/director.ts` — the director pass proposes per-scene engines from script/mood/profile (LLM), under "AI suggests, human approves": the proposal lands in `directorState: proposed` exactly like shots do today;
+- `src/lib/ibismuh/composition-plan.ts` — the plan→kind mapping consumes the approved engine per scene (kind = the S87 track kind; this is where mixed videos become real);
 - `src/app/api/videos/[id]/director/route.ts` — approval checkpoint unchanged.
 
 Constraints: the lane lockstep law still holds per whole-video mode; mixed-engine videos require Stage X. Until X, the router's approved output is honored only when all scenes map to ONE lane; otherwise assemble surfaces the conflict (honest UI, no silent mode-flip).
 
 ### X — schema-3 persisted engine-authored tracks (the recorded S87 open tail)
 **Objective:** mixed-engine videos (whiteboard + graphics + character + footage in one timeline) with one composition truth.
-- `src/lib/tubeforge/timeline.ts` — schema 3: engine-authored tracks persisted at assemble time with the re-derive/compare consistency check the S87 §11 refinement already specifies (never blindly stored — verified or refused);
-- `src/lib/tubeforge/composition-plan.ts` — multi-kind plans validated per-scene (all-or-nothing law extends: every kind must have a segment builder);
-- `src/lib/tubeforge/render.ts` — segment builders for `graphics` and `character` kinds (the per-scene dispatch the extension-points audit identified: new `PlanVisualKind` → lane resolver → segment builder → tracks emission); whiteboard-in-composition reuses the phase-2 builder once G1 proves the pattern;
+- `src/lib/ibismuh/timeline.ts` — schema 3: engine-authored tracks persisted at assemble time with the re-derive/compare consistency check the S87 §11 refinement already specifies (never blindly stored — verified or refused);
+- `src/lib/ibismuh/composition-plan.ts` — multi-kind plans validated per-scene (all-or-nothing law extends: every kind must have a segment builder);
+- `src/lib/ibismuh/render.ts` — segment builders for `graphics` and `character` kinds (the per-scene dispatch the extension-points audit identified: new `PlanVisualKind` → lane resolver → segment builder → tracks emission); whiteboard-in-composition reuses the phase-2 builder once G1 proves the pattern;
 - acceptance battery extension (the §4.C pattern, 18/18 → mixed-kind rows).
 
 **Sequencing law:** X is LAST. It is gated on G1 and K1 shipping as peer lanes first (the whiteboard precedent: engine-level peer, contract-level unified, then compositor citizenship — slices 3→4→5 replayed for the new engines).
@@ -359,13 +359,13 @@ Total: roughly 10–14 focused weeks for one senior developer after the W-track 
 
 ## Appendix A — verified file inventory (evidence for the seams cited above)
 
-- Whiteboard engine: `src/lib/tubeforge/whiteboard/{storyboard,svg,assets,timing,beat-plan,llm-planner,whiteboard-planner,tracks,wb-page,render,upload,asset-store,benchmark-scenarios}.ts`
-- Shared contract: `src/lib/tubeforge/{timeline,composition-plan,render-lane,render-assembly,types}.ts` (types.ts:580 reserves `3d|character|graphics` track kinds)
-- Compositor/QC: `src/lib/tubeforge/{render,motion,transitions,shots,slides,render-qc,qc,scene-qc,visual-qc,visual-consistency}.ts`
-- Audio: `src/lib/tubeforge/{captions,pacing,sfx,audiomix,studio-sound}.ts`
-- Characters: `src/lib/tubeforge/{characters,character-identity,character-rig,character-jobs}.ts`
-- Director: `src/lib/tubeforge/{director,director-plan,liveliness,pacing}.ts`
+- Whiteboard engine: `src/lib/ibismuh/whiteboard/{storyboard,svg,assets,timing,beat-plan,llm-planner,whiteboard-planner,tracks,wb-page,render,upload,asset-store,benchmark-scenarios}.ts`
+- Shared contract: `src/lib/ibismuh/{timeline,composition-plan,render-lane,render-assembly,types}.ts` (types.ts:580 reserves `3d|character|graphics` track kinds)
+- Compositor/QC: `src/lib/ibismuh/{render,motion,transitions,shots,slides,render-qc,qc,scene-qc,visual-qc,visual-consistency}.ts`
+- Audio: `src/lib/ibismuh/{captions,pacing,sfx,audiomix,studio-sound}.ts`
+- Characters: `src/lib/ibismuh/{characters,character-identity,character-rig,character-jobs}.ts`
+- Director: `src/lib/ibismuh/{director,director-plan,liveliness,pacing}.ts`
 - Design records: `docs/design/{whiteboard-videoscribe-reconciliation,s87-universal-timeline,s92-narration-pacing,s93-character-rig,s94-3d-engine}.md`, `docs/audits/w1-blind-rubric.md`, `WHITEBOARD_ENGINE_DESIGN.md`, `ROADMAP.md` (2.0 tracks), `ARCHITECTURE.md` §1.9
 - Harness precedent: `scripts/w1-whiteboard-benchmark.mts`, `docs/baselines/w1-whiteboard-baseline-2026-11-13.json`
 
-*Prepared from a read-only audit clone. Zero files in `ibis01/tubeforge` were changed.*
+*Prepared from a read-only audit clone. Zero files in `ibis01/ibismuh` were changed.*

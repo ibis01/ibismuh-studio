@@ -101,7 +101,7 @@ const settingsLog = log.child({ mod: "providers/settings" });
  *
  * getCapability used to wrap its ENTIRE read (saved row parse + credential
  * decrypt) in one try/catch whose catch arm returned `defaultFor(capability)`.
- * Any single failure — a rotated TUBEFORGE_ENCRYPTION_KEY, a DB hiccup, a
+ * Any single failure — a rotated IBISMUH_STUDIO_ENCRYPTION_KEY, a DB hiccup, a
  * corrupt row — therefore read as "the user never saved anything": the UI
  * showed zai defaults over a row that still said groq, which is exactly the
  * "settings revert to default after I save and log back in" incident.
@@ -170,7 +170,7 @@ export async function getCapability(
   }
 
   // -- Half 2: the secret (ProviderCredential, encrypted at rest) -----------
-  // Isolated: a decrypt failure (rotated TUBEFORGE_ENCRYPTION_KEY is the
+  // Isolated: a decrypt failure (rotated IBISMUH_STUDIO_ENCRYPTION_KEY is the
   // historical trigger) must NOT erase the selection above. The capability
   // reports "no usable key" and the settings UI asks the user to re-enter it.
   if (!config.apiKey) {
@@ -246,7 +246,7 @@ export async function saveCapability(
   // with the exact operator fix.
   if (next.apiKey && !encryptionKeyUsable()) {
     throw new Error(
-      "TUBEFORGE_ENCRYPTION_KEY is missing or too short — the API key cannot be stored securely. " +
+      "IBISMUH_STUDIO_ENCRYPTION_KEY is missing or too short — the API key cannot be stored securely. " +
         "Set it (64 hex chars, openssl rand -hex 32) in your hosting environment variables, " +
         "then redeploy. Your provider/model selection is NOT lost — only the key save was refused.",
     );
@@ -276,14 +276,10 @@ export async function saveCapability(
  *  settings GET's storage.health probe). True when the env key is present and
  *  ≥16 chars — the same contract requireKey enforces. */
 export function encryptionKeyUsable(): boolean {
-  // The controlled-rebrand dual-read (mirrors crypto.ts): the
-  // IBISMUH_STUDIO_ENCRYPTION_KEY name is primary, the legacy
-  // TUBEFORGE_ENCRYPTION_KEY keeps working unchanged.
-  return (
-    (process.env.IBISMUH_STUDIO_ENCRYPTION_KEY ??
-      process.env.TUBEFORGE_ENCRYPTION_KEY ??
-      "").length >= 16
-  );
+  // True when the env key is present and ≥16 chars — the same contract
+  // requireKey enforces (IBISMUH_STUDIO_ENCRYPTION_KEY only; the legacy
+  // dual-read was removed in the 2026-11-23 hardening pass).
+  return (process.env.IBISMUH_STUDIO_ENCRYPTION_KEY ?? "").length >= 16;
 }
 
 export function effectiveModel(

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# tf-go-public.sh — put your local TubeForge on a public https://*.trycloudflare.com URL
-# Usage:  bash tf-go-public.sh [port]     default port 3000
+# ibismuh-go-public.sh — put your local Ibismuh Studio on a public https://*.trycloudflare.com URL
+# Usage:  bash ibismuh-go-public.sh [port]     default port 3000
 # Ctrl+C stops sharing. The URL is temporary — it changes each run.
 set -euo pipefail
 
 PORT="${1:-3000}"
 APP="http://localhost:$PORT"
-echo "== TubeForge -> public subdomain =="
+echo "== Ibismuh Studio -> public subdomain =="
 
 # 1) install cloudflared if missing
 if ! command -v cloudflared >/dev/null 2>&1; then
@@ -24,7 +24,7 @@ fi
 # 2) is the app running?
 if ! curl -s -o /dev/null --max-time 4 "$APP"; then
   echo "!! Nothing is listening on $APP"
-  echo "   Start it in another terminal first:  cd ~/tubeforge && npm run dev"
+  echo "   Start it in another terminal first:  cd ~/ibismuh-studio && npm run dev"
   exit 1
 fi
 

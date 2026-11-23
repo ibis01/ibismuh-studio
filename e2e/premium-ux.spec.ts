@@ -98,7 +98,7 @@ test.describe("Stage 4a premium UX", () => {
     // guessed delay is a race against machine speed (the CI flake this
     // replaces). Await the WRITE itself, never a sleep.
     await expect(async () => {
-      const draft = await page.evaluate(() => localStorage.getItem("ibismuh:create-draft") ?? localStorage.getItem("tubeforge:create-draft"));
+      const draft = await page.evaluate(() => localStorage.getItem("ibismuh:create-draft") ?? localStorage.getItem("ibismuh:create-draft"));
       expect(draft).toContain("container ships");
     }).toPass({ timeout: 15_000 });
 

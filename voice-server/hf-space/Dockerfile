@@ -1,4 +1,4 @@
-# ── TubeForge Voice Server — Hugging Face Space (free CPU) ─────────────
+# ── Ibismuh Studio Voice Server — Hugging Face Space (free CPU) ─────────────
 # Copy THIS folder's files (README.md, Dockerfile, voice_server.py) into a
 # new HF Space repo and it just runs. See README.md for the 5-minute guide.
 

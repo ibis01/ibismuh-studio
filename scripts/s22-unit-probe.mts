@@ -19,7 +19,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //   5. THE CASCADE LAW — deleting the org takes its world with it.
 // Run: node --import tsx scripts/s22-unit-probe.mts
 
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { NextRequest } from "next/server";
 import {

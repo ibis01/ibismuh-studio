@@ -4,7 +4,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 // daemon. The video evidence: a real sign-in inside the chat.z.ai preview
 // iframe bounced straight back to an empty form. This suite proves the whole
 // arc a phone actually walks, WITH the daemon launched under
-// TUBEFORGE_COOKIE_SAMESITE=none (the preview deployment's env):
+// IBISMUH_STUDIO_COOKIE_SAMESITE=none (the preview deployment's env):
 //   register -> 201, the Set-Cookie carries SameSite=None + Secure (the
 //   iframe law), the verification link is RELATIVE (the internal origin is
 //   unreachable from the phone) -> GET the relative link -> 307 with a

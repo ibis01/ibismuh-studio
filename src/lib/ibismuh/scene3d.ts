@@ -444,6 +444,11 @@ export function scaffoldScene3D(
   opts: { aspect?: Scene3DAspect; fps?: 24 | 30 | 60; durationSec?: number } = {}
 ): Scene3D {
   const aspect = opts.aspect ?? "16:9";
+  // FROZEN VALUE (determinism): the fallback seed MUST stay "tubeforge" —
+  // it feeds hash32 for every topic-less scaffold, and changing it shifts
+  // every deterministically generated 3D scene (breaking byte-identical
+  // re-renders of existing content). Pinned by scripts/test-unit.mts. The
+  // string is historical determinism material, not an active identity.
   const h = hash32(topic || "tubeforge");
   const hue = h % 360;
   const hexOf = (v: number) => `#${(v & 0xffffff).toString(16).padStart(6, "0")}`;

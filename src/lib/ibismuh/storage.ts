@@ -83,7 +83,7 @@ export function isVercelRuntime(): boolean {
 export const UPLOAD_ROOT = process.env.IBISMUH_STUDIO_UPLOAD_ROOT
   ? path.resolve(process.env.IBISMUH_STUDIO_UPLOAD_ROOT)
   : isVercelRuntime()
-    ? "/tmp/tubeforge-uploads"
+    ? "/tmp/ibismuh-uploads"
     : path.join(process.cwd(), "uploads");
 
 
@@ -134,7 +134,7 @@ async function ensureDirFor(file: string): Promise<void> {
 
 const S3_CACHE = process.env.IBISMUH_STUDIO_S3_CACHE_DIR
   ? path.resolve(process.env.IBISMUH_STUDIO_S3_CACHE_DIR)
-  : path.join(os.tmpdir(), "tubeforge-s3-cache");
+  : path.join(os.tmpdir(), "ibismuh-s3-cache");
 
 function cacheFileFor(key: string, etag: string): string {
   const h = createHash("sha256").update(key).digest("hex").slice(0, 32);
@@ -430,7 +430,7 @@ export function scratchDir(name: string): string {
     storageDriverKind() === "s3"
       ? process.env.IBISMUH_STUDIO_SCRATCH_ROOT
         ? path.resolve(process.env.IBISMUH_STUDIO_SCRATCH_ROOT)
-        : path.join(os.tmpdir(), "tubeforge-scratch")
+        : path.join(os.tmpdir(), "ibismuh-scratch")
       : UPLOAD_ROOT;
   const dir = path.join(root, ...normalizeKey(name).split("/"));
   try {

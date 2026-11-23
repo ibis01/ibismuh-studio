@@ -23,11 +23,14 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfbase.pdfmetrics import registerFontFamily
 from PIL import Image as PILImage
 
-PDF_SKILL_DIR = '/home/z/my-project/skills/pdf'
-sys.path.insert(0, os.path.join(PDF_SKILL_DIR, 'scripts'))
-from pdf import install_font_fallback  # noqa: E402
+try:  # font fallback helper from the local pdf skill (optional, sandbox-only)
+    PDF_SKILL_DIR = os.environ.get('PDF_SKILL_DIR', '/home/z/my-project/skills/pdf')
+    sys.path.insert(0, os.path.join(PDF_SKILL_DIR, 'scripts'))
+    from pdf import install_font_fallback  # noqa: E402
+except ImportError:
+    install_font_fallback = None
 
-BUILD = '/home/z/my-project/scripts/handbook-build'
+BUILD = os.path.dirname(os.path.abspath(__file__))
 OUT_BODY = os.path.join(BUILD, 'body.pdf')
 
 # ------------------------------------------------------------------

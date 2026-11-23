@@ -1,7 +1,7 @@
 import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 
 // S27 unit probe — "the $5 door": the external review's verdict was that
-// TubeForge's credit ledger is app-credit bookkeeping, not a USD meter —
+// Ibismuh Studio's credit ledger is app-credit bookkeeping, not a USD meter —
 // UsageRecord rows wrote inputTokens/outputTokens/costMicroUsd as zeros
 // (with a literal "cost arrives with provider-level token reporting" IOU
 // in the comment), the completion interface dropped provider usage, and
@@ -28,19 +28,19 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //      result-duck usage, sink-emitted usage (the string-return providers
 //      layer), failed-without-usage (zeros), failed-with-usage (billed
 //      anyway). Zai models stay metered-but-unpriced ($0 cost).
-//   7. THE KNOBS — TUBEFORGE_SPEND_GATE=0 lifts the gate; a tiny
-//      TUBEFORGE_SPEND_STOP_USD blocks immediately (subprocess, env-parsed).
+//   7. THE KNOBS — IBISMUH_STUDIO_SPEND_GATE=0 lifts the gate; a tiny
+//      IBISMUH_STUDIO_SPEND_STOP_USD blocks immediately (subprocess, env-parsed).
 // llm.ts's own openaiFetch is NOT fetch-fakeable (safeFetch pins DNS through
 // undici's fetch) — its gate/usage wiring shares every helper proved here
 // and ships under tsc; the route e2e exercises the live wrapper end-to-end.
 // Run: node --import tsx scripts/s27-unit-probe.mts
 
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 // S32 — the probe exercises the BUDGET gate (the $5 limit), so it needs the
 // pricing-verified path. The source constant stays "provisional" until an
 // operator reconciles the registry; this env override is the same hook an
 // operator uses for a pre-activation sanity check.
-process.env.TUBEFORGE_PRICING_VERIFIED ??= "1";
+process.env.IBISMUH_STUDIO_PRICING_VERIFIED ??= "1";
 
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
@@ -423,10 +423,10 @@ console.log("\n§7 the knobs");
   writeFileSync(tmp, script);
   const run = (env: NodeJS.ProcessEnv) =>
     execFileSync("node", ["--import", "tsx", tmp], { env: { ...process.env, ...env } }).toString().trim();
-  check("default: gate on, dispatch admitted", run({ TUBEFORGE_PRICING_VERIFIED: "1" }).endsWith("ADMITTED"), run({ TUBEFORGE_PRICING_VERIFIED: "1" }));
-  check("TUBEFORGE_SPEND_GATE=0 lifts the gate", run({ TUBEFORGE_SPEND_GATE: "0", TUBEFORGE_PRICING_VERIFIED: "1" }).endsWith("UNGATED"), run({ TUBEFORGE_SPEND_GATE: "0", TUBEFORGE_PRICING_VERIFIED: "1" }));
-  check("tiny TUBEFORGE_SPEND_STOP_USD blocks instantly",
-    run({ TUBEFORGE_SPEND_STOP_USD: "0.000001", TUBEFORGE_PRICING_VERIFIED: "1" }).endsWith("BLOCKED"), run({ TUBEFORGE_SPEND_STOP_USD: "0.000001", TUBEFORGE_PRICING_VERIFIED: "1" }));
+  check("default: gate on, dispatch admitted", run({ IBISMUH_STUDIO_PRICING_VERIFIED: "1" }).endsWith("ADMITTED"), run({ IBISMUH_STUDIO_PRICING_VERIFIED: "1" }));
+  check("IBISMUH_STUDIO_SPEND_GATE=0 lifts the gate", run({ IBISMUH_STUDIO_SPEND_GATE: "0", IBISMUH_STUDIO_PRICING_VERIFIED: "1" }).endsWith("UNGATED"), run({ IBISMUH_STUDIO_SPEND_GATE: "0", IBISMUH_STUDIO_PRICING_VERIFIED: "1" }));
+  check("tiny IBISMUH_STUDIO_SPEND_STOP_USD blocks instantly",
+    run({ IBISMUH_STUDIO_SPEND_STOP_USD: "0.000001", IBISMUH_STUDIO_PRICING_VERIFIED: "1" }).endsWith("BLOCKED"), run({ IBISMUH_STUDIO_SPEND_STOP_USD: "0.000001", IBISMUH_STUDIO_PRICING_VERIFIED: "1" }));
 }
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASS" : `${failures} FAILURE(S)`}`);

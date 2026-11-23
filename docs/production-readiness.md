@@ -1,11 +1,11 @@
-# TubeForge — Production-Readiness Roadmap (governing, adopted 2026-11-13)
+# Ibismuh Studio — Production-Readiness Roadmap (governing, adopted 2026-11-13)
 
 **Formal decision (adopted at S98, HEAD `d023a01`):** major feature development
 is FROZEN. Until every gate below is closed, the only allowed changes are
 security fixes, reliability improvements, bug fixes, and maintenance. No new
 video engine starts before the exit criteria pass.
 
-The 13-engine roadmap is complete. TubeForge's next competitive advantage is
+The 13-engine roadmap is complete. Ibismuh Studio's next competitive advantage is
 operational reliability, not another AI engine. Each stage below lands as a
 numbered worklog stage with the established discipline: unit pins, full local
 gates, and a CI-green push before the stage is marked done.
@@ -59,7 +59,7 @@ step is not another feature" — so P2 opens with operations, not engines:
    the live source (the stale 2025-10-28 posture, the wrong backup.sh-absent note,
    the pre-account checklist), README re-dated (S109, the real eight-job CI lane),
    ROADMAP's arc note records the lift.
-2. **Staging provisioned** per DEPLOYMENT §3 — `tubeforge-staging` on Fly (same
+2. **Staging provisioned** per DEPLOYMENT §3 — `ibismuh-studio-staging` on Fly (same
    image), a Neon branch, a separate R2 bucket, Stripe TEST-mode keys + webhook,
    console email, fresh secrets. Requires operator accounts; the provisioning kit
    and drill scripts land as the next stages so provisioning is one command once
@@ -259,7 +259,7 @@ selection and the verifier's own contract are pinned.
 ## P0.6 target topology (the acceptance test, for the record)
 
 ```
-TubeForge Web (Next.js · authentication · API)
+Ibismuh Studio Web (Next.js · authentication · API)
         │
 PostgreSQL (Prisma migrations + data)     queue worker (jobs + recovery)
         │                                          │

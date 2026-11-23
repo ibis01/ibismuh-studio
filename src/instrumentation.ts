@@ -15,8 +15,6 @@
 // that must degrade the background jobs, not the entire app. The outcome is
 // recorded on globalThis so /api/diag can report it remotely.
 
-import "./lib/ibismuh/compat-env";
-
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 

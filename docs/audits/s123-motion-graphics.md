@@ -4,7 +4,7 @@
 |---|---|
 | Stage | **S123** — the Motion Graphics Engine (milestone G1 of the S120 2D programme), P0–P5 executed |
 | Baseline | main `37796ce` (597 unit tests, 8 CI gates green); the G1.1–G1.4 branch chain (PRs #14–#17) + the S120 status/docs merges |
-| Design record | `docs/design/s123-motion-graphics.md` (the approved Rev 2 spec, committed at P1.3); `docs/tubeforge/G0-baseline-report.md` + the merge-readiness playbook (sandbox docs) |
+| Design record | `docs/design/s123-motion-graphics.md` (the approved Rev 2 spec, committed at P1.3); `docs/ibismuh/G0-baseline-report.md` + the merge-readiness playbook (sandbox docs) |
 | Result | **P0–P5 LANDED** on `s123/p0-p2-execution` + the P3–P5 execution branch — the graphics engine is a peer lane end-to-end: grammar → frame truth → composer → planners → projection → preflight wall → renderer → drafts → routes → studio → QC group → proof. The unit battery reads **597 → 685**. |
 | Ship state | The lane is WIRED (the lockstep commit landed the picker entry + route branch + compositor dispatch together — acceptance criterion 4); CI on the pushed branch is the remaining gate (the sandbox ran the full local battery; Docker smoke / PostgreSQL integration / clean-clone bootstrap / Playwright e2e run on GitHub). |
 
@@ -35,7 +35,7 @@
 | Unit battery (`scripts/test-unit.mts`) | **PASS — 685 passed, 0 failed** (597 → 685: the four G1 suites + the S123 pin suite + the P3 lockstep/renderer/draft/QC suites; `resumableKinds` 25 → 26) |
 | The S123 proof (`scripts/s123-graphics-proof.mts`) | **GATE GREEN — 21 assertions** (receipt: `validation/s123/s123-graphics-proof-receipt.json`, gitignored) |
 | The route probe (`scripts/s123-route-e2e.mjs`) | written to the house pattern; needs a live server — CI/manual run |
-| Regression law | `git diff main..HEAD -- src/lib/tubeforge/whiteboard/` **empty** (the whiteboard engine untouched; `normalizeVoSlot`/`probeDurationSec`/`WB_CHROMIUM_LAUNCH_ARGS` are IMPORTED, never copied) |
+| Regression law | `git diff main..HEAD -- src/lib/ibismuh/whiteboard/` **empty** (the whiteboard engine untouched; `normalizeVoSlot`/`probeDurationSec`/`WB_CHROMIUM_LAUNCH_ARGS` are IMPORTED, never copied) |
 | Production build + Playwright e2e + Docker smoke + PostgreSQL integration + clean-clone bootstrap | **CI-run on push** (the sandbox has no daemon/CI runner) |
 
 ## 3. Determinism + golden-frame receipts (D3)
@@ -82,7 +82,7 @@ The P5 proof re-records the same laws on the SIX-scene proof doc (576 delivered 
 | 7 | Draft at 0.5 scale ≥ 2× faster; drafts carry `inherited_review_credit: false`; never enter the assembly | **PASS** (3.02× with the look-rate lever — §4; drafts write only their own key, storage-checked by the route probe) |
 | 8 | QC group enforced (no broad-pass cover); the rescore recorded | **PASS for the group** (the matrix + the lane calibrations; the rescore record is `docs/audits/s123-blind-rescore.md` — the HUMAN gate is pending, see that file) |
 | 9 | 8/8 CI gates at close; unit count 597 → N; README + S120 doc updated | **LOCAL: 685. CI on push.** README + the S120 roadmap status lines updated in the close commit |
-| 10 | Whiteboard engine byte-identical | **PASS** (`git diff main..HEAD -- src/lib/tubeforge/whiteboard/` empty) |
+| 10 | Whiteboard engine byte-identical | **PASS** (`git diff main..HEAD -- src/lib/ibismuh/whiteboard/` empty) |
 
 ## 7. Explicit completion evidence (spec §11)
 

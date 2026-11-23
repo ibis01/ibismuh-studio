@@ -21,7 +21,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //      sessions, settings, uploads tree) with it.
 // Run: node --import tsx scripts/s23-unit-probe.mts
 
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { NextRequest } from "next/server";
 import {

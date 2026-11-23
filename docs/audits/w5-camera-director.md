@@ -4,7 +4,7 @@
 
 ## What landed
 
-**`src/lib/tubeforge/whiteboard/camera-director.ts`** — pure, deterministic:
+**`src/lib/ibismuh/whiteboard/camera-director.ts`** — pure, deterministic:
 
 - `directCamera(scene, width, height, durationMs, geometry, events, opts?)` — the W2 beat plan (ONE planner, two consumers) → per-beat focus rects (union of the beat's placements' transformed flattened-geometry bboxes, padded once at framing time) → `CameraEvent[]`:
   - keys[0] frames beat 0 from the scene's first frame (content-driven origin — never the blind center default);

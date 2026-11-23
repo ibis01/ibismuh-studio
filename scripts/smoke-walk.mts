@@ -4,7 +4,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 /**
  * P0.6 docker-smoke walk phase (docs/production-readiness.md).
  *
- *   docker compose exec -T web node --import tsx scripts/smoke-walk.mts --phase 1|2|3
+ *   docker compose exec -T ibismuh-web node --import tsx scripts/smoke-walk.mts --phase 1|2|3
  *
  * Runs INSIDE the web container of the composed production topology — real
  * Postgres, real MinIO (s3 driver), real worker container. Phases:
@@ -26,11 +26,6 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
  *
  * Exit 0 = the phase held. Any failure exits 1 (the smoke is the gate).
  */
-
-// The smoke walk runs via `docker compose exec` — a FRESH process outside the
-// Next server, so the env mirror must load here too (the rebrand seam: legacy
-// TUBEFORGE_* container env still resolves).
-import "../src/lib/ibismuh/compat-env.ts";
 
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";

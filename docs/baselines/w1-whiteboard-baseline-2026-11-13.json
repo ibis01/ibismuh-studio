@@ -2,7 +2,7 @@
   "stage": "W1",
   "what": "whiteboard perceptual baseline — five fixed scene types × three aspects",
   "definition": {
-    "module": "src/lib/tubeforge/whiteboard/benchmark-scenarios.ts",
+    "module": "src/lib/ibismuh/whiteboard/benchmark-scenarios.ts",
     "projectHashes": {
       "16:9": "488237559e75adaa407fc7c42921f0b5ec91798f81f74e7c81c44b2cfacf7efa",
       "9:16": "674ea3db98d437e6ac7dd750072f50103d3a95f2de4b7801f0d2a474b1155df8",

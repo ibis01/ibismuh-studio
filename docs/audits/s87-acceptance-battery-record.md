@@ -7,7 +7,7 @@ as a step of the E2E job (chromium + ffmpeg are its tools; the battery
 spends $0 AI).
 
 **The question it answers** (S76 §4.C, the adoption decision's close
-condition for the timeline track): does every TubeForge engine describe
+condition for the timeline track): does every Ibismuh Studio engine describe
 its cut ONE way — and do the delivered pixels honor that one
 description? The battery is the artifacts half of the S76 standard
 (deterministic pins live in `scripts/test-unit.mts`, slices 1–4: parity,

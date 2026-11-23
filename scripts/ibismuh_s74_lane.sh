@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tf_s74_lane.sh — paced supervisor for the S74 paired re-measure.
+# ibismuh_s74_lane.sh — paced supervisor for the S74 paired re-measure.
 #
 # The 2026-11-10 lane receipt: back-to-back i2v submissions 429 (the pilot's
 # naturally-spaced pair went through clean), and short-backoff retries dig
@@ -13,7 +13,7 @@
 #
 # PROBE-FIRST (the one gateway-resumption policy, all entry points): the
 # cheap llm probe gates every gateway-touching entry. A 429 window is
-# waited out (tf_s74_catchup.sh) or left to the next resume (s74-resume.sh)
+# waited out (ibismuh_s74_catchup.sh) or left to the next resume (s74-resume.sh)
 # — never hammered.
 set -uo pipefail
 
@@ -25,7 +25,7 @@ cd "$REPO_ROOT"
 if ! node --import tsx scripts/gateway-quota-probe.mts > /tmp/s74-probe.log 2>&1; then
   echo "[supervisor] probe NOT green ($(tail -1 /tmp/s74-probe.log))"
   echo "[supervisor] the window is closed — no i2v submissions into a throttle."
-  echo "[supervisor] use scripts/tf_s74_catchup.sh (silence + canary) or wait and re-run."
+  echo "[supervisor] use scripts/ibismuh_s74_catchup.sh (silence + canary) or wait and re-run."
   exit 3
 fi
 echo "[supervisor] probe GREEN — opening the lane"

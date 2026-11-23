@@ -1,4 +1,4 @@
-# TubeForge — Risk Register
+# Ibismuh Studio — Risk Register
 
 **Status:** Stage 1 audit complete; risks prioritized.
 **Last updated:** 2026-11-01
@@ -21,9 +21,9 @@
 
 | ID | Risk | File:line | Stage to fix | Mitigation |
 | --- | --- | --- | --- | --- |
-| R-CRIT-1 | ✅ **CLOSED (Stage 2, 2026-11-01).** Multi-tenant isolation now enforced end to end: `User`/`Organization`/`Membership` + `organizationId` on every content model; the `tenant-db` Prisma extension injects the org filter into every query from the request context; `requireUser()` on all 66 route files (ESLint blocks raw `@/lib/db` in `src/app`); verified by 7/7 cross-tenant isolation e2e tests (`e2e/isolation.spec.ts`) + CI. | `prisma/schema.prisma`, `src/lib/tubeforge/tenant-db.ts`, `src/lib/tubeforge/tenant.ts` | closed | — |
-| R-CRIT-2 | ✅ **CLOSED (Stage 2, 2026-11-01).** `Setting` replaced by per-user storage: `UserSetting` (preferences), `ProviderCredential` (encrypted at rest, AES-256-GCM), `YouTubeAccount` (per-user connection, encrypted tokens), `User.passwordHash`. Legacy rows survive in `LegacySetting` until the first owner claims them (prove-the-old-password flow in register); consumed rows are migrated + deleted. | `prisma/schema.prisma`, `src/lib/tubeforge/claim.ts`, `src/lib/tubeforge/crypto.ts`, `src/lib/tubeforge/settings.ts` | closed | — |
-| R-CRIT-3 | **First-come race on `POST /api/auth/setup`.** A fresh install can be claimed by the first caller. Mitigations exist (403s after configured; requires `TUBEFORGE_AUTH_SECRET`) but the race is not eliminated. | `src/app/api/auth/setup/route.ts:15` | Stage 1 | Add `TUBEFORGE_OWNER_TOKEN` env bootstrap so the first call must present it. Stage 2 replaces the whole flow with `POST /api/auth/register` + email verification. |
+| R-CRIT-1 | ✅ **CLOSED (Stage 2, 2026-11-01).** Multi-tenant isolation now enforced end to end: `User`/`Organization`/`Membership` + `organizationId` on every content model; the `tenant-db` Prisma extension injects the org filter into every query from the request context; `requireUser()` on all 66 route files (ESLint blocks raw `@/lib/db` in `src/app`); verified by 7/7 cross-tenant isolation e2e tests (`e2e/isolation.spec.ts`) + CI. | `prisma/schema.prisma`, `src/lib/ibismuh/tenant-db.ts`, `src/lib/ibismuh/tenant.ts` | closed | — |
+| R-CRIT-2 | ✅ **CLOSED (Stage 2, 2026-11-01).** `Setting` replaced by per-user storage: `UserSetting` (preferences), `ProviderCredential` (encrypted at rest, AES-256-GCM), `YouTubeAccount` (per-user connection, encrypted tokens), `User.passwordHash`. Legacy rows survive in `LegacySetting` until the first owner claims them (prove-the-old-password flow in register); consumed rows are migrated + deleted. | `prisma/schema.prisma`, `src/lib/ibismuh/claim.ts`, `src/lib/ibismuh/crypto.ts`, `src/lib/ibismuh/settings.ts` | closed | — |
+| R-CRIT-3 | **First-come race on `POST /api/auth/setup`.** A fresh install can be claimed by the first caller. Mitigations exist (403s after configured; requires `IBISMUH_STUDIO_AUTH_SECRET`) but the race is not eliminated. | `src/app/api/auth/setup/route.ts:15` | Stage 1 | Add `IBISMUH_STUDIO_OWNER_TOKEN` env bootstrap so the first call must present it. Stage 2 replaces the whole flow with `POST /api/auth/register` + email verification. |
 
 ---
 
@@ -43,14 +43,14 @@
 
 | ID | Risk | File:line | Stage to fix | Mitigation |
 | --- | --- | --- | --- | --- |
-| R-HIGH-6 | `uploadToYouTube` implemented but never called — publish stage is dead scaffolding | `src/lib/tubeforge/youtube.ts:292-382` | Stage 6 | Add `POST /api/videos/[id]/publish` route; enqueue a publish job; call the existing `uploadToYouTube` function. |
+| R-HIGH-6 | `uploadToYouTube` implemented but never called — publish stage is dead scaffolding | `src/lib/ibismuh/youtube.ts:292-382` | Stage 6 | Add `POST /api/videos/[id]/publish` route; enqueue a publish job; call the existing `uploadToYouTube` function. |
 | R-HIGH-7 | `Video.youtubeUrl` is never written by any code path | grep confirmed | Stage 6 | Consequence of R-HIGH-6. Fixed when the publish route is added. |
 
 ### Missing timeout/retry (1 cluster)
 
 | ID | Risk | File:line | Stage to fix | Mitigation |
 | --- | --- | --- | --- | --- |
-| R-HIGH-8 | YouTube fetch calls have no timeout/retry — a single Google 500 fails the upload | `src/lib/tubeforge/youtube.ts:123,166,218,314,336,362` | Stage 3 | Wrap every YouTube fetch in the existing `budget.ts#aiCall` pattern (timeout, retry, 429 cool-down). Add per-call `AbortSignal.timeout`. |
+| R-HIGH-8 | YouTube fetch calls have no timeout/retry — a single Google 500 fails the upload | `src/lib/ibismuh/youtube.ts:123,166,218,314,336,362` | Stage 3 | Wrap every YouTube fetch in the existing `budget.ts#aiCall` pattern (timeout, retry, 429 cool-down). Add per-call `AbortSignal.timeout`. |
 
 ### Missing validation framework (1)
 
@@ -74,7 +74,7 @@
 
 | ID | Risk | File:line | Stage to fix | Mitigation |
 | --- | --- | --- | --- | --- |
-| R-HIGH-12 | `PUT /api/settings/ai` saves Z.ai global creds + per-capability provider config to the singleton `Setting` table | `src/app/api/settings/ai/route.ts:71` | Stage 2 | Move to `ProviderCredential` per-user, encrypted at rest with `TUBEFORGE_ENCRYPTION_KEY`. |
+| R-HIGH-12 | `PUT /api/settings/ai` saves Z.ai global creds + per-capability provider config to the singleton `Setting` table | `src/app/api/settings/ai/route.ts:71` | Stage 2 | Move to `ProviderCredential` per-user, encrypted at rest with `IBISMUH_STUDIO_ENCRYPTION_KEY`. |
 | R-HIGH-13 | `PUT /api/youtube/config` saves OAuth client secret to the singleton `Setting` table | `src/app/api/youtube/config/route.ts:10` | Stage 2 | `ytClientId` / `ytClientSecret` stay server-wide in `.env`. Per-user `ytRefreshToken` / `ytChannelTitle` / `ytChannelThumb` move to `YouTubeAccount`. |
 | R-HIGH-14 | `POST /api/settings/ai` fires real chat/tts/image/video calls with user-supplied `baseUrl` overrides | `src/app/api/settings/ai/route.ts:162` | Stage 1 | Mitigated by `providerFetch → safeFetch` (already in place). Add a per-call cost cap to prevent runaway test spend. |
 
@@ -132,20 +132,20 @@
 
 | ID | Risk | File:line | Stage to fix | Mitigation |
 | --- | --- | --- | --- | --- |
-| R-MED-3 | Login brute-force counters reset on restart (`__tfAuthLimit` in-memory only) | `src/lib/tubeforge/auth.ts:189-190` | Stage 2 | Move to Redis. |
-| R-MED-4 | API rate-limit buckets reset on restart (`__tfRateBuckets` in-memory only) | `src/lib/tubeforge/rate-limit.ts:18-21` | Stage 2 | Move to Redis. |
+| R-MED-3 | Login brute-force counters reset on restart (`__tfAuthLimit` in-memory only) | `src/lib/ibismuh/auth.ts:189-190` | Stage 2 | Move to Redis. |
+| R-MED-4 | API rate-limit buckets reset on restart (`__tfRateBuckets` in-memory only) | `src/lib/ibismuh/rate-limit.ts:18-21` | Stage 2 | Move to Redis. |
 
 ### In-memory pacing state (1)
 
 | ID | Risk | File:line | Stage to fix | Mitigation |
 | --- | --- | --- | --- | --- |
-| R-MED-5 | AI budget pacing state resets on restart (`__tfBudget`) — thundering-herd risk on fresh process | `src/lib/tubeforge/budget.ts:45-54` | Stage 3 | Move to Redis (or accept as a degraded mode with documented restart behavior). |
+| R-MED-5 | AI budget pacing state resets on restart (`__tfBudget`) — thundering-herd risk on fresh process | `src/lib/ibismuh/budget.ts:45-54` | Stage 3 | Move to Redis (or accept as a degraded mode with documented restart behavior). |
 
 ### Memory-bound media streaming (2)
 
 | ID | Risk | File:line | Stage to fix | Mitigation |
 | --- | --- | --- | --- | --- |
-| R-MED-6 | `GET /api/videos/[id]/mp4` reads entire file into memory via `fs.readFileSync` | `src/lib/tubeforge/render.ts:729` | Stage 3 | Replace with redirect to presigned S3 URL (or `fs.createReadStream` + Range support if staying on a Node server). |
+| R-MED-6 | `GET /api/videos/[id]/mp4` reads entire file into memory via `fs.readFileSync` | `src/lib/ibismuh/render.ts:729` | Stage 3 | Replace with redirect to presigned S3 URL (or `fs.createReadStream` + Range support if staying on a Node server). |
 | R-MED-7 | `GET /api/videos/[id]/export` buffers entire ZIP in memory via `buildZip` | `src/app/api/videos/[id]/export/route.ts:248` | Stage 3 | Stream the ZIP to the client (or to S3 then redirect). |
 
 ### Build / packaging (4)
@@ -167,7 +167,7 @@
 
 | ID | Risk | File:line | Stage to fix | Mitigation |
 | --- | --- | --- | --- | --- |
-| R-MED-13 | `/proc/<pid>/stat` zombie watchdog is Linux-only (won't work on macOS/Windows hosts) | `src/lib/tubeforge/proc.ts:37-46` | Stage 3 | Replace with a cross-platform child-process reaper (e.g. `tree-kill` or signal-based with `process.kill`). |
+| R-MED-13 | `/proc/<pid>/stat` zombie watchdog is Linux-only (won't work on macOS/Windows hosts) | `src/lib/ibismuh/proc.ts:37-46` | Stage 3 | Replace with a cross-platform child-process reaper (e.g. `tree-kill` or signal-based with `process.kill`). |
 
 ### Side-effecting GET (1)
 
@@ -189,8 +189,8 @@
 | --- | --- | --- | --- | --- |
 | R-LOW-1 | `VoiceProfile` SQLite comment drifted from Postgres version (cosmetic; fields are identical) | `prisma/schema.sqlite.prisma:194-198` | Stage 1 | Sync the comment block from Postgres to SQLite. |
 | R-LOW-2 | Tailwind v3 config file is dead drift (v4 uses CSS-based config in `globals.css`) | `tailwind.config.ts` | Stage 1 | Either delete the file (v4 doesn't need it) or wire it via `@config` in `globals.css` and update the `content` globs to include `./src/**`. |
-| R-LOW-3 | `TUBEFORGE_AUTH_SECRET` absent from local `.env` (studio runs open by default — documented dev mode) | (local dev only) | Stage 1 | Document in `SETUP.md` that local dev with the studio open is the default; production requires `TUBEFORGE_AUTH_SECRET` + `TUBEFORGE_REQUIRE_LOCK=1`. |
-| R-LOW-4 | `runScriptJob` is dead code (the fix for D-01 already exists) | `src/lib/tubeforge/script-job.ts:35-174` | Stage 1 | Wire `runScriptJob` into `startJob` for `POST /api/videos`. |
+| R-LOW-3 | `IBISMUH_STUDIO_AUTH_SECRET` absent from local `.env` (studio runs open by default — documented dev mode) | (local dev only) | Stage 1 | Document in `SETUP.md` that local dev with the studio open is the default; production requires `IBISMUH_STUDIO_AUTH_SECRET` + `IBISMUH_STUDIO_REQUIRE_LOCK=1`. |
+| R-LOW-4 | `runScriptJob` is dead code (the fix for D-01 already exists) | `src/lib/ibismuh/script-job.ts:35-174` | Stage 1 | Wire `runScriptJob` into `startJob` for `POST /api/videos`. |
 | R-LOW-5 | `reactStrictMode: false` in `next.config.ts` weakens React dev-mode check | `next.config.ts:8` | Stage 1 | Set `reactStrictMode: true`. |
 | R-LOW-6 | Playwright installed (`1.57.0`) but unwired (no `playwright.config.*`, no `e2e/` dir) | `package.json:74` | Stage 1 | Either wire Playwright E2E tests (preferred) or remove the dependency. |
 | R-LOW-7 | `bun-types` in devDependencies but `npm` is the documented PM — `test` and `check` scripts require bun | `package.json:99` | Stage 1 | Pick one PM. If npm: migrate `test-unit.ts` to node + tsx or vitest. If bun: update `SETUP.md` to document bun as the prerequisite. |

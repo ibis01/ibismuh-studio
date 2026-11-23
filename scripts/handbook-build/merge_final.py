@@ -4,7 +4,7 @@ from pypdf import PdfReader, PdfWriter
 
 A4_W, A4_H = 595.28, 841.89
 
-BUILD = '/home/z/my-project/scripts/handbook-build'
+BUILD = os.path.dirname(os.path.abspath(__file__))
 COVER = f'{BUILD}/cover.pdf'
 BODY = f'{BUILD}/body.pdf'
 OUT = '/home/z/my-project/download/Ibismuh_Studio_Maintenance_Handbook.pdf'

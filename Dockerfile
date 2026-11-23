@@ -1,4 +1,4 @@
-# TubeForge — production image (Stage 3, T-3.12).
+# Ibismuh Studio — production image (Stage 3, T-3.12).
 #
 # ONE image, TWO roles (docker-compose.yml / fly.toml pick the command):
 #   web    → node .next/standalone/server.js      (Next.js standalone, port 3000)
@@ -101,7 +101,7 @@ COPY --from=build --chown=ibismuh:ibismuh /app/prisma ./prisma
 # Prisma 7: the CLI reads its datasource from the config file — the
 # compose CMD's migrate-stage2 → `migrate deploy` dies with 'The
 # datasource.url property is required in your Prisma config file'
-# without it (the U2-port receipt, tubeforge 66606af).
+# without it (the U2-port receipt, ibismuh 66606af).
 COPY --from=build --chown=ibismuh:ibismuh /app/prisma.config.ts ./prisma.config.ts
 COPY --from=build --chown=ibismuh:ibismuh /app/tsconfig.json ./tsconfig.json
 COPY --from=build --chown=ibismuh:ibismuh /app/next.config.ts ./next.config.ts

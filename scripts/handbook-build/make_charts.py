@@ -17,7 +17,7 @@ BORDER = '#c0d0e2'
 TEXT_PRIMARY = '#142840'
 TEXT_MUTED = '#5a7a96'
 
-OUT = '/home/z/my-project/scripts/handbook-build'
+OUT = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------------------------------------------------------
 # Chart 1 - Boot payload before/after commit 42238f7 (gz bytes)

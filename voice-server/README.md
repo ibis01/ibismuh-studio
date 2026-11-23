@@ -1,4 +1,4 @@
-# TubeForge Voice Server — run voice cloning on YOUR laptop
+# Ibismuh Studio Voice Server — run voice cloning on YOUR laptop
 
 Free, open-source, unlimited narration. No API bills, no rate limits, your
 voice samples never leave your machine. Uses **Chatterbox** (Resemble AI,
@@ -10,7 +10,7 @@ Verified hardware: AMD Ryzen 7 8845HS (CPU-only), 32 GB RAM — works fine.
 > - **Oracle Cloud Always Free VM** — 24/7, no sleep, fastest of the three hosts → [`oracle/README.md`](oracle/README.md)
 > - **Hugging Face Space** — easiest, but 2-4× slower and sleeps when idle → [`hf-space/README.md`](hf-space/README.md)
 >
-> **Running TubeForge self-hosted (Docker/VPS)?** You can run ONE voice server
+> **Running Ibismuh Studio self-hosted (Docker/VPS)?** You can run ONE voice server
 > next to the app and share it with all your users — see
 > [Shared voice server](#shared-voice-server-operator) below. Zero per-user setup.
 
@@ -61,9 +61,9 @@ cloudflared tunnel --url http://localhost:8931
 
 It prints a line like `https://something-words.trycloudflare.com` — copy it.
 
-## Wire it into TubeForge
+## Wire it into Ibismuh Studio
 
-1. TubeForge → **Settings → AI Providers → Voiceover**
+1. Ibismuh Studio → **Settings → AI Providers → Voiceover**
 2. Pick **"My Machine (self-hosted)"**
 3. **Base URL** = the `https://...trycloudflare.com` URL from Window 2
 4. **API key** = the same `--key` secret you started the server with
@@ -81,7 +81,7 @@ It prints a line like `https://something-words.trycloudflare.com` — copy it.
 - **Languages:** default model is English. For 23 languages run
   `python voice_server.py --model chatterbox-multilingual --lang en`
   (the multilingual variant only ships in the original size — slower).
-- **Laptop asleep / tunnel off?** TubeForge shows a clear
+- **Laptop asleep / tunnel off?** Ibismuh Studio shows a clear
   "voice server unreachable" error — start the two windows and retry.
   The trycloudflare URL changes on each restart — update Base URL then.
 - **Keep the `--key` secret**: anyone with the URL + key can use your GPU.
@@ -93,7 +93,7 @@ It prints a line like `https://something-words.trycloudflare.com` — copy it.
 
 ## Shared voice server (operator)
 
-Self-hosting TubeForge (Docker, VPS, a sandbox)? Run ONE voice server on the
+Self-hosting Ibismuh Studio (Docker, VPS, a sandbox)? Run ONE voice server on the
 same box and every user gets voice cloning with **zero per-user setup** —
 no laptop, no tunnel, no Zhipu key. Users who save their OWN server URL in
 Settings still take precedence for their account.
@@ -110,19 +110,19 @@ HF_HOME=$PWD/hf-cache VOICE_THREADS=1 \
   .venv/bin/python voice_server.py --model chatterbox-turbo --port 8931 --key pick-any-secret
 ```
 
-Then in the TubeForge app's `.env`:
+Then in the Ibismuh Studio app's `.env`:
 
 ```bash
-TUBEFORGE_SHARED_VOICE_URL=http://127.0.0.1:8931
-TUBEFORGE_SHARED_VOICE_KEY=pick-any-secret   # the --key value above
+IBISMUH_STUDIO_SHARED_VOICE_URL=http://127.0.0.1:8931
+IBISMUH_STUDIO_SHARED_VOICE_KEY=pick-any-secret   # the --key value above
 # Optional — let the app start the server itself on boot (loopback URLs
 # only; spawns detached, waits for nothing, synthesis retries on 503 while
 # the model loads):
-TUBEFORGE_SPAWN_VOICE_SERVER=1
-TUBEFORGE_VOICE_SERVER_DIR=/opt/tubeforge/voice-server
-TUBEFORGE_VOICE_SERVER_MODEL=chatterbox-turbo
+IBISMUH_STUDIO_SPAWN_VOICE_SERVER=1
+IBISMUH_STUDIO_VOICE_SERVER_DIR=/opt/ibismuh/voice-server
+IBISMUH_STUDIO_VOICE_SERVER_MODEL=chatterbox-turbo
 # Recommended: CPU synthesis legitimately runs long
-TUBEFORGE_TIMEOUT_TTS=600000
+IBISMUH_STUDIO_TIMEOUT_TTS=600000
 ```
 
 What users see: the Clone panel says "Clones speak through this platform's

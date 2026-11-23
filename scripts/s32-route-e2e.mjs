@@ -4,7 +4,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 // running daemon. Three laws:
 //
 //   1. PRICING-UNVERIFIED BLOCK — with the daemon running WITHOUT
-//      TUBEFORGE_PRICING_VERIFIED, the FIRST paid-provider connection test
+//      IBISMUH_STUDIO_PRICING_VERIFIED, the FIRST paid-provider connection test
 //      is refused with the pricing-unverified error (not a wire failure,
 //      not a budget block). The zai gateway path stays open.
 //
@@ -20,8 +20,8 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //      route e2e documents it and asserts the gate's durable state.
 //
 // The suite runs in two daemon states:
-//   - Phase 1: daemon WITHOUT TUBEFORGE_PRICING_VERIFIED (pricing-unverified block)
-//   - Phase 2: daemon WITH TUBEFORGE_PRICING_VERIFIED=1 (durable hammer + restart)
+//   - Phase 1: daemon WITHOUT IBISMUH_STUDIO_PRICING_VERIFIED (pricing-unverified block)
+//   - Phase 2: daemon WITH IBISMUH_STUDIO_PRICING_VERIFIED=1 (durable hammer + restart)
 // The caller restarts the daemon between phases.
 //
 // Run: node scripts/s32-route-e2e.mjs  (after the daemon is up in the right phase)
@@ -84,7 +84,7 @@ check("1.2  the connection test route answers", first.status === 200, first.stat
 // ---- 2. detect the phase ----
 const pricingUnverified = /pricing is unverified|PRICING_STATUS/i.test(firstBody.error ?? "");
 if (pricingUnverified) {
-  console.log("\n[phase 1] pricing-unverified block (daemon without TUBEFORGE_PRICING_VERIFIED)");
+  console.log("\n[phase 1] pricing-unverified block (daemon without IBISMUH_STUDIO_PRICING_VERIFIED)");
   check("2.1  the first paid test is refused with the pricing-unverified error",
     firstBody.ok === false && pricingUnverified, firstBody.error);
   check("2.2  the error names PRICING_STATUS and the reconcile action",
@@ -107,7 +107,7 @@ if (pricingUnverified) {
   check("2.4  no reservations persisted (the block fired before admit)",
     reservations === 0, reservations);
 } else {
-  console.log("\n[phase 2] durable hammer + restart (daemon with TUBEFORGE_PRICING_VERIFIED=1)");
+  console.log("\n[phase 2] durable hammer + restart (daemon with IBISMUH_STUDIO_PRICING_VERIFIED=1)");
   // The daemon has pricing verified — exercise the durability law.
   // Hammer until the gate slams (same as s27, but now we prove durability).
   let blocked = null;

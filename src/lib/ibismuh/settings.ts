@@ -123,7 +123,7 @@ export async function deleteProviderCredential(
 }
 
 /** S186 — the credentials map plus the providers whose rows could not be
- *  decrypted (rotated/missing TUBEFORGE_ENCRYPTION_KEY). Callers degrade per
+ *  decrypted (rotated/missing IBISMUH_STUDIO_ENCRYPTION_KEY). Callers degrade per
  *  provider instead of failing the whole read. */
 export interface ProviderCredentialMap
   extends Map<string, { baseUrl: string; apiKey: string }> {
@@ -136,7 +136,7 @@ export interface ProviderCredentialMap
  *  disappeared" when the row for the other provider still exists.
  *
  *  S186 — decrypt-failure isolation: a row whose ciphertext no longer
- *  matches TUBEFORGE_ENCRYPTION_KEY (rotated key is the historical trigger)
+ *  matches IBISMUH_STUDIO_ENCRYPTION_KEY (rotated key is the historical trigger)
  *  is SKIPPED and reported in `unreadable` instead of throwing through the
  *  whole GET. One unreadable key degrades to "that provider shows no key" —
  *  it never 500s the settings page or erases the saved provider selection. */

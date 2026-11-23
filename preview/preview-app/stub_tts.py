@@ -6,7 +6,7 @@ the 1.8 GB XTTS-v2 model it generates a short silence/sine-wave WAV file using
 only stdlib + numpy. Lets us run the full API end-to-end in the sandbox
 without downloading the model.
 
-Set env var TUBEFORGE_PREVIEW=1 to activate this stub.
+Set env var IBISMUH_STUDIO_PREVIEW=1 to activate this stub.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import wave
 from pathlib import Path
 from typing import Optional
 
-log = logging.getLogger("tubeforge.stub_tts")
+log = logging.getLogger("ibismuh.stub_tts")
 
 _lock = threading.Lock()
 

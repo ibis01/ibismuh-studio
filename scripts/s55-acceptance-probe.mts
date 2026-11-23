@@ -38,7 +38,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //
 // Usage: S55_PHASE=seed node --import tsx scripts/s55-acceptance-probe.mts
 
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { execFile } from "child_process";
 import crypto from "node:crypto";
@@ -759,7 +759,7 @@ async function phaseReport() {
       gatewayQuotaSpent: 0,
       paidDispatches: 0,
       standinOnly: true,
-      spendGate: "untouched (no TUBEFORGE_SPEND_GATE override)",
+      spendGate: "untouched (no IBISMUH_STUDIO_SPEND_GATE override)",
     },
     ids: { userId: state.userId, orgId: state.orgId, videoId: state.videoId },
     meta: state.meta,

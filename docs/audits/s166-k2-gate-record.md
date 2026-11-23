@@ -22,7 +22,7 @@ forbids: the gate would open itself.
 S166 therefore ships the mouth classes, the art variants, and the pose
 schema v-next — and RECORDS this gate. The IK stays where it is today:
 
-- `src/lib/tubeforge/anim/ik.ts` — the existing two-bone planar solver
+- `src/lib/ibismuh/anim/ik.ts` — the existing two-bone planar solver
   (cosine law; refuse-not-clamp; pole continuity; S64 purity laws). It
   is called where the rig already calls it; S166 changed nothing there.
 

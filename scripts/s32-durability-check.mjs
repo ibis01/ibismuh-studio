@@ -8,14 +8,14 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 // restart is STILL blocked (the recorded total survived the restart from
 // the SpendReservation table, not from in-memory state).
 //
-// Pre-req: the daemon is running with TUBEFORGE_PRICING_VERIFIED=1 and has
+// Pre-req: the daemon is running with IBISMUH_STUDIO_PRICING_VERIFIED=1 and has
 // NOT been restarted since the hammer (the recorded total is in-memory).
 // This script hammers, snapshots, signals the caller to restart, then
 // verifies the post-restart state.
 //
-// Run AFTER a fresh daemon with TUBEFORGE_PRICING_VERIFIED=1:
+// Run AFTER a fresh daemon with IBISMUH_STUDIO_PRICING_VERIFIED=1:
 //   node scripts/s32-durability-check.mjs   # phase 1: hammer + snapshot
-//   # restart the daemon (still with TUBEFORGE_PRICING_VERIFIED=1)
+//   # restart the daemon (still with IBISMUH_STUDIO_PRICING_VERIFIED=1)
 //   node scripts/s32-durability-check.mjs   # phase 2: verify still blocked
 
 import fs from "node:fs";
@@ -92,7 +92,7 @@ if (!fs.existsSync(STATE_FILE)) {
   fs.writeFileSync(STATE_FILE, JSON.stringify(snapshot, null, 2));
   console.log(`[phase 1] snapshot: ${JSON.stringify(snapshot)}`);
   // Leave the account + reservations IN PLACE — the restart must see them.
-  console.log("[phase 1] DONE — now RESTART the daemon (still with TUBEFORGE_PRICING_VERIFIED=1) and re-run this script for phase 2");
+  console.log("[phase 1] DONE — now RESTART the daemon (still with IBISMUH_STUDIO_PRICING_VERIFIED=1) and re-run this script for phase 2");
   await prisma.$disconnect();
   process.exit(0);
 }

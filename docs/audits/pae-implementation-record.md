@@ -24,7 +24,7 @@
 | Prohibition | Verification |
 |---|---|
 | No second animation clock | Every directive evaluates on the scene-local clock `frameAt` resolves (or the 3D lane's own normalized t); frames come only from `anim/clock` — zero new timebase code |
-| The whiteboard engine untouched | `git diff 60a87e4..efaa5c7 -- src/lib/tubeforge/whiteboard/` is **empty** (also gated in `pae-push.sh`) |
+| The whiteboard engine untouched | `git diff 60a87e4..efaa5c7 -- src/lib/ibismuh/whiteboard/` is **empty** (also gated in `pae-push.sh`) |
 | No new renderer integration | The camera/tweens render through the existing SVG applier; the 3D objects through the existing three.js page — zero new rasterizers |
 | No Director routing logic | `director*.ts`, `production-profiles.ts` untouched; directives are doc-level data |
 | No unjustified dependencies | `git diff 60a87e4..efaa5c7 -- package.json bun.lock` is **empty** — zero new packages |
@@ -50,8 +50,8 @@ unrecoverable); receipt at `docs/baselines/pae-phase3-2026-11-16.txt`.
 
 ## 5. Packaging
 
-- **Bundle:** `/home/z/my-project/docs/tubeforge/pae-execution.bundle` (both branches, complete history; `git bundle verify` passes).
-- **Push script:** `/home/z/my-project/docs/tubeforge/pae-push.sh` — credential-safe (the askpass pattern, no token in args/URLs/disk), five sanity gates incl. the PAE file-set assertion, CI expectation **805**.
+- **Bundle:** `/home/z/my-project/docs/ibismuh/pae-execution.bundle` (both branches, complete history; `git bundle verify` passes).
+- **Push script:** `/home/z/my-project/docs/ibismuh/pae-push.sh` — credential-safe (the askpass pattern, no token in args/URLs/disk), five sanity gates incl. the PAE file-set assertion, CI expectation **805**.
 
 ## 6. The standing security note
 

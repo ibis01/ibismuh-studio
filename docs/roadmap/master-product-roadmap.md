@@ -1,4 +1,4 @@
-# TubeForge — Master Product & Engineering Roadmap (S162–S184)
+# Ibismuh Studio — Master Product & Engineering Roadmap (S162–S184)
 
 **Status: PROPOSED — adopted as direction of travel, nothing else.**
 
@@ -36,7 +36,7 @@ including users with very limited budgets, can afford to use.
 
 The central philosophy:
 
-> AI directs. TubeForge creates. Native engines animate. TubeForge renders.
+> AI directs. Ibismuh Studio creates. Native engines animate. Ibismuh Studio renders.
 
 Treat this as ONE integrated product programme, not separate improvements to
 animation, voice generation and AI video creation.
@@ -49,7 +49,7 @@ animation, voice generation and AI video creation.
 USER
         |
         v
-TUBEFORGE STUDIO
+IBISMUH STUDIO
         |
         v
    AI DIRECTOR
@@ -205,7 +205,7 @@ land.
 
 ### PROGRAMME B — AI Director (S168–S170)
 
-This is where TubeForge becomes fundamentally different from conventional
+This is where Ibismuh Studio becomes fundamentally different from conventional
 AI video generators.
 
 **S168 — Director Specification.** A formal spec defining what the AI
@@ -239,7 +239,7 @@ its timeline, apply easing, generate frame states, render through the native
 engine. The AI does not generate the animation.
 
 **S170 acceptance test:** disconnect the AI provider after the project has
-been approved. TubeForge must still render the complete video.
+been approved. Ibismuh Studio must still render the complete video.
 
 ---
 
@@ -260,7 +260,7 @@ not duplicated engines.
 
 ### PROGRAMME D — Affordable Voice Engine (S173–S176)
 
-Voice generation is one of TubeForge's major recurring production costs.
+Voice generation is one of Ibismuh Studio's major recurring production costs.
 **Extend the existing TTS architecture, do not build another subsystem** —
 the report inspected the repo and found the substantial surface already in
 place (`providers/tts.ts`, `providers/registry.ts`, `voice-clone.ts`,
@@ -308,7 +308,7 @@ not generated as an image.
 **S178 — Music and Sound Design.** Background music selection; scene-specific
 sound effects; narration ducking; automatic volume balancing; fades;
 beat-aware editing; audio normalization; music licensing checks. The
-Director selects audio assets; TubeForge handles mixing and synchronization.
+Director selects audio assets; Ibismuh Studio handles mixing and synchronization.
 
 ---
 
@@ -322,7 +322,7 @@ unreadable text.
 **S180 — Intelligent Scene Repair.** Identify a problem, propose a
 correction ("the second scene has insufficient visual movement" → introduce
 a camera movement / animate the foreground / add a native motion graphic /
-improve the transition). The user approves; TubeForge regenerates only the
+improve the transition). The user approves; Ibismuh Studio regenerates only the
 affected scene. Must preserve the existing revision, approval, cost-control
 and artifact-provenance guarantees.
 
@@ -449,8 +449,8 @@ its own implementation plan, file-level scope, tests and acceptance criteria.
 
 ## 8. What success should look like
 
-A user opens TubeForge and types: "Create a 5-minute educational video
-explaining how the human heart works." TubeForge: understands the request;
+A user opens Ibismuh Studio and types: "Create a 5-minute educational video
+explaining how the human heart works." Ibismuh Studio: understands the request;
 develops the script; creates the storyboard; selects the appropriate video
 type; generates or retrieves suitable illustrations; generates the narration
 using a free or affordable voice engine; plans the animations; executes the
@@ -461,9 +461,9 @@ The user never needs to know what easing functions, keyframes, SVG paths,
 character rigs or FFmpeg are. And a user can produce a complete video
 without paying for AI video-generation credits.
 
-TubeForge competes on three things: **quality** (professionally produced
+Ibismuh Studio competes on three things: **quality** (professionally produced
 look), **affordability** (limited budgets still produce excellent videos),
-**creative freedom** (AI helps direct, TubeForge's own engines provide
+**creative freedom** (AI helps direct, Ibismuh Studio's own engines provide
 precise control).
 
 The strategic decision: **we are not building another application that asks
@@ -481,7 +481,7 @@ Purpose: no programme duplicates shipped work.
 
 | Roadmap ask | Already in the repo | Evidence |
 |---|---|---|
-| S162 measured easing + choreography | **Code landed** — nine exact-op curves (seven opus MIT anchor sets via cubic-bezier evaluator; OT parabolic-in-out; OT exponential), counter tabular-nums + landing pulse + kinetic stagger, planner/llm-planner adoption | `e07fbb0`; `src/lib/tubeforge/anim/easing.ts`, `graphics/frame.ts`, `graphics/planner.ts`, `graphics/llm-planner.ts`; battery 902/902; blind kit 12/12 |
+| S162 measured easing + choreography | **Code landed** — nine exact-op curves (seven opus MIT anchor sets via cubic-bezier evaluator; OT parabolic-in-out; OT exponential), counter tabular-nums + landing pulse + kinetic stagger, planner/llm-planner adoption | `e07fbb0`; `src/lib/ibismuh/anim/easing.ts`, `graphics/frame.ts`, `graphics/planner.ts`, `graphics/llm-planner.ts`; battery 902/902; blind kit 12/12 |
 | S162 acceptance | Blind kit committed; **human scoring gate PENDING** | `scripts/s162-blind-kit.mts`; `docs/audits/s162-visual-acceptance-record.md` |
 | S163 native transition engine | **Landed both phases** — Phase A assembly-xfade vocabulary (`409fc59`); Phase B native `graphics/transitions.ts` (`9a9fb9e`) | Six-engine audit Part 4 S163; battery 920/920; CI 8/8 |
 | S164 whiteboard geometry (Rough.js native port) | **Code landed** — `da654d3`: roughen.ts + fills.ts in-house (no Rough.js dep), per-shape fnv1a seed law, S139 knobs honored; battery 928/928; live smoke byte-identical; blind kit W-series NOT YET RUN | Six-engine audit Part 4 S164; `scripts/s164-proof.mts` |

@@ -5,7 +5,7 @@ import fs from "fs";
 const token = fs.readFileSync("/tmp/tf-session.txt", "utf8").trim();
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-await ctx.addCookies([{ name: "tf_session", value: token, url: "http://localhost:3000" }]);
+await ctx.addCookies([{ name: "ibismuh_session", value: token, url: "http://localhost:3000" }]);
 const page = await ctx.newPage();
 page.on("response", (r) => {
   if (r.url().includes(".css") || r.url().includes("_next/static/chunks/main") || r.url().endsWith("/"))

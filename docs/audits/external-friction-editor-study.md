@@ -5,7 +5,7 @@
 | Trigger | The operator supplied `github.com/friction2d/friction` as reference input for the remaining graphics gap (the element-level canvas editor, named in the S123 close record §8) |
 | Repo | https://github.com/friction2d/friction — friction.graphics; motion graphics for vector/raster animation; **fork of enve** (Maurycy Liebner) |
 | License | **GPL-3.0-only** (`LICENSE.md`, "License (GPL-3.0-only)", copyright Ole-André Rodlie and contributors; enve lineage GPL as well) |
-| TubeForge license | Proprietary, all rights reserved (`/LICENSE`) |
+| Ibismuh Studio license | Proprietary, all rights reserved (`/LICENSE`) |
 | Verdict | **Clean-room reference only.** Architecture/UX concepts are read and restated in our own words with our own implementation; **zero source copied, no translation, no derivative modules**. Same boundary the AGPL VoiceStudio study drew (independent sidecar, protocol-level only), one notch stricter because friction is GPL and its domain (canvas editing) is where we intend to build. |
 | Evidence basis | Shallow clone inspected read-only: `src/core/canvas*.cpp/h`, `src/core/MovablePoints/`, `src/core/Boxes/boundingbox.h`, `src/core/canvasselectedboxesactions.cpp` |
 
@@ -37,7 +37,7 @@
 
 ## 3. License boundary (binding for this slice and its follow-ups)
 
-- No friction/enve source file, snippet, or translated logic enters the TubeForge tree — the implementation below is written against OUR contracts (`GraphicsDoc`, `Placement`, the ONE applier), not against friction's APIs.
+- No friction/enve source file, snippet, or translated logic enters the Ibismuh Studio tree — the implementation below is written against OUR contracts (`GraphicsDoc`, `Placement`, the ONE applier), not against friction's APIs.
 - Friction's documentation/UI photographs are not embedded. Screenshots are not copied.
 - If a future slice ever needs GPL code (e.g., a full SVG path editor), it must live in a **separate GPL process/sidecar** with a protocol boundary — the VoiceStudio decision, mirrored — never vendored into this tree.
 

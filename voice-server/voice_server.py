@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-TubeForge voice server — self-hosted voice cloning on YOUR machine.
+Ibismuh Studio voice server — self-hosted voice cloning on YOUR machine.
 
 Wraps Chatterbox (Resemble AI, MIT license — commercial use allowed) behind a
-tiny HTTP API that TubeForge calls for narration:
+tiny HTTP API that Ibismuh Studio calls for narration:
 
     POST /tts     {"text": "...", "voice": "<base64 wav or empty>", "speed": 1.0}
                   header: X-Voice-Key: <secret>          (only if you started
@@ -22,10 +22,10 @@ a 15-second narration paragraph takes ~15-45 s.
 Run:
     python voice_server.py --key my-secret            # auth recommended when
                                                       # exposed via a tunnel
-Expose to TubeForge (Vercel) with a free Cloudflare quick tunnel:
+Expose to Ibismuh Studio (Vercel) with a free Cloudflare quick tunnel:
     cloudflared tunnel --url http://localhost:8931
 Then paste the printed https://...trycloudflare.com URL into
-TubeForge -> Settings -> AI Providers -> Voiceover -> "My Machine (self-hosted)"
+Ibismuh Studio -> Settings -> AI Providers -> Voiceover -> "My Machine (self-hosted)"
 as the Base URL, and the same --key value as the API key.
 """
 
@@ -387,7 +387,7 @@ def pick_device(flag: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="TubeForge self-hosted voice server")
+    parser = argparse.ArgumentParser(description="Ibismuh Studio self-hosted voice server")
     parser.add_argument("--port", type=int, default=int(os.environ.get("VOICE_PORT", "8931")))
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--key", default=os.environ.get("VOICE_KEY", ""), help="shared secret (X-Voice-Key)")

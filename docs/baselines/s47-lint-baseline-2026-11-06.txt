@@ -1,4 +1,4 @@
-TubeForge — ESLint baseline frozen at S47 (2026-11-06 UTC)
+Ibismuh Studio — ESLint baseline frozen at S47 (2026-11-06 UTC)
 ==========================================================
 
 Command   : npx eslint .            (eslint.config.mjs, warn-level rules)

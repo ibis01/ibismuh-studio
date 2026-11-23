@@ -185,12 +185,12 @@ console.log("S40 probe — the env switch (injected, fail-closed)");
 
 // E. qcEnforcementMode reads an injected env — no process.env mutation here.
 {
-  eq(qcEnforcementMode({ TUBEFORGE_QC_ENFORCEMENT: "report" }), "report", "exact 'report'");
-  eq(qcEnforcementMode({ TUBEFORGE_QC_ENFORCEMENT: "enforce" }), "enforce", "explicit 'enforce'");
+  eq(qcEnforcementMode({ IBISMUH_STUDIO_QC_ENFORCEMENT: "report" }), "report", "exact 'report'");
+  eq(qcEnforcementMode({ IBISMUH_STUDIO_QC_ENFORCEMENT: "enforce" }), "enforce", "explicit 'enforce'");
   eq(qcEnforcementMode({}), "enforce", "absent → enforce");
-  eq(qcEnforcementMode({ TUBEFORGE_QC_ENFORCEMENT: "" }), "enforce", "empty → enforce");
-  eq(qcEnforcementMode({ TUBEFORGE_QC_ENFORCEMENT: "report " }), "enforce", "trailing space is junk → enforce");
-  eq(qcEnforcementMode({ TUBEFORGE_QC_ENFORCEMENT: "Report" }), "enforce", "case-sensitive → enforce");
+  eq(qcEnforcementMode({ IBISMUH_STUDIO_QC_ENFORCEMENT: "" }), "enforce", "empty → enforce");
+  eq(qcEnforcementMode({ IBISMUH_STUDIO_QC_ENFORCEMENT: "report " }), "enforce", "trailing space is junk → enforce");
+  eq(qcEnforcementMode({ IBISMUH_STUDIO_QC_ENFORCEMENT: "Report" }), "enforce", "case-sensitive → enforce");
 
   // The mode gates the DECISION, not the findings: report mode keeps the
   // would-block list for the UI's "advisory" badge.

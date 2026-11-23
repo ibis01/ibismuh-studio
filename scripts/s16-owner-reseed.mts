@@ -8,7 +8,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 // original org and videos are unrecoverable, so this mints a fresh identity:
 //   · the 6 orphan orgs (zero memberships — pure e2e litter) are removed;
 //   · a fresh org "ibis01's Studio" + the owner user (ibis01abc@gmail.com,
-//     password from argv, default the documented tubeforge2026) + the owner
+//     password from argv, default the documented ibismuh2026) + the owner
 //     membership, in the register route's exact row shape;
 //   · the login is then proven live against the daemon (the caller does
 //     this — the script only writes rows).
@@ -16,7 +16,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 import { hashPassword } from "../src/lib/ibismuh/tenant";
 
 const EMAIL = "ibis01abc@gmail.com";
-const password = process.argv[2] ?? "tubeforge2026";
+const password = process.argv[2] ?? "ibismuh2026";
 if (password.length < 8) {
   console.error("usage: s16-owner-reseed.mts [password >= 8 chars]");
   process.exit(1);

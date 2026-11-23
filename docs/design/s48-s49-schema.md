@@ -91,7 +91,7 @@ always wins); `resolveChatModel` is a pure, unit-tested resolver.
 
 ### 3.1 Doctrine
 
-In `islamic-history` policy mode, TubeForge must NEVER paint a face (or
+In `islamic-history` policy mode, Ibismuh Studio must NEVER paint a face (or
 figure) of the restricted subjects — the Prophet Muhammad ﷺ first, plus the
 Ten Promised Paradise, the Prophet's family, the Quranic prophets, the
 angels, and God. Enforcement is **system-level and layered**: no single layer

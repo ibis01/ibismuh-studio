@@ -822,7 +822,7 @@ model MusicTrack {
   isOriginal     Boolean @default(false) // synthesized by Ibismuh Studio — no third-party audio
 
   // --- Copyright / license record (kept for every track, shown in UI) ---
-  licenseType         String   @default("TubeForge Original") // e.g. "YouTube Audio Library", "CC BY 4.0", "Commercial license"
+  licenseType         String   @default("Ibismuh Studio Original") // e.g. "YouTube Audio Library", "CC BY 4.0", "Commercial license"
   sourceUrl           String?
   commercialUse       Boolean  @default(true)
   attributionRequired Boolean  @default(false)

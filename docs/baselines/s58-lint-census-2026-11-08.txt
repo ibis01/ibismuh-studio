@@ -1,4 +1,4 @@
-TubeForge lint census — 2026-11-08 (S58 close)
+Ibismuh Studio lint census — 2026-11-08 (S58 close)
 Command: npm run lint (eslint .)
 Result: 0 errors / 62 warnings (session start: 0 errors / 221 warnings)
 

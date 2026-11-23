@@ -1,22 +1,22 @@
-# PAE — Architecture Reconciliation & Implementation Specification (TubeForge Procedural Animation Engine)
+# PAE — Architecture Reconciliation & Implementation Specification (Ibismuh Studio Procedural Animation Engine)
 
 - **Date:** 2026-11-15
 - **Commit audited:** `60a87e4` (branch `s124/element-editor`), working tree clean at audit time; re-verified gates: typecheck / lint / unit suite all green before any PAE change.
 - **Method:** read-only audit first (zero code modified — the Phase 0 constraint), then this specification, then approval-gated incremental implementation. External reference: `lemomo-ai/lemo-opuscar`, cloned **anonymously** to `/tmp/lemo-opuscar` (no credentials used — all four leaked PATs remain revoked-pending; no token ever touched repo access).
-- **Purpose:** integrate the strongest technical ideas from Lemo-Opuscar into TubeForge through a **native Procedural Animation Engine (PAE)** — reconciled against the existing architecture, not pasted over it.
+- **Purpose:** integrate the strongest technical ideas from Lemo-Opuscar into Ibismuh Studio through a **native Procedural Animation Engine (PAE)** — reconciled against the existing architecture, not pasted over it.
 
 ---
 
 ## 0. The governing reconciliation
 
-**Principle 0 — extend, never duplicate.** TubeForge already owns a deterministic, frame-quantized, per-frame-screenshot render pipeline with timeline projection, QC lenses, budget walls, job recovery and cost/security posture. Lemo-Opuscar independently converged on the same core law ("the picture is a function of time"), which is *confirmation, not competition*. PAE is therefore not a new engine: it is the set of **capabilities the existing engines lack**, grafted onto the existing seams.
+**Principle 0 — extend, never duplicate.** Ibismuh Studio already owns a deterministic, frame-quantized, per-frame-screenshot render pipeline with timeline projection, QC lenses, budget walls, job recovery and cost/security posture. Lemo-Opuscar independently converged on the same core law ("the picture is a function of time"), which is *confirmation, not competition*. PAE is therefore not a new engine: it is the set of **capabilities the existing engines lack**, grafted onto the existing seams.
 
 ### The five standing prohibitions, restated as design gates
 
 | Prohibition | How PAE honors it |
 |---|---|
 | No second animation clock | Every PAE directive evaluates on the **scene-local clock** `frameAt` already resolves; frame counts come only from `anim/clock.ts framePlanWindows` at `doc.fps`. No new timebase exists anywhere in PAE. |
-| The whiteboard engine is untouchable | Zero diffs under `src/lib/tubeforge/whiteboard/` across the whole PAE program (CI-verifiable by path filter). |
+| The whiteboard engine is untouchable | Zero diffs under `src/lib/ibismuh/whiteboard/` across the whole PAE program (CI-verifiable by path filter). |
 | No new renderer integration | Camera/tween/events render through the **existing** graphics composer (SVG + `APPLY_GRAPHICS_FRAME_FN`) and the **existing** three.js lane (S94). No Blender, no WebGL post pipeline, no third rasterizer. |
 | No Director routing logic | PAE directives are doc-level data. No `director*.ts` file changes in S129–S134; planner *emission* of directives is a later, separately-approved stage. |
 | No unjustified dependencies | **Zero new npm dependencies** across all PAE stages. three.js is already present (S94). |
@@ -32,7 +32,7 @@ The directive's Phase 1 target list includes "2D and 3D renderer adapters". Read
 
 ## 1. Deliverable ① — current architecture inventory (evidence-based)
 
-### 1.1 The shared animation substrate — `src/lib/tubeforge/anim/` (S120 §8)
+### 1.1 The shared animation substrate — `src/lib/ibismuh/anim/` (S120 §8)
 
 | File | Exports | Law |
 |---|---|---|
@@ -69,9 +69,9 @@ The directive's Phase 1 target list includes "2D and 3D renderer adapters". Read
 
 ### 1.5 Lemo-Opuscar's strongest ideas — clean-room harvest
 
-Cloned anonymously; **license tiers verified from its LICENSE file**: code (`core/`, `tools/`, `styleboard/`, `plugin/`) = **MIT**; all Markdown docs + image prompts = **CC BY-NC 4.0**; demo films = CC BY 4.0. Clean-room law: no code copied, no doc text reproduced (TubeForge is commercial; NC docs are concept-reference only). Ideas harvested at concept level:
+Cloned anonymously; **license tiers verified from its LICENSE file**: code (`core/`, `tools/`, `styleboard/`, `plugin/`) = **MIT**; all Markdown docs + image prompts = **CC BY-NC 4.0**; demo films = CC BY 4.0. Clean-room law: no code copied, no doc text reproduced (Ibismuh Studio is commercial; NC docs are concept-reference only). Ideas harvested at concept level:
 
-| # | Opuscar idea | TubeForge verdict |
+| # | Opuscar idea | Ibismuh Studio verdict |
 |---|---|---|
 | 1 | `window.render(t)` — the picture is a pure function of time; any frame renderable alone, in any order, by any worker | **Already converged** (S123 `frameAt`, byte-identical pin) — confirmation |
 | 2 | Seeded determinism (`mulberry`, `hash`); no unseeded randomness, no `Date.now()` | Already the house law (pure modules, `arthash`); PAE extends it: any future randomness in directives must be seeded |
@@ -171,7 +171,7 @@ Byte-identity law: a doc with **no** PAE directives renders **byte-identically**
 | Item | License | Use | Commercial verdict |
 |---|---|---|---|
 | lemo-opuscar code (core/tools/styleboard/plugin) | MIT | Concept reference only (clean-room; nothing copied) | Permissive; attribution in this doc satisfies MIT for any idea-level influence |
-| lemo-opuscar docs (*.md, style prompts) | **CC BY-NC 4.0** | Concept reference ONLY — no text, tables, or prompt strings reproduced | **Non-commercial: TubeForge (a commercial SaaS) must not copy or adapt doc text.** This spec describes ideas, which are not copyrightable; no expression copied |
+| lemo-opuscar docs (*.md, style prompts) | **CC BY-NC 4.0** | Concept reference ONLY — no text, tables, or prompt strings reproduced | **Non-commercial: Ibismuh Studio (a commercial SaaS) must not copy or adapt doc text.** This spec describes ideas, which are not copyrightable; no expression copied |
 | lemo-opuscar demo films | CC BY 4.0 | Not used | n/a |
 | three.js (existing dep, S94) | MIT | Unchanged usage in the 3D adapter | Fine |
 | Playwright, ffmpeg (system) | Apache-2.0 / LGPL-GPL system binary | Unchanged | Existing posture |

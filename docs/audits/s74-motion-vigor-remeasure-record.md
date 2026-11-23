@@ -124,7 +124,7 @@ queue PASS · billing 40/40 · build 0 · e2e 30/30.
 **CI evidence (the open-code commit): run 42811386568 on `90b5c68` —
 all six jobs green** (Typecheck·Lint·Unit · Production build · Secret
 scan (gitleaks) · PostgreSQL integration · Money-path coverage · E2E
-(Playwright)): https://github.com/ibis01/tubeforge/actions/runs/42811386568
+(Playwright)): https://github.com/ibis01/ibismuh/actions/runs/42811386568
 (the Typecheck·Lint·Unit job needed one rerun — the known Install-ffmpeg
 apt-mirror flake last seen in S68; the rerun was green).
 
@@ -137,7 +137,7 @@ repo root from their own location, and every entry point follows the
 probe-first policy. **CI evidence: run 42816234222 on `c6db273` — all
 six jobs green** (one ffmpeg-install apt-mirror flake rerun — the same
 S68-round-2 shape):
-https://github.com/ibis01/tubeforge/actions/runs/42816234222. The
+https://github.com/ibis01/ibismuh/actions/runs/42816234222. The
 measurement (8 paired i2v renders + 16 blind vision calls) runs when the
 gateway window clears, via the lane supervisor. The close commit lands
 only on real clips + blind scores, per the stage law that took S62 from

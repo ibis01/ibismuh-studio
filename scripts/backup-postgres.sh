@@ -106,8 +106,8 @@ fi
 
 # --- 5. prune local dumps past the retention window -------------------------
 if [ "$RETENTION_DAYS" -gt 0 ]; then
-  PRUNED="$(find "$BACKUP_DIR" -name 'tubeforge-*.dump' -type f -mtime +"$RETENTION_DAYS" -print -delete | wc -l)"
-  find "$BACKUP_DIR" -name 'tubeforge-*.dump.sha256' -type f -mtime +"$RETENTION_DAYS" -delete
+  PRUNED="$(find "$BACKUP_DIR" -name 'ibismuh-*.dump' -type f -mtime +"$RETENTION_DAYS" -print -delete | wc -l)"
+  find "$BACKUP_DIR" -name 'ibismuh-*.dump.sha256' -type f -mtime +"$RETENTION_DAYS" -delete
   echo "[backup:pg] pruned $PRUNED local dump(s) older than $RETENTION_DAYS day(s)"
 fi
 

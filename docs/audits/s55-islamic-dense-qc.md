@@ -116,7 +116,7 @@ hit-free; a broken probe degrades to `unavailable`, never throws).
 
 ## Files
 
-- `src/lib/tubeforge/restricted-subjects.ts` — the dense L4 (pure
+- `src/lib/ibismuh/restricted-subjects.ts` — the dense L4 (pure
   planners + tripwire bridge + batched judge); L1–L3, L5 untouched.
 - `scripts/s55-dense-qc-probe.mts` — the evidence probe (versioned).
 - `scripts/test-unit.mts` — the S55 T-55.4 suite section (+4).

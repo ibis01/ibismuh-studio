@@ -1,4 +1,4 @@
-# TubeForge Voice Server — Oracle Cloud Always Free (24/7, no PC)
+# Ibismuh Studio Voice Server — Oracle Cloud Always Free (24/7, no PC)
 
 Run the voice server on Oracle's **Always Free** Ampere A1 VM: 4 ARM CPUs,
 24 GB RAM, up for months without sleep. $0 forever on the Always Free tier —
@@ -63,8 +63,8 @@ terminal app, works entirely from the phone browser:
    ```bash
    set -e
    cd /tmp
-   curl -fsSL -o voice_server.py https://raw.githubusercontent.com/ibis01/tubeforge/main/voice-server/voice_server.py
-   curl -fsSL -o setup-oracle.sh https://raw.githubusercontent.com/ibis01/tubeforge/main/voice-server/oracle/setup-oracle.sh
+   curl -fsSL -o voice_server.py https://raw.githubusercontent.com/ibis01/ibismuh/main/voice-server/voice_server.py
+   curl -fsSL -o setup-oracle.sh https://raw.githubusercontent.com/ibis01/ibismuh/main/voice-server/oracle/setup-oracle.sh
    bash setup-oracle.sh --key ismail-01
    ```
 
@@ -80,14 +80,14 @@ First start downloads the ~1.5 GB model — after ~2-5 min check:
 
 ```bash
 curl http://localhost:8931/health     # → {"ok": true, ...}
-journalctl -u tubeforge-voice -f      # live logs
+journalctl -u ibismuh-voice -f      # live logs
 ```
 
 For 23 languages instead of English: `sudo VOICE_MODEL=chatterbox-multilingual
-bash ~/setup-oracle.sh` (or edit `/opt/tubeforge-voice/voice.env`, then
-`sudo systemctl restart tubeforge-voice`).
+bash ~/setup-oracle.sh` (or edit `/opt/ibismuh-voice/voice.env`, then
+`sudo systemctl restart ibismuh-voice`).
 
-## Step 5 — wire into TubeForge
+## Step 5 — wire into Ibismuh Studio
 
 Settings → AI Providers → Voiceover → **My Machine (self-hosted)**:
 

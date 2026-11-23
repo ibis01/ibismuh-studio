@@ -305,8 +305,8 @@ try {
       // the server may keep uploads under the repo root OR under
       // .next/standalone (the standalone server chdirs) — sweep both.
       const roots = [
-        process.env.TUBEFORGE_UPLOAD_ROOT
-          ? path.resolve(process.env.TUBEFORGE_UPLOAD_ROOT)
+        process.env.IBISMUH_STUDIO_UPLOAD_ROOT
+          ? path.resolve(process.env.IBISMUH_STUDIO_UPLOAD_ROOT)
           : path.join(process.cwd(), "uploads"),
         path.join(process.cwd(), ".next", "standalone", "uploads"),
       ];

@@ -220,7 +220,7 @@ and `fly.toml` pick the command per service:
 cp .env.example .env      # set POSTGRES_PASSWORD, IBISMUH_STUDIO_AUTH_SECRET,
                            # IBISMUH_STUDIO_ENCRYPTION_KEY (required!)
 docker compose up -d --build
-docker compose up -d --scale worker=2   # more render capacity
+docker compose up -d --scale ibismuh-worker=2   # more render capacity
 ```
 
 Postgres runs as a compose service; migrations (`prisma migrate deploy`)
@@ -272,11 +272,11 @@ ONLY — in production the verification/reset links must reach inboxes.
 ### Operations quick reference
 
 ```bash
-docker compose logs -f worker          # queue activity (JSON lines)
+docker compose logs -f ibismuh-worker     # queue activity (JSON lines)
 curl -s localhost:3000/api/auth/status # liveness
 npx prisma migrate deploy              # manual schema sync (compose does it)
 npm run backup                         # SQLite only; on Postgres: pg_dump
-docker compose exec web node scripts/auth-reset.mjs --email you@example.com  # lockout recovery
+docker compose exec ibismuh-web node scripts/auth-reset.mjs --email you@example.com  # lockout recovery
 ```
 
 Usage metering: every AI call lands in `UsageRecord` (per user, per

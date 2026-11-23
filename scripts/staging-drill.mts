@@ -32,7 +32,7 @@
 //
 // Usage:
 //   node --import tsx scripts/staging-drill.mts \
-//     [--url https://tubeforge-staging.fly.dev] \
+//     [--url https://ibismuh-studio-staging.fly.dev] \
 //     [--suite all|health|billing|pipeline] \
 //     [--scene-poll-ms 90000] [--render-poll-ms 600000]
 //
@@ -47,7 +47,7 @@ function arg(name: string, fallback?: string): string | undefined {
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
 }
 
-const BASE = (arg("url") ?? process.env.STAGING_URL ?? "https://tubeforge-staging.fly.dev").replace(/\/+$/, "");
+const BASE = (arg("url") ?? process.env.STAGING_URL ?? "https://ibismuh-studio-staging.fly.dev").replace(/\/+$/, "");
 const SUITE = arg("suite") ?? "all";
 const SCENE_POLL_MS = Number(arg("scene-poll-ms") ?? 90_000);
 const RENDER_POLL_MS = Number(arg("render-poll-ms") ?? 600_000);

@@ -4,18 +4,18 @@
 #   bash scripts/docker-smoke.sh
 #
 # Builds the production image and walks the REAL topology end-to-end:
-# postgres (migrations) + SeaweedFS (S3-compatible object storage) + web
-# (Next.js · auth · API) + worker (queue execution). The acceptance walk:
+# ibismuh-postgres (migrations) + SeaweedFS (S3-compatible object storage) +
+# ibismuh-web (Next.js · auth · API) + ibismuh-worker (queue execution). The acceptance walk:
 #
 #   register → login → create project (HTTP, real routes)
-#   → ffmpeg renders a real MP4 inside the web container
+#   → ffmpeg renders a real MP4 inside the ibismuh-web container
 #   → put/get round-trips the artifact through the s3 driver into the store
 #     (S101 reservation lifecycle settled)
 #   → enqueue a job → the WORKER container executes it cross-process
-#   → a REAL whiteboard project renders IN-CONTAINER through the worker's
+#   → a REAL whiteboard project renders IN-CONTAINER through the ibismuh-worker's
 #     chromium (DEPLOYMENT §5.1 — launch args, frames, encode, artifact)
-#   → stop worker → seed an expired-lease running job + a pending job
-#   → start worker → the reaper bumps the fencing token, both jobs land done
+#   → stop ibismuh-worker → seed an expired-lease running job + a pending job
+#   → start ibismuh-worker → the reaper bumps the fencing token, both jobs land done
 #
 # Any failure exits non-zero. The compose project is torn down on exit.
 #
@@ -44,10 +44,10 @@ cd "$ROOT"
 export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(openssl rand -hex 16)}"
 export IBISMUH_STUDIO_AUTH_SECRET="${IBISMUH_STUDIO_AUTH_SECRET:-$(openssl rand -hex 32)}"
 export IBISMUH_STUDIO_ENCRYPTION_KEY="${IBISMUH_STUDIO_ENCRYPTION_KEY:-$(openssl rand -hex 32)}"
-export MINIO_ROOT_USER="${MINIO_ROOT_USER:-tubeforge}"
+export MINIO_ROOT_USER="${MINIO_ROOT_USER:-ibismuh}"
 export MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$(openssl rand -hex 16)}"
 
-COMPOSE=(docker compose -p tf-smoke -f docker-compose.yml -f docker-compose.smoke.yml)
+COMPOSE=(docker compose -p ibismuh-smoke -f docker-compose.yml -f docker-compose.smoke.yml)
 
 MINIO_PID=""
 cleanup() {
@@ -112,7 +112,7 @@ curl -fsSLo /tmp/weed.tar.gz "https://github.com/seaweedfs/seaweedfs/releases/do
 tar xzf /tmp/weed.tar.gz -C /tmp weed
 rm -rf /tmp/seaweed-data && mkdir -p /tmp/seaweed-data
 cat > /tmp/seaweed-s3.json << EOF
-{ "identities": [ { "name": "anon", "actions": ["Read", "List"] }, { "name": "tubeforge", "credentials": [{ "accessKey": "$MINIO_ROOT_USER", "secretKey": "$MINIO_ROOT_PASSWORD" }], "actions": ["Read", "Write", "List", "Tagging", "Admin"] } ] }
+{ "identities": [ { "name": "anon", "actions": ["Read", "List"] }, { "name": "ibismuh", "credentials": [{ "accessKey": "$MINIO_ROOT_USER", "secretKey": "$MINIO_ROOT_PASSWORD" }], "actions": ["Read", "Write", "List", "Tagging", "Admin"] } ] }
 EOF
 # -ip.bind=0.0.0.0 is NOT optional: -ip=127.0.0.1 alone binds the S3 gateway
 # to host loopback, and the containers reach the store over host.docker.internal
@@ -138,25 +138,25 @@ fi
 echo "[smoke] SeaweedFS S3 gateway healthy (host process, :9000)"
 
 # --- build + boot the topology ---
-echo "[smoke] building + booting the production topology (postgres + web + worker → MinIO)"
+echo "[smoke] building + booting the production topology (ibismuh-postgres + ibismuh-web + ibismuh-worker → MinIO)"
 "${COMPOSE[@]}" up -d --build
 
-echo "[smoke] waiting for web health (the image healthcheck: /api/auth/status)"
+echo "[smoke] waiting for ibismuh-web health (the image healthcheck: /api/auth/status)"
 WEB_OK=false
 for i in $(seq 1 90); do
   if curl -fsS http://localhost:3000/api/auth/status >/dev/null 2>&1; then WEB_OK=true; break; fi
   if [ "$i" -eq 45 ]; then
-    echo "[smoke] web still unhealthy at midpoint — last logs:"
-    "${COMPOSE[@]}" logs --tail 40 web || true
+    echo "[smoke] ibismuh-web still unhealthy at midpoint — last logs:"
+    "${COMPOSE[@]}" logs --tail 40 ibismuh-web || true
   fi
   sleep 5
 done
 if [ "$WEB_OK" != true ]; then
-  echo "[smoke] FAIL: web never became healthy"
-  "${COMPOSE[@]}" logs --tail 60 web || true
+  echo "[smoke] FAIL: ibismuh-web never became healthy"
+  "${COMPOSE[@]}" logs --tail 60 ibismuh-web || true
   exit 1
 fi
-echo "[smoke] web healthy"
+echo "[smoke] ibismuh-web healthy"
 
 # The acceptance walk's HTTP leg — through the REAL routes on the REAL
 # topology (fresh database: open registration, no legacy claim gate).
@@ -175,14 +175,14 @@ curl -fsS -b /tmp/smoke-cookies.txt -X POST http://localhost:3000/api/videos \
 echo "[smoke]   created the project through POST /api/videos"
 
 echo "[smoke] phase 1 — topology reality: migrations, columns, store round-trip, cross-process job, whiteboard render"
-"${COMPOSE[@]}" exec -T web node --import tsx scripts/smoke-walk.mts --phase 1
+"${COMPOSE[@]}" exec -T ibismuh-web node --import tsx scripts/smoke-walk.mts --phase 1
 
-echo "[smoke] stopping the worker — seeding the recovery scenario while it is DOWN"
-"${COMPOSE[@]}" stop worker
-"${COMPOSE[@]}" exec -T web node --import tsx scripts/smoke-walk.mts --phase 2
+echo "[smoke] stopping ibismuh-worker — seeding the recovery scenario while it is DOWN"
+"${COMPOSE[@]}" stop ibismuh-worker
+"${COMPOSE[@]}" exec -T ibismuh-web node --import tsx scripts/smoke-walk.mts --phase 2
 
-echo "[smoke] starting the worker — the reaper + claimer must land both jobs"
-"${COMPOSE[@]}" start worker
-"${COMPOSE[@]}" exec -T web node --import tsx scripts/smoke-walk.mts --phase 3
+echo "[smoke] starting ibismuh-worker — the reaper + claimer must land both jobs"
+""${COMPOSE[@]}" start ibismuh-worker
+"${COMPOSE[@]}" exec -T ibismuh-web node --import tsx scripts/smoke-walk.mts --phase 3
 
 echo "[smoke] PASS — the production topology walked end-to-end"

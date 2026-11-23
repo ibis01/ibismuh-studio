@@ -29,7 +29,7 @@ artifacts** (the original rubric's direction — never inverted).
 
 ## 2. The central finding (the round's verdict on the architecture)
 
-TubeForge can produce visually attractive scenes, but it does not
+Ibismuh Studio can produce visually attractive scenes, but it does not
 consistently produce **meaningful motion**:
 
 - Social: facial expression barely changes.

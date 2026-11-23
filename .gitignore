@@ -72,8 +72,8 @@ server.log
 /upload/
 /forensics/
 # packaging artifacts
-public/tubeforge-local.zip
-public/tubeforge/
+public/ibismuh-local.zip
+public/ibismuh/
 *.tar
 
 # editor / OS

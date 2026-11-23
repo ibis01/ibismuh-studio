@@ -361,7 +361,7 @@ export async function prepareSample(
   if (raw.length > 200 * 1024 * 1024)
     throw new Error("That file is enormous — trim it to the 3-30 seconds you want cloned");
 
-  const dir = path.join(os.tmpdir(), `tubeforge-clone-${randomUUID().slice(0, 8)}`);
+  const dir = path.join(os.tmpdir(), `ibismuh-clone-${randomUUID().slice(0, 8)}`);
   fs.mkdirSync(dir, { recursive: true });
   const ext = /^\.[a-z0-9]{1,5}$/i.test(stageExt) ? stageExt : ".bin";
   const staged = path.join(dir, `sample${ext}`);

@@ -13,7 +13,7 @@ Landed on the S66 head `445a1c6` linear. CI evidence: this file's §6.
 
 ## 1. The reconciliation decision — the canonical engine survives
 
-`src/lib/tubeforge/whiteboard/` (the S64 P0 + S65 E1 engine) carries E3+.
+`src/lib/ibismuh/whiteboard/` (the S64 P0 + S65 E1 engine) carries E3+.
 `contrib/whiteboard-e2/` (the sandbox E2 prototype, archived in S66) is
 **deleted** in this commit — its history remains reachable at `8d974d1`.
 
@@ -90,7 +90,7 @@ rejections / exactly one M per path / command walls (the S67 suite).
   now also sweeps `whiteboard/scene-<n>.mp4` + `whiteboard/preview-<id>.mp4`
   (the preview-id charset IS the engine's id law, so the pattern cannot
   miss a legal id).
-- **Editor Phase A (§5):** `src/components/tubeforge/whiteboard/`
+- **Editor Phase A (§5):** `src/components/ibismuh/whiteboard/`
   — `whiteboard-studio.tsx` (scaffold / regenerate / render / scene tabs /
   scrub) + `wb-canvas.tsx`. THE SEAM, enforced by construction: the pure
   page-side trio (`composeScene` / `framePayload` / `APPLY_FRAME_FN`)

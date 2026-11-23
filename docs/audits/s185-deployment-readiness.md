@@ -3,7 +3,7 @@
 **Status: PART 1 LANDED (`374c853`) — parts 2+ PROPOSED (operator-gated).**
 
 An external production review (2026-11, relayed by the operator) audited
-commit `30f70d9` and concluded: do NOT migrate TubeForge to Vercel — the
+commit `30f70d9` and concluded: do NOT migrate Ibismuh Studio to Vercel — the
 Fly.io topology of record is the right shape for the rendering worker and
 the durable queue. That conclusion merely re-affirms DEPLOYMENT.md §1
 (S33's one-topology decision, on record since 2026-11-05). The review's
@@ -54,7 +54,7 @@ image — the bump is CI-proven, not asserted.
 
 | Part | The ask | The evidence that closes it | Gate |
 | --- | --- | --- | --- |
-| 2 | Provision staging: `fly launch --no-deploy --copy-config --name tubeforge-staging`, a Neon BRANCH of the database (resettable), a separate R2 bucket, fresh staging secrets — DEPLOYMENT.md §3's table, via `scripts/staging-provision.sh` | `fly status` receipt + the provisioned secret NAMES (never values) + `docs/runbooks/staging.md` followed end-to-end | operator accounts (flyctl, Neon, Cloudflare) |
+| 2 | Provision staging: `fly launch --no-deploy --copy-config --name ibismuh-studio-staging`, a Neon BRANCH of the database (resettable), a separate R2 bucket, fresh staging secrets — DEPLOYMENT.md §3's table, via `scripts/staging-provision.sh` | `fly status` receipt + the provisioned secret NAMES (never values) + `docs/runbooks/staging.md` followed end-to-end | operator accounts (flyctl, Neon, Cloudflare) |
 | 3 | The real render drill: submit a real project on staging, deliver the mp4 through the R2 presign path, ffprobe the delivered bytes | the drill receipt (duration, bytes, sha256) + the queue row lifecycle, appended here | part 2 |
 | 4 | Reliability drills: `scripts/s75-e12-queue-drill.mts` against the REAL staging queue (dead-worker recovery), cancellation mid-render, the backup restore drill (`scripts/restore-drill.mts`) | drill receipts on disk (`scripts/staging-drills.sh` is the harness) | part 3 |
 | 5 | The six production modes validated in the HOSTED environment (free/standard/premium across the six engines' render paths — the S184 anti-cripple law proven on delivered bytes, not in the sandbox) | per-mode delivered videos + the mode-contract assertions run against staging data | part 4 |

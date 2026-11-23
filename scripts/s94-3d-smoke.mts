@@ -95,7 +95,7 @@ async function main() {
     sfx: "none",
     // The 3D clip AS an ordinary footage asset — the compositor cannot tell
     // it apart from stock footage, and must not: that is the point.
-    stock: { source: "stock", file: "stock-01.mp4", query: "3d scene", credit: "TubeForge 3D engine", pageUrl: "", durationSec: 4 },
+    stock: { source: "stock", file: "stock-01.mp4", query: "3d scene", credit: "Ibismuh Studio 3D engine", pageUrl: "", durationSec: 4 },
   };
   fs.copyFileSync(result.file, path.join(dir, "stock-01.mp4"));
   await ffmpeg(["-f", "lavfi", "-i", "sine=frequency=440:duration=4", "-ar", "48000", "-ac", "1", path.join(dir, sceneWavFile(1))]);

@@ -8,7 +8,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 
 const BASE = "http://localhost:3000";
 const RUN = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-const EMAIL = `s68-diag-${RUN}@tubeforge.test`;
+const EMAIL = `s68-diag-${RUN}@ibismuh.test`;
 const PASSWORD = "s68-whiteboard-123";
 const t0 = Date.now();
 const lap = (label: string) => `+${((Date.now() - t0) / 1000).toFixed(1)}s ${label}`;
@@ -56,7 +56,7 @@ async function call(method: string, path: string, body?: unknown) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   const setCookie = res.headers.get("set-cookie");
-  if (setCookie?.startsWith("tf_session=")) cookie = setCookie.split(";")[0];
+  if (setCookie?.startsWith("ibismuh_session=")) cookie = setCookie.split(";")[0];
   const json = (await res.json().catch(() => null)) as unknown;
   return { status: res.status, json };
 }

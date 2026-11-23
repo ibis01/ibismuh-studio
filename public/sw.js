@@ -1,4 +1,4 @@
-// TubeForge service worker — deliberately conservative.
+// Ibismuh Studio service worker — deliberately conservative.
 //
 // The app is a live dashboard driven by polling APIs; stale HTML or stale
 // chunks would break it in confusing ways. So: NETWORK-FIRST for everything,

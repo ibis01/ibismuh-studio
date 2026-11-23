@@ -4,10 +4,10 @@
 |---|---|
 | Stage | **S124** — the element-level graphics editor (the S123 close record §8 follow-up slice): select · drag · scale · z-order in the Graphics Studio's **Layout mode** |
 | Baseline | `s123/full-execution` (685 unit tests, the S123 proof GATE GREEN, production build exit 0) — the slice rode the standing "continue building till you finish all" authorization and the operator's "Continue" with the friction reference supplied (2026-11-14) |
-| Reference | `docs/audits/external-friction-editor-study.md` — the **clean-room** study of friction2d/friction (GPL-3.0-only, enve lineage); TubeForge is proprietary, so concepts only: the explicit geometry mode, the four-action z-order vocabulary, overlay handles reading the composed page's own geometry. **Zero source copied** — the implementation is written against OUR contracts (`GraphicsDoc`, `Placement`, the ONE applier) |
+| Reference | `docs/audits/external-friction-editor-study.md` — the **clean-room** study of friction2d/friction (GPL-3.0-only, enve lineage); Ibismuh Studio is proprietary, so concepts only: the explicit geometry mode, the four-action z-order vocabulary, overlay handles reading the composed page's own geometry. **Zero source copied** — the implementation is written against OUR contracts (`GraphicsDoc`, `Placement`, the ONE applier) |
 | Design record | `docs/design/s124-graphics-element-editor.md` (the laws, the acceptance criteria, the honest gaps) |
 | Result | **LANDED** on `s124/element-editor` (5 commits on `s123/full-execution`). The graphics studio edits element geometry through the validated PUT: hit-test → drag/scale gestures previewing through the ONE applier → commit → the strict byte-stable write. No grammar changes, no new routes, no server changes, no new dependencies |
-| Gates | tsc clean · eslint `.` clean (repo-wide, the CI gate) · unit **685 → 699, 0 failed** (14 S124 pins) · billing 40 · queue restart-recovery PASS · coverage **52.68% ≥ 50%** floor · production build exit 0 · the regression law holds (`git diff 37796ce..HEAD -- src/lib/tubeforge/whiteboard/` **empty**) |
+| Gates | tsc clean · eslint `.` clean (repo-wide, the CI gate) · unit **685 → 699, 0 failed** (14 S124 pins) · billing 40 · queue restart-recovery PASS · coverage **52.68% ≥ 50%** floor · production build exit 0 · the regression law holds (`git diff 37796ce..HEAD -- src/lib/ibismuh/whiteboard/` **empty**) |
 
 ## 1. Commit map
 
@@ -40,4 +40,4 @@
 
 ## 4. Delivery
 
-Same path as S123: the branch `s124/element-editor` rides on `s123/full-execution` (both packaged for the operator's push — `docs/tubeforge/s124-execution.bundle` + `s124-push.sh` in the sandbox docs folder, supersedes nothing; the s123 bundle stays valid). No write credentials exist in this sandbox and the chat-leaked token was never used — **it must still be revoked**.
+Same path as S123: the branch `s124/element-editor` rides on `s123/full-execution` (both packaged for the operator's push — `docs/ibismuh/s124-execution.bundle` + `s124-push.sh` in the sandbox docs folder, supersedes nothing; the s123 bundle stays valid). No write credentials exist in this sandbox and the chat-leaked token was never used — **it must still be revoked**.

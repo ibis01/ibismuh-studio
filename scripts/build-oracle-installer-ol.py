@@ -37,7 +37,7 @@ if ! command -v curl >/dev/null || ! command -v tar >/dev/null; then
 fi
 
 KEY="${KEY:-${VOICE_KEY:-$(openssl rand -hex 16 2>/dev/null || head -c16 /dev/urandom | od -An -tx1 | tr -d ' \n')}}"
-APP_DIR="/opt/tubeforge-voice"
+APP_DIR="/opt/ibismuh-voice"
 mkdir -p "$APP_DIR"
 cp -f "$(cd "$(dirname "$0")" && pwd)/voice_server.py" "$APP_DIR/voice_server.py" 2>/dev/null \
   || cp -f voice_server.py "$APP_DIR/voice_server.py" 2>/dev/null || true
@@ -86,7 +86,7 @@ VOICE_PORT=$PORT
 EOF
 chmod 600 "$APP_DIR/voice.env"
 
-cat > /etc/systemd/system/tubeforge-voice.service <<EOF
+cat > /etc/systemd/system/ibismuh-voice.service <<EOF
 [Unit]
 Description=Ibismuh Studio voice server (Chatterbox, self-hosted)
 After=network-online.target
@@ -104,7 +104,7 @@ Environment=OMP_NUM_THREADS=4
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable --now tubeforge-voice.service
+systemctl enable --now ibismuh-voice.service
 
 echo "==> [5/5] opening port $PORT in the local firewall"
 iptables -I INPUT 1 -p tcp --dport "$PORT" -j ACCEPT
@@ -128,8 +128,8 @@ cat <<EOF
     Base URL : http://$PUBLIC_IP:$PORT
     API key  : $KEY
 
-  Check status:    systemctl status tubeforge-voice
-  Live logs:       journalctl -u tubeforge-voice -f
+  Check status:    systemctl status ibismuh-voice
+  Live logs:       journalctl -u ibismuh-voice -f
   First start downloads the ~1.5 GB Chatterbox model - give it 2-5 min,
   then:  curl http://localhost:$PORT/health   ->  {"ok": true, ...}
 ====================================================================

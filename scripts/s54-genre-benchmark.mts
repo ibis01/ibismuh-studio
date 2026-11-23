@@ -45,7 +45,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 // Unset S54_LEG = everything in one shot (the original behavior, for a
 // friendlier environment). State file: /tmp/s54-state.json.
 
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import { execFile } from "child_process";
 import crypto from "node:crypto";

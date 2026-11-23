@@ -1,7 +1,7 @@
 # Whiteboard VideoScribe-Like Improvement — Stage 0 Reconciliation
 
 **Status:** READ-ONLY reconciliation of the operator's improvement plan
-("TubeForge Whiteboard Engine: VideoScribe-like improvement plan",
+("Ibismuh Studio Whiteboard Engine: VideoScribe-like improvement plan",
 delivered 2026-11-13) against the live whiteboard engine at HEAD `276cd49`.
 No product code was changed by this stage. This document is the plan's
 §"Recommended implementation order" mapped onto the live tree: proposed
@@ -184,11 +184,11 @@ under the existing loudness contract (render.ts already mixes VO + bed).
 | Plan need | Reconciled surface |
 | --- | --- |
 | Benchmark + rubric harness | `scripts/w1-whiteboard-benchmark.mts` (the s67-e9a-proof pattern: scaffold → validate → render → receipts) + `docs/audits/w1-blind-rubric.md` |
-| Beat planner (native) | `src/lib/tubeforge/whiteboard/beat-plan.ts` — pure, deterministic, sentence/punctuation/cue rules |
+| Beat planner (native) | `src/lib/ibismuh/whiteboard/beat-plan.ts` — pure, deterministic, sentence/punctuation/cue rules |
 | Beat planner (LLM) | llm-planner.ts extends to emit beats in the SAME schema; degradation stays beat-by-beat to native |
-| Asset authoring validator | `src/lib/tubeforge/whiteboard/asset-validate.ts` — wired into `loadLibrary` (warn-and-exclude) + the S69 upload gate (reject with readable errors) |
+| Asset authoring validator | `src/lib/ibismuh/whiteboard/asset-validate.ts` — wired into `loadLibrary` (warn-and-exclude) + the S69 upload gate (reject with readable errors) |
 | Word anchors | timing.ts `scheduleScene(opts)` + the render job passing the captions lane's anchors; `estimateProjectFrames` unchanged (duration is still the hard clock) |
-| Camera director | `src/lib/tubeforge/whiteboard/camera-director.ts` — focus rects from placement/text bounds → `CameraEvent[]`; `cameraDrift` demoted to the no-keys fallback |
+| Camera director | `src/lib/ibismuh/whiteboard/camera-director.ts` — focus rects from placement/text bounds → `CameraEvent[]`; `cameraDrift` demoted to the no-keys fallback |
 | Continuous canvas | storyboard.ts `board` policy + `FrameState` carried-ink layer + composeScene accepting carried placements; render manifest (S117) records board state per scene |
 | Sound events | sfx.ts kinds + whiteboard event rows; mixed under the existing bed/VO chain, OFF by default |
 
@@ -252,7 +252,7 @@ CI-green push (the house law).
 - Pins: benchmark determinism (two runs, identical frame hashes).
 
 **W2 — semantic beat compiler** (exit: draw order is semantic)
-- `src/lib/tubeforge/whiteboard/beat-plan.ts`: the `WhiteboardBeat`
+- `src/lib/ibismuh/whiteboard/beat-plan.ts`: the `WhiteboardBeat`
   type + native rules (sentence type, keywords, punctuation → purpose /
   action / emphasis / windows) + `compileBeats` →
   `AnimationEvent[]`.

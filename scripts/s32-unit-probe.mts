@@ -19,10 +19,10 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 //
 // Run: node --import tsx scripts/s32-unit-probe.mts
 
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 // The probe exercises BOTH the budget gate (with pricing verified) AND the
 // pricing-unverified block (without). The env override is toggled per-section.
-process.env.TUBEFORGE_PRICING_VERIFIED ??= "1";
+process.env.IBISMUH_STUDIO_PRICING_VERIFIED ??= "1";
 
 import { withCtx, hashPassword } from "../src/lib/ibismuh/tenant";
 import {
@@ -140,19 +140,19 @@ console.log("\n§1 pricing provenance");
     { legacy: priceForModel("gpt-4.1"), fallback: priceForModel("gpt-6-astra") });
 
   // With the env override OFF, pricingVerified() returns false.
-  const saved = process.env.TUBEFORGE_PRICING_VERIFIED;
-  delete process.env.TUBEFORGE_PRICING_VERIFIED;
+  const saved = process.env.IBISMUH_STUDIO_PRICING_VERIFIED;
+  delete process.env.IBISMUH_STUDIO_PRICING_VERIFIED;
   check("without the env override, pricingVerified() is false (provisional)",
     pricingVerified() === false, pricingVerified());
-  process.env.TUBEFORGE_PRICING_VERIFIED = saved;
+  process.env.IBISMUH_STUDIO_PRICING_VERIFIED = saved;
   check("restoring the env override re-admits", pricingVerified() === true);
 }
 
 // ---------- §2 the pricing-unverified block ----------
 console.log("\n§2 pricing-unverified block");
 {
-  const saved = process.env.TUBEFORGE_PRICING_VERIFIED;
-  delete process.env.TUBEFORGE_PRICING_VERIFIED;
+  const saved = process.env.IBISMUH_STUDIO_PRICING_VERIFIED;
+  delete process.env.IBISMUH_STUDIO_PRICING_VERIFIED;
   await resetGate();
   let blocked: unknown = null;
   try {
@@ -167,7 +167,7 @@ console.log("\n§2 pricing-unverified block");
     blocked instanceof Error ? blocked.message : "");
   check("the zai gateway stays ungated even with unverified pricing",
     (await admitDispatch({ provider: "zai", model: "glm-4.6", estimatedMicro: 1 })) === null);
-  process.env.TUBEFORGE_PRICING_VERIFIED = saved;
+  process.env.IBISMUH_STUDIO_PRICING_VERIFIED = saved;
 }
 
 // ---------- §3 durable reservations ----------

@@ -5,7 +5,7 @@
 | Milestone | G1 — Motion graphics, executed as stage **S123** (decision D1) under the S120 programme |
 | Revision | **Rev 2** (2026-11-14) — approved decisions D1–D4 incorporated; unmerged branch prior art reconciled into the plan |
 | Status | **APPROVED with revisions.** Implementation authorized 2026-11-14 ("build all the gaps left"): P0–P2 executed on the `s123/p0-p2-execution` branch (merge receipts in the commit subjects). P3–P5 remain gated on their own authorization; the S120 §4 blind re-score needs its scorers. |
-| Main repository | `ibis01/tubeforge` (all work happens here; TubeForge stays the single production orchestrator) |
+| Main repository | `ibis01/ibismuh` (all work happens here; Ibismuh Studio stays the single production orchestrator) |
 | Baseline | The G0 read-only audit (2026-11-14): 18 declarations verified against main HEAD `37796ce`, risk register + S120 doc-correction clauses recorded |
 | References | `kaomei/stickman-video-director` (MIT — workflow patterns only); in-repo drafts `docs/audits/external-2d-animation-roadmap.md` + `docs/audits/external-w5-g1-api-drafts.md` (merged from `docs/external-2d-roadmap`, PR #13) |
 
@@ -26,7 +26,7 @@ Read-only inspection on 2026-11-14 revealed that the G1 programme had already be
 
 | Branch | PR | Content | Disposition |
 |---|---|---|---|
-| `feat/g1-graphics-doc` | #14 | `358412f` G1.1 — GraphicsDoc grammar + validator (`src/lib/tubeforge/graphics/types.ts`) + `test-unit.mts` registration | **ADOPTED** (P1, merged) |
+| `feat/g1-graphics-doc` | #14 | `358412f` G1.1 — GraphicsDoc grammar + validator (`src/lib/ibismuh/graphics/types.ts`) + `test-unit.mts` registration | **ADOPTED** (P1, merged) |
 | `feat/g1-graphics-frame` | #15 | + `be9eb0b` G1.2 — frame truth `frameAt(doc, tMs)` (`graphics/frame.ts`, pure) | **ADOPTED** (P1, merged) |
 | `feat/g1-graphics-compose` | #16 | + `49b0d40` G1.3 — composer: static skeleton + one `APPLY_GRAPHICS_FRAME_FN` (`graphics/compose.ts`) | **ADOPTED** (P2, merged) |
 | `feat/g1-graphics-planner` | #17 | + `540ca06` G1.4 — deterministic scaffold planner + metered LLM planner with per-element degradation (`graphics/planner.ts`, `graphics/llm-planner.ts`) | **ADOPTED** (P2, merged) |
@@ -66,7 +66,7 @@ The `g1` chain and the `s121`/`s122` chains both edit `scripts/test-unit.mts` �
 
 ## 3. Objective and scope
 
-Land a motion-graphics engine sharing TubeForge's renderer, timeline and QC gates: declarative graphics doc, kinetic text, counters, bars/charts, icons, shapes, staged reveals, transitions; planner (native + LLM); draft/preflight paths; timeline projection; compositor integration; QC; studio UI; e2e.
+Land a motion-graphics engine sharing Ibismuh Studio's renderer, timeline and QC gates: declarative graphics doc, kinetic text, counters, bars/charts, icons, shapes, staged reveals, transitions; planner (native + LLM); draft/preflight paths; timeline projection; compositor integration; QC; studio UI; e2e.
 
 **Out of scope:** skeletal characters (K1 = S122's track), cinematic camera (C2-ext), per-scene engine routing logic (Stage R — D2 keeps only advisory metadata), mixed-engine composition (Stage X), VoiceStudio (T-series = S121's track). Graphics is a peer lane: "no camera; the doc clock IS the timeline" (compose.ts).
 
@@ -76,7 +76,7 @@ Land a motion-graphics engine sharing TubeForge's renderer, timeline and QC gate
 |---|---|---|
 | Stickman (MIT) | `skills/directing-stickman-videos/scripts/b6_character_preflight.py` | Preflight-before-spend pattern (§7 `graphics/preflight.ts`) |
 | Stickman (MIT) | `skills/directing-stickman-videos/scripts/b6_iteration.py` | Draft viewport pattern (scale ∈ {0.5, 0.75, 1.0}, drafts non-reviewable, `inherited_review_credit: false`); fingerprint-diff repair worklist |
-| Stickman (MIT) | `skills/directing-stickman-videos/references/b6-sample-1-acceptance.md` | QC matrix **structure** only (IDs, required result, allowed variation, restricted N/A, no broad-pass cover) — rows are TubeForge-authored |
+| Stickman (MIT) | `skills/directing-stickman-videos/references/b6-sample-1-acceptance.md` | QC matrix **structure** only (IDs, required result, allowed variation, restricted N/A, no broad-pass cover) — rows are Ibismuh Studio-authored |
 | In-repo drafts | `docs/audits/external-2d-animation-roadmap.md` | The file-by-file plan the G1.x branches implemented; its house-law table (no second renderer, one frame truth, determinism, named walls, leaf modules, AI-suggests-human-approves) binds this spec |
 | In-repo drafts | `docs/audits/external-w5-g1-api-drafts.md` | The G1 API draft — compare at P2 against the landed `types.ts`/`frame.ts`/`compose.ts`, record divergences like Part G did for W5 |
 
@@ -128,17 +128,17 @@ The shared time-based model is already the substrate's design; fps enters **only
 
 | File | Change | Phase | State |
 |---|---|---|---|
-| `src/lib/tubeforge/graphics/types.ts` | §5.1 routing field + validator handling (advisory, tolerant) | P1 | **Landed** |
+| `src/lib/ibismuh/graphics/types.ts` | §5.1 routing field + validator handling (advisory, tolerant) | P1 | **Landed** |
 | `scripts/test-unit.mts` | D2/D3 pin suites (routing neutrality, per-fps conversion pins); suite relabels carry S123 | P1 | **Landed (P1 half); budget-at-fps + compose-neutrality pins at P2** |
-| `src/lib/tubeforge/types.ts` | Add the `graphics` entry to `RENDER_MODES` (L107) — lockstep with the lane change (S120 rule). `TimelineTrackDTO.kind` L580 already seats it | P2 | This drop |
-| `src/lib/tubeforge/render-lane.ts` | Extend `RenderLane`/`resolveRenderLane` with the graphics lane; extend unit pins | P2 | This drop |
-| `src/lib/tubeforge/graphics/tracks.ts` | S87 projection via `framePlanWindows(sceneMs, doc.fps)` | P2 | This drop |
-| `src/lib/tubeforge/graphics/preflight.ts` | R-1 fix: the budget wall computed against the DELIVERED count | P2 | This drop |
-| `src/lib/tubeforge/render.ts` | Graphics segment builder + compositor case (the `render3d.ts` peer-lane precedent; one renderer) | P3 | Gated |
-| `src/lib/tubeforge/render-assembly.ts` | Approved-only graphics manifests (S117 rule; drafts never enter) | P3 | Gated |
-| `src/lib/tubeforge/render-qc.ts` + `qc.ts` | Register the graphics QC group | P3 | Gated |
+| `src/lib/ibismuh/types.ts` | Add the `graphics` entry to `RENDER_MODES` (L107) — lockstep with the lane change (S120 rule). `TimelineTrackDTO.kind` L580 already seats it | P2 | This drop |
+| `src/lib/ibismuh/render-lane.ts` | Extend `RenderLane`/`resolveRenderLane` with the graphics lane; extend unit pins | P2 | This drop |
+| `src/lib/ibismuh/graphics/tracks.ts` | S87 projection via `framePlanWindows(sceneMs, doc.fps)` | P2 | This drop |
+| `src/lib/ibismuh/graphics/preflight.ts` | R-1 fix: the budget wall computed against the DELIVERED count | P2 | This drop |
+| `src/lib/ibismuh/render.ts` | Graphics segment builder + compositor case (the `render3d.ts` peer-lane precedent; one renderer) | P3 | Gated |
+| `src/lib/ibismuh/render-assembly.ts` | Approved-only graphics manifests (S117 rule; drafts never enter) | P3 | Gated |
+| `src/lib/ibismuh/render-qc.ts` + `qc.ts` | Register the graphics QC group | P3 | Gated |
 | `src/app/api/videos/[id]/render/route.ts` | Accept/validate the graphics lane | P3/P4 | Gated |
-| `src/components/tubeforge/scene-editor.tsx` | Graphics preview/edit affordances via the existing scene stack | P4 | Gated |
+| `src/components/ibismuh/scene-editor.tsx` | Graphics preview/edit affordances via the existing scene stack | P4 | Gated |
 | `README.md`, `docs/design/s120-2d-animation-roadmap.md` | Stage-close status; **merged via `docs/s120-status-reconcile` (PR #22) at P0** | P0/P5 | P0 done; close edits at P5 |
 
 Note: the earlier proposal of giving `director-plan.ts` a graphics engine value is **removed from G1 entirely** under D2 — routing metadata lives only in the graphics doc, and Stage R owns the director side.
@@ -151,14 +151,14 @@ Note: the earlier proposal of giving `director-plan.ts` a graphics engine value 
 
 | # | File | Purpose | Phase |
 |---|---|---|---|
-| 1 | `src/lib/tubeforge/graphics/tracks.ts` | `graphicsTracks(doc)` → S87 projection via `framePlanWindows(sceneMs, doc.fps)` — mirror of `whiteboard/tracks.ts` law; one clip per scene, contiguous by construction, fps-correct | **P2 — this drop** |
-| 2 | `src/lib/tubeforge/graphics/preflight.ts` | Preflight-before-spend (Stickman pattern): the budget wall enforced at `doc.fps` against the DELIVERED frame count **before** chromium launches (R-1); JSON report at P3 | **P2 (wall core) — this drop**; P3 extends |
-| 3 | `src/lib/tubeforge/graphics/draft.ts` | Draft viewport (scale ∈ {0.5, 0.75, 1.0}, even dims ≥ 64 px, labelled non-reviewable, `inherited_review_credit: false`) | P3 |
-| 4 | `src/lib/tubeforge/graphics/qc.ts` | G1 subcheck matrix — TubeForge-authored rows in the Stickman **structure**; an unchecked subcheck fails the scene | P3 |
+| 1 | `src/lib/ibismuh/graphics/tracks.ts` | `graphicsTracks(doc)` → S87 projection via `framePlanWindows(sceneMs, doc.fps)` — mirror of `whiteboard/tracks.ts` law; one clip per scene, contiguous by construction, fps-correct | **P2 — this drop** |
+| 2 | `src/lib/ibismuh/graphics/preflight.ts` | Preflight-before-spend (Stickman pattern): the budget wall enforced at `doc.fps` against the DELIVERED frame count **before** chromium launches (R-1); JSON report at P3 | **P2 (wall core) — this drop**; P3 extends |
+| 3 | `src/lib/ibismuh/graphics/draft.ts` | Draft viewport (scale ∈ {0.5, 0.75, 1.0}, even dims ≥ 64 px, labelled non-reviewable, `inherited_review_credit: false`) | P3 |
+| 4 | `src/lib/ibismuh/graphics/qc.ts` | G1 subcheck matrix — Ibismuh Studio-authored rows in the Stickman **structure**; an unchecked subcheck fails the scene | P3 |
 | 5 | `src/app/api/videos/[id]/graphics/route.ts` | Scaffold/CRUD (mirror of the whiteboard route family) | P4 |
 | 6 | `src/app/api/videos/[id]/graphics/render/route.ts` | Final + labelled-draft render endpoints | P4 |
-| 7 | `src/components/tubeforge/graphics/graphics-canvas.tsx` | Preview canvas playing `frameAt` through `APPLY_GRAPHICS_FRAME_FN` (one applier, two callers) | P4 |
-| 8 | `src/components/tubeforge/graphics/graphics-studio.tsx` | Studio panel (mirror of `whiteboard-studio.tsx`) | P4 |
+| 7 | `src/components/ibismuh/graphics/graphics-canvas.tsx` | Preview canvas playing `frameAt` through `APPLY_GRAPHICS_FRAME_FN` (one applier, two callers) | P4 |
+| 8 | `src/components/ibismuh/graphics/graphics-studio.tsx` | Studio panel (mirror of `whiteboard-studio.tsx`) | P4 |
 | 9 | `scripts/s123-graphics-proof.mts` | Proof script (D1 naming; mirrors `scripts/w7-finishing-proof.mts`) | P5 |
 | 10 | `scripts/s123-route-e2e.mjs` | Route probe (D1 naming; the house `sN-route-e2e.mjs` pattern) | P5 |
 | 11 | `e2e/graphics.spec.ts` | Playwright suite (mirror of `e2e/whiteboard.spec.ts`) | P4 |
@@ -170,7 +170,7 @@ Note: the earlier proposal of giving `director-plan.ts` a graphics engine value 
 
 - **Unit (in `scripts/test-unit.mts`):** the G1.1–G1.4 suites (grammar, walls, round-trip, compatibility table, group integrity, time sanity, frame truth, composer defaults/reveal mechanisms, planner degradation) — **plus the S123 pins**: D2 routing neutrality (byte-identical round-trip and frames with/without `routing`; compose half at P2); D3 per-fps pins (§5.2 items 1–5); `graphicsTracks` contiguity/fps pins; the R-1 delivered-vs-whole-doc arithmetic pin.
 - **Integration (P3/P4):** graphics routes scaffold → plan → validate → draft → render; approved-only manifest enforcement; budget refusal before chromium at `doc.fps`.
-- **Regression:** the 597-test battery stays green and grows; `render-lane.ts` pins extended not broken; `git diff main -- src/lib/tubeforge/whiteboard/` empty at close; QC battery grows by the graphics group; golden-frame hashes per fps.
+- **Regression:** the 597-test battery stays green and grows; `render-lane.ts` pins extended not broken; `git diff main -- src/lib/ibismuh/whiteboard/` empty at close; QC battery grows by the graphics group; golden-frame hashes per fps.
 - **Known merge note:** the `g1-*` and `s121/s122` chains both edit `scripts/test-unit.mts` — resolve at merge by keeping both suite blocks; no test-law conflicts (disjoint suites).
 
 ## 9. Acceptance criteria
@@ -184,7 +184,7 @@ Note: the earlier proposal of giving `director-plan.ts` a graphics engine value 
 7. Draft at 0.5 scale ≥ 2× faster than final in the probe; drafts carry `inherited_review_credit: false` and never enter `render-assembly.ts` (P3/P4).
 8. QC group enforced (no broad-pass cover); blind re-score recorded in `docs/audits/s123-blind-rescore.md`, composite ≥ 4/5 — a failing gate routes back before Stage X (P5).
 9. CI gates green at close; unit count reported 597 → N; README + S120 doc updated (via the `docs/s120-status-reconcile` merge + close edits).
-10. Whiteboard engine byte-identical (`src/lib/tubeforge/whiteboard/` diff empty).
+10. Whiteboard engine byte-identical (`src/lib/ibismuh/whiteboard/` diff empty).
 
 ## 10. Rollback strategy
 

@@ -1,6 +1,6 @@
 # Runbook — Scene-Level Editing & Repair (S111–S118)
 
-**Audience:** the operator and anyone operating a TubeForge production
+**Audience:** the operator and anyone operating a Ibismuh Studio production
 instance. This is the trust layer's user manual and incident guide — what
 the layer does, how to walk the ladder, what the gates refuse and why, and
 where every behavior is pinned.

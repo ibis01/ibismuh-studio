@@ -29,7 +29,7 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
 // BASELINE; thresholds are S54 decisions, not claims made here.
 // Run: node --import tsx scripts/s51-continuity-benchmark.mts
 
-process.env.TUBEFORGE_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
+process.env.IBISMUH_STUDIO_AUTH_SECRET ??= "probe-secret-0123456789abcdef";
 
 import crypto from "node:crypto";
 import fs from "node:fs";

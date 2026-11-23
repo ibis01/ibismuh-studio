@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Trigger | The operator supplied a PAT in chat and said **push**. The pae-push flow ran: both execution branches created on `ibis01/tubeforge` (`s123/full-execution` @ `f202a4f`, `s124/element-editor` @ `60b521c`), then the full gate dispatched on the PAE stack |
+| Trigger | The operator supplied a PAT in chat and said **push**. The pae-push flow ran: both execution branches created on `ibis01/ibismuh` (`s123/full-execution` @ `f202a4f`, `s124/element-editor` @ `60b521c`), then the full gate dispatched on the PAE stack |
 | Run | CI `43694769530` (workflow_dispatch, ref `s124/element-editor`) — the first CI exposure for everything after S123 P2 (pushes trigger main-only; the only prior green run was the s123/p0-p2 **pull_request** range scan) |
 | Result | 4 green (Production build, Docker production smoke, Clean-clone bootstrap, PostgreSQL integration) · 3 red (Secret scan, Money-path coverage [downstream of unit], Typecheck·Lint·Unit) |
 

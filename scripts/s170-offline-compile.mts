@@ -1,7 +1,7 @@
 // S170 — the offline-compile proof (the acceptance receipt).
 //
 // The acceptance test, verbatim from the roadmap: "disconnect the AI
-// provider after the project has been approved. TubeForge must still
+// provider after the project has been approved. Ibismuh Studio must still
 // render the complete video." The compile half of that acceptance is
 // THIS script: a real three-mode project (graphics + character + 3d)
 // compiled to the engine-facing plan with the provider surface
@@ -154,7 +154,7 @@ async function main(): Promise<void> {
 
   // 4. the receipt.
   const receipt = {
-    acceptance: "disconnect the AI provider after the project has been approved — TubeForge must still render the complete video",
+    acceptance: "disconnect the AI provider after the project has been approved — Ibismuh Studio must still render the complete video",
     proof: "the compile half: a fully-authored three-mode project compiles offline (data-in/data-out, zero provider imports); the render half rides the engines' own AI-free gates",
     compiledAtCommit: "HEAD",
     planSha256: sha,

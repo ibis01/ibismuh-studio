@@ -1,9 +1,9 @@
 # Creator Intelligence Engine — the evaluation and decision record
 
-2026-11-10 · Trigger: an external comparison of TubeForge against
+2026-11-10 · Trigger: an external comparison of Ibismuh Studio against
 `Jakeschincariol/youtube-agent-skill` (MIT) recommended a strategic
 direction. This record ground-truths that comparison against the actual
-codebase, decides what TubeForge adopts, and stages it. **No code lands in
+codebase, decides what Ibismuh Studio adopts, and stages it. **No code lands in
 this record** — it is the design decision the future stages cite.
 
 ---
@@ -41,13 +41,13 @@ ships. Corrections, each verified in the tree:
 | Publishing: "Manual approval and upload" (theirs) vs connected (ours) | Confirmed ours: resumable upload, `runUploadJob`, publish flow with AI suggest + human approve | — |
 
 The strategic conclusion stands after correction, sharpened: the
-intersection is real but smaller than claimed, and TubeForge's unfair
+intersection is real but smaller than claimed, and Ibismuh Studio's unfair
 advantage is that its intelligence can **act** — a Shorts pick becomes a
 rendered `short.mp4`, not a suggestion in a document.
 
 ## 3. The decision — a Creator Intelligence Engine, as native services
 
-Adopted: a **Creator Intelligence Engine** joins the TubeForge 2.0 shared
+Adopted: a **Creator Intelligence Engine** joins the Ibismuh Studio 2.0 shared
 systems (Director, Visual Consistency, Audio Intelligence, Video Critic).
 The four modules that earn their place, in build order:
 
@@ -66,7 +66,7 @@ The four modules that earn their place, in build order:
   self-containment scoring replaces keyword density in `pickBestScene`
   (the pure-function seam stays — same signature, smarter score), and the
   clip's first line gets rewritten for cold-start viewers. The renderer
-  below it is already built and CI-proven — this is where TubeForge
+  below it is already built and CI-proven — this is where Ibismuh Studio
   visibly out-executes an advisory tool.
 - **CI-4 Retention Intelligence** (from `/yt-retention` +
   `retention.py`). New Analytics-API scope + token refresh; retention

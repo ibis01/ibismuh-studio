@@ -1,4 +1,4 @@
-# TubeForge Whiteboard Engine — E0 Repository Audit
+# Ibismuh Studio Whiteboard Engine — E0 Repository Audit
 
 - **Date**: 2026-11-09 UTC
 - **Audited state**: `main` @ `83aa7d3` (CI run 42534021634, 6/6 green —
@@ -19,7 +19,7 @@
 
 ## 1. Executive summary
 
-TubeForge is unusually well-positioned to host the Whiteboard Engine:
+Ibismuh Studio is unusually well-positioned to host the Whiteboard Engine:
 nearly every piece of surrounding infrastructure the plan's §3 asks for
 already exists, is production-hardened, and is CI-pinned — the job queue
 (20 registered kinds, crash-recovery payloads, cooperative cancel,
@@ -35,7 +35,7 @@ The plan's six architectural requirements score as follows TODAY:
 
 | Requirement | Verdict | Evidence |
 |---|---|---|
-| Independent (of Director) | **PASS** | `src/lib/tubeforge/whiteboard/` imports nothing from `director.ts`/`director-plan.ts`/`production-profiles.ts`/`shots.ts`/`motion.ts`/`liveliness.ts`; unit-pinned by module isolation (the engine's tests never touch Director code paths) |
+| Independent (of Director) | **PASS** | `src/lib/ibismuh/whiteboard/` imports nothing from `director.ts`/`director-plan.ts`/`production-profiles.ts`/`shots.ts`/`motion.ts`/`liveliness.ts`; unit-pinned by module isolation (the engine's tests never touch Director code paths) |
 | Native-first (no paid APIs to draw) | **PASS** | SVG + chromium + FFmpeg only; the S64 benchmark rendered 63.88s with zero generation-API calls |
 | Deterministic | **PASS** | The frame plan is a pure function of (project, assets, durations) — pinned by a same-inputs-same-frames unit contract; no CSS animation, no wall-clock in the engine |
 | Editable | **PARTIAL** | Every visual change is an `AnimationEvent` with identity/start/duration and the scheduler treats editor events as senior — but there is no editor surface yet (Phase 1+) |
@@ -75,7 +75,7 @@ session (not from memory):
   plan's §10 "separate rendering workloads" topology already has a
   committed skeleton.
 - **The whiteboard P0 (S64, landed this session)**:
-  `src/lib/tubeforge/whiteboard/{svg,storyboard,timing,assets,render}.ts`
+  `src/lib/ibismuh/whiteboard/{svg,storyboard,timing,assets,render}.ts`
   (~1.6k lines), 40 unit contracts, `scripts/s64-whiteboard-benchmark.mts`,
   evidence in `validation/s64/` (manifest + project.json committed).
 
@@ -87,7 +87,7 @@ Verdict: **PASS**.
 
 | Plan need | Existing component (path) | Reuse verdict |
 |---|---|---|
-| Job orchestration | `jobs.ts` (20 kinds, dedupe, progress, boot recovery), `queue.ts` (atomic claims, retry backoff 30s→10min, per-kind max attempts, per-org heavy cap `TUBEFORGE_MAX_RENDER_CONCURRENCY`), `queue-handlers.ts`, `cancel.ts`, `scripts/worker.mts` | **Direct reuse** — a `whiteboard-render` kind joins the registry (Phase 1) |
+| Job orchestration | `jobs.ts` (20 kinds, dedupe, progress, boot recovery), `queue.ts` (atomic claims, retry backoff 30s→10min, per-kind max attempts, per-org heavy cap `IBISMUH_STUDIO_MAX_RENDER_CONCURRENCY`), `queue-handlers.ts`, `cancel.ts`, `scripts/worker.mts` | **Direct reuse** — a `whiteboard-render` kind joins the registry (Phase 1) |
 | Auth + tenancy | `middleware.ts` (default-deny, signed tokens, rate limits, CSRF origin guard), `auth.ts`/`auth-token.ts`, `tenant.ts`/`tenant-db.ts` (Prisma client extension scoping every query by org) | **Direct reuse** — routes inherit everything for free |
 | Billing | `billing.ts` (microcredits, reserve→settle holds, Stripe lifecycle), `spend.ts` (USD "the $5 door"), `budget.ts` (the `aiCall` choke point) | **Direct reuse** — native rendering is $0-metered; only optional AI planner/TTS touches credits |
 | Storage | `storage.ts` (local + S3 via zero-dep SigV4, quotas, presign, `withLocalFile` scratch) | **Direct reuse** — outputs land as artifacts exactly like final.mp4 today |
@@ -107,7 +107,7 @@ satisfiable everywhere.
 As landed (S64 record §2, frozen):
 
 ```
-src/lib/tubeforge/whiteboard/
+src/lib/ibismuh/whiteboard/
 ├── svg.ts          PURE — sanitizer (security gate) + full path grammar +
 │                   arc-length/point/tangent math
 ├── storyboard.ts   PURE — WhiteboardProject/Scene/AnimationEvent/CameraEvent
@@ -219,7 +219,7 @@ regression (Director untouched; suite 253 → 293 green; e2e 26 green).
 Open gaps, in priority order:
 
 1. **Whiteboard money-path coverage** — the c8 `--include` list does
-   not cover `src/lib/tubeforge/whiteboard/` (the 50% floor measures
+   not cover `src/lib/ibismuh/whiteboard/` (the 50% floor measures
    billing/spend/render kin). Add the module once product routes make
    it a money path.
 2. **Chromium-in-CI** — check/coverage lanes install ffmpeg but not
@@ -260,7 +260,7 @@ already exists:
 | E12 production integration | entitlements, publishing paths, worker topology (the fly/compose skeleton exists) |
 
 Standing owner-side blockers (unchanged from the external audit):
-`TUBEFORGE_ENCRYPTION_KEY` on Vercel (re-store provider credentials
+`IBISMUH_STUDIO_ENCRYPTION_KEY` on Vercel (re-store provider credentials
 after), and the GitHub PAT that transited chat — rotate out-of-band at
 the next natural milestone. Also parked: S63's gateway-blocked
 re-measure (resumable protocol in its record §5).
