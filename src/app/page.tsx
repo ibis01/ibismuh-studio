@@ -329,7 +329,9 @@ export default function Home() {
                   <span aria-hidden className="h-1 w-1 rounded-full bg-primary glow-brand-soft" />
                   {meta.kicker}
                 </p>
-                <h1 className="text-base sm:text-lg font-semibold tracking-tight truncate">
+                {/* A3 — the page title breathes: one step up on desktop so the
+                    kicker → title → subtitle stack reads as a proper masthead. */}
+                <h1 className="text-base sm:text-xl font-semibold tracking-tight truncate">
                   {meta.title}
                 </h1>
                 <p className="text-xs text-muted-foreground truncate hidden sm:block">
@@ -357,8 +359,9 @@ export default function Home() {
             <div aria-hidden className="tf-hairline-fade absolute inset-x-0 bottom-0" />
           </header>
 
-          {/* View content */}
-          <main className="flex-1 px-4 sm:px-6 py-6 w-full max-w-[1400px] mx-auto">
+          {/* View content — A3: a touch more vertical air on desktop so the
+              content column and the sticky header feel like two zones. */}
+          <main className="flex-1 px-4 sm:px-6 py-6 sm:py-8 w-full max-w-[1400px] mx-auto">
             {view === "dashboard" && <DashboardView />}
             {/* Every destination renders itself — no hub tab strips (the
                 sidebar is the ONE navigation map; legacy hub ids normalize

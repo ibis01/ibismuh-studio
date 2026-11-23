@@ -186,3 +186,49 @@ glow-brand-soft must keep winning the box-shadow cascade).
 
 Adoption: automatic (global). New surfaces only need the utilities above;
 never hand-roll radial washes or grain per component.
+
+---
+
+## 7. A3 — surface & control pass (the "more beautiful design and layout" round)
+
+Where A2 lit the ROOM (ambient washes, grain, hairlines), A3 refines the
+FURNITURE: the shared primitives every view inherits. One edit per primitive,
+zero view files touched — the whole studio sharpens at once.
+
+### The two new utilities (globals.css, appended after the A2 layer)
+
+| Utility | Applies to | The law |
+| --- | --- | --- |
+| `.tf-pop` | Dialog, command palette, popover, dropdown, hover-card, select content, menubar, context-menu | ONE elevated chrome: popover token (one step lighter than the page), strong hairline silhouette, `--tf-elev-3` detachment, top-light inset. `shadow-md/lg` retired from those surfaces — tf-pop owns depth. Sheets are EXEMPT: the mobile sheet keeps `.tf-sidebar-surface` and must keep winning |
+| `.tf-control` | Input, Textarea, Select trigger | ONE control surface: white-alpha field (4%), hover border-RAISE (12% → 20% + field lift) instead of the old bg fill, cyan focus edge (60%). The 3px focus ring stays owned by the primitives; tf-control only joins the border to it |
+
+### Component deltas
+
+1. **Button** — the press: `active:scale-[0.985]` on every variant; the base
+   already carries `transition-all`, and the global reduced-motion guard
+   collapses it to instant under the OS setting.
+2. **Tabs** — the active pill is a raised surface (`white/7`) with an inset
+   top light instead of the flat `bg-input` fill; geometry unchanged.
+3. **Shell** — the header's page title steps up on desktop (`sm:text-xl`) so
+   the kicker → title → subtitle stack reads as a masthead; the content
+   column gains a touch of vertical air (`py-6 sm:py-8`).
+4. **Input/Textarea/Select** — the old `dark:bg-input/30` /
+   `dark:hover:bg-input/50` fills are retired; `.tf-control` is the single
+   source for field surface, hover and focus edge.
+
+### Laws (same as A2, unchanged)
+
+1. **No new hues.** White-alpha surfaces over the existing navy tokens; cyan
+   remains the single accent; red stays destructive-only.
+2. **Caller overrides keep winning where it matters.** Explicit caller
+   backgrounds on triggers (`bg-white/5` etc.) are visually identical to the
+   new base — no visual break, and they now inherit the hover/focus law.
+3. **Reduced motion.** Every transition added here rides the existing global
+   `prefers-reduced-motion` guard — nothing new to exempt.
+4. **Contrast.** All surface deltas are lightness/alpha moves inside the same
+   palette; every text tone keeps its AA relationship (backgrounds moved by
+   ≤ 2% alpha).
+
+Adoption: automatic (all views inherit the primitives). New floating surfaces
+use `.tf-pop`; new fields need nothing — `<Input>`/`<Textarea>`/`<SelectTrigger>`
+carry the law in their base.

@@ -127,3 +127,8 @@ docs/baselines/w1-whiteboard-baseline-*.json
 
 # S136 — patch artifacts must never ride the statically-served public dir
 public/*.patch
+
+# Local screenshot/visual-probe harness DBs (never shipped, never committed)
+prisma/dev.db*
+*.db-shm
+*.db-wal

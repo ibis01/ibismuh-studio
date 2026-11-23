@@ -1092,3 +1092,58 @@ body::after {
       inset 0 1px 0 rgb(255 255 255 / 6%);
   }
 }
+
+/* ==========================================================================
+   A3 — surface & control pass (the 2026-11 "more beautiful design and
+   layout" round). A2 lit the ROOM; A3 refines the FURNITURE: the shared
+   primitives every view inherits, so the whole studio sharpens at once
+   without touching a single view file.
+
+   Brand-safe by construction: no new hues — white-alpha surfaces over the
+   existing navy tokens, the existing cyan as the focus edge, the existing
+   elevation grammar for depth. The global reduced-motion guard collapses
+   every transition added here automatically.
+
+   Two utilities, one law each:
+   - .tf-pop      ONE elevated chrome for every floating surface (dialog,
+                  command palette, popover, dropdown, hover-card): the
+                  popover token (one step lighter than the page), a strong
+                  hairline silhouette, elev-3 detachment, a top-light inset.
+                  Sheets are exempt — the mobile sheet keeps its own lit
+                  surface (.tf-sidebar-surface) and must keep winning.
+   - .tf-control  ONE control surface for Input / Textarea / Select trigger:
+                  white-alpha field, hover border-raise (replaces the old
+                  dark:hover:bg-input/50 fill), cyan focus edge. The ring
+                  itself stays owned by the primitives (focus-visible:ring-*).
+   ========================================================================== */
+
+@layer utilities {
+  .tf-pop {
+    background: var(--popover);
+    border: 1px solid var(--tf-hairline-strong);
+    box-shadow:
+      var(--tf-elev-3),
+      inset 0 1px 0 rgb(255 255 255 / 5%);
+  }
+
+  .tf-control {
+    background: rgb(255 255 255 / 4%);
+    border-color: rgb(255 255 255 / 12%);
+    transition:
+      border-color var(--tf-dur) var(--tf-ease),
+      background var(--tf-dur) var(--tf-ease),
+      box-shadow var(--tf-dur) var(--tf-ease);
+  }
+  /* Hover raise — border brightens instead of the field filling up; the
+     control stays a quiet surface until it is the thing you are in. */
+  .tf-control:hover:not(:disabled):not(:focus-visible):not([aria-invalid="true"]) {
+    border-color: rgb(255 255 255 / 20%);
+    background: rgb(255 255 255 / 5.5%);
+  }
+  /* Focus edge — cyan joins the border so the 3px ring and the field read
+     as one focused unit. Declared AFTER the hover rule so focus wins when
+     both apply (typed-into-and-hovered). */
+  .tf-control:focus-visible {
+    border-color: rgb(34 211 238 / 60%);
+  }
+}
