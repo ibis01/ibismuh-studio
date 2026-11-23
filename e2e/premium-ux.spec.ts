@@ -180,10 +180,9 @@ test.describe("Stage 4b premium UX", () => {
     await page.goto("/");
     await page.waitForSelector("nav[aria-label='Main navigation']");
 
-    // The tenth surface: Assets destination → Voice Studio tab, page
-    // heading, catalog grid.
-    await page.getByRole("navigation", { name: "Main navigation" }).getByText("Assets").click();
-    await page.getByRole("tab", { name: "Voice Studio" }).click();
+    // The tenth surface: Voice Studio — a first-class sidebar destination
+    // (2026-11 law): page heading, catalog grid.
+    await page.getByRole("navigation", { name: "Main navigation" }).getByText("Voice Studio").click();
     await expect(page.getByRole("heading", { name: "Voice Studio" })).toBeVisible();
     await expect(page.getByText("Narration voices", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Audition" }).first()).toBeVisible();
@@ -227,8 +226,7 @@ test.describe("Stage 4b premium UX", () => {
 
     await page.goto("/");
     await page.waitForSelector("nav[aria-label='Main navigation']");
-    await page.getByRole("navigation", { name: "Main navigation" }).getByText("Assets").click();
-    await page.getByRole("tab", { name: "Cast", exact: true }).click();
+    await page.getByRole("navigation", { name: "Main navigation" }).getByText("Cast", { exact: true }).click();
 
     // Roster card + identity readiness chips (Bible done, art not yet).
     await expect(page.getByText("Professor Vex")).toBeVisible();
@@ -283,8 +281,7 @@ test.describe("Stage 4b premium UX", () => {
     await page.goto("/");
     await page.waitForSelector("nav[aria-label='Main navigation']");
 
-    await page.getByRole("navigation", { name: "Main navigation" }).getByText("Insights").click();
-    await page.getByRole("tab", { name: "Topic Radar" }).click();
+    await page.getByRole("navigation", { name: "Main navigation" }).getByText("Topic Radar").click();
     await expect(page.getByRole("heading", { name: "Topic Radar" })).toBeVisible();
     await expect(page.getByText("Scan a niche")).toBeVisible();
     await expect(page.getByText("Run Topic Radar")).toBeVisible();

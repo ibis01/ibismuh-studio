@@ -25279,7 +25279,14 @@ await test("B3 language & nav: the new copy speaks creator-control and the shell
   ok(store.includes('  | "workspace"'), "workspace joined the ViewId union (existing ids preserved)");
   const page = fs.readFileSync("src/app/page.tsx", "utf8");
   ok(page.includes("workspace: {"), "VIEW_META knows the workspace");
-  ok(page.includes('view !== "workspace"'), "the header CTA hides on the workspace (a focused surface, like Create/Settings)");
+  ok(
+    page.includes("the header carries view context, not global"),
+    "the header carries NO global nav CTA at all — plan §5: start-a-project lives in the sidebar map, the ⌘K palette action and Home's hero CTA (one meaning, one accessible name; the e2e strict-mode pin 'New Project' stays unique)"
+  );
+  ok(
+    !page.includes('name: "New Project"') && !page.includes(">New Project<"),
+    "no second 'New Project' button can reappear in the shell"
+  );
   const sidebar = fs.readFileSync("src/components/ibismuh/app-sidebar.tsx", "utf8");
   // Receipt 2026-11 (operator ruling: "every feature must have its page, bold
   // and clear, not cramped into another page") — the five workspace areas are
@@ -25512,6 +25519,112 @@ await test("B4 production test — the music storage key resolves at render time
   ok(src.includes("filePath: `_music/${def.slug}.flac`"), "the seed stores the UPLOAD_ROOT-relative key (_music/<slug>.flac) — trackAbsolutePath's law");
   ok(!src.includes("path.relative(MUSIC_DIR, outPath)"), "the MUSIC_DIR-relative shape is gone (a bare name resolved to uploads/<slug>.flac — missing — and failed every bed-mixed assembly)");
   ok(src.includes("export function trackAbsolutePath"), "the resolver stays the single seam (UPLOAD_ROOT + the stored key)");
+});
+
+// ---------------------------------------------------------------------------
+// UI/UX plan §5 — ONE navigation map, ONE compact progress strip.
+// (baseline: docs/uiux/UIUX_BASELINE_AUDIT.md, DESIGN_SYSTEM.md)
+// ---------------------------------------------------------------------------
+
+await test("UIUX §5 — the production board's stage→area mapping drives the nav spine dots", async () => {
+  const { stageStateForArea } = await import("../src/components/ibismuh/production-board.tsx");
+  const board = {
+    stages: {
+      script: { state: "done", label: "Script" },
+      storyboard: { state: "running", label: "Storyboard" },
+      voiceover: { state: "missing", label: "Voice" },
+      render: { state: "partial", label: "Render" },
+      publish: { state: "missing", label: "Publish" },
+    },
+  } as Parameters<typeof stageStateForArea>[0];
+  ok(stageStateForArea(board, "director") === "done", "Director carries the script stage's state");
+  ok(stageStateForArea(board, "storyboard") === "running", "Storyboard carries the storyboard stage's state");
+  ok(stageStateForArea(board, "timeline") === "partial", "Timeline carries the render stage's state");
+  ok(stageStateForArea(board, "inspector") === "missing", "Inspector carries the voiceover stage's state");
+  ok(stageStateForArea(board, "canvas") === null, "Canvas owns no pipeline stage — no dot");
+  ok(stageStateForArea(null, "director") === null, "a board that hasn't loaded yet yields no dots (no layout shift)");
+});
+
+await test("UIUX §5 — the legacy hub views normalize to their concrete destination", async () => {
+  const { useAppStore, restoreViewFromHash } = await import("../src/lib/store.ts");
+  const s = useAppStore.getState();
+  s.setView("assets");
+  ok(useAppStore.getState().view === "cast", "#/assets lands on Cast — no hub strip page exists");
+  s.setView("insights");
+  ok(useAppStore.getState().view === "analytics", "#/insights lands on Analytics");
+  s.setView("timeline");
+  ok(useAppStore.getState().view === "timeline", "real destinations pass through unchanged");
+  restoreViewFromHash("#/assets");
+  ok(useAppStore.getState().view === "cast", "hash restore normalizes the legacy hub id too");
+  restoreViewFromHash("#/timeline/abc123");
+  ok(useAppStore.getState().view === "timeline" && useAppStore.getState().focusVideoId === "abc123", "the workspace deep-link law survives the normalization");
+  s.setView("dashboard");
+});
+
+await test("UIUX §5 — ONE poll, ONE strip: the workspace owns the board and the tabs carry the dots", () => {
+  const ws = fs.readFileSync("src/components/ibismuh/production-workspace.tsx", "utf8");
+  const boardSrc = fs.readFileSync("src/components/ibismuh/production-board.tsx", "utf8");
+  ok(ws.includes("const board = useProductionBoard(video?.id)"), "the workspace owns the ONE board poll (hooks law: before the null guard)");
+  ok(ws.includes("data={board}") && ws.includes("hideStages"), "the board card consumes the shared poll and drops its duplicate stage chips");
+  ok(boardSrc.includes("export function useProductionBoard"), "the board fetch is a shared hook (no second fetcher)");
+  ok(boardSrc.includes("export function stageStateForArea") && boardSrc.includes("export const BOARD_STAGE_DOT"), "the stage→dot mapping is exported for the nav spine");
+  const spineCount = ws.split("stageStateForArea(board, t.value)").length - 1;
+  ok(spineCount === 2, `both breakpoints' tab lists carry the dots (wide + stacked) — found ${spineCount}`);
+});
+
+await test("UIUX §5 — the hub tab strips are retired: no page renders a second navigation row", () => {
+  ok(!fs.existsSync("src/components/ibismuh/hub-tabs.tsx"), "the HubTabs component is gone");
+  const page = fs.readFileSync("src/app/page.tsx", "utf8");
+  ok(!page.includes("<HubTabs") && !page.includes("import { HubTabs }"), "page.tsx renders no hub strip (the doc comment may explain the retirement)");
+  ok(!page.includes("ASSETS_GROUP") && !page.includes("INSIGHTS_GROUP"), "the hub grouping consts are gone");
+  for (const dest of ["cast", "world", "voice", "analytics", "research", "calendar", "channels"]) {
+    ok(page.includes(`view === "${dest}" && <`), `the ${dest} page renders itself directly`);
+  }
+  const store = fs.readFileSync("src/lib/store.ts", "utf8");
+  ok(/setView: \(v\) =>[\s\S]*?assets.*cast/.test(store), "setView normalizes the legacy assets id");
+  ok(/restoreViewFromHash[\s\S]*?assets.*cast/.test(store), "hash restore normalizes the legacy assets id");
+});
+
+await test("UIUX §6 — the Timeline save-state chip speaks the full state machine (source pin)", () => {
+  const ts = fs.readFileSync("src/components/ibismuh/timeline-studio.tsx", "utf8");
+  // Plan §6: loading/saving/saved/unsaved/failed/rendering all visible; a
+  // failed save may never look like routine "unsaved" noise (the chip
+  // persists until the next SERVER-CONFIRMED success), and "saved" may only
+  // appear after the PUT answers ok.
+  ok(ts.includes("saveFailed"), "the failed state exists as its own flag");
+  ok(ts.includes('saveFailed ? ('), "the chip renders the failed state");
+  ok(ts.includes("save failed — retry"), "the failed chip doubles as the retry affordance");
+  ok(/renderInFlight \? \([\s\S]{0,200}?rendering…/.test(ts), "the chip speaks rendering while a render is in flight");
+  ok(ts.includes("setSaveFailed(false); // the next successful save retires the failure chip"), "the failure chip retires ONLY on a server-confirmed save");
+  // The savedAt write must stay AFTER the res.ok gate (server-confirmed law).
+  ok(/if \(!res\.ok\) \{[\s\S]{0,220}?throw new Error\([\s\S]{0,60}\}\s*\n\s*setDirty\(false\);\s*\n\s*setSavedAt\(Date\.now\(\)\);/.test(ts),
+    "'saved' is stamped only after the PUT answers ok — never optimistically");
+});
+
+await test("UIUX §6 — zoom keeps the operator's place (scroll-fraction anchor, selection untouched)", () => {
+  const ts = fs.readFileSync("src/components/ibismuh/timeline-studio.tsx", "utf8");
+  ok(ts.includes("CONTENT FRACTION across every density change"), "the density effect anchors the lanes scroll to the same content fraction");
+  ok(/const fraction = el\.scrollLeft \/ Math\.max\(1, total \* prev \+ 32\);\s*\n\s*el\.scrollLeft = fraction \* Math\.max\(1, total \* density \+ 32\);/.test(ts),
+    "the anchor preserves scrollLeft/contentWidth across the density change");
+  // Selection is scene INDEX state — no density writer may touch it.
+  const zoomSites = [...ts.matchAll(/setDensity\((?:\(d\) => [^\n]*|Math\.[^\n]*)\)/g)].length;
+  ok(zoomSites >= 3, "all zoom entry points (buttons + wheel) go through setDensity alone");
+  ok(!/setSelected\([\s\S]{0,80}setDensity/.test(ts) && !/setDensity\([\s\S]{0,80}setSelected\(/.test(ts),
+    "no zoom path resets the selected clip");
+});
+
+await test("UIUX §5 — the workspace header owns an editable title and a render chip (source pin)", () => {
+  const ws = fs.readFileSync("src/components/ibismuh/production-workspace.tsx", "utf8");
+  ok(/aria-label=\{titleEditing \? "Save title" : "Edit title"\}/.test(ws), "the title pencil is a named control (open ↔ commit)");
+  ok(ws.includes('aria-label="Project title"'), "the editing field carries its accessible name");
+  // Server-confirmed law: PATCH, then refresh, THEN the toast — never optimistic.
+  ok(/PATCH",\s*\n\s*headers: \{ "Content-Type": "application\/json" \},\s*\n\s*body: JSON\.stringify\(\{ title: next \}\)/.test(ws),
+    "the rename rides the EXISTING PATCH contract (no API change)");
+  ok(/await refreshVideo\(video\.id\);\s*\n\s*toast\(\{ title: "Title updated"/.test(ws),
+    "'Title updated' speaks only after the server refresh confirms it");
+  ok(ws.includes('if (e.key === "Escape" && !titleSaving) setTitleEditing(false)'), "Escape cancels without a write");
+  // Render status is a header fact while it runs (plan §5), progress numbers only.
+  ok(ws.includes("(busy === \"render\" || busy === \"preview\") && renderLabel"), "the render chip is gated on a real in-flight label");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

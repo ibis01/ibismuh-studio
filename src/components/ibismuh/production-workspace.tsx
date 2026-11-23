@@ -35,7 +35,7 @@ import GraphicsStudio from "@/components/ibismuh/graphics/graphics-studio";
 import { DirectorCard } from "@/components/ibismuh/director-card";
 import { Scene3DPanel } from "@/components/ibismuh/scene3d-panel";
 import { CriticCard } from "@/components/ibismuh/critic-card";
-import { ProductionBoard } from "@/components/ibismuh/production-board";
+import { ProductionBoard, useProductionBoard, stageStateForArea, BOARD_STAGE_DOT } from "@/components/ibismuh/production-board";
 import { PacingStrip } from "@/components/ibismuh/pacing-strip";
 import { TimelineStudio } from "@/components/ibismuh/timeline-studio";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
@@ -99,6 +99,7 @@ import {
   AudioLines,
   Bot,
   ChevronDown,
+  Pencil,
   Wand2,
   Play,
   Square,
@@ -401,6 +402,45 @@ export function ProductionWorkspace({
     },
     [onChanged]
   );
+
+  // UI/UX plan §5 — the project header owns an EDITABLE title: the operator
+  // renames the production in place (PATCH /api/videos/[id] already speaks
+  // `title`, sliced to 120 server-side). Success is server-confirmed via the
+  // refresh; a failed rename toasts and leaves the old title standing.
+  const [titleEditing, setTitleEditing] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [titleSaving, setTitleSaving] = useState(false);
+  const saveTitle = useCallback(async () => {
+    if (!video) return;
+    const next = titleDraft.trim().slice(0, 120);
+    if (!next || next === (video.title ?? video.topic ?? "")) {
+      setTitleEditing(false);
+      return;
+    }
+    setTitleSaving(true);
+    try {
+      const res = await fetch(`/api/videos/${video.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: next }),
+      });
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(d.error ?? `HTTP ${res.status}`);
+      }
+      setTitleEditing(false);
+      await refreshVideo(video.id);
+      toast({ title: "Title updated", description: next });
+    } catch (err) {
+      toast({
+        title: "Rename failed",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setTitleSaving(false);
+    }
+  }, [video, titleDraft, refreshVideo, toast]);
 
   // Reset + re-seed the dialog's transient state whenever the open video
   // changes — React's documented render-time adjust (guarded seed compare)
@@ -843,6 +883,12 @@ export function ProductionWorkspace({
     },
     [video, refreshVideo, toast, bumpRefresh],
   );
+
+  // The production board — ONE poll owned here (useProductionBoard). Its data
+  // feeds both the area tabs' stage-state dots (the single compact progress
+  // strip, UI/UX plan §5) and the board detail card, which stops fetching and
+  // stops repeating the stage chips.
+  const board = useProductionBoard(video?.id);
 
   if (!video) return null;
   // The guard above narrows the prop for everything below; the const makes
@@ -4400,11 +4446,70 @@ export function ProductionWorkspace({
                 </a>
               </Badge>
             )}
+            {/* UI/UX plan §5 — render status is a header-level fact, not a
+                buried panel line: while the longest operation runs, its label
+                and progress are visible from the top of EVERY area. Details
+                stay on the progress strip below the board (no duplicates). */}
+            {(busy === "render" || busy === "preview") && renderLabel && (
+              <Badge className="border border-sky-500/25 bg-sky-500/10 text-sky-200 gap-1" title={renderLabel}>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {renderLabel}
+                {renderProgress && (
+                  <span className="tf-num">
+                    {renderProgress.current}/{renderProgress.total}
+                  </span>
+                )}
+              </Badge>
+            )}
             <span className="text-xs text-muted-foreground">{timeAgo(video.createdAt)}</span>
           </div>
-          <h2 className="text-lg leading-snug font-semibold tracking-tight mt-1.5">
-            {video.title ?? video.topic}
-          </h2>
+          {/* UI/UX plan §5 — the title is editable in place: pencil opens the
+              field, Enter commits (PATCH), Escape cancels. The server's
+              response is the truth; the toast confirms only after refresh. */}
+          <div className="flex items-center gap-1.5 mt-1.5">
+            {titleEditing ? (
+              <input
+                value={titleDraft}
+                autoFocus
+                maxLength={120}
+                disabled={titleSaving}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !titleSaving) void saveTitle();
+                  if (e.key === "Escape" && !titleSaving) setTitleEditing(false);
+                }}
+                aria-label="Project title"
+                className="text-lg leading-snug font-semibold tracking-tight bg-white/6 border border-white/15 rounded-lg px-2 py-1 max-w-full flex-1 min-w-0 outline-none focus-visible:border-primary/60"
+              />
+            ) : (
+              <h2 className="text-lg leading-snug font-semibold tracking-tight truncate">
+                {video.title ?? video.topic}
+              </h2>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (titleEditing) {
+                  if (!titleSaving) void saveTitle();
+                } else {
+                  setTitleDraft(video.title ?? video.topic ?? "");
+                  setTitleEditing(true);
+                }
+              }}
+              disabled={titleSaving}
+              aria-label={titleEditing ? "Save title" : "Edit title"}
+              title={titleEditing ? "Save (Enter — Esc cancels)" : "Rename this project"}
+              className="tf-focusable shrink-0 h-7 w-7 grid place-items-center rounded-md text-muted-foreground hover:text-foreground hover:bg-white/8 transition-colors"
+            >
+              {titleSaving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : titleEditing ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Pencil className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
           <p className="text-xs text-muted-foreground mt-0.5">
             {video.wordCount ?? 0} words ·{" "}
             {LENGTHS.find((l) => l.id === video.length)?.label ?? video.length} ·{" "}
@@ -4432,10 +4537,14 @@ export function ProductionWorkspace({
       {/* S91 — the living production board: stages, checkpoints, costs,
           history — one glance at where the project stands (the visible
           approval line: every stage the human has driven stays on record).
-          R2 GUI pass: the stage chips are the pipeline's navigation spine —
-          clicking one jumps to the area that owns the stage. */}
+          UI/UX plan §5 — the stage chips live on the area tabs now (the nav
+          spine carries their state dots); this card keeps the detail half:
+          attention chips, checkpoints, costs, history. The board data comes
+          from the ONE poll above — no second fetch. */}
       <ProductionBoard
         videoId={video.id}
+        data={board}
+        hideStages
         onStageClick={(stage) =>
           changeTab(
             stage === "script"
@@ -4490,18 +4599,31 @@ export function ProductionWorkspace({
           <div className="mt-4 space-y-3">
             <Tabs value={activeTab} onValueChange={changeTab}>
               <TabsList className="flex w-full overflow-x-auto tf-scroll-bar bg-white/5 sm:grid sm:grid-cols-5">
-                {AREA_TABS.map((t) => (
-                  <TabsTrigger
-                    key={t.value}
-                    value={t.value}
-                    className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs"
-                  >
-                    <span className="flex items-center justify-center gap-1.5">
-                      <t.icon className="h-3.5 w-3.5 shrink-0" />
-                      {t.label}
-                    </span>
-                  </TabsTrigger>
-                ))}
+                {AREA_TABS.map((t) => {
+                  const stageState = stageStateForArea(board, t.value);
+                  return (
+                    <TabsTrigger
+                      key={t.value}
+                      value={t.value}
+                      title={stageState ? `${t.label} — ${stageState}` : undefined}
+                      className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs"
+                    >
+                      <span className="flex items-center justify-center gap-1.5">
+                        <t.icon className="h-3.5 w-3.5 shrink-0" />
+                        {t.label}
+                        {/* The nav spine's progress dot — the pipeline stage
+                            this area owns, as its production state (UI/UX plan
+                            §5: ONE compact progress strip). */}
+                        {stageState && (
+                          <span
+                            aria-hidden
+                            className={`h-1.5 w-1.5 rounded-full shrink-0 ${BOARD_STAGE_DOT[stageState]}`}
+                          />
+                        )}
+                      </span>
+                    </TabsTrigger>
+                  );
+                })}
               </TabsList>
             </Tabs>
             {/* 2026-11 law — every area owns its page: ONE resizable work
@@ -4551,18 +4673,30 @@ export function ProductionWorkspace({
           /* <1024px — the B3 stacked tabs, unchanged (mobile law). */
           <Tabs value={activeTab} onValueChange={changeTab}>
             <TabsList className="flex w-full overflow-x-auto tf-scroll-bar bg-white/5 sm:grid sm:grid-cols-5">
-              {AREA_TABS.map((t) => (
-                <TabsTrigger
-                  key={t.value}
-                  value={t.value}
-                  className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs"
-                >
-                  <span className="flex items-center justify-center gap-1.5">
-                    <t.icon className="h-3.5 w-3.5 shrink-0" />
-                    {t.label}
-                  </span>
-                </TabsTrigger>
-              ))}
+              {AREA_TABS.map((t) => {
+                const stageState = stageStateForArea(board, t.value);
+                return (
+                  <TabsTrigger
+                    key={t.value}
+                    value={t.value}
+                    title={stageState ? `${t.label} — ${stageState}` : undefined}
+                    className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs"
+                  >
+                    <span className="flex items-center justify-center gap-1.5">
+                      <t.icon className="h-3.5 w-3.5 shrink-0" />
+                      {t.label}
+                      {/* Same progress dot as the wide layout — the stage
+                          state rides the nav spine on every breakpoint. */}
+                      {stageState && (
+                        <span
+                          aria-hidden
+                          className={`h-1.5 w-1.5 rounded-full shrink-0 ${BOARD_STAGE_DOT[stageState]}`}
+                        />
+                      )}
+                    </span>
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
             <TabsContent value="director" className="mt-4">
               {scriptTab}

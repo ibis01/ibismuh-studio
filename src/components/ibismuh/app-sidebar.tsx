@@ -28,16 +28,20 @@ import {
  * The previous B1 architecture (four hub destinations + Settings) buried
  * Cast/World/Voice inside "Assets" and Analytics/Topic Radar/Calendar/
  * Channels inside "Insights": pages the operator could not see did not
- * exist for them. The hub tabs still work (the Assets/Insights ViewIds are
- * unchanged and keep their HubTabs strips), but the sidebar now lists all
- * of them DIRECTLY, grouped so the map still reads at a glance.
+ * exist for them. The sidebar lists all of them DIRECTLY, grouped so the
+ * map still reads at a glance.
  *
  * 2026-11 operator ruling — "every feature must have its page, bold and
  * clear, not cramped into another page": the five production-workspace areas
- * (Director, Storyboard, Canvas, Timeline Studio, Inspector) now also sit in
+ * (Director, Storyboard, Canvas, Timeline Studio, Inspector) also sit in
  * the sidebar under Production. Each owns a page with its own hash and
  * header; clicking one with no project open lands the pointed empty state
  * that points at Projects — the map never hides a destination.
+ *
+ * UI/UX plan §5 — this sidebar is the ONE navigation map. The B1 hub tab
+ * strips are retired (the legacy "assets"/"insights" ViewIds normalize to
+ * concrete destinations in the store), so no page renders a second
+ * navigation row.
  *
  * Nav ids are ViewIds, so the ⌘K palette and every programmatic
  * `setView(...)` keep working unchanged.
@@ -67,7 +71,7 @@ export const NAV_ITEMS: {
     id: "library",
     label: "Projects",
     icon: Library,
-    hint: "All projects & the workspace",
+    hint: "Create & continue videos",
     group: "Studio",
   },
   {
