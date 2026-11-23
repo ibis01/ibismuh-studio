@@ -1177,8 +1177,19 @@ export async function runRenderJob(
     }
   }
 
-  if (!video.hasStoryboard && mode !== "slides")
-    throw new Error("Generate the storyboard first — there is no scene art yet");
+  // The storyboard gate — same storage-truth fallback the admission route
+  // runs (the row flag is the job's own success tail; a replay resumed by
+  // the queue can arrive BEFORE that tail lands, and refusing a painted
+  // board here is the same lie the route used to tell). Genuinely unpainted
+  // → the honest throw stands; stale-false → self-heal and proceed.
+  if (!video.hasStoryboard && mode !== "slides") {
+    const painted = await storyboardComplete(videoId, scenes).catch(() => false);
+    if (!painted)
+      throw new Error("Generate the storyboard first — there is no scene art yet");
+    await db.video
+      .update({ where: { id: videoId }, data: { hasStoryboard: true } })
+      .catch(() => {});
+  }
   if (!video.hasVoiceover)
     throw new Error("Generate the voiceover first — narration drives the scene timing");
 

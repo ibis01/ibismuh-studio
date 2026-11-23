@@ -25716,12 +25716,27 @@ await test("2026-11 JSON diagnosability — empty replies and prose replies fail
   ok(proseErr.length < 400, "the snippet is capped — an error, not a wall of text");
 });
 
-await test("2026-11 timeline workbench — the studio fills its column, the deck rides beside it, the gate never renders silence (source pins)", () => {
+await test("2026-11 timeline workbench — the deck merges UNDER the studio, the gate never renders silence (source pins)", () => {
+  const ws = fs.readFileSync("src/components/ibismuh/production-workspace.tsx", "utf8");
   const ts = fs.readFileSync("src/components/ibismuh/timeline-studio.tsx", "utf8");
   ok(!ts.includes("if (!canAssemble) return null"), "the null law is dead — a 600px empty panel is not an empty state");
   ok(ts.includes("The lanes assemble once the project has a voice"), "the gate is a pointed state with the unlock path (voice card locations named)");
-  ok(ts.includes("flex min-h-full flex-col rounded-xl border border-white/10"), "the studio card fills its workbench column (min-h-full)");
+  // 2026-11 REVISED law — the Render & Ship deck is part of the main column:
+  // the 320px side rail is retired (it cramped four tuning cards into one
+  // endless scroll and stranded dead space beside the lanes).
+  ok(!ws.includes('aria-label="Render and ship"'), "the side rail is retired — no aside on the timeline page");
+  ok(ws.includes("const timelineWorkbench") && ws.includes("{renderShipPanel}"), "the workbench stacks the strip and the deck in ONE main column");
+  ok(ws.includes("md:grid-cols-2 2xl:grid-cols-4"), "the tuning cards fan out (music · motion · transitions · 3D) instead of one cramped rail");
+  ok(ts.includes("flex min-h-full flex-col rounded-xl border border-white/10"), "the studio card fills its column (min-h-full)");
   ok(ts.includes("min-h-[220px] flex-1 overflow-x-auto rounded-lg border border-white/10 bg-black/20"), "the lane surface absorbs the leftover height — no void under the clips");
+});
+
+await test("2026-11 render admission — the storyboard gate falls back to storage truth (source pins)", () => {
+  const route = fs.readFileSync("src/app/api/videos/[id]/render/route.ts", "utf8");
+  const jobs = fs.readFileSync("src/lib/ibismuh/video-jobs.ts", "utf8");
+  ok(route.includes("storyboardComplete(id, scenes)"), "the route consults the SAME storage truth the storyboard board shows before refusing");
+  ok(jobs.includes("storyboardComplete(videoId, scenes)"), "the job body (crash-resume replays) runs the same storage-truth fallback");
+  ok(route.includes("hasStoryboard: true"), "a stale-false row flag self-heals at admission");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
