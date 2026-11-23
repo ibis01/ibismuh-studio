@@ -25514,6 +25514,70 @@ await test("B4 production test — the music storage key resolves at render time
   ok(src.includes("export function trackAbsolutePath"), "the resolver stays the single seam (UPLOAD_ROOT + the stored key)");
 });
 
+// ---------------------------------------------------------------------------
+// UI/UX plan §5 — ONE navigation map, ONE compact progress strip.
+// (baseline: docs/uiux/UIUX_BASELINE_AUDIT.md, DESIGN_SYSTEM.md)
+// ---------------------------------------------------------------------------
+
+await test("UIUX §5 — the production board's stage→area mapping drives the nav spine dots", async () => {
+  const { stageStateForArea } = await import("../src/components/ibismuh/production-board.tsx");
+  const board = {
+    stages: {
+      script: { state: "done", label: "Script" },
+      storyboard: { state: "running", label: "Storyboard" },
+      voiceover: { state: "missing", label: "Voice" },
+      render: { state: "partial", label: "Render" },
+      publish: { state: "missing", label: "Publish" },
+    },
+  } as Parameters<typeof stageStateForArea>[0];
+  ok(stageStateForArea(board, "director") === "done", "Director carries the script stage's state");
+  ok(stageStateForArea(board, "storyboard") === "running", "Storyboard carries the storyboard stage's state");
+  ok(stageStateForArea(board, "timeline") === "partial", "Timeline carries the render stage's state");
+  ok(stageStateForArea(board, "inspector") === "missing", "Inspector carries the voiceover stage's state");
+  ok(stageStateForArea(board, "canvas") === null, "Canvas owns no pipeline stage — no dot");
+  ok(stageStateForArea(null, "director") === null, "a board that hasn't loaded yet yields no dots (no layout shift)");
+});
+
+await test("UIUX §5 — the legacy hub views normalize to their concrete destination", async () => {
+  const { useAppStore, restoreViewFromHash } = await import("../src/lib/store.ts");
+  const s = useAppStore.getState();
+  s.setView("assets");
+  ok(useAppStore.getState().view === "cast", "#/assets lands on Cast — no hub strip page exists");
+  s.setView("insights");
+  ok(useAppStore.getState().view === "analytics", "#/insights lands on Analytics");
+  s.setView("timeline");
+  ok(useAppStore.getState().view === "timeline", "real destinations pass through unchanged");
+  restoreViewFromHash("#/assets");
+  ok(useAppStore.getState().view === "cast", "hash restore normalizes the legacy hub id too");
+  restoreViewFromHash("#/timeline/abc123");
+  ok(useAppStore.getState().view === "timeline" && useAppStore.getState().focusVideoId === "abc123", "the workspace deep-link law survives the normalization");
+  s.setView("dashboard");
+});
+
+await test("UIUX §5 — ONE poll, ONE strip: the workspace owns the board and the tabs carry the dots", () => {
+  const ws = fs.readFileSync("src/components/ibismuh/production-workspace.tsx", "utf8");
+  const boardSrc = fs.readFileSync("src/components/ibismuh/production-board.tsx", "utf8");
+  ok(ws.includes("const board = useProductionBoard(video?.id)"), "the workspace owns the ONE board poll (hooks law: before the null guard)");
+  ok(ws.includes("data={board}") && ws.includes("hideStages"), "the board card consumes the shared poll and drops its duplicate stage chips");
+  ok(boardSrc.includes("export function useProductionBoard"), "the board fetch is a shared hook (no second fetcher)");
+  ok(boardSrc.includes("export function stageStateForArea") && boardSrc.includes("export const BOARD_STAGE_DOT"), "the stage→dot mapping is exported for the nav spine");
+  const spineCount = ws.split("stageStateForArea(board, t.value)").length - 1;
+  ok(spineCount === 2, `both breakpoints' tab lists carry the dots (wide + stacked) — found ${spineCount}`);
+});
+
+await test("UIUX §5 — the hub tab strips are retired: no page renders a second navigation row", () => {
+  ok(!fs.existsSync("src/components/ibismuh/hub-tabs.tsx"), "the HubTabs component is gone");
+  const page = fs.readFileSync("src/app/page.tsx", "utf8");
+  ok(!page.includes("<HubTabs") && !page.includes("import { HubTabs }"), "page.tsx renders no hub strip (the doc comment may explain the retirement)");
+  ok(!page.includes("ASSETS_GROUP") && !page.includes("INSIGHTS_GROUP"), "the hub grouping consts are gone");
+  for (const dest of ["cast", "world", "voice", "analytics", "research", "calendar", "channels"]) {
+    ok(page.includes(`view === "${dest}" && <`), `the ${dest} page renders itself directly`);
+  }
+  const store = fs.readFileSync("src/lib/store.ts", "utf8");
+  ok(/setView: \(v\) =>[\s\S]*?assets.*cast/.test(store), "setView normalizes the legacy assets id");
+  ok(/restoreViewFromHash[\s\S]*?assets.*cast/.test(store), "hash restore normalizes the legacy assets id");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 
 for (const f of failures) console.log(`  ✗ ${f}`);

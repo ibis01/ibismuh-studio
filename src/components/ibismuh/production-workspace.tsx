@@ -35,7 +35,7 @@ import GraphicsStudio from "@/components/ibismuh/graphics/graphics-studio";
 import { DirectorCard } from "@/components/ibismuh/director-card";
 import { Scene3DPanel } from "@/components/ibismuh/scene3d-panel";
 import { CriticCard } from "@/components/ibismuh/critic-card";
-import { ProductionBoard } from "@/components/ibismuh/production-board";
+import { ProductionBoard, useProductionBoard, stageStateForArea, BOARD_STAGE_DOT } from "@/components/ibismuh/production-board";
 import { PacingStrip } from "@/components/ibismuh/pacing-strip";
 import { TimelineStudio } from "@/components/ibismuh/timeline-studio";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
@@ -843,6 +843,12 @@ export function ProductionWorkspace({
     },
     [video, refreshVideo, toast, bumpRefresh],
   );
+
+  // The production board — ONE poll owned here (useProductionBoard). Its data
+  // feeds both the area tabs' stage-state dots (the single compact progress
+  // strip, UI/UX plan §5) and the board detail card, which stops fetching and
+  // stops repeating the stage chips.
+  const board = useProductionBoard(video?.id);
 
   if (!video) return null;
   // The guard above narrows the prop for everything below; the const makes
@@ -4432,10 +4438,14 @@ export function ProductionWorkspace({
       {/* S91 — the living production board: stages, checkpoints, costs,
           history — one glance at where the project stands (the visible
           approval line: every stage the human has driven stays on record).
-          R2 GUI pass: the stage chips are the pipeline's navigation spine —
-          clicking one jumps to the area that owns the stage. */}
+          UI/UX plan §5 — the stage chips live on the area tabs now (the nav
+          spine carries their state dots); this card keeps the detail half:
+          attention chips, checkpoints, costs, history. The board data comes
+          from the ONE poll above — no second fetch. */}
       <ProductionBoard
         videoId={video.id}
+        data={board}
+        hideStages
         onStageClick={(stage) =>
           changeTab(
             stage === "script"
@@ -4490,18 +4500,31 @@ export function ProductionWorkspace({
           <div className="mt-4 space-y-3">
             <Tabs value={activeTab} onValueChange={changeTab}>
               <TabsList className="flex w-full overflow-x-auto tf-scroll-bar bg-white/5 sm:grid sm:grid-cols-5">
-                {AREA_TABS.map((t) => (
-                  <TabsTrigger
-                    key={t.value}
-                    value={t.value}
-                    className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs"
-                  >
-                    <span className="flex items-center justify-center gap-1.5">
-                      <t.icon className="h-3.5 w-3.5 shrink-0" />
-                      {t.label}
-                    </span>
-                  </TabsTrigger>
-                ))}
+                {AREA_TABS.map((t) => {
+                  const stageState = stageStateForArea(board, t.value);
+                  return (
+                    <TabsTrigger
+                      key={t.value}
+                      value={t.value}
+                      title={stageState ? `${t.label} — ${stageState}` : undefined}
+                      className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs"
+                    >
+                      <span className="flex items-center justify-center gap-1.5">
+                        <t.icon className="h-3.5 w-3.5 shrink-0" />
+                        {t.label}
+                        {/* The nav spine's progress dot — the pipeline stage
+                            this area owns, as its production state (UI/UX plan
+                            §5: ONE compact progress strip). */}
+                        {stageState && (
+                          <span
+                            aria-hidden
+                            className={`h-1.5 w-1.5 rounded-full shrink-0 ${BOARD_STAGE_DOT[stageState]}`}
+                          />
+                        )}
+                      </span>
+                    </TabsTrigger>
+                  );
+                })}
               </TabsList>
             </Tabs>
             {/* 2026-11 law — every area owns its page: ONE resizable work
@@ -4551,18 +4574,30 @@ export function ProductionWorkspace({
           /* <1024px — the B3 stacked tabs, unchanged (mobile law). */
           <Tabs value={activeTab} onValueChange={changeTab}>
             <TabsList className="flex w-full overflow-x-auto tf-scroll-bar bg-white/5 sm:grid sm:grid-cols-5">
-              {AREA_TABS.map((t) => (
-                <TabsTrigger
-                  key={t.value}
-                  value={t.value}
-                  className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs"
-                >
-                  <span className="flex items-center justify-center gap-1.5">
-                    <t.icon className="h-3.5 w-3.5 shrink-0" />
-                    {t.label}
-                  </span>
-                </TabsTrigger>
-              ))}
+              {AREA_TABS.map((t) => {
+                const stageState = stageStateForArea(board, t.value);
+                return (
+                  <TabsTrigger
+                    key={t.value}
+                    value={t.value}
+                    title={stageState ? `${t.label} — ${stageState}` : undefined}
+                    className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs"
+                  >
+                    <span className="flex items-center justify-center gap-1.5">
+                      <t.icon className="h-3.5 w-3.5 shrink-0" />
+                      {t.label}
+                      {/* Same progress dot as the wide layout — the stage
+                          state rides the nav spine on every breakpoint. */}
+                      {stageState && (
+                        <span
+                          aria-hidden
+                          className={`h-1.5 w-1.5 rounded-full shrink-0 ${BOARD_STAGE_DOT[stageState]}`}
+                        />
+                      )}
+                    </span>
+                  </TabsTrigger>
+                );
+              })}
             </TabsList>
             <TabsContent value="director" className="mt-4">
               {scriptTab}

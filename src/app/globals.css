@@ -851,6 +851,74 @@ audio::-webkit-media-controls-panel {
 }
 
 /* ==========================================================================
+   UI/UX plan Phase 1 — the type scale (docs/uiux/DESIGN_SYSTEM.md §2).
+   ADDITIVE: existing components keep their current styles; NEW surfaces and
+   every Phase-3+ screen take headings/body/captions from this scale so the
+   hierarchy stops being re-invented per component. Sizes ride the same
+   Geist stack already loaded in layout.tsx; no font change, no color change.
+   ========================================================================== */
+
+:root {
+  --tf-font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@layer utilities {
+  /* Display — major workspace titles (one per page, the VIEW_META heading) */
+  .tf-display {
+    font-size: 1.5rem;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+    color: var(--tf-text-1);
+  }
+
+  /* H1 — main section headings inside a page */
+  .tf-h1 {
+    font-size: 1.25rem;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    font-weight: 600;
+    color: var(--tf-text-1);
+  }
+
+  /* H2 — panel headings */
+  .tf-h2 {
+    font-size: 1rem;
+    line-height: 1.4;
+    font-weight: 600;
+    color: var(--tf-text-1);
+  }
+
+  /* H3 — subsections */
+  .tf-h3 {
+    font-size: 0.875rem;
+    line-height: 1.45;
+    font-weight: 600;
+    color: var(--tf-text-1);
+  }
+
+  /* Body / secondary body */
+  .tf-body {
+    font-size: 0.875rem;
+    line-height: 1.55;
+    color: var(--tf-text-2);
+  }
+
+  /* Caption — supporting metadata; never for interactive labels */
+  .tf-caption {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--tf-text-3);
+  }
+
+  /* Monospace technical values — timecodes, ids, hashes */
+  .tf-mono {
+    font-family: var(--tf-font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ==========================================================================
    R1 (Cinematic full-studio upgrade) — elevation grammar, panel chrome,
    scrollbar law and the global reduced-motion guard. Spec:
    docs/design/R1_SHELL_CINEMATIC_SPEC.md. Existing B1/Stage-4a tokens stay

@@ -26,20 +26,20 @@ export type BoardStageId =
   | "render"
   | "publish";
 
-interface BoardStage {
+export interface BoardStage {
   state: "done" | "partial" | "preview" | "running" | "missing";
   label: string;
   detail?: string;
 }
 
-interface BoardCheckpoint {
+export interface BoardCheckpoint {
   id: string;
   label: string;
   state: "ok" | "pending" | "attention" | "na";
   detail: string;
 }
 
-interface BoardData {
+export interface BoardData {
   stages: Record<"script" | "storyboard" | "voiceover" | "render" | "publish", BoardStage>;
   jobs: Record<string, boolean | unknown> & { lastErrors?: Record<string, string> };
   checkpoints: BoardCheckpoint[];
@@ -64,6 +64,11 @@ const STAGE_DOT: Record<BoardStage["state"], string> = {
   missing: "bg-zinc-600",
 };
 
+/** The stage-state dot classes, exported for the workspace's navigation
+ *  spine: the five area tabs carry each owning stage's production state
+ *  (UI/UX plan §5 — ONE progress strip, not a second chip row). */
+export const BOARD_STAGE_DOT = STAGE_DOT;
+
 function timeAgo(iso: string): string {
   const s = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
   if (s < 60) return `${s}s ago`;
@@ -72,20 +77,16 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-export function ProductionBoard({
-  videoId,
-  onStageClick,
-}: {
-  videoId: string;
-  /** R2 GUI pass — the stage strip is the pipeline's navigation spine:
-   *  clicking a stage jumps to the workspace area that owns it. Optional
-   *  so the board stays a pure read-only card anywhere else. */
-  onStageClick?: (stage: BoardStageId) => void;
-}) {
+/** The board fetch, LIFTED into a hook (UI/UX plan §5): the workspace owns
+ *  ONE poll and feeds both the navigation spine (stage dots on the five area
+ *  tabs) and this detail card — no duplicate fetchers, no drift. */
+export function useProductionBoard(
+  videoId: string | null | undefined,
+): BoardData | null {
   const [data, setData] = useState<BoardData | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
 
   const load = useCallback(async () => {
+    if (!videoId) return;
     try {
       const res = await fetch(`/api/videos/${videoId}/board`, { cache: "no-store" });
       if (!res.ok) return;
@@ -96,11 +97,12 @@ export function ProductionBoard({
   }, [videoId]);
 
   useEffect(() => {
+    if (!videoId) return;
     // Deferred by 0ms — the codebase's settled pattern for async loads in
     // effects (no synchronous setState cascades).
     const t = setTimeout(() => void load(), 0);
     return () => clearTimeout(t);
-  }, [load]);
+  }, [load, videoId]);
 
   // Live while anything generates (the queue-panel rhythm: 4s until idle).
   const anyRunning =
@@ -113,6 +115,56 @@ export function ProductionBoard({
     const t = setInterval(() => void load(), 4000);
     return () => clearInterval(t);
   }, [anyRunning, load]);
+
+  return data;
+}
+
+/** Board stage → owning workspace area, with each stage's production state.
+ *  Drives the state dots on the workspace's five area tabs (the ONE compact
+ *  progress strip). Canvas hosts per-scene work and owns no pipeline stage —
+ *  it carries no dot. */
+export function stageStateForArea(
+  board: BoardData | null,
+  area: "director" | "storyboard" | "canvas" | "timeline" | "inspector",
+): BoardStage["state"] | null {
+  if (!board) return null;
+  switch (area) {
+    case "director":
+      return board.stages.script.state;
+    case "storyboard":
+      return board.stages.storyboard.state;
+    case "timeline":
+      return board.stages.render.state;
+    case "inspector":
+      return board.stages.voiceover.state;
+    default:
+      return null;
+  }
+}
+
+export function ProductionBoard({
+  videoId,
+  data: providedData,
+  hideStages = false,
+  onStageClick,
+}: {
+  videoId: string;
+  /** Pre-fetched board data from the host's useProductionBoard poll — when
+   *  given, this card renders WITHOUT its own fetch (the workspace owns the
+   *  one poll). Omit it to keep the old self-fetching behavior. */
+  data?: BoardData | null;
+  /** The five stage chips move onto the workspace's area tabs (the nav
+   *  spine); the board then renders only what the strip can't: the
+   *  attention chips, checkpoints, costs and history. */
+  hideStages?: boolean;
+  /** R2 GUI pass — the stage strip is the pipeline's navigation spine:
+   *  clicking a stage jumps to the workspace area that owns it. Optional
+   *  so the board stays a pure read-only card anywhere else. */
+  onStageClick?: (stage: BoardStageId) => void;
+}) {
+  const [showHistory, setShowHistory] = useState(false);
+  const selfFetched = useProductionBoard(providedData === undefined ? videoId : null);
+  const data = providedData !== undefined ? providedData : selfFetched;
 
   // While the board loads, hold the layout so the workspace header doesn't
   // jump when the card pops in (audit: the vanishing-card defect).
@@ -139,29 +191,33 @@ export function ProductionBoard({
 
   return (
     <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-2.5">
-      {/* the stage strip — clickable when the workspace wires onStageClick */}
-      <div className="flex items-center gap-1 flex-wrap">
-        {stages.map(([stageId, s], i) => (
-          <div key={s.label} className="flex items-center gap-1">
-            {i > 0 && <ChevronRight className="h-3 w-3 text-zinc-600" />}
-            <button
-              type="button"
-              onClick={() => onStageClick?.(stageId)}
-              className={onStageClick
-                ? "tf-focusable inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] border border-white/8 px-2 py-1 hover:border-white/25 hover:bg-white/[0.08] transition-colors"
-                : "inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] border border-white/8 px-2 py-1"}
-              title={s.detail ?? s.state}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${STAGE_DOT[s.state]}`} />
-              <span className="text-[11px] text-zinc-300">{s.label}</span>
-              {s.state === "running" && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
-              {s.detail && (
-                <span className="text-[10px] text-muted-foreground">{s.detail}</span>
-              )}
-            </button>
-          </div>
-        ))}
-      </div>
+      {/* the stage strip — clickable when the workspace wires onStageClick.
+          Hidden when the host carries the stages on its own nav spine
+          (hideStages — the five area tabs own the strip there). */}
+      {!hideStages && (
+        <div className="flex items-center gap-1 flex-wrap">
+          {stages.map(([stageId, s], i) => (
+            <div key={s.label} className="flex items-center gap-1">
+              {i > 0 && <ChevronRight className="h-3 w-3 text-zinc-600" />}
+              <button
+                type="button"
+                onClick={() => onStageClick?.(stageId)}
+                className={onStageClick
+                  ? "tf-focusable inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] border border-white/8 px-2 py-1 hover:border-white/25 hover:bg-white/[0.08] transition-colors"
+                  : "inline-flex items-center gap-1.5 rounded-lg bg-white/[0.04] border border-white/8 px-2 py-1"}
+                title={s.detail ?? s.state}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${STAGE_DOT[s.state]}`} />
+                <span className="text-[11px] text-zinc-300">{s.label}</span>
+                {s.state === "running" && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
+                {s.detail && (
+                  <span className="text-[10px] text-muted-foreground">{s.detail}</span>
+                )}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* what needs the human */}
       {attention.length > 0 && (

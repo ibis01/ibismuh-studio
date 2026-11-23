@@ -92,7 +92,15 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set) => ({
   view: "dashboard",
-  setView: (v) => set({ view: v }),
+  // UI/UX plan §5 — one navigation map, no duplicated destinations. The
+  // sidebar lists every page DIRECTLY (the 2026-11 law), so the two legacy
+  // hub ids normalize at the door: #/assets lands on Cast, #/insights on
+  // Analytics. The ViewIds stay in the type for old deep links; they never
+  // become the active view — nothing renders a second navigation strip.
+  setView: (v) =>
+    set({
+      view: v === "assets" ? "cast" : v === "insights" ? "analytics" : v,
+    }),
 
   refreshKey: 0,
   bumpRefresh: () => set((s) => ({ refreshKey: s.refreshKey + 1 })),
@@ -173,7 +181,9 @@ export function restoreViewFromHash(
   const m = /^#\/([a-z]+)(?:\/([A-Za-z0-9_-]+))?$/.exec(hash);
   if (!m || !VIEW_IDS.includes(m[1] as ViewId)) return false;
   const s = useAppStore.getState();
-  const view = m[1] as ViewId;
+  // Legacy hub deep links land on the concrete destination (the sidebar
+  // lists every page directly — no hub strips exist anymore).
+  const view = (m[1] === "assets" ? "cast" : m[1] === "insights" ? "analytics" : m[1]) as ViewId;
   // The workspace and its five area pages all carry the hosted project id.
   if ((view === "workspace" || isWorkspaceArea(view)) && m[2] && m[2] !== s.focusVideoId)
     s.setFocusVideoId(m[2]);

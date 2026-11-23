@@ -27,7 +27,6 @@ import {
 import { Loader2, Menu, Plus, Search } from "lucide-react";
 import { IbismuhLogo, IbismuhWordmark } from "@/components/ibismuh/logo";
 import { CommandPalette } from "@/components/ibismuh/command-palette";
-import { HubTabs } from "@/components/ibismuh/hub-tabs";
 
 // Code splitting (boot-payload fix, 2026-11): statically importing every
 // view forced every phone to download the whole studio (~10 MB gz in dev)
@@ -122,20 +121,13 @@ const WorkspaceView: ComponentType<{ area: ViewId }> = dynamic(
   { ssr: false, loading: () => <ViewFallback /> }
 );
 
-// B1 destination hubs (docs/design/B1_DESIGN_SPECIFICATION.md §3): the four
-// destinations + Settings. Grouped views render inside their destination's
-// HubTabs strip; the hub maps its tab ids onto ViewIds, so programmatic
-// jumps (clone deep-link → voice, project → calendar) land on the same
-// surface with the right tab lit and the sidebar highlighting the
-// destination that owns the view (activeNavId).
-const ASSETS_GROUP: ViewId[] = ["assets", "cast", "world", "voice"];
-const INSIGHTS_GROUP: ViewId[] = [
-  "insights",
-  "analytics",
-  "research",
-  "calendar",
-  "channels",
-];
+// UI/UX plan §5 — ONE navigation map. The sidebar lists every destination
+// DIRECTLY (the 2026-11 law), so the B1 hub strips (HubTabs) are retired:
+// no page renders a second navigation row anymore. The legacy hub ViewIds
+// ("assets"/"insights") stay in the store's type only to normalize old deep
+// links at the door (setView + restoreViewFromHash map them to their first
+// destination); the VIEW_META entries below remain only because the record
+// covers every ViewId — those two are unreachable aliases now.
 
 const VIEW_META: Record<ViewId, { kicker: string; title: string; subtitle: string }> = {
   dashboard: {
@@ -145,13 +137,13 @@ const VIEW_META: Record<ViewId, { kicker: string; title: string; subtitle: strin
   },
   assets: {
     kicker: "Studio",
-    title: "Assets",
-    subtitle: "Cast, world and voice — reusable across projects",
+    title: "Cast",
+    subtitle: "Recurring characters with locked-in visual identity",
   },
   insights: {
-    kicker: "Studio",
-    title: "Insights",
-    subtitle: "Research, analytics and publishing intelligence",
+    kicker: "Insights",
+    title: "Analytics",
+    subtitle: "Real YouTube performance feeding the Topic Radar",
   },
   analytics: {
     kicker: "Insights",
@@ -373,38 +365,16 @@ export default function Home() {
           {/* View content */}
           <main className="flex-1 px-4 sm:px-6 py-6 w-full max-w-[1400px] mx-auto">
             {view === "dashboard" && <DashboardView />}
-            {ASSETS_GROUP.includes(view) && (
-              <HubTabs
-                active={view}
-                tabs={[
-                  { id: "cast", label: "Cast" },
-                  { id: "world", label: "World" },
-                  { id: "voice", label: "Voice Studio" },
-                ]}
-                panels={{
-                  cast: <CastView />,
-                  world: <WorldView />,
-                  voice: <VoiceView />,
-                }}
-              />
-            )}
-            {INSIGHTS_GROUP.includes(view) && (
-              <HubTabs
-                active={view}
-                tabs={[
-                  { id: "analytics", label: "Analytics" },
-                  { id: "research", label: "Topic Radar" },
-                  { id: "calendar", label: "Publishing Calendar" },
-                  { id: "channels", label: "Channels" },
-                ]}
-                panels={{
-                  analytics: <AnalyticsView />,
-                  research: <ResearchView />,
-                  calendar: <CalendarView />,
-                  channels: <ChannelsView />,
-                }}
-              />
-            )}
+            {/* Every destination renders itself — no hub tab strips (the
+                sidebar is the ONE navigation map; legacy hub ids normalize
+                in the store before they can become the active view). */}
+            {view === "cast" && <CastView />}
+            {view === "world" && <WorldView />}
+            {view === "voice" && <VoiceView />}
+            {view === "analytics" && <AnalyticsView />}
+            {view === "research" && <ResearchView />}
+            {view === "calendar" && <CalendarView />}
+            {view === "channels" && <ChannelsView />}
             {view === "create" && <CreateView />}
             {view === "library" && <LibraryView />}
             {/* The workspace and its five area pages host ONE component instance
