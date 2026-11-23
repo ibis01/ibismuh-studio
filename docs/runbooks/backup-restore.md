@@ -97,7 +97,7 @@ into the drill log in §4.
 
 | Date | Dump stamp | Size | Restore time | Boot + smoke time | Result | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| — | — | — | — | — | _first quarterly drill pending_ | — |
+| — | — | — | — | — | _first quarterly drill pending — production Postgres lane, scheduled with the real-PostgreSQL migration drill (M2); the SQLite-lane machinery below is drilled on every push_ | — |
 
 ### 4.1 The automated companion drill (S103 / P1.1, 2026-11-13)
 
@@ -119,6 +119,44 @@ via `IBISMUH_STUDIO_ALERT_BACKUPS_DIR` — backup artifact freshness. Every fail
 prints one actionable `[ALERT] <check> — <what to do>` line and the final
 `HEALTH <n> failed` is machine-scrapable; exit code 1 wakes the monitor.
 Point a cron/uptime monitor at it in production.
+
+### 4.2 Object-storage leg added (M1 infrastructure milestone, 2026-11-23)
+
+The M1 review demanded restore evidence for the object store, not just the
+database. `scripts/restore-drill.mts` now runs **two legs** in one pass:
+
+- **Storage leg** — seeds four objects in the real `uploads/` layout
+  (`<videoId>/final.mp4`, `<videoId>/preview.mp4`,
+  `<videoId>/thumbnail.jpg`, `_music/track-128.mp3`), byte-copies them into
+  the drill backup, destroys the live copies with random bytes, restores
+  from the backup, and asserts sha256 checksums **and** full manifest
+  parity (every seeded path present, nothing missing, nothing extra).
+- **Database leg** — unchanged (VACUUM INTO snapshot → noise-destroy →
+  restore → integrity_check + row-count parity against seeded
+  org/user/video/jobs data).
+
+First two-leg run (2026-11-23): **12/12 assertions PASS** — DB RTO 449 ms
+(restore + verify incl. seeded parity), storage RTO 35 ms (byte-exact).
+A real `npm run backup` bundle was produced the same day
+(`backups/ibismuh-2026-11-23_193854/`, gitignored per `/backups/` —
+VACUUM INTO hot copy, 668 KB, `integrity_check: ok`, 39 tables, uploads
+manifest of 40 files, MANIFEST.txt).
+
+**Finding fixed the same day:** the operational backup path
+(`scripts/backup.sh`) hard-required the `sqlite3` CLI and exited 1 on hosts
+without it — i.e. `npm run backup` was broken on exactly the slim
+containers it is meant to run on (first observed live here, exit 1, 2026-11-23).
+It now falls back to the same `VACUUM INTO` hot copy through
+`better-sqlite3` (`scripts/backup-vacuum.mjs`), which ships with the Prisma
+driver adapter, so `npm run backup` works wherever the app runs.
+
+**Operational gotcha recorded during the drill:** a shell-exported ambient
+`DATABASE_URL` silently outranks `.env` for every Node/Prisma process —
+drill/setup invocations landed on the wrong database file
+(`/home/z/my-project/db/custom.db`) until the URL was pinned explicitly.
+**All backup/drill/restore commands must pin the URL**
+(`DATABASE_URL="file:<abs-path>" npm run …`). This is the live instance of
+the wrong-target failure class §5 warns about.
 
 ## 5. Failure modes and responses
 

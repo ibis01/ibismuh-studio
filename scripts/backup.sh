@@ -40,14 +40,16 @@ if [[ "$DB_URL" == file:* ]]; then
     exit 1
   fi
 
-  if ! command -v sqlite3 >/dev/null 2>&1; then
-    echo "[backup] ERROR: sqlite3 CLI is required for SQLite backups" >&2
-    echo "         (install it, or copy $DB_FILE manually while the app is stopped)" >&2
-    exit 1
+  if command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 "$DB_FILE" "VACUUM INTO '$DEST/database.db'"
+    echo "[backup] database hot-copied (VACUUM INTO): $DB_FILE -> $DEST/database.db"
+  else
+    # Minimal hosts (CI containers, slim VMs) often lack the sqlite3 CLI —
+    # the operational backup path must not depend on it. Same hot copy via
+    # better-sqlite3, which ships with the app's Prisma driver adapter.
+    echo "[backup] sqlite3 CLI not found — falling back to node + better-sqlite3"
+    BACKUP_SRC="$DB_FILE" BACKUP_OUT="$DEST/database.db" node "$ROOT/scripts/backup-vacuum.mjs"
   fi
-
-  sqlite3 "$DB_FILE" "VACUUM INTO '$DEST/database.db'"
-  echo "[backup] database hot-copied (VACUUM INTO): $DB_FILE -> $DEST/database.db"
 else
   if [ -z "$DB_URL" ]; then
     echo "[backup] WARNING: DATABASE_URL not found in .env — attempting pg_dump default" >&2
