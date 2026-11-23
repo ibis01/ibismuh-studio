@@ -1355,7 +1355,11 @@ async function blendRun(
   settings: TransitionSettings[],
   outPath: string,
   groupMax: number,
-  quality: { crf: string; preset: string } = QUALITY_ENCODING.standard
+  quality: { crf: string; preset: string } = QUALITY_ENCODING.standard,
+  /** Honest stitch progress — called per encode pass so the UI's progress
+   *  line MOVES through the minutes the blend rounds actually take (the old
+   *  frozen "Stitching scenes" read as a hang). */
+  onProgress?: (label: string) => void
 ): Promise<void> {
   const tmp = (i: number, round: number) =>
     outPath.replace(/\.mp4$/, `.blend-r${round}-${i}.mp4`);
@@ -1372,6 +1376,12 @@ async function blendRun(
     const nextDurations: number[] = [];
     const nextBoundaries: TransitionSettings[] = [];
     const singlePass = groups.length === 1 && groups[0].to - groups[0].from + 1 === paths.length;
+    // The blend clock: each round re-encodes the whole timeline prefix, so
+    // "pass 2 of ~3" is the honest unit — segments already reported their own
+    // progress one step earlier.
+    onProgress?.(
+      `Blending transitions (pass ${round + 1}${singlePass ? "" : ` · ${paths.length} clips left`})`
+    );
 
     for (const [gi, g] of groups.entries()) {
       const groupPaths = paths.slice(g.from, g.to + 1);
@@ -1418,6 +1428,9 @@ async function blendRun(
         }
         nextPaths.push(groupOut);
         nextDurations.push(g.outDurationSec);
+        onProgress?.(
+          `Blending transitions (pass ${round + 1} · group ${gi + 1}/${groups.length})`
+        );
       }
       // The boundary AFTER this group becomes a next-round boundary (the
       // last group has none — its tail is the run's end).
@@ -1467,6 +1480,8 @@ async function stitchSegments(opts: {
   outPath: string;
   /** S3 — delivery encode tier for blend masters (default standard). */
   quality?: { crf: string; preset: string };
+  /** Honest stitch progress — forwarded to every blend run (see blendRun). */
+  onProgress?: (label: string) => void;
 }): Promise<void> {
   const n = opts.segPaths.length;
   const boundaries = opts.settings.slice(0, Math.max(0, n - 1));
@@ -1487,7 +1502,7 @@ async function stitchSegments(opts: {
 
   // No cuts at all → one run covers everything → today's single-master path.
   if (runs.length === 1) {
-    await blendRun(opts.segPaths, opts.durationsSec, boundaries, opts.outPath, groupMax, q);
+    await blendRun(opts.segPaths, opts.durationsSec, boundaries, opts.outPath, groupMax, q, opts.onProgress);
     return;
   }
 
@@ -1507,7 +1522,8 @@ async function stitchSegments(opts: {
       boundaries.slice(run.from, run.to),
       runOut,
       groupMax,
-      q
+      q,
+      opts.onProgress
     );
     runOutputs.push(runOut);
   }
@@ -2399,6 +2415,7 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
       settings: boundary,
       outPath: basePath,
       quality: QUALITY_ENCODING[opts.quality ?? "standard"],
+      onProgress: (label) => report(scenes.length, label),
     });
 
     // 4) Subtitles + music, then move into place.

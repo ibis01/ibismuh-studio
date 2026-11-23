@@ -111,7 +111,7 @@ export function StatCard({
   return (
     <Card
       className={clsx(
-        "glass border-white/8 rounded-2xl p-4 sm:p-5 relative overflow-hidden",
+        "glass tf-glass-lift border-white/8 rounded-2xl p-4 sm:p-5 relative overflow-hidden",
         accent && "glow-brand-soft"
       )}
     >
@@ -120,7 +120,7 @@ export function StatCard({
       )}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs text-muted-foreground font-medium truncate">{label}</p>
+          <p className="text-xs text-foreground/75 font-medium truncate">{label}</p>
           <p className="text-2xl sm:text-[28px] font-bold tracking-tight mt-1 tabular-nums">
             {value}
           </p>

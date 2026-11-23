@@ -262,10 +262,11 @@ export function AppSidebar() {
         <div className="glass tf-elev-1 rounded-xl p-3.5">
           <div className="flex items-center gap-2">
             <span className="animate-pulse-dot h-2 w-2 rounded-full bg-primary shrink-0" />
-            <p className="text-xs font-medium">You direct · AI assists</p>
+            <p className="text-xs font-medium">Studio online</p>
           </div>
           <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
-            Idea → Script → Scenes → Ship. You approve every step.
+            Every pipeline stage runs in the background — progress lands
+            here and in Activity.
           </p>
         </div>
         {/* Sign out only makes sense while the lock is active (AuthGate broadcasts it) */}
