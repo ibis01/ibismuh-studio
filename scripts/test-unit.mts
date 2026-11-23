@@ -25585,6 +25585,34 @@ await test("UIUX §5 — the hub tab strips are retired: no page renders a secon
   ok(/restoreViewFromHash[\s\S]*?assets.*cast/.test(store), "hash restore normalizes the legacy assets id");
 });
 
+await test("UIUX §6 — the Timeline save-state chip speaks the full state machine (source pin)", () => {
+  const ts = fs.readFileSync("src/components/ibismuh/timeline-studio.tsx", "utf8");
+  // Plan §6: loading/saving/saved/unsaved/failed/rendering all visible; a
+  // failed save may never look like routine "unsaved" noise (the chip
+  // persists until the next SERVER-CONFIRMED success), and "saved" may only
+  // appear after the PUT answers ok.
+  ok(ts.includes("saveFailed"), "the failed state exists as its own flag");
+  ok(ts.includes('saveFailed ? ('), "the chip renders the failed state");
+  ok(ts.includes("save failed — retry"), "the failed chip doubles as the retry affordance");
+  ok(/renderInFlight \? \([\s\S]{0,200}?rendering…/.test(ts), "the chip speaks rendering while a render is in flight");
+  ok(ts.includes("setSaveFailed(false); // the next successful save retires the failure chip"), "the failure chip retires ONLY on a server-confirmed save");
+  // The savedAt write must stay AFTER the res.ok gate (server-confirmed law).
+  ok(/if \(!res\.ok\) \{[\s\S]{0,220}?throw new Error\([\s\S]{0,60}\}\s*\n\s*setDirty\(false\);\s*\n\s*setSavedAt\(Date\.now\(\)\);/.test(ts),
+    "'saved' is stamped only after the PUT answers ok — never optimistically");
+});
+
+await test("UIUX §6 — zoom keeps the operator's place (scroll-fraction anchor, selection untouched)", () => {
+  const ts = fs.readFileSync("src/components/ibismuh/timeline-studio.tsx", "utf8");
+  ok(ts.includes("CONTENT FRACTION across every density change"), "the density effect anchors the lanes scroll to the same content fraction");
+  ok(/const fraction = el\.scrollLeft \/ Math\.max\(1, total \* prev \+ 32\);\s*\n\s*el\.scrollLeft = fraction \* Math\.max\(1, total \* density \+ 32\);/.test(ts),
+    "the anchor preserves scrollLeft/contentWidth across the density change");
+  // Selection is scene INDEX state — no density writer may touch it.
+  const zoomSites = [...ts.matchAll(/setDensity\((?:\(d\) => [^\n]*|Math\.[^\n]*)\)/g)].length;
+  ok(zoomSites >= 3, "all zoom entry points (buttons + wheel) go through setDensity alone");
+  ok(!/setSelected\([\s\S]{0,80}setDensity/.test(ts) && !/setDensity\([\s\S]{0,80}setSelected\(/.test(ts),
+    "no zoom path resets the selected clip");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 
 for (const f of failures) console.log(`  ✗ ${f}`);

@@ -72,7 +72,7 @@ ProductionBoard card, the store's ViewId contract.
 | ESLint | `npm run lint` | 0 errors, 19 warnings (pre-existing `no-explicit-any` family, untouched files) |
 | Unit suite | `npm run test` | **1030 passed, 0 failed** (1026 baseline + 4 new) |
 | Production build | `npm run build` | ✓ compiled, 53/53 static pages, standalone assembled |
-| Nightly-only e2e | `npm run test:e2e` | **Not executed in this environment** (requires provider-keyed server + full stack); selectors repaired by source-audit and pinned by unit text-assertions — flagged as pending in §8 |
+| E2E (Playwright) | `npm run test:e2e` | **Executed. First CI run (45125553088) failed 2 tests — both real shell regressions from the navigation map, receipted and fixed in `8bcfaac`. Full suite now 38/38 locally; PR CI re-runs it.** |
 
 ## 6. New regression tests
 
@@ -97,14 +97,13 @@ gate, and the 6 AFTER captures of the changed surfaces. Capture scripts live in
 
 ## 8. Known limitations (honest)
 
-1. **E2E suite not executed here** — the nightly workflow will run it; the touched
-   selectors were verified by source inspection and the unit pins above.
-2. **Provider-gated visual states** (generated storyboard art, assembled timeline
+1. **Provider-gated visual states** (generated storyboard art, assembled timeline
    clips, render-in-progress, error states) are documented from source + the operator
    screencast, not re-captured — no AI keys in this environment by design.
-3. The icon-only-button aria-label gap list (audit §F8) is heuristic grep output;
-   Phase 10 does the authoritative pass.
-4. The workspace project header does not yet expose editable title / save status /
+2. The icon-only-button aria-label gap list (audit §F8) is heuristic grep output;
+   the Phase 10 spot-check found aria-labels present (the grep under-counts multi-line
+   JSX) — the authoritative pass remains manual review.
+3. The workspace project header does not yet expose editable title / save status /
    render status (plan §5) — staged as Phase 6 work alongside the Timeline redesign.
 
 ## 9. Remaining plan work (staged, in plan order)
@@ -113,9 +112,9 @@ gate, and the 6 AFTER captures of the changed surfaces. Capture scripts live in
 |---|---|---|
 | 0 | Repository & UI audit | **done** (this branch) |
 | 1 | Design system | **done** (codified + type scale added) |
-| 2 | Application shell & navigation | **done** (this milestone's implementation) |
-| 3 | Timeline Studio redesign | next (P0 — strict gates, engine untouched) |
-| 4–8 | Storyboard / Director / Canvas / Inspector / microinteractions | staged |
-| 9–10 | Responsive + accessibility passes | staged (foundations already in place) |
+| 2 | Application shell & navigation | **done** (this milestone's implementation; e2e regressions fixed in `8bcfaac`) |
+| 3 | Timeline Studio redesign | **Phase 6 landed** — full save-state chip (unsaved/saving/saved/**failed-retry**/rendering, server-confirmed law pinned) + zoom scroll-fraction anchor (playhead time and selection untouched; 2 new unit pins, 1032/1032) |
+| 4–8 | Storyboard / Director / Canvas / Inspector / microinteractions | **audited** — storyboard card contract (unified `aspect-video` thumbs, status badge, context actions, filmstrip density), pointed empty state and AI-progress honesty already satisfied in the shell (see §7 audit notes); deeper Director progressive disclosure staged |
+| 9–10 | Responsive + accessibility passes | **audited** — 4-tier responsive behavior present (desktop resizable, laptop/tablet sidebar→drawer at `<lg`, mobile single-column; mobile-sweep e2e green); WCAG foundations in place (2× `prefers-reduced-motion` blocks, `tf-focusable` focus-visible, Radix focus traps, aria-labelled icon controls) |
 | 11 | Performance measurement | staged (before/after Lighthouse on prod server) |
 | 12 | Regression & visual validation battery | continuous per milestone |

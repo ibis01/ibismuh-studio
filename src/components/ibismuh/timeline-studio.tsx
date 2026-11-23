@@ -456,6 +456,10 @@ export function TimelineStudio({
   /** S3 — timestamp of the last successful save (manual or auto); drives
    *  the quiet “saved” note next to the Save button. */
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  /** UI/UX plan §6 — the save-state chip must speak FAILED, not let a
+   *  failed autosave vanish with its toast while the amber “unsaved” badge
+   *  sits there looking routine. Cleared by the next successful save. */
+  const [saveFailed, setSaveFailed] = useState(false);
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [density, setDensity] = useState(DENSITY_DEFAULT);
@@ -588,12 +592,14 @@ export function TimelineStudio({
         }
         setDirty(false);
         setSavedAt(Date.now());
+        setSaveFailed(false); // the next successful save retires the failure chip
         onSaved?.();
         // Autosaves stay quiet (a toast every 2.5 s of editing is noise);
         // failures ALWAYS surface — a silent lost save is the worst outcome.
         if (!silent)
           toast({ title: "Timeline saved", description: "The render will honor your trims and order." });
       } catch (err) {
+        setSaveFailed(true); // plan §6: the chip persists — a toast alone lets a failed save look routine
         toast({
           title: silent ? "Autosave failed" : "Save failed",
           description: err instanceof Error ? err.message : String(err),
@@ -1982,6 +1988,28 @@ export function TimelineStudio({
   }, []);
   const [canvasSize, setCanvasSize] = useState({ w: 0, h: 0 });
 
+  // UI/UX plan §6 — zoom must not lose your place: the browser keeps raw
+  // scrollLeft in px, so after a density change the same px sits over a
+  // DIFFERENT moment of the timeline (the playhead visually flies away and
+  // the operator re-finds it by hand). Anchor the lanes scroll to the same
+  // CONTENT FRACTION across every density change (buttons, wheel, fit) —
+  // the playhead keeps its position over the content, selection untouched.
+  // The playhead's TIME never moves (it is seconds; only px scale), so this
+  // is pure viewport arithmetic — no state, no scroll-event loop.
+  const densityRef = useRef(density);
+  useEffect(() => {
+    const el = lanesWrapRef.current;
+    if (!el) return;
+    const prev = densityRef.current;
+    if (prev === density || prev <= 0) {
+      densityRef.current = density;
+      return;
+    }
+    const fraction = el.scrollLeft / Math.max(1, total * prev + 32);
+    el.scrollLeft = fraction * Math.max(1, total * density + 32);
+    densityRef.current = density;
+  }, [density, total]);
+
   // The preview wrapper only exists once a timeline is loaded (the whole
   // surface renders inside that branch) — so the observer must (re)attach
   // when the timeline arrives, not just on first mount. A [] dep would
@@ -2553,7 +2581,28 @@ export function TimelineStudio({
               {timeline.sceneCount} scenes · {timeline.totalDurationSec.toFixed(1)}s
             </Badge>
           )}
-          {dirty ? (
+          {renderInFlight ? (
+            <Badge className="text-[10px] bg-sky-500/15 text-sky-200 border-sky-500/30">
+              rendering…
+            </Badge>
+          ) : saving ? (
+            <Badge className="text-[10px] bg-sky-500/15 text-sky-200 border-sky-500/30">
+              saving…
+            </Badge>
+          ) : saveFailed ? (
+            // UI/UX plan §6 — the failure state is FIRST-CLASS: it stays until
+            // the next successful save retires it. A toast alone lets a failed
+            // autosave look like routine "unsaved" noise while the doc is
+            // actually stranded. The chip is also the retry affordance.
+            <button
+              type="button"
+              onClick={() => void save()}
+              title="The last save failed — click to retry (⌘S also works). Your edits are still here."
+              className="tf-focusable text-[10px] bg-red-500/15 text-red-200 border border-red-500/30 rounded-full px-2 py-0.5 font-medium"
+            >
+              save failed — retry
+            </button>
+          ) : dirty ? (
             <Badge className="text-[10px] bg-amber-500/15 text-amber-200 border-amber-500/30">
               unsaved
             </Badge>
