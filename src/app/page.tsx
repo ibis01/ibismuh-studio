@@ -301,7 +301,7 @@ export default function Home() {
         {/* Main column */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* Top bar */}
-          <header className="sticky top-0 z-30 glass-strong border-b border-white/5">
+          <header className="sticky top-0 z-30 glass-strong">
             <div className="flex items-center gap-3 px-4 sm:px-6 h-16">
               {/* Mobile nav trigger */}
               <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
@@ -317,7 +317,7 @@ export default function Home() {
                 </SheetTrigger>
                 <SheetContent
                   side="left"
-                  className="w-64 p-0 bg-sidebar border-white/10"
+                  className="w-64 p-0 tf-sidebar-surface border-white/10"
                 >
                   <SheetTitle className="sr-only">Navigation</SheetTitle>
                   <MobileNavContent onNavigate={handleNav} view={view} />
@@ -325,7 +325,10 @@ export default function Home() {
               </Sheet>
 
               <div className="min-w-0 flex-1">
-                <p className="tf-kicker hidden sm:block">{meta.kicker}</p>
+                <p className="tf-kicker hidden sm:flex items-center gap-2">
+                  <span aria-hidden className="h-1 w-1 rounded-full bg-primary glow-brand-soft" />
+                  {meta.kicker}
+                </p>
                 <h1 className="text-base sm:text-lg font-semibold tracking-tight truncate">
                   {meta.title}
                 </h1>
@@ -350,6 +353,8 @@ export default function Home() {
                   ⌘K palette action, and Home's hero CTA — one meaning, no
                   duplicate button with an ambiguous accessible name. */}
             </div>
+            {/* A2 — the header's lower edge fades at both ends instead of a flat border */}
+            <div aria-hidden className="tf-hairline-fade absolute inset-x-0 bottom-0" />
           </header>
 
           {/* View content */}
@@ -377,7 +382,8 @@ export default function Home() {
           </main>
 
           {/* Sticky footer */}
-          <footer className="mt-auto border-t border-white/5 px-4 sm:px-6 py-4">
+          <footer className="mt-auto relative px-4 sm:px-6 py-4">
+            <div aria-hidden className="tf-hairline-fade absolute inset-x-0 top-0" />
             <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
               <p>
                 <span className="text-gradient font-semibold">Ibismuh Studio</span> ·
