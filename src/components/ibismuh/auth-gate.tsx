@@ -293,8 +293,22 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   // ---- signed out / register / error ----
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background bg-grid px-4">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen flex items-center justify-center bg-background bg-grid px-4 relative overflow-hidden">
+      {/* A4 ambience — the same two-hue aurora wash as the login page, so
+          every unauthenticated surface speaks one visual language. */}
+      <div
+        aria-hidden="true"
+        className="tf-aurora tf-aurora-cyan -top-48 left-1/2 h-[26rem] w-[44rem]"
+      />
+      <div
+        aria-hidden="true"
+        className="tf-aurora tf-aurora-blue bottom-[-14rem] right-[-8rem] h-[30rem] w-[34rem]"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/30 to-transparent"
+      />
+      <div className="relative w-full max-w-sm">
         <div className="flex flex-col items-center gap-3 mb-8 text-center">
           <IbismuhLogo size={64} />
           <h1 className="text-2xl font-bold tracking-tight">
@@ -330,7 +344,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         {/* S18 — the recovery flow replaces the card (only from LOGIN mode:
             a register-mode gate has no accounts, nothing to recover). */}
         {flow === "recover" && recoverStep === 1 && (
-          <form onSubmit={requestReset} className="glass rounded-2xl border border-white/10 p-6 space-y-4">
+          <form onSubmit={requestReset} className="glass tf-glow-edge rounded-2xl border border-white/10 p-6 space-y-4">
             <p className="text-xs text-muted-foreground leading-relaxed">
               Enter the account's email — the recovery link is sent there. Single-owner
               installs without a mail relay get the link right here instead.
@@ -372,7 +386,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         )}
 
         {flow === "recover" && recoverStep === 2 && recoverDone && (
-          <div className="glass rounded-2xl border border-white/10 p-6 space-y-4 text-center">
+          <div className="glass tf-glow-edge rounded-2xl border border-white/10 p-6 space-y-4 text-center">
             <MailCheck className="h-8 w-8 mx-auto text-emerald-400" />
             <p className="text-sm font-medium">Password changed</p>
             <p className="text-xs text-muted-foreground leading-relaxed">
@@ -393,7 +407,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         )}
 
         {flow === "recover" && recoverStep === 2 && !recoverDone && (
-          <form onSubmit={confirmReset} className="glass rounded-2xl border border-white/10 p-6 space-y-4">
+          <form onSubmit={confirmReset} className="glass tf-glow-edge rounded-2xl border border-white/10 p-6 space-y-4">
             {recoverLink ? (
               <p className="text-xs text-muted-foreground leading-relaxed">
                 Single-owner mode — the link is{" "}
@@ -474,7 +488,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         {flow === "signin" && (
         <form
           onSubmit={submit}
-          className="glass rounded-2xl border border-white/10 p-6 space-y-4"
+          className="glass tf-glow-edge rounded-2xl border border-white/10 p-6 space-y-4"
         >
           {mode === "register" && (
             <Input

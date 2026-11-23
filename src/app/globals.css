@@ -60,7 +60,10 @@
   --secondary: oklch(0.24 0.024 250);
   --secondary-foreground: oklch(0.95 0.005 240);
   --muted: oklch(0.225 0.02 250);
-  --muted-foreground: oklch(0.68 0.02 246);
+  /* A4 — 0.68 read below comfortable contrast on the navy canvas (the
+     external review's #1 finding); one step brighter stays muted but
+     clears the floor for secondary text everywhere. */
+  --muted-foreground: oklch(0.73 0.018 246);
   --accent: oklch(0.27 0.04 232);
   --accent-foreground: oklch(0.95 0.005 240);
   --destructive: oklch(0.704 0.191 22.216);
@@ -179,6 +182,13 @@
     opacity: 0.75;
     box-shadow: 0 0 0 6px rgb(34 211 238 / 0%);
   }
+}
+
+/* Text selection — brand-tinted (the default OS blue fights the navy
+   canvas; this reads as intentional on every selectable surface). */
+::selection {
+  background: rgb(34 211 238 / 28%);
+  color: white;
 }
 
 /* Custom scrollbars */
@@ -1090,6 +1100,118 @@ body::after {
     box-shadow:
       inset 0 0 0 1px rgb(34 211 238 / 16%),
       inset 0 1px 0 rgb(255 255 255 / 6%);
+  }
+
+  /* ---- A4 aesthetic pass — ambience + affordance refinements ---------- */
+
+  /* Ambient aurora orb — a slow, large blurred light that gives hero and
+     login surfaces cinematic depth. Purely decorative (aria-hidden at the
+     usage sites); drifts gently so the surface feels alive without ever
+     competing with content. Pairs with .tf-aurora-blue / .tf-aurora-cyan
+     for the two-hue wash. */
+  .tf-aurora {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(90px);
+    pointer-events: none;
+    animation: tf-aurora-drift 16s ease-in-out infinite alternate;
+  }
+  .tf-aurora-cyan {
+    background: radial-gradient(
+      circle at center,
+      rgb(34 211 238 / 22%),
+      transparent 70%
+    );
+  }
+  .tf-aurora-blue {
+    background: radial-gradient(
+      circle at center,
+      rgb(37 99 235 / 26%),
+      transparent 70%
+    );
+  }
+
+  /* Glass-card lift — the KPI/StatCard affordance: same physical rise law
+     as tf-card-hover, tinted hairline for the glass family. */
+  .tf-glass-lift {
+    transition:
+      transform var(--tf-dur) var(--tf-ease),
+      border-color var(--tf-dur) var(--tf-ease),
+      box-shadow var(--tf-dur) var(--tf-ease);
+  }
+  .tf-glass-lift:hover {
+    transform: translateY(-2px);
+    border-color: rgb(34 211 238 / 24%);
+    box-shadow:
+      0 12px 32px rgb(0 0 0 / 38%),
+      0 0 18px rgb(34 211 238 / 7%),
+      inset 0 1px 0 rgb(255 255 255 / 5%);
+  }
+
+  /* Gradient-border ring — a 1px brand-ramp edge painted as a masked
+     pseudo-element (radius-safe, no wrapper div): drop-in for any glass
+     card that should read as a lit surface (auth cards, login). */
+  .tf-glow-edge {
+    position: relative;
+  }
+  .tf-glow-edge::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      160deg,
+      rgb(34 211 238 / 42%),
+      rgb(37 99 235 / 20%) 38%,
+      rgb(255 255 255 / 7%) 70%,
+      rgb(34 211 238 / 24%)
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* Gradient border card — the login surface treatment: a 1px brand ramp
+     wrapped around the glass card (the p-px padding trick; the card's own
+     border is dropped so the ramp IS the edge). */
+  .tf-border-glow {
+    position: relative;
+    border-radius: 1rem;
+    padding: 1px;
+    background: linear-gradient(
+      160deg,
+      rgb(34 211 238 / 40%),
+      rgb(37 99 235 / 18%) 38%,
+      rgb(255 255 255 / 6%) 70%,
+      rgb(34 211 238 / 22%)
+    );
+    box-shadow:
+      0 24px 70px rgb(0 0 0 / 50%),
+      0 0 44px rgb(34 211 238 / 10%);
+  }
+}
+
+@keyframes tf-aurora-drift {
+  from {
+    transform: translate3d(-3%, -2%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(4%, 3%, 0) scale(1.12);
+  }
+}
+
+/* The aurora is decoration — reduced-motion users get the same wash,
+   frozen (opacity + position intact, no drift). */
+@media (prefers-reduced-motion: reduce) {
+  .tf-aurora {
+    animation: none !important;
   }
 }
 
