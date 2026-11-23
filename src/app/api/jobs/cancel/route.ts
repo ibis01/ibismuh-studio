@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/ibismuh/tenant";
 import { requestJobCancel, type JobKind } from "@/lib/ibismuh/jobs";
 import { resumableKinds } from "@/lib/ibismuh/queue-handlers";
+import { parseJsonBody, jobCancelSchema } from "@/lib/ibismuh/api-schemas";
 
 /**
  * POST — stop a running background job (user-facing Stop button).
@@ -29,19 +30,13 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   auth.enter(); // tenant scope: handler + spawned job closures
 
-  let body: { entityId?: string; kind?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  // Shared Zod admission (Phase 5): id shape + length walls before the
+  // registry lookup.
+  const parsed = await parseJsonBody(req, jobCancelSchema);
+  if (!parsed.ok)
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
 
-  const { entityId, kind } = body ?? {};
-  if (!entityId || !kind)
-    return NextResponse.json(
-      { error: "entityId and kind are required" },
-      { status: 400 }
-    );
+  const { entityId, kind } = parsed.data;
   if (!KINDS.includes(kind as JobKind))
     return NextResponse.json(
       { error: `Unknown job kind "${kind}"` },

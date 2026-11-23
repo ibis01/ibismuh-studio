@@ -26,6 +26,7 @@ import {
   enforceRequestContentLength,
   withUploadSlot,
 } from "@/lib/ibismuh/upload-limits";
+import { parseJsonValue, cloneMetaSchema } from "@/lib/ibismuh/api-schemas";
 
 export async function POST(req: NextRequest) {
   const auth = await requireUser(req);
@@ -74,20 +75,35 @@ export async function POST(req: NextRequest) {
 
   const file = form.get("file");
   const url = form.get("url");
-  const name = typeof form.get("name") === "string" ? String(form.get("name")) : "";
-  const sampleText =
-    typeof form.get("sampleText") === "string" ? String(form.get("sampleText")) : "";
-  const auditionText =
-    typeof form.get("auditionText") === "string" ? String(form.get("auditionText")) : "";
+  // Shared Zod admission (Phase 5): the text fields are length-walled
+  // before they ride into the clone pipeline.
+  const meta = parseJsonValue(
+    {
+      name: typeof form.get("name") === "string" ? String(form.get("name")) : undefined,
+      sampleText:
+        typeof form.get("sampleText") === "string" ? String(form.get("sampleText")) : undefined,
+      auditionText:
+        typeof form.get("auditionText") === "string" ? String(form.get("auditionText")) : undefined,
+      consentText:
+        typeof form.get("consentText") === "string" ? String(form.get("consentText")) : undefined,
+      consentBasis:
+        typeof form.get("consentBasis") === "string" ? String(form.get("consentBasis")) : undefined,
+    },
+    cloneMetaSchema,
+    "Invalid clone metadata",
+  );
+  if (!meta.ok)
+    return NextResponse.json({ error: meta.error }, { status: 400 });
+  const name = meta.data.name ?? "";
+  const sampleText = meta.data.sampleText ?? "";
+  const auditionText = meta.data.auditionText ?? "";
 
   // S121 consent ledger — the uploader records WHOSE voice this is and the
   // basis of their claim. Optional today (legacy rows have null), persisted
   // on every clone when supplied; the UI prompts for it next to the upload.
   // The law lives in parseCloneConsent (voice-clone.ts) — shared with its pin.
-  const consentTextRaw =
-    typeof form.get("consentText") === "string" ? String(form.get("consentText")) : "";
-  const consentBasisRaw =
-    typeof form.get("consentBasis") === "string" ? String(form.get("consentBasis")) : "";
+  const consentTextRaw = meta.data.consentText ?? "";
+  const consentBasisRaw = meta.data.consentBasis ?? "";
   const parsedConsent = parseCloneConsent(consentTextRaw, consentBasisRaw);
   if (!parsedConsent.ok) {
     return NextResponse.json({ error: parsedConsent.error }, { status: 400 });

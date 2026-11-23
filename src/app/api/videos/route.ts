@@ -10,6 +10,7 @@ import { TRANSITIONS, sanitizeTransitionDuration } from "@/lib/ibismuh/transitio
 import { isDuckIntensity } from "@/lib/ibismuh/audiomix";
 import { isMusicMoodId } from "@/lib/ibismuh/music";
 import { errorText } from "@/lib/ibismuh/redact";
+import { parseJsonBody, videoCreateSchema } from "@/lib/ibismuh/api-schemas";
 
 const TRANSITION_IDS = new Set<string>(TRANSITIONS.map((t) => t.id));
 
@@ -53,7 +54,14 @@ export async function POST(req: NextRequest) {
   auth.enter(); // tenant scope: handler + spawned job closures
 
   try {
-    const body = await req.json();
+    // Shared Zod admission (Phase 5): malformed values (NaN, Infinity,
+    // absurd lengths, unknown formats/render modes, malformed ids) are
+    // rejected BEFORE any downstream coercion — the old path silently
+    // defaulted unknown formats and clamped NaN.
+    const parsed = await parseJsonBody(req, videoCreateSchema);
+    if (!parsed.ok)
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const body: Record<string, unknown> = parsed.data as Record<string, unknown>;
     const topic = String(body.topic ?? "").trim();
     if (!topic)
       return NextResponse.json({ error: "Topic is required" }, { status: 400 });

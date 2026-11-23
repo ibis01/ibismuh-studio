@@ -50,6 +50,12 @@ import {
   ProviderHttpError,
   validateProviderBaseUrl,
 } from "@/lib/ibismuh/providers/http";
+import {
+  parseJsonBody,
+  parseJsonValue,
+  providerSettingsPatchSchema,
+  providerTestSchema,
+} from "@/lib/ibismuh/api-schemas";
 
 const CAPABILITIES: CapabilityId[] = ["chat", "tts", "asr", "image", "video"];
 
@@ -176,7 +182,12 @@ export async function PUT(req: NextRequest) {
   auth.enter(); // tenant scope: handler + spawned job closures
 
   try {
-    const body = await req.json();
+    // Shared Zod admission (Phase 5): lengths, capability ids and enum
+    // walls before any credential is touched.
+    const parsedBody = await parseJsonBody(req, providerSettingsPatchSchema);
+    if (!parsedBody.ok)
+      return NextResponse.json({ error: parsedBody.error }, { status: 400 });
+    const body = parsedBody.data as Record<string, unknown>;
 
     // ---- Scope 1: shared credentials (per-user zai.* preference rows) ----
     if (body.scope === "zai" || (!body.scope && !body.capability)) {
@@ -291,9 +302,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   auth.enter(); // tenant scope: handler + spawned job closures
 
+  // Shared Zod admission (Phase 5) — an empty body still means "test saved
+  // chat settings"; anything present must be well-formed.
   let body: Record<string, string | boolean | undefined> = {};
   try {
-    body = await req.json();
+    const raw = await req.json();
+    const parsed = parseJsonValue(raw ?? {}, providerTestSchema, "Invalid test request");
+    if (!parsed.ok)
+      return NextResponse.json({ ok: false, error: parsed.error }, { status: 200 });
+    body = parsed.data as Record<string, string | boolean | undefined>;
   } catch {
     /* empty body = test saved chat settings */
   }
