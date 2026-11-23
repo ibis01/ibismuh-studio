@@ -7429,3 +7429,170 @@ produced a real 143s h264+aac keynote.
 **Gates (this sandbox):** battery 1026/1026 · eslint clean · tsc clean ·
 five final.mp4 artifacts ffprobe-verified (h264 + AAC). CI owns the push
 evidence. fly.io picks this up on its next manual `fly deploy`.
+
+## 2026-11-23 — Studio session: milestone branch M3 + M4 — API validation census + the provider retry gap closed
+
+**M3 (audit).** The API validation census tool landed (`npm run audit:api`):
+138 route files / 209 methods classified into validation lanes + auth
+classes, full per-method evidence table emitted to
+docs/audits/api-validation-audit.md. Result: zero unvalidated input
+surfaces — raw-parse 0 (all 23 first-pass candidates source-verified
+guarded), query-NaN 0; auth 199/209 session-gated, 1 fail-closed HMAC
+(Stripe webhook), 9 public-by-design each with its own wall. The F-08
+manual-walls lane (51) accepted with evidence, pinned by test:api-schemas.
+
+**M4 (fix).** The provider retry gap (R-HIGH-8 / final-report remaining
+risk #3) is CLOSED: the Z.ai lane already retried via budget.ts#withRetry;
+the direct-provider lane (providerFetch) and the YouTube lane (ytFetch)
+now retry through providers/http.ts#withTransportRetry — transient-only
+re-attempts (timeouts, connection blips, 408/429/5xx), 429 honors
+Retry-After (bounded 60s) else budget's 4x multiplier, exponential backoff
+with full jitter; deterministic verdicts (policy blocks, 401/403/400/404,
+quotaExceeded) surface on attempt one. youtube-api 3 attempts, youtube-
+upload 2 (resumable PUT restart is protocol-legal), providerFetch 3.
+Zero caller-visible contract change. Three S149 stubs scripted a 500 as
+"unreachable" — under the new law a 500 is honestly recovered, so those
+stubs now script a hard-unreachable 404 (stub-only, no assertion changed).
+
+**Gates (this sandbox):** typecheck PASS · lint 0/0 · unit 1039/1039 ·
+net-guard + provider battery PASS · provider-registry 16/16 · rate
+limiter PASS. test:voicestudio fails identically on the pre-M4 tree
+(loopback server on a non-standard port blocked by the sandbox network
+policy — pre-existing environment failure, not an M4 regression).
+
+**Push state:** both commits (63351f3 M3, a562ba0 M4) are LOCAL-ONLY on
+release/production-readiness — the sandbox has no GitHub credentials this
+session (`could not read Username for 'https://github.com'`); main stays
+in sync at origin. Push when credentials are available.
+
+## 2026-11-23 — Studio session (continued): M5 + M6 + M7 — the milestone plan completes on the branch
+
+**M5 (drill, BLOCKED-as-expected).** No Docker daemon in this sandbox —
+the docker-smoke runtime walk cannot run here (CI owns that evidence).
+A full structural re-audit of the deployment topology ran instead: both
+compose files parse; all four milestone services present (postgres /
+migrate one-shot / web / worker); postgres healthchecked; named volumes
+all carry the ibismuh_ rename law; zero legacy TUBEFORGE_* references;
+smoke overlay merge-safe (every patched key exists in base); Dockerfile
+three-stage (deps → build → runner). ONE new finding recorded, M5-F1
+(minor): ibismuh-web and ibismuh-worker carry NO compose healthcheck —
+deliberately not blind-fixed (probes need a daemon to be proven; the
+next daemon-equipped session closes it WITH the smoke walk).
+
+**M6 (decision).** GO for the milestone merge, conditional on operator
+actions in order: push the branch when credentials exist → CI green →
+docker-smoke green (+ M5-F1 closed with it) → merge release/production-
+readiness → main (squash-free — the history is the audit trail). Honest
+limits recorded: docker-smoke BLOCKED (no daemon), test:voicestudio
+pre-existing sandbox-environment failure (fails identically pre-M4),
+push BLOCKED (no GitHub credentials — M3..M7 records are local-only).
+
+**M7 (gate).** npm run check executed END-TO-END on the decision tree:
+exit 0, single run — typecheck · lint 0/0 · unit 1039/1039 ·
+whiteboard-trace · whiteboard-profiles · provider-registry · billing ·
+storage · net-guard + provider battery · tenant-registry ·
+tenant-isolation · upload-limits · api-schemas · queue-reliability ·
+lint-budget · rate limiter · scene-revisions 29/29 · restore drill 12/12
+(RTO db 394ms / objects 57ms) · alert probe HEALTH 0 failed.
+
+**Push state:** 5 local-only commits on release/production-readiness
+(63351f3 M3 · a562ba0 M4 · 5c8038c status · 898c228 M5 · this record).
+main remains in sync with origin. Push when credentials are available.
+
+## 2026-11-23 — Studio session (continued): the credential unblock — push landed, M5-F1 closed in code, the smoke script repaired
+
+**Push (the M6 pipeline's first operator action).** The operator supplied
+a GitHub PAT mid-session; `git push origin release/production-readiness`
+landed ed963e2..3ab5c95 (M3 · M4 · status · M5 · M6/M7). Local/origin
+re-verified identical (rev-list 0/0 both ways, blob SHAs match). CI fired
+through the PR lane (PR #14 synchronize, run 45264608342) — the ci.yml
+push filter is `branches: [main]` (restored by c1b071a; verified by
+blob-SHA this session), so branch pushes ride the PR lane while a PR is
+open, and the merge commit to main will earn its own push-lane evidence.
+
+**M5-F1 (closed in code; CI proof pending).** The compose topology now
+declares healthchecks for both application services: ibismuh-web carries
+the image's own probe (node fetch /api/auth/status — DB-touching by
+design: a web that cannot answer auth status cannot serve, and postgres's
+own healthcheck disambiguates); ibismuh-worker gets the process check the
+Dockerfile documents ("the worker overrides with a process check in
+compose") — a node /proc scan for the worker.mts process, EXCLUDING the
+probe's own PID (the -e source contains 'worker.mts'; a naive scan
+self-matches and reports a dead worker healthy). No pgrep/ps in the slim
+image — /proc and node are always there. A wedged claim loop is NOT this
+probe's job (the lease/reaper recovery owns it — the walk's phase 2/3
+proves that). docker-smoke.sh now ASSERTS both services report healthy
+to Docker (wait_healthy via docker inspect), and re-proves the worker's
+probe after the phase-3 restart.
+
+**The smoke script repair (found by `bash -n`, exit-code evidence).**
+scripts/docker-smoke.sh shipped with an unbalanced quote on the phase-3
+restart line (`""` + `${COMPOSE[@]}"` — the same restoration-era
+corruption class as the ci.yml trigger glob): the walk executed phases
+1-2 then died at EOF before the worker restart, so the smoke job could
+not pass as shipped. Repaired to the documented call; `bash -n` exit 0,
+all 26 repo shell scripts re-swept clean, compose files re-parse, the
+smoke overlay stays merge-safe (healthchecks are new base keys the
+overlay never touches).
+
+**The display-mangling receipt (recorded for future sessions).** This
+sandbox session caught its own Bash TEXT output rendering the ci.yml
+push filter as `branches: ain]` while the real bytes are
+`branches: [main]` — python integer dumps, git blob SHAs, exit codes
+and the Read/Edit tools all agreed on the truth. c1b071a's restoration
+was real; the "still corrupted" reading was the display layer. Law
+reaffirmed: bracketed tokens in text output are not evidence — exit
+codes, SHAs, and integer dumps are.
+
+**Gates (this sandbox, for the fix commit):** `bash -n` clean on the
+repaired walk · compose YAML parses, overlay merge-safe · the worker
+probe behaviorally verified (exit 1 with no worker process on this
+host; self-match guard proven). The full battery + docker-smoke proof
+is CI's to produce (PR #14 now carries the `docker-smoke` label; the
+synchronize run after this push walks the topology on the runner).
+
+**Push state:** this commit joins the milestone branch; merge condition
+4 (squash-free merge to main) waits on CI green + docker-smoke green.
+
+**The bind-law receipt (CI run 45266346258, the smoke's first honest walk).
+** The label opted the smoke in for the first time AND the phase-3 syntax
+repair let the walk actually gate — and it caught a real, born-broken
+defect: the image HEALTHCHECK probed 127.0.0.1:3000, but Next standalone
+binds $HOSTNAME (the container id inside Docker; server.js:
+HOSTNAME || '0.0.0.0') — loopback is connection-refused forever. The
+external curl in the walk always passed (it enters via the published
+port), so nothing ever noticed; the walk now ASSERTS docker health
+status, and the probe was wrong. Fixed in BOTH places (compose
+healthcheck + Dockerfile HEALTHCHECK): probe
+http://$HOSTNAME:3000/api/auth/status, loopback fallback for non-Docker
+runs. The prisma 42P01/42703 lines in the same logs are benign-by-
+design (LegacySetting does not exist in fresh installs and the route
+catches; the stale-hold sweep is best-effort warn-logged) — the walk's
+phases own that verdict.
+
+**The stale-payload receipt (CI run 45268391546).** The healthcheck gate
+passed (web probe + worker process check both healthy — the bind-law fix
+held) and the HTTP walk advanced to register + login, then died:
+POST /api/videos rejected the walk's payload with 400 —
+format:"classic" is a relic from before the Phase-5 Zod admission
+(videoCreateSchema: format → "script"|"story"; schema-validated locally
+with tsx: classic INVALID, script VALID). The walk payload predates the
+admission gate and the smoke had not run its HTTP leg since (label
+opt-ins + the phase-3 syntax error). Fixed to format:"script" — the
+handler creates the draft row before any async job, so the phase-1
+topic lookup is unaffected by CI's absent AI credentials.
+
+**GREEN (CI run 45270185522, PR #14 head a6e0bce, 2026-11-23 21:32–21:47
+UTC).** All eight jobs green — Typecheck·Lint·Unit · Production
+build · Money-path coverage · PostgreSQL integration · Clean-clone
+bootstrap · Secret scan · E2E (Playwright) · Docker production smoke
+(P0.6). The walk's full receipt: web healthcheck gate PASS (bind-law
+probe) → worker process-check PASS → register → login → create
+project (admission-gate payload) → phase 1 topology reality (migration
+chain, column projections, s3 round-trip through the production SigV4
+signer into SeaweedFS, cross-process stock job in the worker container,
+in-container whiteboard render through chromium) → phase 2 recovery
+seeding with the worker DOWN → phase 3 restart → worker probe
+re-proven healthy → reaper + claimer landed both jobs → PASS. M5-F1
+is closed WITH the daemon proof the M5 drill required. The M6 merge
+condition list is fully satisfied; condition 4 executes next.

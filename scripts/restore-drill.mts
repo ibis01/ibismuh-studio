@@ -23,15 +23,18 @@ import { createPrisma } from "../src/lib/ibismuh/prisma-factory.mjs";
  *                  real query works; the S100 lease columns project (the
  *                  P2022 guard class); the restore actually replaced the
  *                  destroyed bytes
- *   6. RTO       — measured wall time across backup → destroy → restore →
- *                  verify
+ *   6. storage   — the media layer (uploads/ layout, storage.ts): objects
+ *                  backed up with a sha256 manifest, destroyed with noise,
+ *                  restored from the bundle, verified byte-identical
+ *   7. RTO       — measured wall time across backup → destroy → restore →
+ *                  verify, for BOTH legs (database + object storage)
  *
  * Exit 0 = the drill held (RTO printed). Exit 1 = a restoration finding —
  * per the runbook: any error here is a finding, not a drill detail.
  */
 
 import { createHash, randomBytes } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -48,6 +51,16 @@ function check(name: string, ok: boolean, detail = ""): void {
 
 function sha256(file: string): string {
   return createHash("sha256").update(readFileSync(file)).digest("hex");
+}
+
+function walkFiles(dir: string, base: string = dir): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...walkFiles(p, base));
+    else out.push(path.relative(base, p));
+  }
+  return out;
 }
 
 /** The live SQLite file path — DATABASE_URL from .env, prisma-relative
@@ -162,11 +175,90 @@ async function main(): Promise<void> {
 
   await withClient(casualty, (db) => db.job.findMany({ take: 1 }));
   check("restored schema projects the S100 lease columns (the P2022 guard)", true);
+  const dbDone = Date.now();
 
-  // 6. RTO — the measured recovery time.
-  const rtoMs = Date.now() - t0;
+  // 6. object-storage leg — media lives OUTSIDE the database (uploads/,
+  //    the layout storage.ts documents: <videoId>/final.mp4, _music/…).
+  //    The same law as the database: backup → destroy → restore → verify.
+  const storageRoot = path.join(outDir, "storage-live");
+  const storageBackup = path.join(outDir, "storage-backup");
+  const objects: { rel: string; bytes: number; hash: string }[] = [
+    { rel: "vid_drill1/final.mp4", bytes: 2 << 20, hash: "" },
+    { rel: "vid_drill1/preview.mp4", bytes: 1 << 20, hash: "" },
+    { rel: "vid_drill1/thumbnail.jpg", bytes: 180 * 1024, hash: "" },
+    { rel: "_music/track-128.mp3", bytes: 3 << 20, hash: "" },
+  ];
+  mkdirSync(storageRoot, { recursive: true });
+  for (const o of objects) {
+    const p = path.join(storageRoot, o.rel);
+    mkdirSync(path.dirname(p), { recursive: true });
+    writeFileSync(p, randomBytes(o.bytes));
+    o.hash = sha256(p);
+  }
+  check(
+    "object storage seeded (the uploads/ layout, per storage.ts)",
+    objects.every((o) => statSync(path.join(storageRoot, o.rel)).size === o.bytes),
+    `${objects.length} objects`,
+  );
+
+  const t1 = Date.now();
+  // backup — a sha256 manifest + a byte copy per object (backup.sh writes a
+  // presence manifest; the drill proves the RESTORE procedure with checksums).
+  mkdirSync(storageBackup, { recursive: true });
+  const manifest: string[] = [];
+  for (const o of objects) {
+    const dst = path.join(storageBackup, o.rel);
+    mkdirSync(path.dirname(dst), { recursive: true });
+    copyFileSync(path.join(storageRoot, o.rel), dst);
+    manifest.push(`${o.rel}\t${o.hash}\t${o.bytes}`);
+  }
+  const manifestPath = path.join(storageBackup, "manifest.sha256");
+  writeFileSync(manifestPath, manifest.join("\n") + "\n");
+  check(
+    "object backup written (sha256 manifest + byte copies)",
+    existsSync(manifestPath) && manifest.length === objects.length,
+    `${manifest.length} objects manifested`,
+  );
+
+  // casualty — every object overwritten with noise (not a polite delete).
+  let destroyedAll = true;
+  for (const o of objects) {
+    const p = path.join(storageRoot, o.rel);
+    writeFileSync(p, randomBytes(o.bytes));
+    if (sha256(p) === o.hash) destroyedAll = false;
+  }
+  check(
+    "object storage destroyed (lost-media scenario)",
+    destroyedAll,
+    "every object overwritten with noise",
+  );
+
+  // restore — the bundle bytes land back per the manifest.
+  for (const o of objects) {
+    copyFileSync(path.join(storageBackup, o.rel), path.join(storageRoot, o.rel));
+  }
+  const restoredOk = objects.every((o) => sha256(path.join(storageRoot, o.rel)) === o.hash);
+  check(
+    "object restore executed (bundle bytes land back per manifest)",
+    restoredOk,
+    `${objects.length} objects byte-identical to the backup`,
+  );
+
+  // verify — manifest parity: nothing missing, nothing extra.
+  const manifestRels = manifest.map((line) => line.split("\t")[0]).sort();
+  const liveRels = walkFiles(storageRoot).sort();
+  check(
+    "object manifest parity (no missing, no extra artifacts)",
+    JSON.stringify(manifestRels) === JSON.stringify(liveRels),
+    `${liveRels.length} files under the storage root`,
+  );
+
+  // 7. RTO — the measured recovery time, both legs.
+  const totalMs = Date.now() - t0;
   console.log("");
-  console.log(`[drill] RTO (backup + destroy + restore + verify): ${rtoMs}ms`);
+  console.log(`[drill] RTO database (backup + destroy + restore + verify): ${dbDone - t0}ms`);
+  console.log(`[drill] RTO object storage (backup + destroy + restore + verify): ${Date.now() - t1}ms`);
+  console.log(`[drill] RTO total: ${totalMs}ms`);
 
   if (failures > 0) {
     console.error(

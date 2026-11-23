@@ -123,7 +123,15 @@ DEPLOYMENT.md.
 2. Phase 6: scripts/test fixtures retain direct prisma-factory access (the
    approved operator/test escape hatch) — severity: low.
 3. Phase 7: per-provider retry matrices beyond shared-transport timeouts —
-   severity: low.
+   severity: low. *(RESOLVED on the milestone branch, M4: the shared
+   transport-retry layer `providers/http.ts#withTransportRetry` now covers
+   `providerFetch` (all direct-provider adapters, 3 attempts) and `ytFetch`
+   (every YouTube call, youtube-api 3 / youtube-upload 2 attempts) —
+   transient-only re-attempts (timeouts, connection blips, 408/429/5xx),
+   429 honors Retry-After (bounded) else the budget.ts 4x multiplier,
+   exponential backoff with full jitter; deterministic verdicts never
+   retry. Evidence: IMPLEMENTATION_STATUS.md "M4 — provider retry gap:
+   CLOSED".)*
 4. Phase 8's Postgres advisory-lock path awaits a live drill (standard
    SQL; CI exercises the migrate flow every push) — severity: low.
 5. Frozen legacy-derived values (KDF salt, scene seed) are permanent data

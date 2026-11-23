@@ -255,7 +255,215 @@ immediately after the push).
 
 **Handoff:**
 
-1. PR `feat/uiux-render-deck-aesthetic` → `main` (opened; merge awaits owner
-   approval per mandate — the branch is a strict fast-forward of `main`).
+1. ~~PR `feat/uiux-render-deck-aesthetic` → `main`~~ — **MERGED 2026-11-23**
+   (PR #13, merge commit `7272e95`; full gate re-run on the merged main:
+   typecheck PASS, lint 0/0, unit **1039/1039**).
 2. `archive-a4-aesthetic-pass.patch` stays intentionally untracked (a local
    export artifact, not project source).
+
+---
+
+## Infrastructure & recovery verification milestone (2026-11-23, in progress)
+
+The external review verdict — real work, but "not yet production-ready";
+next milestone must be infrastructure and recovery verification. Tracked as
+PR #14 (`release/production-readiness` → `main`, draft — merges only after
+the M6 evidence-backed release decision).
+
+### M1 — backup & restore drill: DONE
+
+- **Two-leg restore drill** (`npm run test:drill`): database leg + new
+  object-storage leg (real `uploads/` layout, sha256 + manifest parity).
+  Two clean runs, **12/12 assertions PASS** — DB RTO 449/487 ms, storage
+  RTO 35/36 ms (byte-exact).
+- **Real finding fixed:** `npm run backup` exited 1 on hosts without the
+  `sqlite3` CLI — broken on exactly the slim containers it targets. Now
+  falls back to the same `VACUUM INTO` hot copy via `better-sqlite3`
+  (`scripts/backup-vacuum.mjs`); real bundle produced and verified
+  (`integrity_check ok`, 39 tables, 40-file uploads manifest).
+- Evidence: `docs/runbooks/backup-restore.md` §4.2 (commit `6211588`).
+
+### M2 — real PostgreSQL migration drill: DONE
+
+- **New drill `scripts/pg-drill.mts`** (`npm run test:drill:pg`): real
+  PostgreSQL 17.12 (embedded-postgres, no docker/root), the REAL
+  `migrate:release` path (preflight → session advisory lock → full 37-migration
+  chain → verify), seed through the app's prisma-factory, `backup-postgres.sh`
+  dump conventions (custom format, `pg_restore --list` verify, sha256 sidecar),
+  DROP DATABASE casualty, runbook §3 restore command, parity +
+  `prisma migrate status` on the restored DB, and the advisory-lock
+  concurrency law (held lock → concurrent runner FAILS FAST; released →
+  idempotent success). **21/21 PASS**, two consecutive clean runs; RTOs:
+  boot 525 ms · full-chain migrate 6.1 s · dump+verify 154 ms ·
+  destroy+restore+parity 1.2 s.
+- **Finding (operational, now documented + automated away):** a
+  `setup:local` machine holds the sqlite-generated prisma client —
+  `migrate:release`'s lock step dies with an adapter/provider mismatch.
+  The drill regenerates the release-lane client first and restores the dev
+  client after; runbook §5 carries the manual fix.
+- **Proof gained:** the S60 `Setting_pkey` wedge fires on EVERY fresh
+  full-chain deploy and the S60 repair recovers it automatically (one
+  `rolled_back` history row by design) — now asserted on every drill run.
+- Evidence: `docs/runbooks/backup-restore.md` §4 drill log row + §4.3;
+  sqlite-lane drill re-run after (dev client restored) 12/12; lint 0/0,
+  typecheck PASS.
+
+### M3 — API validation coverage assessment: DONE
+
+- **New census tool `scripts/api-validation-audit.mts`** (`npm run audit:api`):
+  static source census over every exported HTTP method — 138 route files,
+  209 methods, each classified into validation lanes and auth classes, the
+  full per-method table emitted as evidence
+  (`docs/audits/api-validation-audit.md`).
+- **Result: zero unvalidated input surfaces.** raw-parse lane: **0**
+  methods. The first pass flagged 23 candidates; every one was
+  source-verified to carry admission in idioms the initial classifier
+  missed (property-path typeof, enum equality, `Number.isInteger` walls,
+  dedicated validators). Query NaN candidates: **0** (both first-pass
+  candidates source-verified guarded).
+- **Auth: 199/209 session-gated · 1 fail-closed HMAC signature (Stripe
+  webhook) · 9 public-by-design** (auth flows, health, OAuth callback —
+  each dispositioned with its own wall: throttle, zod, hashed one-time
+  tokens, signed state CSRF, safe-by-construction shape).
+- **Manual-walls lane (51 methods, the F-08 class): accepted with
+  evidence** — every member carries explicit walls; the highest-risk
+  routes sit on the shared zod layer pinned by `test:api-schemas`;
+  incremental migration continues opportunistically.
+- Lanes: input-free 112 · manual-walls 51 · query-only 18 · local-zod 15 ·
+  form-walls 9 · shared-schema 3 · signature 1.
+
+### M4 — provider retry gap: CLOSED
+
+- **New transport-retry layer `providers/http.ts#withTransportRetry`** — the
+  Z.ai SDK lane already retried through `budget.ts#withRetry`; the two lanes
+  with zero retry now share the same philosophy with a stricter classifier:
+  - **`providerFetch`** (every direct-provider adapter call: chat, tts,
+    image, video, vision, asr, voicestudio-extra, voice-clone) — 3 attempts;
+    `retryAttempts` opt-out added to `ProviderFetchOpts`.
+  - **`ytFetch`** (every YouTube call: OAuth, channel lookup, stats sync,
+    retention analytics, resumable upload, thumbnail set) — youtube-api 3
+    attempts · youtube-upload 2 (one clean restart of the expensive resumable
+    PUT — Google's resumable protocol accepts a repeated PUT against the
+    same session URL; a transient 500 no longer fails a finished video).
+- **Transient-only re-attempts**: timeouts (`TimeoutError`/abort), connection
+  blips (`fetch failed`, ECONNRESET/ECONNREFUSED, socket hang up), and
+  statuses 408/429/500/502/503/504. **Deterministic verdicts never retry** —
+  policy blocks (`UrlGuardError`, and the mapped "network policy" error),
+  401/403/400/404, YouTube's quotaExceeded 403 — so bad keys and quota walls
+  surface on the first attempt instead of burning wall time and quota.
+- **429 cool-down parity with budget.ts**: `Retry-After` header honored
+  (delta-seconds or HTTP-date, bounded 60 s) via the new `retryAfterMs`
+  field on `ProviderHttpError`; without a header the same 4x multiplier
+  budget.ts applies to rate limits kicks in. Backoff is exponential with
+  full jitter (base 750 ms) so concurrent lanes don't re-sync their retries.
+- **Zero caller-visible contract change**: the final failure rethrows
+  unchanged — every `.ok` handler keeps its quota-aware, hint-bearing
+  error messages; net-guard/provider battery, provider-registry, rate
+  limiter, and the full unit suite all pass against the new layer.
+- **Suite alignment (stub-only, no assertion changed)**: three S149 Cartesia
+  stubs scripted a 500 as "unreachable list" — under the new transport law a
+  500 is honestly retried and recovered, which changed the self-heal
+  scenario's call sequence. The stubs now script a hard-unreachable 404;
+  the laws they pin (cannot-verify → verbatim, no silent substitution,
+  404-after-verbatim → refresh + retry ONCE) are unchanged and still pass.
+- Gate after: typecheck PASS, lint 0/0, unit 1039/1039, net-guard +
+  provider battery PASS, provider-registry 16/16, rate limiter PASS.
+  (`test:voicestudio` fails identically on the pre-M4 tree in this sandbox —
+  its loopback server on a non-standard port is blocked by the network
+  policy here; pre-existing environment failure, not an M4 regression.)
+
+### M5 — Docker deployment verification: DONE (runtime walk BLOCKED in sandbox, recorded honestly)
+
+- **Runtime acceptance walk: BLOCKED, as expected.** No Docker daemon in
+  this sandbox (`docker: command not found`) — `scripts/docker-smoke.sh`
+  (the full register → render → store → worker-reaper walk) cannot run
+  here. The prior session's record stands: CI hosts with a daemon own the
+  runtime evidence; the compose topology was validated structurally there.
+- **Structural re-audit on the milestone branch (this session, all
+  programmatic checks against the current files):**
+  - YAML validity: both `docker-compose.yml` and `docker-compose.smoke.yml`
+    parse clean.
+  - Service topology: all four milestone services present
+    (ibismuh-postgres, ibismuh-migrate, ibismuh-web, ibismuh-worker);
+    migrate correctly one-shot (no restart policy); postgres carries a
+    healthcheck.
+  - Persistence: named volumes all carry the `ibismuh_` prefix (the rename
+    law); postgres/web/worker each mount them.
+  - Env naming: zero legacy `TUBEFORGE_*` references across compose +
+    Dockerfile; 15 `IBISMUH_STUDIO_*` variables in use.
+  - Smoke overlay merge-safety: every key the overlay patches
+    (web/worker `depends_on`, `environment`) exists in the base — no
+    orphan keys.
+  - Dockerfile: three-stage build (deps → build → runner), no legacy ARGs.
+- **New finding (M5-F1, minor, recorded — deliberately NOT blind-fixed):**
+  the two long-running app containers (`ibismuh-web`, `ibismuh-worker`)
+  carry NO healthcheck — only postgres does. `ibismuh-web` is the natural
+  candidate for a `/api/health` probe (the phase-10 readiness endpoint);
+  the worker would want a process-liveness probe. Wiring them without a
+  daemon to prove the probes stay green would violate this repo's
+  evidence-backed-change law, so the finding is recorded for the next
+  daemon-equipped session to close WITH the smoke walk as proof.
+
+### M6 — final evidence-backed production release decision
+
+**DECISION: GO for the milestone merge, conditional on the operator
+actions below.** The evidence posture, stated honestly:
+
+- **Green in this sandbox (the evidence that exists):**
+  - Full `npm run check` gate: **exit 0, end-to-end** — typecheck PASS ·
+    lint 0/0 · unit **1039/1039** · whiteboard-trace · whiteboard-profiles ·
+    provider-registry · billing · storage · net-guard + provider battery ·
+    tenant-registry · tenant-isolation · upload-limits · api-schemas
+    battery PASS · queue-reliability battery PASS · lint-budget within
+    budget · rate limiter battery PASS · scene-revisions 29/29 ·
+    restore drill 12/12 (RTO database 394 ms · object storage 57 ms) ·
+    alert probe HEALTH 0 failed.
+  - M2's real-PostgreSQL lane drill (21/21, two consecutive runs) stands.
+  - M3's validation census: zero unvalidated input surfaces, evidence-
+    dispositioned; M4's transport retry closed the last HIGH risk cluster
+    with zero caller-visible contract change.
+- **Honest limits (what this sandbox could NOT prove):**
+  - `scripts/docker-smoke.sh` runtime walk: BLOCKED — no Docker daemon
+    (M5). CI on a daemon-equipped host owns this evidence. Finding M5-F1
+    (web/worker compose healthchecks) rides along with that walk.
+  - `test:voicestudio`: fails identically on the pre-M4 tree here (loopback
+    server on a non-standard port blocked by the sandbox network policy) —
+    pre-existing environment failure, not a branch regression.
+  - **Push: DONE (2026-11-23, ~21:00 UTC) — the operator supplied a PAT.**
+    `git push origin release/production-readiness` landed
+    ed963e2..3ab5c95 (M3 + M4 + status + M5 + M6/M7); local and origin
+    re-verified identical (`rev-list` 0/0 both directions). CI fired on
+    the push through the PR lane (PR #14 synchronize, run 45264608342).
+- **Conditions before the merge (ALL SATISFIED — CI run 45270185522,
+  2026-11-23 21:32–21:47 UTC, PR #14 head a6e0bce):**
+  1. DONE — the milestone branch is pushed (operator PAT).
+  2. DONE — CI GREEN, all eight jobs: Typecheck·Lint·Unit · Production
+     build · Money-path coverage · PostgreSQL integration · Clean-clone
+     bootstrap · Secret scan · E2E (Playwright) · Docker production
+     smoke (P0.6).
+  3. DONE — M5-F1 CLOSED WITH DAEMON PROOF: the walk asserts both
+     compose healthchecks healthy (web HTTP probe + worker process
+     check) and re-proves the worker probe after the phase-3 restart.
+     Three real defects were found and fixed on the way (receipts in
+     worklog): the phase-3 restart line's unbalanced quote (the walk
+     could not pass as shipped), the image/compose web probe's loopback
+     bind bug (Next standalone binds $HOSTNAME — proven by run
+     45266346258 once the walk began gating), and the HTTP-walk payload
+     riding the Phase-5 admission gate (format: script).
+  4. EXECUTING — merge `release/production-readiness` → `main`
+     (squash-free merge — the branch's history is the audit trail).
+
+### M7 — full verification gate before the milestone merge: PASS
+
+- `npm run check` executed **end-to-end on the M6-decision tree**: exit 0.
+- The chain: typecheck · lint · unit · whiteboard-trace ·
+  whiteboard-profiles · provider-registry · billing · storage · net-guard ·
+  tenant-registry · tenant-isolation · upload-limits · api-schemas ·
+  queue-reliability · lint-budget · rate · scene-revisions · restore
+  drill · alert probe — **all green, single run, no retries**.
+
+### Remaining
+
+- **None.** M1–M7 are complete on the milestone branch. The four
+  conditions in M6 move with the branch: push → CI → docker-smoke
+  (+ M5-F1) → merge.
