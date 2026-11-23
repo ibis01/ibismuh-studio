@@ -25613,6 +25613,20 @@ await test("UIUX §6 — zoom keeps the operator's place (scroll-fraction anchor
     "no zoom path resets the selected clip");
 });
 
+await test("UIUX §5 — the workspace header owns an editable title and a render chip (source pin)", () => {
+  const ws = fs.readFileSync("src/components/ibismuh/production-workspace.tsx", "utf8");
+  ok(/aria-label=\{titleEditing \? "Save title" : "Edit title"\}/.test(ws), "the title pencil is a named control (open ↔ commit)");
+  ok(ws.includes('aria-label="Project title"'), "the editing field carries its accessible name");
+  // Server-confirmed law: PATCH, then refresh, THEN the toast — never optimistic.
+  ok(/PATCH",\s*\n\s*headers: \{ "Content-Type": "application\/json" \},\s*\n\s*body: JSON\.stringify\(\{ title: next \}\)/.test(ws),
+    "the rename rides the EXISTING PATCH contract (no API change)");
+  ok(/await refreshVideo\(video\.id\);\s*\n\s*toast\(\{ title: "Title updated"/.test(ws),
+    "'Title updated' speaks only after the server refresh confirms it");
+  ok(ws.includes('if (e.key === "Escape" && !titleSaving) setTitleEditing(false)'), "Escape cancels without a write");
+  // Render status is a header fact while it runs (plan §5), progress numbers only.
+  ok(ws.includes("(busy === \"render\" || busy === \"preview\") && renderLabel"), "the render chip is gated on a real in-flight label");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 
 for (const f of failures) console.log(`  ✗ ${f}`);

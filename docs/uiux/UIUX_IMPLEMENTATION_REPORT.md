@@ -103,8 +103,13 @@ gate, and the 6 AFTER captures of the changed surfaces. Capture scripts live in
 2. The icon-only-button aria-label gap list (audit §F8) is heuristic grep output;
    the Phase 10 spot-check found aria-labels present (the grep under-counts multi-line
    JSX) — the authoritative pass remains manual review.
-3. The workspace project header does not yet expose editable title / save status /
-   render status (plan §5) — staged as Phase 6 work alongside the Timeline redesign.
+3. The workspace project header now carries the plan-§5 header facts: an
+   EDITABLE title (rides the existing PATCH contract; server-confirmed via
+   refresh before the success toast) and a header-level render chip (label +
+   real progress numbers, only while an operation is in flight). Per-artifact
+   save chips stay where the editing happens (Director script, Timeline doc) —
+   a single global "save" chip in the header would be a SECOND surface for
+   state it cannot truthfully summarize.
 
 ## 9. Remaining plan work (staged, in plan order)
 

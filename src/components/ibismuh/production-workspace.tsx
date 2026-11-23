@@ -99,6 +99,7 @@ import {
   AudioLines,
   Bot,
   ChevronDown,
+  Pencil,
   Wand2,
   Play,
   Square,
@@ -401,6 +402,45 @@ export function ProductionWorkspace({
     },
     [onChanged]
   );
+
+  // UI/UX plan §5 — the project header owns an EDITABLE title: the operator
+  // renames the production in place (PATCH /api/videos/[id] already speaks
+  // `title`, sliced to 120 server-side). Success is server-confirmed via the
+  // refresh; a failed rename toasts and leaves the old title standing.
+  const [titleEditing, setTitleEditing] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [titleSaving, setTitleSaving] = useState(false);
+  const saveTitle = useCallback(async () => {
+    if (!video) return;
+    const next = titleDraft.trim().slice(0, 120);
+    if (!next || next === (video.title ?? video.topic ?? "")) {
+      setTitleEditing(false);
+      return;
+    }
+    setTitleSaving(true);
+    try {
+      const res = await fetch(`/api/videos/${video.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: next }),
+      });
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(d.error ?? `HTTP ${res.status}`);
+      }
+      setTitleEditing(false);
+      await refreshVideo(video.id);
+      toast({ title: "Title updated", description: next });
+    } catch (err) {
+      toast({
+        title: "Rename failed",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setTitleSaving(false);
+    }
+  }, [video, titleDraft, refreshVideo, toast]);
 
   // Reset + re-seed the dialog's transient state whenever the open video
   // changes — React's documented render-time adjust (guarded seed compare)
@@ -4406,11 +4446,70 @@ export function ProductionWorkspace({
                 </a>
               </Badge>
             )}
+            {/* UI/UX plan §5 — render status is a header-level fact, not a
+                buried panel line: while the longest operation runs, its label
+                and progress are visible from the top of EVERY area. Details
+                stay on the progress strip below the board (no duplicates). */}
+            {(busy === "render" || busy === "preview") && renderLabel && (
+              <Badge className="border border-sky-500/25 bg-sky-500/10 text-sky-200 gap-1" title={renderLabel}>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                {renderLabel}
+                {renderProgress && (
+                  <span className="tf-num">
+                    {renderProgress.current}/{renderProgress.total}
+                  </span>
+                )}
+              </Badge>
+            )}
             <span className="text-xs text-muted-foreground">{timeAgo(video.createdAt)}</span>
           </div>
-          <h2 className="text-lg leading-snug font-semibold tracking-tight mt-1.5">
-            {video.title ?? video.topic}
-          </h2>
+          {/* UI/UX plan §5 — the title is editable in place: pencil opens the
+              field, Enter commits (PATCH), Escape cancels. The server's
+              response is the truth; the toast confirms only after refresh. */}
+          <div className="flex items-center gap-1.5 mt-1.5">
+            {titleEditing ? (
+              <input
+                value={titleDraft}
+                autoFocus
+                maxLength={120}
+                disabled={titleSaving}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !titleSaving) void saveTitle();
+                  if (e.key === "Escape" && !titleSaving) setTitleEditing(false);
+                }}
+                aria-label="Project title"
+                className="text-lg leading-snug font-semibold tracking-tight bg-white/6 border border-white/15 rounded-lg px-2 py-1 max-w-full flex-1 min-w-0 outline-none focus-visible:border-primary/60"
+              />
+            ) : (
+              <h2 className="text-lg leading-snug font-semibold tracking-tight truncate">
+                {video.title ?? video.topic}
+              </h2>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                if (titleEditing) {
+                  if (!titleSaving) void saveTitle();
+                } else {
+                  setTitleDraft(video.title ?? video.topic ?? "");
+                  setTitleEditing(true);
+                }
+              }}
+              disabled={titleSaving}
+              aria-label={titleEditing ? "Save title" : "Edit title"}
+              title={titleEditing ? "Save (Enter — Esc cancels)" : "Rename this project"}
+              className="tf-focusable shrink-0 h-7 w-7 grid place-items-center rounded-md text-muted-foreground hover:text-foreground hover:bg-white/8 transition-colors"
+            >
+              {titleSaving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : titleEditing ? (
+                <Check className="h-3.5 w-3.5" />
+              ) : (
+                <Pencil className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
           <p className="text-xs text-muted-foreground mt-0.5">
             {video.wordCount ?? 0} words ·{" "}
             {LENGTHS.find((l) => l.id === video.length)?.label ?? video.length} ·{" "}
