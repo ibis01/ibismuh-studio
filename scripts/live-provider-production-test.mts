@@ -34,6 +34,13 @@
 import fs from "node:fs";
 import path from "node:path";
 
+/** Loose JSON probe shape — the harness asserts on fixture/DTO shapes the
+ *  app itself serializes; unknown-field access is the point of a probe. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the probe shape: harness asserts on app-serialized DTO fields dynamically
+type Json = Record<string, any>;
+const asJson = (v: unknown): Json => (v && typeof v === "object" ? (v as Json) : {});
+
+
 const BASE = process.argv.includes("--base")
   ? process.argv[process.argv.indexOf("--base") + 1]
   : "http://localhost:3000";
@@ -79,7 +86,7 @@ async function api(
   method: string,
   path: string,
   body?: unknown
-): Promise<{ status: number; json: () => Promise<any>; ok: boolean }> {
+): Promise<{ status: number; json: () => Promise<Json>; ok: boolean }> {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: { "Content-Type": "application/json", ...(cookie ? { cookie } : {}) },
@@ -90,10 +97,10 @@ async function api(
 
 async function pollVideo(
   id: string,
-  pick: (v: any) => boolean,
+  pick: (v: Json) => boolean,
   maxMs: number,
   pollMs = 2000
-): Promise<{ video: any } | null> {
+): Promise<{ video: Json } | null> {
   const deadline = now() + maxMs;
   while (now() < deadline) {
     const r = await api("GET", `/api/videos/${id}`);
@@ -272,19 +279,19 @@ async function main(): Promise<void> {
 
   // ---------- QC (the render's QC tail) ----------
   const tQc = now();
-  let qcReport: any = null;
+  let qcReport: Json | null = null;
   for (let i = 0; i < 30; i++) {
     const dto = await (await api("GET", `/api/videos/${videoId}`)).json();
-    qcReport = dto?.video?.qc ?? null;
+    qcReport = asJson(asJson(dto).video).qc ?? null;
     if (qcReport) break;
     await new Promise((r) => setTimeout(r, 2000));
   }
   const qcPassed = Boolean(qcReport?.passed);
-  const loudness = (qcReport?.checks ?? []).find((r: any) => r.id === "loudness")?.value ?? "?";
-  const deadAir = (qcReport?.checks ?? []).find((r: any) => r.id === "dead-air")?.value ?? "?";
+    const loudness = String(((qcReport?.checks ?? []) as Json[]).find((r) => asJson(r).id === "loudness")?.value ?? "?");
+  const deadAir = String(((qcReport?.checks ?? []) as Json[]).find((r) => asJson(r).id === "dead-air")?.value ?? "?");
   stage("QC battery", qcPassed, now() - tQc, `loudness ${loudness}, dead-air ${deadAir}`);
   if (!qcPassed) {
-    const rows = (qcReport?.checks ?? []) as any[];
+    const rows = ((qcReport?.checks ?? []) as Json[]);
     const bad = rows.filter((r) => (r.status ?? (r.passed ? "pass" : "fail")) === "fail").map((r) => r.id ?? r.label);
     honestGaps.push(`QC flagged: ${bad.join(", ") || "report absent"}`);
   }

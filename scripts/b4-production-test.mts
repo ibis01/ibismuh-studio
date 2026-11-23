@@ -21,6 +21,13 @@ import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 import { Agent, setGlobalDispatcher } from "undici";
 
+/** Loose JSON probe shape — the harness asserts on fixture/DTO shapes the
+ *  app itself serializes; unknown-field access is the point of a probe. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- the probe shape: harness asserts on app-serialized DTO fields dynamically
+type Json = Record<string, any>;
+const asJson = (v: unknown): Json => (v && typeof v === "object" ? (v as Json) : {});
+
+
 // The music seed synthesizes the whole original library (ffmpeg, ~30s+) —
 // far past nothing, but the dev server can be busy; give every request a
 // generous header ceiling instead of undici's default.
@@ -58,7 +65,7 @@ async function api(
   method: string,
   path: string,
   body?: unknown
-): Promise<{ status: number; json: () => Promise<any>; ok: boolean }> {
+): Promise<{ status: number; json: () => Promise<Json>; ok: boolean }> {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: { "Content-Type": "application/json", ...(cookie ? { cookie } : {}) },
@@ -69,10 +76,10 @@ async function api(
 
 async function pollVideo(
   id: string,
-  pick: (v: any) => boolean,
+  pick: (v: Json) => boolean,
   maxMs: number,
   pollMs = 2000
-): Promise<{ video: any } | null> {
+): Promise<{ video: Json } | null> {
   const deadline = now() + maxMs;
   while (now() < deadline) {
     const r = await api("GET", `/api/videos/${id}`);
@@ -182,7 +189,7 @@ async function main(): Promise<void> {
 
     // Continuity structure: scenes carry the S77 fields the continuity panel reads.
     const dto = await (await api("GET", `/api/videos/${video.id}`)).json();
-    const scenes: any[] = (() => {
+    const scenes: Json[] = (() => {
       try {
         const raw = dto?.video?.scenes;
         if (!raw) return [];
@@ -332,14 +339,14 @@ async function main(): Promise<void> {
     // in the dev-server process — record it, assert only the BED's existence.
     const seed = await api("POST", "/api/music", { action: "seed", force: true }).catch((e: unknown) => ({ status: 0, json: async () => ({ err: String(e) }) }));
     const lib = await (await api("GET", "/api/music")).json();
-    const track = (lib.tracks ?? []).find((t: any) => t.isOriginal);
+    const track = (lib.tracks ?? []).find((t) => asJson(t).isOriginal);
     if (!track) {
       // fresh install: one forced synthesis pass, then re-read
       await api("POST", "/api/music", { action: "seed", force: true }).catch(() => null);
       const lib2 = await (await api("GET", "/api/music")).json();
-      const t2 = (lib2.tracks ?? []).find((x: any) => x.isOriginal);
+      const t2 = (lib2.tracks ?? []).find((x) => asJson(x).isOriginal);
       ok(Boolean(t2), `P2 an original bed synthesized offline (ffmpeg, license-safe): ${t2?.name ?? "?"}`);
-      (track as any) = t2 ?? track;
+      track = (t2 ?? track) as typeof track;
     } else {
       ok(Boolean(track), `P2 an original bed is available (${track?.name ?? "?"}; seed POST answered ${seed.status})`);
     }
@@ -361,18 +368,18 @@ async function main(): Promise<void> {
     // QC measures the standing render — read through the video DTO (the same
     // shape the workspace's S40 ship gate consumes). The report lands moments
     // after hasVideo (the render's QC tail) — poll briefly for it.
-    let qcReport: any = null;
+    let qcReport: Json | null = null;
     for (let i = 0; i < 30; i++) {
       const dto = await (await api("GET", `/api/videos/${video.id}`)).json();
-      qcReport = dto?.video?.qc ?? null;
+      qcReport = asJson(asJson(dto).video).qc ?? null;
       if (qcReport) break;
       await new Promise((r) => setTimeout(r, 2000));
     }
     const qcPassed = Boolean(qcReport?.passed);
-    const loudness = (qcReport?.checks ?? []).find((r: any) => r.id === "loudness")?.value ?? "?";
-    const deadAir = (qcReport?.checks ?? []).find((r: any) => r.id === "dead-air")?.value ?? "?";
+    const loudness = String(((qcReport?.checks ?? []) as Json[]).find((r) => asJson(r).id === "loudness")?.value ?? "?");
+    const deadAir = String(((qcReport?.checks ?? []) as Json[]).find((r) => asJson(r).id === "dead-air")?.value ?? "?");
     ok(qcPassed, `P2 QC battery passes on the standing render — loudness ${loudness}, dead-air: ${deadAir}`);
-    const qcRows = (qcReport?.checks ?? []) as any[];
+    const qcRows = ((qcReport?.checks ?? []) as Json[]);
     const failedRows = qcRows.filter((r) => (r.status ?? (r.passed ? "pass" : "fail")) === "fail").map((r) => r.id ?? r.label);
     if (failedRows.length > 0) honestGaps.push(`P2 QC flagged: ${failedRows.join(", ")}`);
 
@@ -448,8 +455,8 @@ async function main(): Promise<void> {
         timeout: 300_000,
       });
       smoke = { code: 0, out };
-    } catch (e: any) {
-      smoke = { code: 1, out: String(e?.stdout ?? "") + String(e?.message ?? e) };
+    } catch (e) {
+      smoke = { code: 1, out: String(asJson(e).stdout ?? "") + String(e instanceof Error ? e.message : String(e)) };
     }
     ok(smoke.code === 0, "P3 K1 rig smoke: REAL chromium+ffmpeg render, pixels measured, determinism + cache proven");
     timeline.push(t("rig real render (smoke)", renderT, smoke.code === 0 ? "rig-scene.mp4 landed" : "FAILED — see record"));

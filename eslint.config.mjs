@@ -8,10 +8,12 @@ const __dirname = dirname(__filename);
 
 const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
   rules: {
-    // TypeScript rules — Stage 1 (T-1.4): the blanket "off" pass was reverted
-    // to `warn` so `npm run lint` reports real issues without blocking the
-    // build. Tighten selected rules to "error" once the warning count is
-    // driven down to zero.
+    // TypeScript rules — 2026-11-23 hardening (Phase 9): the warning count
+    // was driven to ZERO (the 19 production-harness anys in scripts/ were
+    // typed; src/ was already clean). The rule stays "warn" as the GLOBAL
+    // floor, is promoted to "error" for src/** below (product code cannot
+    // grow the class back), and scripts/lint-budget.mjs pins the total
+    // warning count so CI fails on ANY growth.
     "@typescript-eslint/no-explicit-any": "warn",
     // S56/T-56.6: the trivial tranche is at ZERO (72+3+5 sites burned down,
     // 2026-11-08) — promoted to "error" so the class cannot grow back.
@@ -78,6 +80,15 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-redeclare": "off",
     "no-undef": "off", // TS handles undefined globals
     "no-unreachable": "warn",
+  },
+}, {
+  // Phase 9 — product code carries zero explicit anys (verified 2026-11-23;
+  // the two remaining mentions in tenant-db.ts are scoped disable/enable
+  // pairs around the Prisma adapter, justified in place). The rule is now
+  // an ERROR for src/** — the class cannot grow back silently.
+  files: ["src/**/*.{ts,tsx}"],
+  rules: {
+    "@typescript-eslint/no-explicit-any": "error",
   },
 }, {
   // Stage 2 multi-tenant guard: route handlers must go through the tenant-
