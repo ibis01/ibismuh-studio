@@ -198,3 +198,42 @@ Statuses used (per mandate): PASS / PARTIAL / FAIL / BLOCKED / NOT VERIFIED
 4. Phase 8: the Postgres advisory-lock path awaits a live drill (standard SQL; CI covers the migrate flow).
 5. Frozen legacy-derived values (KDF salt, scene3d seed) are permanent data-compatibility invariants.
 6. Sandbox blocks during verification: Docker daemon, external Postgres, live provider credentials, npm ci (memory).
+
+---
+
+## Deferred UI restoration — render deck + A4 aesthetic pass (2026-11-23)
+
+**Status: PASS** — branch `feat/uiux-render-deck-aesthetic` (main @ `3fcf04b` + two commits)
+
+The production-readiness engagement started from a clean tree; two pieces of
+in-flight UI work were preserved verbatim on archive branches at the time
+(nothing discarded). With phases 0–11 merged to main, both pieces are now
+restored ON TOP of the hardened code and re-verified:
+
+| Restored work | Source | Commit on this branch |
+|---|---|---|
+| The Render & Ship deck merges under the lanes; the storyboard render gate falls back to storage truth; the blend stage reports per-pass progress | `feat/render-deck-merged-ui` @ `af90391` (was based on pre-hardening `e14b412`) | `261b8d6` (cherry-picked; auto-merged clean against the hardening changes) |
+| A4 aesthetic pass: aurora ambience + glow-edge glass on the unauthenticated surfaces (globals.css, login, auth-gate, app-sidebar, shared, dashboard-view), `--muted-foreground` contrast fix | `archive/ui-aesthetic-pass-uncommitted` @ `06023f2` | `f209532` (cherry-picked onto main, its native base) |
+
+### Verification (executed 2026-11-23 on this branch)
+
+| Check | Result |
+|---|---|
+| Typecheck | PASS |
+| Lint + lint budget | PASS — 0 errors, 0 warnings |
+| Unit suite | PASS — **1039/1039** (includes the workbench pin "the deck merges UNDER the studio" and the new admission-gate pin) |
+| Security batteries (13) | PASS — whiteboard-trace/profiles, provider-registry, billing, storage, net-guard, tenant-registry/isolation, upload-limits, api-schemas, queue-reliability, rate, scene-revisions |
+| Production build | PASS |
+| LIVE browser (production standalone server) | PASS — dashboard, project workspace, Timeline Studio: the deck rides BELOW the lanes in the main column (render setup full-width; Background music / Image Motion / Scene transitions / 3D scene clip in the responsive grid), Ship Gate + Quality Check verdicts render, login carries the aurora/glass pass. Zero console errors, zero page errors. |
+
+### Environment limitation (disclosed, NOT caused by these changes)
+
+Next.js **dev mode** in the current sandbox no longer hydrates (static
+"Warming up the forge…" splash persists; the dev HMR websocket handshake also
+fails with `ERR_INVALID_HTTP_RESPONSE`). Verified PRE-EXISTING by running the
+identical probe against clean main (`3fcf04b`) in a detached worktree — same
+failure — and against the PRODUCTION standalone server of the same tree —
+full hydration with zero errors. The hardening-era Playwright e2e suites
+(smoke/isolation/CSP) check document titles, API behavior and headers, which
+is why this dev-only regression in the sandbox went unnoticed. Browser-level
+verification above therefore used the production server.
