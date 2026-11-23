@@ -7429,3 +7429,38 @@ produced a real 143s h264+aac keynote.
 **Gates (this sandbox):** battery 1026/1026 · eslint clean · tsc clean ·
 five final.mp4 artifacts ffprobe-verified (h264 + AAC). CI owns the push
 evidence. fly.io picks this up on its next manual `fly deploy`.
+
+## 2026-11-23 — Studio session: milestone branch M3 + M4 — API validation census + the provider retry gap closed
+
+**M3 (audit).** The API validation census tool landed (`npm run audit:api`):
+138 route files / 209 methods classified into validation lanes + auth
+classes, full per-method evidence table emitted to
+docs/audits/api-validation-audit.md. Result: zero unvalidated input
+surfaces — raw-parse 0 (all 23 first-pass candidates source-verified
+guarded), query-NaN 0; auth 199/209 session-gated, 1 fail-closed HMAC
+(Stripe webhook), 9 public-by-design each with its own wall. The F-08
+manual-walls lane (51) accepted with evidence, pinned by test:api-schemas.
+
+**M4 (fix).** The provider retry gap (R-HIGH-8 / final-report remaining
+risk #3) is CLOSED: the Z.ai lane already retried via budget.ts#withRetry;
+the direct-provider lane (providerFetch) and the YouTube lane (ytFetch)
+now retry through providers/http.ts#withTransportRetry — transient-only
+re-attempts (timeouts, connection blips, 408/429/5xx), 429 honors
+Retry-After (bounded 60s) else budget's 4x multiplier, exponential backoff
+with full jitter; deterministic verdicts (policy blocks, 401/403/400/404,
+quotaExceeded) surface on attempt one. youtube-api 3 attempts, youtube-
+upload 2 (resumable PUT restart is protocol-legal), providerFetch 3.
+Zero caller-visible contract change. Three S149 stubs scripted a 500 as
+"unreachable" — under the new law a 500 is honestly recovered, so those
+stubs now script a hard-unreachable 404 (stub-only, no assertion changed).
+
+**Gates (this sandbox):** typecheck PASS · lint 0/0 · unit 1039/1039 ·
+net-guard + provider battery PASS · provider-registry 16/16 · rate
+limiter PASS. test:voicestudio fails identically on the pre-M4 tree
+(loopback server on a non-standard port blocked by the sandbox network
+policy — pre-existing environment failure, not an M4 regression).
+
+**Push state:** both commits (63351f3 M3, a562ba0 M4) are LOCAL-ONLY on
+release/production-readiness — the sandbox has no GitHub credentials this
+session (`could not read Username for 'https://github.com'`); main stays
+in sync at origin. Push when credentials are available.
