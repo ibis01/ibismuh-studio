@@ -7569,3 +7569,15 @@ runs. The prisma 42P01/42703 lines in the same logs are benign-by-
 design (LegacySetting does not exist in fresh installs and the route
 catches; the stale-hold sweep is best-effort warn-logged) — the walk's
 phases own that verdict.
+
+**The stale-payload receipt (CI run 45268391546).** The healthcheck gate
+passed (web probe + worker process check both healthy — the bind-law fix
+held) and the HTTP walk advanced to register + login, then died:
+POST /api/videos rejected the walk's payload with 400 —
+format:"classic" is a relic from before the Phase-5 Zod admission
+(videoCreateSchema: format → "script"|"story"; schema-validated locally
+with tsx: classic INVALID, script VALID). The walk payload predates the
+admission gate and the smoke had not run its HTTP leg since (label
+opt-ins + the phase-3 syntax error). Fixed to format:"script" — the
+handler creates the draft row before any async job, so the phase-1
+topic lookup is unaffected by CI's absent AI credentials.

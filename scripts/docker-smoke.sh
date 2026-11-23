@@ -192,7 +192,7 @@ curl -fsS -c /tmp/smoke-cookies.txt -X POST http://localhost:3000/api/auth/login
 echo "[smoke]   logged in (session cookie captured)"
 curl -fsS -b /tmp/smoke-cookies.txt -X POST http://localhost:3000/api/videos \
   -H 'content-type: application/json' \
-  -d '{"topic":"Docker smoke","niche":"smoke","format":"classic"}' >/dev/null
+  -d '{"topic":"Docker smoke","niche":"smoke","format":"script"}' >/dev/null
 echo "[smoke]   created the project through POST /api/videos"
 
 echo "[smoke] phase 1 — topology reality: migrations, columns, store round-trip, cross-process job, whiteboard render"
