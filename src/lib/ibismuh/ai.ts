@@ -69,8 +69,61 @@ function repairCommonJson(text: string): string {
   );
 }
 
-function largestBalancedJson(text: string): string | null {
+/**
+ * S186 — one structural scan of a (possibly broken) JSON reply:
+ *  - depthAt[i]: the bracket depth at position i, counting only brackets
+ *    OUTSIDE string literals (prose and string contents never skew it);
+ *  - endsInOpenString: the text terminates inside an unterminated string —
+ *    the tell of a reply cut off mid-stream (a provider output-token cap or
+ *    a dropped connection), as opposed to malformed-but-complete JSON.
+ */
+function scanJsonStructure(text: string): {
+  depthAt: Int32Array;
+  endsInOpenString: boolean;
+} {
+  const depthAt = new Int32Array(text.length);
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    depthAt[i] = depth;
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (inString) {
+      if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{" || ch === "[") depth++;
+    else if (ch === "}" || ch === "]") depth = Math.max(0, depth - 1);
+  }
+  return { depthAt, endsInOpenString: inString };
+}
+
+/**
+ * S186 — the largest complete balanced JSON value in the text, plus the
+ * bracket depth its opening character sits at (0 = a top-level value; > 0 =
+ * a nested fragment of a larger — possibly truncated — structure). The
+ * depth is what lets parseJsonLoose tell "a complete payload with prose
+ * around it" apart from "an inner object that only LOOKS complete because
+ * the reply was cut off around it" (the live 0-scenes killer: a truncated
+ * 20-scene package whose salvage was ONE scene object with no `scenes`
+ * key, which the S151 floor then misreported as a lazy model).
+ */
+function largestBalancedJson(text: string): {
+  json: string;
+  startDepth: number;
+} | null {
+  const { depthAt } = scanJsonStructure(text);
   let best: string | null = null;
+  let bestDepth = 0;
   for (const [open, close] of [
     ["{", "}"],
     ["[", "]"],
@@ -100,14 +153,17 @@ function largestBalancedJson(text: string): string | null {
           depth--;
           if (depth === 0) {
             const candidate = text.slice(i, j + 1);
-            if (best === null || candidate.length > best.length) best = candidate;
+            if (best === null || candidate.length > best.length) {
+              best = candidate;
+              bestDepth = depthAt[i];
+            }
             break;
           }
         }
       }
     }
   }
-  return best;
+  return best === null ? null : { json: best, startDepth: bestDepth };
 }
 
 function isJsonScalarToken(token: string): boolean {
@@ -234,6 +290,26 @@ export function parseJsonLoose(raw: string): Record<string, unknown> {
     );
   const head = cleaned.slice(0, 180).replace(/[\u0000-\u001f\u007f]/g, " ");
   const failing = `Model did not return valid JSON — reply started: "${head}${cleaned.length > 180 ? "…" : ""}"`;
+  // S186 — truncation honesty (the 2026-11-23 "10 Forgotten Empires"
+  // incident). A reply that ends inside an unterminated string was CUT OFF
+  // mid-stream. The S47 law already refuses to fabricate closers for that
+  // shape — but the balanced scan would then "salvage" the largest complete
+  // NESTED object (one scene of twenty) and hand it back as the parse, so
+  // the scene package failed as "0 scenes" — blaming the model's work ethic
+  // for a truncation. The law now: the balanced scan may only ever hand
+  // back a TOP-LEVEL value (depth 0 — a real payload, with prose around it,
+  // possibly carrying a stray quote). A "complete" object that starts at
+  // depth > 0 is an orphaned fragment of a structure that broke around it —
+  // the cut can land inside a string, after a dangling `key:`, anywhere —
+  // and must never be mistaken for the model's answer.
+  const scan = scanJsonStructure(cleaned);
+  const balanced = largestBalancedJson(cleaned);
+  const salvage = balanced !== null && balanced.startDepth === 0 ? balanced : null;
+  if (scan.endsInOpenString && salvage === null) {
+    throw new Error(
+      `Model did not return valid JSON — the reply was cut off mid-string (truncated output: likely the provider's output-token cap or a dropped stream, not a lazy model) — reply started: "${head}${cleaned.length > 180 ? "…" : ""}"`
+    );
+  }
   const strategies: unknown[] = [
     tryJsonParse(cleaned),
     tryJsonParse(repairCommonJson(cleaned)),
@@ -243,10 +319,9 @@ export function parseJsonLoose(raw: string): Record<string, unknown> {
     strategies.push(tryJsonParse(structural));
     strategies.push(tryJsonParse(repairCommonJson(structural)));
   }
-  const balanced = largestBalancedJson(cleaned);
-  if (balanced !== null) {
-    strategies.push(tryJsonParse(balanced));
-    strategies.push(tryJsonParse(repairCommonJson(balanced)));
+  if (salvage !== null) {
+    strategies.push(tryJsonParse(salvage.json));
+    strategies.push(tryJsonParse(repairCommonJson(salvage.json)));
   }
   for (const parsed of strategies) {
     if (parsed !== undefined) return parsed as Record<string, unknown>;
