@@ -44,6 +44,7 @@ import {
   TEXT_CHARS_BY_ID,
   TEXT_IDS_BY_ASSET,
   anchorEnvelope,
+  boundTextLeadIn,
   scheduleScene,
   tracedSplitForScene,
   type AssetGeometry,
@@ -663,11 +664,24 @@ export function compileBeats(
       return d;
     });
     const f = rawSum > 0 ? Math.min(2.8, Math.max(0.5, avail / rawSum)) : 1;
+    // P0-B — the beat window rides the SAME text lead-in bound as the fill
+    // law (one law, two windows: the fill law's whole-window and the
+    // beat's slice). Pre-text paths compress, the payload re-fills, the
+    // window's span end is preserved. A no-op without text — the W4 hard
+    // pin's intent (paths-only windows compile byte-identically) restated
+    // at this arithmetic and pinned in the unit battery.
+    const durs = boundTextLeadIn(
+      items.map((w) => w.kind),
+      items.map((_, i) => Math.max(120, Math.round(raw[i] * f))),
+      PATH_GAP_MS,
+      beat.startMs,
+      beat.endMs
+    );
     let t = beat.startMs;
     for (let i = 0; i < items.length; i++) {
       const w = items[i];
       // Never outlast the scene clock (the hold is the window's own edge).
-      const dur = Math.max(120, Math.min(Math.round(raw[i] * f), Math.max(120, durationMs - t)));
+      const dur = Math.max(120, Math.min(durs[i], Math.max(120, durationMs - t)));
       if (w.kind === "path") {
         events.push({ type: "draw_path", assetId: w.assetId, pathId: w.id, startMs: Math.round(t), durationMs: dur });
         claimed.add(`${w.assetId}::${w.id}`);
