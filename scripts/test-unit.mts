@@ -26010,6 +26010,108 @@ await test("2026-11 render admission — the storyboard gate falls back to stora
   ok(route.includes("hasStoryboard: true"), "a stale-false row flag self-heals at admission");
 });
 
+// ---------------------------------------------------------------------------
+// Excellence P1-F — the preview-vs-final parity metric + the ONE-setup law
+// (docs/whiteboard/excellence-gap-analysis.md step 4): the parity harness
+// proves the applier surface (what the editor preview rides) and the final
+// MP4 carry the same pixels within the codec band. The metric is PURE (the
+// determinism law: no fs, no chromium, no clock) and the page setup is ONE
+// shared helper — the harness must consume the renderer's setup, never a
+// mirrored copy (a mirrored copy could mask setup-drift: the exact class
+// the W1 baseline catch receipt warns about).
+// Failing-first: against the pre-law code, parity.ts does not exist and
+// render.ts exports no setupScenePage — both tests fail on the missing laws.
+// ---------------------------------------------------------------------------
+
+await test("excellence P1-F: the parity metric — identical frames report zero; codec-band deltas pass; structural divergence fails", async () => {
+  const { compareFrameRgb, parityVerdict, PIXEL_TOLERANCE } = await import(
+    "../src/lib/ibismuh/whiteboard/parity"
+  );
+  const W = 16;
+  const H = 9;
+  const px = W * H * 3;
+  const clean = Buffer.alloc(px, 200);
+
+  // Identical buffers: byte-identical, zero deltas, verdict PASS.
+  const same = compareFrameRgb(Buffer.from(clean), Buffer.from(clean));
+  eq(same.meanAbsDelta, 0, "identical frames: mean |Δ| is exactly 0");
+  eq(same.fracOverTolerance, 0, "identical frames: no pixel over tolerance");
+  ok(same.byteIdentical, "identical frames: byte-identical shortcut fires");
+  ok(parityVerdict(same).pass, "identical frames: verdict PASS");
+
+  // Codec-band noise: every pixel wobbles ±2 (JPEG/H.264 quantization
+  // shape) — the mean stays tiny, NOTHING crosses the tolerance, PASS.
+  const noisy = Buffer.alloc(px);
+  for (let i = 0; i < px; i++) noisy[i] = 200 + ((i % 5) - 2); // −2..+2
+  const noiseDiff = compareFrameRgb(Buffer.from(clean), noisy);
+  ok(noiseDiff.meanAbsDelta > 0 && noiseDiff.meanAbsDelta <= 2, `codec-band noise keeps the mean tiny (${noiseDiff.meanAbsDelta.toFixed(3)})`);
+  eq(noiseDiff.fracOverTolerance, 0, "codec-band noise: zero pixels beyond the tolerance");
+  ok(parityVerdict(noiseDiff).pass, "codec-band noise: verdict PASS (the codec band never fails parity)");
+
+  // The tile lens: with dims supplied, the codec-band noise carries ZERO
+  // tile concentration, and the identical-frame shortcut reports null.
+  const noiseDims = compareFrameRgb(Buffer.from(clean), noisy, { width: 16, height: 9 });
+  eq(noiseDims.tileOverFracMax, 0, "codec-band noise: zero tile concentration");
+  ok(parityVerdict(noiseDims).pass, "codec-band noise with dims: verdict PASS");
+
+  // Structural divergence: a 4×4 ink block lands 120 units away — the
+  // mean alone might hide it, but the over-tolerance fraction CANNOT.
+  const diverged = Buffer.from(clean);
+  for (let y = 2; y < 6; y++) {
+    for (let x = 2; x < 6; x++) {
+      const o = (y * W + x) * 3;
+      diverged[o] = Math.max(0, diverged[o] - 120);
+      diverged[o + 1] = Math.max(0, diverged[o + 1] - 120);
+      diverged[o + 2] = Math.max(0, diverged[o + 2] - 120);
+    }
+  }
+  const divDiff = compareFrameRgb(Buffer.from(clean), diverged);
+  const blockFrac = (4 * 4) / (W * H);
+  ok(divDiff.fracOverTolerance >= blockFrac - 1e-9, `the shifted ink block saturates the over-tolerance fraction (${divDiff.fracOverTolerance.toFixed(4)} ≥ ${blockFrac.toFixed(4)})`);
+  // With dims the block CONCENTRATES in its tiles — the lens that
+  // separates scattered codec edges from a missing element.
+  const divDims = compareFrameRgb(Buffer.from(clean), diverged, { width: 16, height: 9 });
+  ok(divDims.tileOverFracMax !== null && divDims.tileOverFracMax >= 0.5, `the shifted block saturates its tiles (${(divDims.tileOverFracMax ?? -1).toFixed(2)})`);
+  ok(divDims.worstTile !== null, "the worst tile is localized (col/row named)");
+  const verdict = parityVerdict(divDims);
+  ok(!verdict.pass, "structural divergence: verdict FAIL");
+  ok(verdict.reasons.some((r) => r.includes("CONCENTRATED")), "the FAIL names the tile concentration");
+  ok(PIXEL_TOLERANCE > 0 && PIXEL_TOLERANCE < 32, "the tolerance sits in the codec band, not the structural band");
+
+  // Length mismatch is a caller bug — reported, not thrown, not a fake pass.
+  const short = Buffer.alloc(px - 3, 200);
+  const bad = compareFrameRgb(Buffer.from(clean), short);
+  ok(!parityVerdict(bad).pass, "a buffer-length mismatch never reads as parity");
+});
+
+await test("excellence P1-F: ONE page setup — the renderer and the parity harness share it (source pins)", () => {
+  const renderSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/render.ts", "utf8");
+  const harnessSrc = fs.readFileSync("scripts/wb-preview-parity.mts", "utf8");
+  const wbPageSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/wb-page.ts", "utf8");
+  const paritySrc = fs.readFileSync("src/lib/ibismuh/whiteboard/parity.ts", "utf8");
+
+  // The extracted helper exists ONCE, in render.ts, and BOTH callers ride it.
+  ok(renderSrc.includes("export async function setupScenePage"), "render.ts exports the shared setupScenePage");
+  ok(renderSrc.includes("setupScenePage(page, {"), "renderWhiteboard consumes the shared setup (inside the S165 compose gate)");
+  ok(harnessSrc.includes("setupScenePage("), "the parity harness consumes the SAME setup (no mirrored copy)");
+  // The duplicated-setup guard: the harness carries no dasharray/defs setup
+  // of its own — those strings live only in the shared helper + the applier.
+  ok(!harnessSrc.includes("stroke-dasharray"), "the harness never re-implements the dash setup");
+  ok(!harnessSrc.includes("defs-root"), "the harness never re-implements the defs root");
+
+  // The one-source applier law: the harness drives the SAME compose +
+  // payload + applier strings the editor preview rides.
+  ok(harnessSrc.includes('from "../src/lib/ibismuh/whiteboard/wb-page"'), "the harness imports the shared wb-page seam");
+  ok(harnessSrc.includes("APPLY_FRAME_FN") && harnessSrc.includes("framePayload") && harnessSrc.includes("composeScene"), "the harness rides composeScene + framePayload + APPLY_FRAME_FN");
+  ok(wbPageSrc.includes("export function composeScene") && wbPageSrc.includes("export const APPLY_FRAME_FN"), "wb-page keeps exporting the shared seam");
+
+  // The metric stays PURE: no fs, no child_process, no chromium, no clock.
+  // (The pins match import forms, never prose — comments may name the law.)
+  ok(!paritySrc.includes("from \"fs\"") && !paritySrc.includes("from \"node:fs\"") && !paritySrc.includes("require(\"fs\")"), "parity.ts does not touch fs (pure)");
+  ok(!paritySrc.includes("from \"child_process\"") && !paritySrc.includes("require(\"child_process\")") && !paritySrc.includes("from \"playwright\"") && !paritySrc.includes("import(\"playwright\")"), "parity.ts does not touch processes or browsers (pure)");
+  ok(!paritySrc.includes("Date.now") && !paritySrc.includes("performance.now"), "parity.ts does not read the clock (deterministic)");
+});
+
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);
 
 for (const f of failures) console.log(`  ✗ ${f}`);

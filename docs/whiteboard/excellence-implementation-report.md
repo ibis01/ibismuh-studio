@@ -155,3 +155,122 @@ The increment is two commits on `feat/whiteboard-excellence` (implementation,
 then reports) — revert the implementation commit (`git revert <impl-sha>`)
 to restore the pre-law schedule and tail exactly; the failing-first pins
 revert with it. `main` is untouched throughout.
+
+---
+
+# Increment 2 (2026-11-24): the P1-F preview-vs-final parity harness
+
+- **Scope:** gap-analysis step 4 — PROVE the one-source law at the pixel
+  level. Additive: a PURE metric module, an additive harness script, the
+  render loop's page setup EXTRACTED (not rewritten), two failing-first
+  pins. No schedule, applier, or QC behavior changed.
+- **Method:** failing-first (the two pins ran against the pre-law code:
+  `parity` unresolvable, no `setupScenePage`, no harness — recorded
+  failing), then the smallest implementation, then the full gates, then
+  REAL renders: the harness (30 samples across the frozen W1 16:9
+  project) and the full W1 benchmark (byte-identity proof of the
+  refactor).
+
+## 1. What changed
+
+| File | Change |
+| --- | --- |
+| `src/lib/ibismuh/whiteboard/parity.ts` | NEW — the PURE parity metric: `compareFrameRgb` (mean |Δ|, over-tolerance fraction, worst channel, the 8×8 tile concentration lens, byte-identical shortcut, length-mismatch honesty) + `parityVerdict` (named-budget FAIL reasons). No fs/child_process/browser/clock — the purity is source-pinned. |
+| `src/lib/ibismuh/whiteboard/render.ts` | The render loop's page-setup pass (defs root, hand poses, index maps, dasharrays, fade markers) EXTRACTED VERBATIM into `export async function setupScenePage(page, args)`; the loop calls it inside the unchanged S165 compose gate. One setup, two callers — the wb-page one-source law extended one seam outward. |
+| `scripts/wb-preview-parity.mts` | NEW — the harness: builds the frozen W1 project, renders the final through `renderWhiteboard`, re-drives THE SAME compose + setup + applier standalone at sampled timestamps (deterministic sample plan: 10/30/50/70/90 % + the exact final frame), decodes both sides to raw RGB (ffmpeg — no new dependencies), diffs through the pure metric, writes the receipt to `validation/wb-parity/` (gitignored), exits non-zero on FAIL. |
+| `scripts/test-unit.mts` | 2 failing-first tests: the metric's contract (identical → 0; codec-band noise → PASS; a concentrated ink block → FAIL naming the tile; length mismatch → never a fake pass) and the ONE-setup law (both callers ride `setupScenePage`; the harness carries no dasharray/defs copy; the purity pins). |
+
+**Not changed:** the scheduler, the applier (`wb-page.ts`), the QC
+battery, the benchmark authoring, any budget wall. No new dependencies
+(ffmpeg and playwright were already the engine's hard dependencies).
+
+## 2. Failing-first evidence
+
+The two new tests ran against the pre-law code: **1045 passed, 2 failed**
+— exactly the two, nothing else (`Cannot find module …/parity` and
+`ENOENT scripts/wb-preview-parity.mts`). After the implementation:
+**1047 passed, 0 failed.**
+
+## 3. The codec calibration (a controlled experiment, NOT tuning to green)
+
+The harness's first run RED on 12/30 samples (2.0–3.4 % over-tolerance,
+means ≤ 0.385) — the failures clustered on the text-heaviest scenes.
+Before touching any budget, the codec-only twin was measured: the SAME
+preview PNG pushed through the engine's exact finishing chain (JPEG q92 →
+H.264 crf19/yuv420p → decode) against itself, three text-dense frames:
+
+| Lens | Codec-only ceiling (identical content) | Budget set | Headroom |
+| --- | --- | --- | --- |
+| mean \|Δ\| | 0.23–0.55 | 3 | ~5–13× |
+| frame over-tolerance | up to 3.62 % | 6 % | ~1.7× |
+| worst 8×8 tile | up to 36 % | 50 % | ~1.4× |
+
+The first-run "failures" (≤ 3.4 %) sit BELOW the codec ceiling — codec
+edge quantization on ink boundaries, not divergence. The recalibration is
+receipted here and in `parity.ts`'s own doc block; the tile lens was
+ADDED in the same slice because the frame fraction alone cannot separate
+scattered codec edges from a small missing element (concentration can).
+
+## 4. Render receipts (the real MP4s)
+
+- **Parity harness:** `node --import tsx scripts/wb-preview-parity.mts`
+  → **GATE GREEN, 30/30 samples inside the codec band** (16:9, 5 scenes ×
+  6 samples). Worst mean |Δ| **0.385** (budget 3), worst over-tolerance
+  **2.09 %** (budget 6 %; codec ceiling 3.62 %), worst tile **34.5 %**
+  (budget 50 %; codec ceiling 36 %). Every real-diff number lands BELOW
+  the codec-only ceiling — the two surfaces carry identical content.
+  Receipt: `validation/wb-parity/wb-preview-parity-2026-11-24.json`
+  (gitignored; preview PNGs retained on disk).
+- **The refactor's byte-identity:** the full W1 benchmark re-run
+  post-extraction — 16:9 sampled frame hashes **byte-identical** to the
+  pre-refactor run on this machine, and the in-run determinism double-run
+  pin **IDENTICAL**. 9:16 sampled hashes also byte-identical across the
+  two later runs. **Finding recorded honestly:** the 1:1 aspect shows
+  sub-perceptual cross-LAUNCH antialiasing flicker (≤ ~12 edge pixels per
+  sampled frame; darkRatio stable to 5 dp, meanLuma to 3 dp; the FIRST
+  chromium launch of the day was also an outlier at 9:16 until caches
+  warmed). The W1 cross-run pin only ever claimed 16:9 — unchanged. The
+  QC lens outcomes and ink statistics are unaffected on all aspects
+  (GATE GREEN, 912/912 frames each).
+
+## 5. Gates on this machine (2026-11-24)
+
+| Gate | Result |
+| --- | --- |
+| `npm run typecheck` | PASS |
+| `npm run lint` / `lint:budget` | PASS / within budget (0/0) |
+| `npm run test` | **1047 passed, 0 failed** |
+| whiteboard-trace / whiteboard-profiles | 25/25 · 22/22 |
+| **`npm run check` (full chain, single run)** | every battery PASS; the one exit-1 was `alert:probe`'s fresh-clone precondition (missing `IBISMUH_STUDIO_AUTH_SECRET`/`ENCRYPTION_KEY`) — provisioned per `.env.example` for the probe invocation only, then **HEALTH 0 failed**. No code failure anywhere in the chain. |
+
+## 6. Adopted guidance (the operator's reference review, filed as
+`docs/whiteboard/reference-review-2026-11-24.md`)
+
+The review's Sprint 2 "preview/final parity" is THIS increment. Its
+"text as handwriting/glyph strokes" is step 5's P1-C; its "draw-speed
+calibration" is step 6's P2-E; its drawable-IR / stage-fingerprint /
+editor-control sprints are adopted as the post-step-6 backlog (they ride
+the same protected seams — no framework adoption, no new dependencies).
+
+## 7. Known limitations carried forward (honest)
+
+1. Defects SMALLER than the codec band (a single short word, ~1–2 % of
+   frame) ride near the frame-level lens — the tile lens catches their
+   concentration, and the unit battery + W1 hashes pin the schedule
+   itself; parity is one gate in a defense-in-depth chain, not the only
+   one.
+2. The tile lens runs only when the caller supplies frame dims (the
+   harness does; pure unit fixtures ride the frame budgets alone).
+3. The parity harness samples (not exhausts) frames — 6 deterministic
+   samples per scene on the frozen W1 project; the sampled set pins the
+   applier at the draw seams, the text-write seams, and the tail park.
+4. D3 (glyph text), D4 (portrait utilization), D5 (natural-speed pacing),
+   D6 (mid-scene occlusion rules) remain OPEN — steps 5–6 of the gap
+   analysis's sequence; the human blind gate remains PENDING (kits ready).
+
+## 8. Rollback
+
+Two commits (implementation, then reports) on `feat/whiteboard-excellence`
+— `git revert` restores the pre-harness tree exactly; `parity.ts` and the
+harness leave with it, and the render loop's setup returns inline (the
+extraction commit reverts cleanly — the loop block is verbatim-identical).

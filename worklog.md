@@ -7659,3 +7659,70 @@ the post-P0 renders; ≥3 scorers ≥4/5 remains the standing release gate).
 D3 (glyph text), D4 (portrait utilization), D5 (natural-speed pacing),
 D6 (occlusion rules) remain OPEN — steps 4–6 of the gap analysis,
 gated on this receipt and the human track.
+
+## 2026-11-24 — Whiteboard Excellence increment 2: the P1-F preview-vs-final parity harness (feat/whiteboard-excellence, main merged in)
+
+**Sync first.** main had advanced to a415cf4e (PR #15, the S186 truncation
+laws) while the excellence branch sat on facdd81 — merged cleanly (no
+conflicts; ai.ts/story.ts/package.json + the standalone s186 battery), gates
+re-run green on the merged tree (unit 1045/0, trace 25/0, profiles PASS,
+s186 battery 6/0). Session verification of the PRIOR receipts on this
+machine before any new edit (the rule-5 law): typecheck/lint/unit 1045/0 ·
+trace 25/0 · profiles 22/0 · full W1 benchmark GATE GREEN (3 aspects,
+determinism pin IDENTICAL, 912/912 frames each).
+
+**Step 4 of the gap analysis — the P1-F parity harness — landed
+failing-first.** Two new pins ran against the pre-law code (1045 passed,
+2 failed — `parity` unresolvable, the harness absent), then the smallest
+implementation: `src/lib/ibismuh/whiteboard/parity.ts` (the PURE metric:
+mean |Δ|, over-tolerance fraction, worst channel, the 8×8 TILE
+CONCENTRATION lens, byte-identical shortcut, length-mismatch honesty;
+purity source-pinned), `scripts/wb-preview-parity.mts` (frozen W1 16:9 →
+real render → the applier surface re-driven standalone through THE SAME
+compose + setup + applier → raw-RGB diff → receipt, exits non-zero on
+FAIL), and the render loop's page setup EXTRACTED VERBATIM into
+`render.ts#setupScenePage` — one setup, two callers (the wb-page one-source
+law extended one seam outward; a mirrored harness copy could mask
+setup-drift, the exact class the W1 baseline catch receipt warns about).
+No schedule/applier/QC change, no new dependencies.
+
+**The codec calibration is a controlled experiment, not tuning to green.**
+The harness's first run was RED on 12/30 samples (2.0–3.4 % over-tolerance,
+means ≤ 0.385, clustered on the text-heaviest scenes) — the codec-only twin
+was measured BEFORE touching any budget: identical PNG → JPEG q92 → H.264
+crf19/yuv420p → decode → compare against itself on three text-dense frames
+→ mean 0.23–0.55, frame ceiling 3.62 %, worst-tile ceiling 36 %. The first
+run's "failures" sit BELOW that ceiling — codec edge quantization, not
+divergence. Budgets receipted at 3 / 6 % / 50 % (~1.5–1.7× headroom) and
+pinned in parity.ts's doc block; the tile lens ADDED in the same slice
+(concentration separates scattered codec edges from a missing element).
+
+**Render receipts.** Parity harness GATE GREEN 30/30 (worst mean 0.385 /
+worst frac 2.09 % / worst tile 34.5 % — every number BELOW the codec-only
+ceiling: the surfaces carry identical content). The refactor's
+byte-identity: full W1 re-run — 16:9 sampled hashes byte-identical
+pre/post, determinism double-run IDENTICAL, 9:16 byte-identical across
+later runs; ONE honest finding recorded: 1:1 shows sub-perceptual
+cross-launch AA flicker (≤ ~12 edge px, darkRatio stable to 5 dp) — the
+cross-run pin only ever claimed 16:9; the finding is now in the benchmark
+report rather than waiting for a future session to trip on it.
+
+**Gates.** typecheck PASS · lint 0/0 · lint:budget PASS · unit 1047/0 ·
+trace 25/0 · profiles 22/0 · FULL `npm run check` single run: every
+battery PASS (provider-registry 16/0, billing 6/0, storage 40/0, scene-
+revisions 29/0, restore drill 12/12 RTO 595ms, queue-reliability,
+tenant-isolation, upload-limits, api-schemas, rate limiter, net-guard);
+the one exit-1 was alert:probe's fresh-clone precondition (missing
+auth/encryption secrets on a bare clone) — provisioned per .env.example
+for the probe invocation only, HEALTH 0 failed. No code failure anywhere.
+
+**Adopted guidance.** The operator's reference review is filed as
+docs/whiteboard/reference-review-2026-11-24.md; its Sprint 2
+preview/final-parity item is THIS increment; handwriting-as-glyph-strokes
+(P1-C) and draw-speed calibration (P2-E) map to steps 5–6; the drawable
+IR / stage fingerprints / editor controls are the post-step-6 backlog —
+all riding the protected seams, no framework adoption, no new deps.
+
+**Still open.** Steps 5–6 (P1-C glyph text, P1-D portrait utilization,
+P2-E natural-speed pacing + motion floor) and the human blind gate
+(≥3 scorers ≥4/5 — kits regenerated, UNFABRICATED).

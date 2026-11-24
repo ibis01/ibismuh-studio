@@ -109,3 +109,63 @@ substituted by AI judgment anywhere in this program.
   amber for exactly that reason — recorded so nobody mistakes it for a
   regression).
 - It does not modify the frozen benchmark or weaken any gate.
+
+---
+
+# Addendum (2026-11-24): the P1-F parity receipt + the cross-run finding
+
+## 1. Preview-vs-final parity — GATE GREEN, 30/30
+
+`scripts/wb-preview-parity.mts` (gap-analysis step 4): the frozen W1
+16:9 project rendered through the REAL engine, the applier surface
+re-driven standalone through THE SAME compose + setup + applier
+(`setupScenePage` — the render loop's page setup, extracted verbatim so
+both callers share ONE implementation), both sides decoded to raw RGB,
+diffed through the PURE `parity.ts` metric at 6 deterministic samples per
+scene (10/30/50/70/90 % + the exact final frame):
+
+| Lens | Worst measured | Budget | Codec-only ceiling (identical content) |
+| --- | --- | --- | --- |
+| mean \|Δ\| | **0.385** | 3 | 0.23–0.55 |
+| frame over-tolerance | **2.09 %** | 6 % | up to 3.62 % |
+| worst 8×8 tile | **34.5 %** | 50 % | up to 36 % |
+
+Every real-diff number sits BELOW the codec-only ceiling measured in the
+controlled twin experiment (identical PNG → JPEG q92 → H.264 crf19
+yuv420p → decode, three text-dense frames) — the editor surface and the
+final MP4 carry identical content; the residual is quantization.
+Receipt: `validation/wb-parity/wb-preview-parity-2026-11-24.json`
+(gitignored). The budgets were set from the codec experiment BEFORE the
+harness's passing run — the passing numbers landing under the ceiling is
+the validation, not the calibration target.
+
+## 2. The cross-run byte-stability finding (recorded honestly)
+
+Re-running the full W1 benchmark on the same machine around the P1-F
+render.ts refactor (setup extraction — behavior-identical by
+construction):
+
+- **16:9:** sampled frame hashes byte-identical pre/post; the in-run
+  determinism double-run pin IDENTICAL. (The committed 16:9 claim
+  unchanged.)
+- **9:16:** sampled hashes byte-identical across the two later runs; the
+  FIRST chromium launch of the day (cold fontconfig/browser caches) was
+  an outlier at 2 samples + 2 seams until caches warmed.
+- **1:1 (NEW finding):** sub-perceptual cross-LAUNCH antialiasing
+  flicker — a handful of edge pixels flip per sampled frame
+  (darkRatio stable to 5 dp, meanLuma to 3 dp, ≤ ~12 px of 1,036,800).
+  NOT a content movement; QC lenses, ink statistics and scene frame
+  counts unaffected (GATE GREEN, 912/912 frames). The cross-run sampled
+  pin has only ever claimed 16:9 — that claim is unchanged, and the 1:1
+  behavior is now RECORDED rather than discovered by a future session.
+  Candidate follow-up (not silently shipped here): extend the determinism
+  pin to a per-run double-render on all three aspects plus a
+  sub-perceptual band for cross-run comparisons.
+
+## 3. What this addendum does NOT claim
+
+- It does not extend the determinism pin beyond 16:9 (the committed law).
+- It does not claim production-readiness (the human gate is open; D3–D6
+  remain per the gap analysis).
+- It does not modify the frozen benchmark authoring (project hashes
+  byte-identical throughout — the S146 finding-3 law held).
