@@ -738,10 +738,22 @@ Return JSON with exactly these keys:
   // with the same "exactly N scenes" instruction instead of painting thin.
   const minScenes =
     SCENE_COUNT_RANGES[opts.length]?.min ?? Math.max(4, Math.ceil(sceneCount / 2));
-  if (scenes.length < minScenes)
+  if (scenes.length < minScenes) {
+    // S186 — the three ways a reply lands below the floor name DIFFERENT
+    // fixes, and one number ("0 scenes") hid all three: a missing scenes
+    // array (off-contract JSON — the S186 parser guard names truncation
+    // itself when that's the cause), an array whose every scene lacked
+    // narration/visual (field drift — the filter dropped them all), and a
+    // lazy short array. The floor error now says WHICH shape happened.
+    const detail = !Array.isArray(parsed.scenes)
+      ? "no scenes array in the reply"
+      : scenes.length === 0 && rawScenes.length > 0
+        ? "0 usable scenes — every scene was missing narration or visual"
+        : `${scenes.length} scenes`;
     throw new Error(
-      `Script came back short: ${scenes.length} scenes for a ${opts.length} video that promises at least ${minScenes} — retrying`
+      `Script came back short: ${detail} for a ${opts.length} video that promises at least ${minScenes} — retrying`
     );
+  }
 
   // Deterministic retention map — the model's own rehook/sfx choices are
   // overridden (it over-flags both), narration math is spoken, visuals are
