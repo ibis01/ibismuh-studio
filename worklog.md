@@ -7596,3 +7596,66 @@ seeding with the worker DOWN → phase 3 restart → worker probe
 re-proven healthy → reaper + claimer landed both jobs → PASS. M5-F1
 is closed WITH the daemon proof the M5 drill required. The M6 merge
 condition list is fully satisfied; condition 4 executes next.
+
+## 2026-11-24 — Whiteboard Excellence P0 increments: the tail park + the text lead-in bound (feat/whiteboard-excellence)
+
+Phase Zero's read-only audit (baseline + gap analysis, commit 2723ac3) had
+prioritized two P0 defects, both recorded upstream (S146 findings 1–2) and
+both re-confirmed in rendered pixels. This increment closes them with the
+gap analysis's failing-first discipline — the tests were written first and
+RUN against the pre-law code (recorded: 1040 passed, 5 failed — exactly the
+five new tests; the fixtures reproduced the defect shapes: the phrase text
+entering at 4588/4036 ms past the 2965 ms bound, the tail holding the
+stroke endpoint), then the smallest corrections landed at the named seams.
+
+**P0-A — the tail park (`timing.ts` handAt).** The tail branch held the
+final stroke's endpoint: the video's longest-lived composition carried a
+hand parked ON the artwork (D1). Now the hand GLIDES the W7 travel family's
+way (eased lerp + sine pen-lift bump, zero at both joints) to a neutral
+park point below-right of the last stroke endpoint — clamped inside the
+board with its own margin (`handParkPoint`, HAND_TAIL_GLIDE_MS 800,
+HAND_PARK_OFFSET 190/120, HAND_PARK_MARGIN 130) — and holds the REST pose
+THERE. `frameAt` passes the project's real dimensions (aspect-correct
+parking; old five-arg callers keep the tolerant default). Pose and
+visibility preserved (the W7 tail pins keep their intent); the S64
+"resting at the end point" pin moved to the park law deliberately, per the
+gap analysis's stated test plan.
+
+**P0-B — the text lead-in bound (`timing.ts` + `beat-plan.ts`).** The fill
+law paced ALL work to the window's right edge and texts rode the sequential
+queue after paths — the key-phrase shape spent 58 % of its window on the
+container and pushed the payload to 66 % (D2's receipt: cc-big at 4613 ms
+of 7000). New `boundTextLeadIn` (TEXT_LEAD_IN_MAX_FRAC 0.45): the first
+text starts no later than 45 % of the window; pre-text paths compress
+proportionally to their headroom above MIN_PATH_MS; the freed time
+RE-ENTERS the payload via integer-exact running-round distribution — the
+draw span's end is preserved to the millisecond (the fill law's
+frozen-frames/static-shots contract untouched). One law, two windows:
+`scheduleScene` and `compileBeats` ride the SAME helper; paths-only
+windows compile byte-identically by construction (the W4 pin's intent
+restated at the new arithmetic and re-pinned).
+
+**Gates (this machine).** typecheck PASS; lint PASS (0 findings);
+lint:budget PASS; unit **1045 passed, 0 failed** (1040 pre-existing pins
+green + 5 new); whiteboard-trace 25/25; whiteboard-profiles 22/22.
+
+**Render receipts.** Full W1 benchmark (3 aspects + determinism re-render
++ blind kit) GATE GREEN: 912/912 frames each aspect, walls 82.9/81.5/51.9 s,
+QC 12/12 measurable lenses per aspect (cut-alignment unmeasured by design,
+unchanged). Determinism pin IDENTICAL — both new laws are pure and
+byte-stable. Frozen-definition project hashes byte-identical to the
+committed baseline (the authoring untouched); the sampled frame hashes
+move by design on exactly the two pinned clocks (phrase text schedule,
+tail parks). The P0 receipts in pixels: the 16:9 and 9:16 final frames
+show the hand PARKED off the rocket (the committed D1 still is history),
+and the phrase schedule now reads cc-box 400+1156, cc-box-od 1686+1149,
+cc-big **2965**+1008 (42.4 % of the scene, was 66 %), cc-small
+4103+1997 → span end 6100 EXACTLY.
+
+**Reports:** docs/whiteboard/excellence-implementation-report.md,
+excellence-benchmark-report.md, excellence-human-evaluation.md (the human
+gate stays pending and UNFABRICATED — the blind kit was regenerated from
+the post-P0 renders; ≥3 scorers ≥4/5 remains the standing release gate).
+D3 (glyph text), D4 (portrait utilization), D5 (natural-speed pacing),
+D6 (occlusion rules) remain OPEN — steps 4–6 of the gap analysis,
+gated on this receipt and the human track.
