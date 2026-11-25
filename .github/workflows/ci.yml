@@ -271,6 +271,14 @@ jobs:
       - name: Scene revision battery (surgical per-scene editing)
         run: npm run test:scene-revisions
 
+      # Master plan commit group 1: the legacy tf-* browser event names
+      # (music preview + auth gate) were renamed into the declared
+      # ibismuh-* catalog (src/lib/ibismuh/ui-events.ts). This suite keeps
+      # the rebrand law executable: neutral names only, consumers import
+      # the catalog, and no undeclared browser event literal returns.
+      - name: UI event catalog (rebrand event-name law)
+        run: npm run test:ui-events
+
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes
       # → print the measured RTO. "A backup that has never been restored is

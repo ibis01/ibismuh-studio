@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { broadcastGateState } from "@/components/ibismuh/auth-gate";
+import { AUTH_GATE_EVENT } from "@/lib/ibismuh/ui-events";
 import { Eye, EyeOff, KeyRound, Lock, Loader2, Mail, MailCheck, ShieldCheck, ShieldOff, TerminalSquare } from "lucide-react";
 
 type Status = {
@@ -71,8 +72,8 @@ export function SecurityAccessCard() {
     })();
     const onGate = (e: Event) =>
       setStatus((s) => (s ? { ...s, gateEnabled: Boolean((e as CustomEvent).detail?.enabled) } : s));
-    window.addEventListener("tf-gate", onGate);
-    return () => window.removeEventListener("tf-gate", onGate);
+    window.addEventListener(AUTH_GATE_EVENT, onGate);
+    return () => window.removeEventListener(AUTH_GATE_EVENT, onGate);
   }, [load]);
 
   // S21 — a signed-in browser that just clicked an emailed verification link

@@ -13,6 +13,7 @@
 //   * a live session -> straight into the studio.
 
 import { useCallback, useEffect, useState } from "react";
+import { AUTH_GATE_EVENT } from "@/lib/ibismuh/ui-events";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { IbismuhLogo } from "@/components/ibismuh/logo";
@@ -37,7 +38,7 @@ interface StatusResponse {
 
 /** Sidebar & friends listen for this to know whether the gate is active. */
 export function broadcastGateState(enabled: boolean) {
-  window.dispatchEvent(new CustomEvent("tf-gate", { detail: { enabled } }));
+  window.dispatchEvent(new CustomEvent(AUTH_GATE_EVENT, { detail: { enabled } }));
 }
 
 export function AuthGate({ children }: { children: React.ReactNode }) {

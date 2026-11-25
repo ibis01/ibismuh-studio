@@ -8,6 +8,7 @@
 // open); settings live in the Setting table (music.* keys).
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MUSIC_PREVIEW_CHANGE_EVENT } from "@/lib/ibismuh/ui-events";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -150,8 +151,8 @@ export function TrackPreviewButton({ track, size = "icon" }: { track: MusicTrack
   useEffect(() => {
     // Stop reflecting state when another preview took over the singleton.
     const onChange = () => setPlaying(previewState.id === track.id && !previewState.audio?.paused);
-    document.addEventListener("tf-preview-change", onChange);
-    return () => document.removeEventListener("tf-preview-change", onChange);
+    document.addEventListener(MUSIC_PREVIEW_CHANGE_EVENT, onChange);
+    return () => document.removeEventListener(MUSIC_PREVIEW_CHANGE_EVENT, onChange);
   }, [track.id]);
 
   const toggle = (e: React.MouseEvent) => {
@@ -161,7 +162,7 @@ export function TrackPreviewButton({ track, size = "icon" }: { track: MusicTrack
     if (a && previewState.id === track.id && !a.paused) {
       a.pause();
       setPlaying(false);
-      document.dispatchEvent(new Event("tf-preview-change"));
+      document.dispatchEvent(new Event(MUSIC_PREVIEW_CHANGE_EVENT));
       return;
     }
     if (a) a.pause();
@@ -172,12 +173,12 @@ export function TrackPreviewButton({ track, size = "icon" }: { track: MusicTrack
       .play()
       .then(() => {
         setPlaying(true);
-        document.dispatchEvent(new Event("tf-preview-change"));
+        document.dispatchEvent(new Event(MUSIC_PREVIEW_CHANGE_EVENT));
       })
       .catch(() => toast.error("Preview failed — check your session"));
     audio.addEventListener("ended", () => {
       setPlaying(false);
-      document.dispatchEvent(new Event("tf-preview-change"));
+      document.dispatchEvent(new Event(MUSIC_PREVIEW_CHANGE_EVENT));
     });
   };
 
