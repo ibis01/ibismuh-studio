@@ -1,0 +1,433 @@
+diff --git a/src/app/globals.css b/src/app/globals.css
+index 1205776..fd37bc7 100755
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -60,7 +60,10 @@
+   --secondary: oklch(0.24 0.024 250);
+   --secondary-foreground: oklch(0.95 0.005 240);
+   --muted: oklch(0.225 0.02 250);
+-  --muted-foreground: oklch(0.68 0.02 246);
++  /* A4 — 0.68 read below comfortable contrast on the navy canvas (the
++     external review's #1 finding); one step brighter stays muted but
++     clears the floor for secondary text everywhere. */
++  --muted-foreground: oklch(0.73 0.018 246);
+   --accent: oklch(0.27 0.04 232);
+   --accent-foreground: oklch(0.95 0.005 240);
+   --destructive: oklch(0.704 0.191 22.216);
+@@ -181,6 +184,13 @@
+   }
+ }
+ 
++/* Text selection — brand-tinted (the default OS blue fights the navy
++   canvas; this reads as intentional on every selectable surface). */
++::selection {
++  background: rgb(34 211 238 / 28%);
++  color: white;
++}
++
+ /* Custom scrollbars */
+ ::-webkit-scrollbar {
+   width: 9px;
+@@ -1091,6 +1101,118 @@ body::after {
+       inset 0 0 0 1px rgb(34 211 238 / 16%),
+       inset 0 1px 0 rgb(255 255 255 / 6%);
+   }
++
++  /* ---- A4 aesthetic pass — ambience + affordance refinements ---------- */
++
++  /* Ambient aurora orb — a slow, large blurred light that gives hero and
++     login surfaces cinematic depth. Purely decorative (aria-hidden at the
++     usage sites); drifts gently so the surface feels alive without ever
++     competing with content. Pairs with .tf-aurora-blue / .tf-aurora-cyan
++     for the two-hue wash. */
++  .tf-aurora {
++    position: absolute;
++    border-radius: 9999px;
++    filter: blur(90px);
++    pointer-events: none;
++    animation: tf-aurora-drift 16s ease-in-out infinite alternate;
++  }
++  .tf-aurora-cyan {
++    background: radial-gradient(
++      circle at center,
++      rgb(34 211 238 / 22%),
++      transparent 70%
++    );
++  }
++  .tf-aurora-blue {
++    background: radial-gradient(
++      circle at center,
++      rgb(37 99 235 / 26%),
++      transparent 70%
++    );
++  }
++
++  /* Glass-card lift — the KPI/StatCard affordance: same physical rise law
++     as tf-card-hover, tinted hairline for the glass family. */
++  .tf-glass-lift {
++    transition:
++      transform var(--tf-dur) var(--tf-ease),
++      border-color var(--tf-dur) var(--tf-ease),
++      box-shadow var(--tf-dur) var(--tf-ease);
++  }
++  .tf-glass-lift:hover {
++    transform: translateY(-2px);
++    border-color: rgb(34 211 238 / 24%);
++    box-shadow:
++      0 12px 32px rgb(0 0 0 / 38%),
++      0 0 18px rgb(34 211 238 / 7%),
++      inset 0 1px 0 rgb(255 255 255 / 5%);
++  }
++
++  /* Gradient-border ring — a 1px brand-ramp edge painted as a masked
++     pseudo-element (radius-safe, no wrapper div): drop-in for any glass
++     card that should read as a lit surface (auth cards, login). */
++  .tf-glow-edge {
++    position: relative;
++  }
++  .tf-glow-edge::before {
++    content: "";
++    position: absolute;
++    inset: 0;
++    border-radius: inherit;
++    padding: 1px;
++    background: linear-gradient(
++      160deg,
++      rgb(34 211 238 / 42%),
++      rgb(37 99 235 / 20%) 38%,
++      rgb(255 255 255 / 7%) 70%,
++      rgb(34 211 238 / 24%)
++    );
++    -webkit-mask:
++      linear-gradient(#fff 0 0) content-box,
++      linear-gradient(#fff 0 0);
++    mask:
++      linear-gradient(#fff 0 0) content-box,
++      linear-gradient(#fff 0 0);
++    -webkit-mask-composite: xor;
++    mask-composite: exclude;
++    pointer-events: none;
++  }
++
++  /* Gradient border card — the login surface treatment: a 1px brand ramp
++     wrapped around the glass card (the p-px padding trick; the card's own
++     border is dropped so the ramp IS the edge). */
++  .tf-border-glow {
++    position: relative;
++    border-radius: 1rem;
++    padding: 1px;
++    background: linear-gradient(
++      160deg,
++      rgb(34 211 238 / 40%),
++      rgb(37 99 235 / 18%) 38%,
++      rgb(255 255 255 / 6%) 70%,
++      rgb(34 211 238 / 22%)
++    );
++    box-shadow:
++      0 24px 70px rgb(0 0 0 / 50%),
++      0 0 44px rgb(34 211 238 / 10%);
++  }
++}
++
++@keyframes tf-aurora-drift {
++  from {
++    transform: translate3d(-3%, -2%, 0) scale(1);
++  }
++  to {
++    transform: translate3d(4%, 3%, 0) scale(1.12);
++  }
++}
++
++/* The aurora is decoration — reduced-motion users get the same wash,
++   frozen (opacity + position intact, no drift). */
++@media (prefers-reduced-motion: reduce) {
++  .tf-aurora {
++    animation: none !important;
++  }
+ }
+ 
+ /* ==========================================================================
+diff --git a/src/app/login/page.tsx b/src/app/login/page.tsx
+index 50f7b4d..ac37388 100755
+--- a/src/app/login/page.tsx
++++ b/src/app/login/page.tsx
+@@ -72,18 +72,32 @@ export default function LoginPage() {
+ 
+   return (
+     <div className="min-h-screen flex items-center justify-center bg-background px-4 relative overflow-hidden">
+-      {/* Ambient glow, same dark-premium language as the app */}
++      {/* A4 ambience — two drifting aurora orbs (cyan above, blue below-left)
++          over the grid: the same dark-premium language as the app, with the
++          slow drift that makes the surface feel alive. All decorative. */}
+       <div
+         aria-hidden="true"
+-        className="pointer-events-none absolute -top-40 left-1/2 -translate-x-1/2 h-96 w-[42rem] rounded-full bg-primary/20 blur-[120px]"
++        className="tf-aurora tf-aurora-cyan -top-48 left-1/2 h-[26rem] w-[44rem]"
++      />
++      <div
++        aria-hidden="true"
++        className="tf-aurora tf-aurora-blue bottom-[-14rem] left-[-10rem] h-[30rem] w-[34rem]"
+       />
+       <div
+         aria-hidden="true"
+         className="pointer-events-none absolute inset-0 bg-grid opacity-[0.35]"
+       />
++      {/* A soft floor so the card never floats on pure void */}
++      <div
++        aria-hidden="true"
++        className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/30 to-transparent"
++      />
+ 
+       <main className="relative w-full max-w-sm">
+-        <div className="glass rounded-2xl p-8 shadow-2xl">
++        {/* A4 — the card wears a brand-ramp edge (the masked gradient ring);
++            the glass panel keeps its own depth law inside. */}
++        <div>
++          <div className="glass tf-glow-edge rounded-2xl p-8">
+           <div className="flex flex-col items-center text-center">
+             <ForgeMark className="h-16 w-16 drop-shadow-[0_0_24px_rgba(34,211,238,0.4)]" />
+             <h1 className="mt-4 text-2xl font-bold tracking-tight">
+@@ -133,7 +147,7 @@ export default function LoginPage() {
+                 <Button
+                   type="submit"
+                   disabled={busy || token.length === 0}
+-                  className="w-full h-11 font-semibold"
++                  className="w-full h-11 font-semibold bg-brand-gradient glow-brand hover:opacity-90"
+                 >
+                   {busy ? (
+                     <>
+@@ -148,6 +162,7 @@ export default function LoginPage() {
+             )}
+           </div>
+         </div>
++        </div>
+ 
+         <p className="mt-4 text-center text-[11px] text-muted-foreground leading-relaxed">
+           The code is the <code className="text-foreground">IBISMUH_STUDIO_ACCESS_TOKEN</code> value
+diff --git a/src/components/ibismuh/app-sidebar.tsx b/src/components/ibismuh/app-sidebar.tsx
+index 94a9dec..0cf974a 100755
+--- a/src/components/ibismuh/app-sidebar.tsx
++++ b/src/components/ibismuh/app-sidebar.tsx
+@@ -262,10 +262,11 @@ export function AppSidebar() {
+         <div className="glass tf-elev-1 rounded-xl p-3.5">
+           <div className="flex items-center gap-2">
+             <span className="animate-pulse-dot h-2 w-2 rounded-full bg-primary shrink-0" />
+-            <p className="text-xs font-medium">You direct · AI assists</p>
++            <p className="text-xs font-medium">Studio online</p>
+           </div>
+           <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+-            Idea → Script → Scenes → Ship. You approve every step.
++            Every pipeline stage runs in the background — progress lands
++            here and in Activity.
+           </p>
+         </div>
+         {/* Sign out only makes sense while the lock is active (AuthGate broadcasts it) */}
+diff --git a/src/components/ibismuh/auth-gate.tsx b/src/components/ibismuh/auth-gate.tsx
+index 02193e9..1f5f14a 100755
+--- a/src/components/ibismuh/auth-gate.tsx
++++ b/src/components/ibismuh/auth-gate.tsx
+@@ -293,8 +293,22 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
+ 
+   // ---- signed out / register / error ----
+   return (
+-    <div className="min-h-screen flex items-center justify-center bg-background bg-grid px-4">
+-      <div className="w-full max-w-sm">
++    <div className="min-h-screen flex items-center justify-center bg-background bg-grid px-4 relative overflow-hidden">
++      {/* A4 ambience — the same two-hue aurora wash as the login page, so
++          every unauthenticated surface speaks one visual language. */}
++      <div
++        aria-hidden="true"
++        className="tf-aurora tf-aurora-cyan -top-48 left-1/2 h-[26rem] w-[44rem]"
++      />
++      <div
++        aria-hidden="true"
++        className="tf-aurora tf-aurora-blue bottom-[-14rem] right-[-8rem] h-[30rem] w-[34rem]"
++      />
++      <div
++        aria-hidden="true"
++        className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/30 to-transparent"
++      />
++      <div className="relative w-full max-w-sm">
+         <div className="flex flex-col items-center gap-3 mb-8 text-center">
+           <IbismuhLogo size={64} />
+           <h1 className="text-2xl font-bold tracking-tight">
+@@ -330,7 +344,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
+         {/* S18 — the recovery flow replaces the card (only from LOGIN mode:
+             a register-mode gate has no accounts, nothing to recover). */}
+         {flow === "recover" && recoverStep === 1 && (
+-          <form onSubmit={requestReset} className="glass rounded-2xl border border-white/10 p-6 space-y-4">
++          <form onSubmit={requestReset} className="glass tf-glow-edge rounded-2xl border border-white/10 p-6 space-y-4">
+             <p className="text-xs text-muted-foreground leading-relaxed">
+               Enter the account's email — the recovery link is sent there. Single-owner
+               installs without a mail relay get the link right here instead.
+@@ -372,7 +386,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
+         )}
+ 
+         {flow === "recover" && recoverStep === 2 && recoverDone && (
+-          <div className="glass rounded-2xl border border-white/10 p-6 space-y-4 text-center">
++          <div className="glass tf-glow-edge rounded-2xl border border-white/10 p-6 space-y-4 text-center">
+             <MailCheck className="h-8 w-8 mx-auto text-emerald-400" />
+             <p className="text-sm font-medium">Password changed</p>
+             <p className="text-xs text-muted-foreground leading-relaxed">
+@@ -393,7 +407,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
+         )}
+ 
+         {flow === "recover" && recoverStep === 2 && !recoverDone && (
+-          <form onSubmit={confirmReset} className="glass rounded-2xl border border-white/10 p-6 space-y-4">
++          <form onSubmit={confirmReset} className="glass tf-glow-edge rounded-2xl border border-white/10 p-6 space-y-4">
+             {recoverLink ? (
+               <p className="text-xs text-muted-foreground leading-relaxed">
+                 Single-owner mode — the link is{" "}
+@@ -474,7 +488,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
+         {flow === "signin" && (
+         <form
+           onSubmit={submit}
+-          className="glass rounded-2xl border border-white/10 p-6 space-y-4"
++          className="glass tf-glow-edge rounded-2xl border border-white/10 p-6 space-y-4"
+         >
+           {mode === "register" && (
+             <Input
+diff --git a/src/components/ibismuh/shared.tsx b/src/components/ibismuh/shared.tsx
+index 3878483..8d63693 100755
+--- a/src/components/ibismuh/shared.tsx
++++ b/src/components/ibismuh/shared.tsx
+@@ -111,7 +111,7 @@ export function StatCard({
+   return (
+     <Card
+       className={clsx(
+-        "glass border-white/8 rounded-2xl p-4 sm:p-5 relative overflow-hidden",
++        "glass tf-glass-lift border-white/8 rounded-2xl p-4 sm:p-5 relative overflow-hidden",
+         accent && "glow-brand-soft"
+       )}
+     >
+@@ -120,7 +120,7 @@ export function StatCard({
+       )}
+       <div className="flex items-start justify-between gap-3">
+         <div className="min-w-0">
+-          <p className="text-xs text-muted-foreground font-medium truncate">{label}</p>
++          <p className="text-xs text-foreground/75 font-medium truncate">{label}</p>
+           <p className="text-2xl sm:text-[28px] font-bold tracking-tight mt-1 tabular-nums">
+             {value}
+           </p>
+diff --git a/src/components/ibismuh/views/dashboard-view.tsx b/src/components/ibismuh/views/dashboard-view.tsx
+index 33832ef..67d4e41 100755
+--- a/src/components/ibismuh/views/dashboard-view.tsx
++++ b/src/components/ibismuh/views/dashboard-view.tsx
+@@ -162,8 +162,14 @@ export function DashboardView() {
+       {/* Quick-start hero (T-4.2) — actions + one-tap topic chips */}
+       <Card className="glass rounded-2xl overflow-hidden relative">
+         <div className="absolute inset-0 bg-grid opacity-60" aria-hidden="true" />
++        {/* A4 — the two-hue wash: cyan light from the top-right, blue from
++            the bottom-left; the content sits in the lit middle. */}
+         <div
+-          className="absolute -top-24 -right-16 h-56 w-56 rounded-full bg-primary/15 blur-3xl"
++          className="tf-aurora tf-aurora-cyan -top-28 -right-14 h-64 w-72"
++          aria-hidden="true"
++        />
++        <div
++          className="tf-aurora tf-aurora-blue -bottom-32 -left-16 h-64 w-80"
+           aria-hidden="true"
+         />
+         <div className="relative p-5 sm:p-7">
+@@ -173,10 +179,11 @@ export function DashboardView() {
+                 <span className="animate-pulse-dot h-1.5 w-1.5 rounded-full bg-primary" />
+                 Studio ready
+               </div>
+-              <h2 className="mt-3 text-xl sm:text-2xl font-bold tracking-tight">
+-                Bring an idea in. Leave with a finished video.
++              <h2 className="mt-2.5 text-xl sm:text-2xl font-bold tracking-tight">
++                Bring an idea in. Leave with a{" "}
++                <span className="text-gradient">finished video</span>.
+               </h2>
+-              <p className="text-sm text-muted-foreground mt-2 max-w-lg leading-relaxed">
++              <p className="text-sm text-muted-foreground mt-1.5 max-w-lg leading-relaxed">
+                 You direct the production — AI assists with scripts, scenes,
+                 narration and packaging. Every important step stays yours to
+                 approve.
+@@ -214,7 +221,7 @@ export function DashboardView() {
+                       setPrefillTopic(t);
+                       setView("create");
+                     }}
+-                    className="tf-focusable text-left text-xs rounded-full border border-white/12 bg-white/4 hover:bg-white/8 hover:border-white/20 px-3.5 py-2 text-white/70 hover:text-white transition-colors"
++                    className="tf-focusable text-left text-xs rounded-full border border-white/12 bg-white/4 hover:bg-white/8 hover:border-white/20 px-3.5 py-2 text-white/80 hover:text-white transition-colors"
+                   >
+                     {t}
+                   </button>
+@@ -225,7 +232,10 @@ export function DashboardView() {
+         </div>
+       </Card>
+ 
+-      {/* KPI row (T-4.2) — published + failed finally surfaced */}
++      {/* KPI row (T-4.2) — published + failed finally surfaced. An EMPTY
++          studio skips the four zeros (the hero + first-production panel
++          carry the moment); counts appear with the first project. */}
++      {(stats.total > 0 || stats.inPipeline > 0) && (
+       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+         <StatCard
+           icon={Film}
+@@ -257,6 +267,7 @@ export function DashboardView() {
+           }
+         />
+       </div>
++      )}
+ 
+       {/* Performance strip (T-4.2) — real YouTube numbers from VideoStat */}
+       {perf && perf.syncedVideos > 0 && (
+@@ -354,6 +365,29 @@ export function DashboardView() {
+         </Card>
+       )}
+ 
++      {stats.total === 0 && chartTotal === 0 && stats.inPipeline === 0 ? (
++        /* A4 — a designed empty studio instead of two charts of zeros: one
++           inviting panel that points at the first production. */
++        <Card className="glass rounded-2xl px-6 py-8 sm:py-10 relative overflow-hidden">
++          <div
++            aria-hidden="true"
++            className="tf-aurora tf-aurora-cyan -top-24 right-0 h-56 w-72"
++          />
++          <div className="relative flex flex-col items-center text-center">
++            <div className="h-12 w-12 rounded-2xl bg-brand-gradient glow-brand flex items-center justify-center">
++              <Clapperboard className="h-6 w-6 text-white" />
++            </div>
++            <h3 className="mt-4 text-lg font-semibold tracking-tight">
++              Your first production starts here
++            </h3>
++            <p className="text-sm text-muted-foreground mt-2 max-w-md leading-relaxed">
++              Script, scenes, narration and packaging run on rails — you
++              approve every step. Charts and pipeline stats light up as soon
++              as the first project exists.
++            </p>
++          </div>
++        </Card>
++      ) : (
+      <div className="grid lg:grid-cols-5 gap-4 items-stretch">
+         {/* Production chart */}
+         <Card className="glass rounded-2xl p-5 lg:col-span-3 h-full flex flex-col">
+@@ -366,7 +400,7 @@ export function DashboardView() {
+             </div>
+           </div>
+           {chartTotal === 0 ? (
+-            <div className="mt-6 h-44 rounded-xl border border-dashed border-white/12 bg-white/[0.02] flex flex-col items-center justify-center text-center px-6">
++            <div className="mt-5 h-36 rounded-xl border border-dashed border-white/12 bg-white/[0.02] flex flex-col items-center justify-center text-center px-6">
+               <p className="text-sm font-medium">No projects yet</p>
+               <p className="text-xs text-muted-foreground mt-1 leading-relaxed max-w-xs">
+                 Your first production will chart here, day by day.
+@@ -427,7 +461,9 @@ export function DashboardView() {
+                 <div className="h-2 rounded-full bg-white/6 overflow-hidden">
+                   <div
+                     className={`h-full rounded-full ${p.cls} transition-all duration-500`}
+-                    style={{ width: `${(p.value / maxPipeline) * 100}%` }}
++                    style={{
++                      width: `${Math.max((p.value / maxPipeline) * 100, p.value > 0 ? 4 : 0)}%`,
++                    }}
+                   />
+                 </div>
+               </li>
+@@ -462,6 +498,7 @@ export function DashboardView() {
+           )}
+         </Card>
+       </div>
++      )}
+ 
+       {/* Recent projects (T-4.2) — clickable, thumbnail-first */}
+       {videos.length > 0 && (
