@@ -285,6 +285,12 @@ jobs:
       - name: Whiteboard Drawable IR (versioned drawable contract)
         run: npm run test:drawable-ir
 
+      # Master plan commit groups 3+4: the shared production spine — the
+      # versioned immutable plan envelope, the measured-audio receipt, and
+      # the shared 12-op timeline, all fail-closed and tamper-evident.
+      - name: Plan contracts (envelope + audio receipt + timeline)
+        run: npm run test:plan-contracts
+
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes
       # → print the measured RTO. "A backup that has never been restored is

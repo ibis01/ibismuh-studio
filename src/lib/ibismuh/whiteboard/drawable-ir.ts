@@ -22,8 +22,7 @@
 //
 // Run: npm run test:drawable-ir   (pure — no DB, no DOM; CI step)
 
-import { createHash } from "node:crypto";
-
+import { canonicalStringify, sha256Hex } from "../canonical";
 import { extractAsset, type ExtractedAsset, type WhiteboardAsset } from "./assets";
 import type { AssetValidationReport } from "./asset-validate";
 import { countPathCommands, pathSegments, totalLength } from "./svg";
@@ -101,41 +100,7 @@ export const DRAWABLE_IR_CHECKS = [
   "orientation",
 ] as const;
 
-// ---------- canonical serialization ----------
-
-/**
- * Fixed-precision number formatting for the canonical form: integers stay
- * integers, everything else rounds to 6 decimals with negative-zero and
- * sub-microscopic magnitudes normalized to "0". Geometry lives at
- * viewBox scale (tens to thousands), so exponent forms never occur.
- */
-function canonicalNumber(n: number): string {
-  if (!Number.isFinite(n)) throw new Error(`drawable-ir: non-finite number ${n} cannot be canonicalized`);
-  if (Number.isInteger(n)) return String(n);
-  const r = Number(n.toFixed(6));
-  if (Object.is(r, -0) || Math.abs(r) < 1e-6) return "0";
-  return String(r);
-}
-
-/**
- * Deterministic JSON: object keys sorted, numbers through canonicalNumber.
- * Arrays keep their given (document) order — order is CONTRACT here, not
- * an implementation detail.
- */
-function canonicalStringify(value: unknown): string {
-  if (value === null || typeof value === "boolean") return JSON.stringify(value);
-  if (typeof value === "number") return canonicalNumber(value);
-  if (typeof value === "string") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(",")}]`;
-  if (typeof value === "object") {
-    const keys = Object.keys(value as Record<string, unknown>).sort();
-    const body = keys
-      .filter((k) => (value as Record<string, unknown>)[k] !== undefined)
-      .map((k) => `${JSON.stringify(k)}:${canonicalStringify((value as Record<string, unknown>)[k])}`);
-    return `{${body.join(",")}}`;
-  }
-  throw new Error(`drawable-ir: value of type ${typeof value} cannot be canonicalized`);
-}
+// ---------- canonical serialization (the shared contract, canonical.ts) ----------
 
 /** The canonical serialization of an IR WITHOUT its fingerprint field. */
 export function drawableIrCanonicalForm(ir: DrawableIr): string {
@@ -150,7 +115,7 @@ export function serializeDrawableIr(ir: DrawableIr): string {
 
 /** sha256 over the canonical sans-fingerprint form. */
 export function computeDrawableIrFingerprint(ir: DrawableIr): string {
-  return createHash("sha256").update(drawableIrCanonicalForm(ir)).digest("hex");
+  return sha256Hex(drawableIrCanonicalForm(ir));
 }
 
 // ---------- compilation ----------
@@ -252,7 +217,7 @@ export function compileDrawableIr(input: DrawableIrCompileInput): DrawableIr {
   const ir: DrawableIr = {
     version: DRAWABLE_IR_VERSION,
     assetId: asset.id,
-    source: { kind: sourceKind, ref: sourceRef, contentHash: createHash("sha256").update(asset.svg).digest("hex") },
+    source: { kind: sourceKind, ref: sourceRef, contentHash: sha256Hex(asset.svg) },
     viewBox: { w: asset.viewBox.w, h: asset.viewBox.h },
     paths,
     texts: extracted.texts.map((t) => ({ id: t.id, content: t.content, x: t.x, y: t.y, size: t.size })),
