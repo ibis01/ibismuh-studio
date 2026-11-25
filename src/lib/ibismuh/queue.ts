@@ -36,6 +36,7 @@ import { errorText } from "@/lib/ibismuh/redact";
 import { log } from "./log";
 import { JobCancelledError, requestCancel, runWithCancelKey } from "./cancel";
 import type { JobKind } from "./jobs";
+import { HEAVY_JOB_KINDS } from "./video-lanes";
 import type { Prisma } from "@prisma/client";
 
 // ---------------------------------------------------------------------------
@@ -51,8 +52,11 @@ const CLAIM_BATCH = 4;
  */
 const MAX_ACTIVE_PER_PROCESS = Number(process.env.IBISMUH_STUDIO_MAX_ACTIVE_JOBS ?? 8);
 /** Heavy ffmpeg kinds subject to the per-organization cap. S67: whiteboard
- *  joins — chromium + ffmpeg is the same CPU/RAM class (design §3.2). */
-const HEAVY_KINDS: readonly JobKind[] = ["render", "short", "convert", "whiteboard"];
+ *  joins — chromium + ffmpeg is the same CPU/RAM class (design §3.2).
+ *  P1 — the list is DECLARED in video-lanes.ts (the lane registry): the
+ *  graphics engine lane joins its siblings instead of silently bypassing
+ *  the cap, and a new engine lane edits one table, not a queue literal. */
+const HEAVY_KINDS: readonly JobKind[] = HEAVY_JOB_KINDS as readonly JobKind[];
 /** Per-org concurrent heavy jobs (ffmpeg is CPU/RAM bound). */
 const MAX_HEAVY_PER_ORG = Number(process.env.IBISMUH_STUDIO_MAX_RENDER_CONCURRENCY ?? 2);
 /** Retry backoff: 30s, 60s, 120s … capped at 10 min, +0–2s jitter. */

@@ -22151,11 +22151,16 @@ await test("S135 pollScript watches the ARTIFACT — a flag-cleared unscripted r
   ok(revSrc.includes("maxWait: 15_000"), "the transaction's acquisition window is bounded too");
 
   // The Auto-Pilot chain is mode-aware: engine lanes scaffold, art lanes paint.
+  // P1 — the wizard DERIVES its presets from the canonical lane registry
+  // (video-lanes.ts): the pickable-type titles live in LANE_UI_META there,
+  // and the create source proves the derivation by consuming the registry.
   const createSrc = await fsp.readFile("src/components/ibismuh/views/create-view.tsx", "utf8");
   ok(createSrc.includes("startEngineDoc"), "the chain knows the engine-doc scaffold leg");
   ok(createSrc.includes("whiteboard/scaffold") && createSrc.includes("graphics/scaffold"), "both engine scaffold routes are wired");
-  ok(createSrc.includes("Motion graphics (2D)"), "the 2D engine lane is a pickable type");
-  ok(createSrc.includes("Character animation"), "the rig channel is a pickable type");
+  ok(createSrc.includes("LANE_REGISTRY") && createSrc.includes("LANE_ORDER"), "the wizard derives its presets from the canonical lane registry (P1)");
+  const lanesSrc = await fsp.readFile("src/lib/ibismuh/video-lanes.ts", "utf8");
+  ok(lanesSrc.includes("Motion graphics (2D)"), "the 2D engine lane is a pickable type (registry-declared)");
+  ok(lanesSrc.includes("Character animation"), "the rig channel is a pickable type (registry-declared)");
 });
 
 await test("S136 the receipt guard rides every money lane — the S135 ordering law is repo-wide (source pins)", async () => {

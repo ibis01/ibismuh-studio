@@ -72,6 +72,7 @@ import {
   Save,
 } from "lucide-react";
 import { clsx } from "clsx";
+import { LANE_ORDER, LANE_REGISTRY, LANE_UI_META } from "@/lib/ibismuh/video-lanes";
 
 type Stage = "script" | "storyboard" | "stock" | "voiceover" | "thumbnail" | "render";
 type StageState = "idle" | "running" | "done" | "error";
@@ -96,69 +97,37 @@ const STEPS = [
  *  pins format + renderMode together so the whole downstream brief (script
  *  source, storyboard, render pipeline, ETA copy) adapts from minute zero
  *  instead of burying the choice mid-wizard. B1 §5.2: every preset shows a
- *  visual preview of the output style (public/formats/*, navy/cyan-graded). */
-const VIDEO_TYPES = [
-  {
-    id: "classic",
-    title: "Classic narration",
-    format: "script",
-    renderMode: "kenburns",
-    desc: "AI writes a flowing narration + metadata — classic render with a thumbnail package.",
-    icon: FileText,
-    accent: "text-primary",
-    preview: "/formats/classic.jpg",
-  },
-  {
-    id: "story",
-    title: "Scene story",
-    format: "story",
-    renderMode: "kenburns",
-    desc: "Scene-by-scene script and storyboard art — Smart Motion pans & zooms per scene.",
-    icon: Clapperboard,
-    accent: "text-amber-300",
-    preview: "/formats/story.jpg",
-  },
-  {
-    id: "whiteboard",
-    title: "Whiteboard explainer",
-    format: "story",
-    renderMode: "whiteboard",
-    desc: "A hand draws every scene in real time — narrated whiteboard animation.",
-    icon: PenTool,
-    accent: "text-sky-300",
-    preview: "/formats/whiteboard.jpg",
-  },
-  {
-    id: "graphics2d",
-    title: "Motion graphics (2D)",
-    format: "story",
-    renderMode: "graphics",
-    desc: "A native 2D engine animates headlines, counters, bar charts and icons from a declarative doc — kinetic and $0, no image generation.",
-    icon: BarChart3,
-    accent: "text-emerald-300",
-    preview: "/formats/graphics2d.jpg",
-  },
-  {
-    id: "character",
-    title: "Character animation",
-    format: "story",
-    renderMode: "kenburns",
-    desc: "Your Cast character performs the story — attach a rigged character and the native rig channel draws it pose-by-pose into every scene; without one, storyboard art carries the scene.",
-    icon: PersonStanding,
-    accent: "text-fuchsia-300",
-    preview: "/formats/character.jpg",
-  },
-  {
-    id: "slides",
-    title: "Keynote slides",
-    format: "story",
-    renderMode: "slides",
-    desc: "A kinetic-typography slide deck, one designed slide per beat — no image generation.",
-    icon: Presentation,
-    accent: "text-violet-300",
-    preview: "/formats/slides.jpg",
-  },
-] as const;
+ *  visual preview of the output style (public/formats/*, navy/cyan-graded).
+ *
+ *  P1 — the presets are DERIVED from the canonical lane registry
+ *  (src/lib/ibismuh/video-lanes.ts): the create wizard no longer owns
+ *  duplicated format/renderMode literals — the registry is the single
+ *  source of truth (the API, queue caps, geometry law and QC calibration
+ *  families read the same table), and this map only resolves the lucide
+ *  icon components. */
+const LANE_ICONS: Record<string, typeof FileText> = {
+  FileText,
+  Clapperboard,
+  PenTool,
+  BarChart3,
+  PersonStanding,
+  Presentation,
+};
+
+const VIDEO_TYPES = LANE_ORDER.map((id) => {
+  const contract = LANE_REGISTRY[id];
+  const ui = LANE_UI_META[id];
+  return {
+    id,
+    title: ui.title,
+    format: contract.format,
+    renderMode: contract.renderMode,
+    desc: ui.desc,
+    icon: LANE_ICONS[ui.icon] ?? FileText,
+    accent: ui.accent,
+    preview: ui.preview,
+  };
+});
 
 /** localStorage key for the persisted brief draft (T-4.3). */
 const DRAFT_KEY = "ibismuh:create-draft";

@@ -63,6 +63,7 @@ import { qcForVideo, qcForPreview, type QcReport } from "./qc";
 import { commitSceneChanges } from "./scene-revisions";
 import { registerSceneArtifact } from "./scene-artifacts";
 import { resolveRenderAssembly, manifestOf } from "./render-assembly";
+import { resolveRenderAspect } from "./video-lanes";
 import {
   resolveContentPolicy,
   runRestrictedVisualScan,
@@ -1106,15 +1107,10 @@ export async function runRenderJob(
   const isPreviewRender = sceneLimit != null && sceneLimit < scenes.length;
   const renderScenes = isPreviewRender ? scenes : assembly.scenes;
   // Stage 6 (T-6.8) — per-render override > per-project default > 30.
-  // Slides mode always renders 9:16 (keynote deck geometry); an explicit
-  // 1:1 is honored only for non-slides modes.
-  const aspect: "16:9" | "9:16" | "1:1" =
-    mode === "slides"
-      ? "9:16"
-      : opts.aspectRatio ??
-        (video.aspectRatio === "9:16" || video.aspectRatio === "1:1" || video.aspectRatio === "16:9"
-          ? video.aspectRatio
-          : "16:9");
+  // P1 — the geometry law lives in video-lanes.ts (the lane registry):
+  // slides pins 9:16 (keynote deck geometry) via resolveRenderAspect, every
+  // other lane honors the requested aspect when legal, 16:9 otherwise.
+  const aspect = resolveRenderAspect(mode, opts.aspectRatio ?? video.aspectRatio);
   const frameRate = opts.frameRate ?? (video.frameRate === 24 || video.frameRate === 60 ? video.frameRate : 30);
 
   // Stage 6 (T-6.10) — per-scene duration overrides from the assembled timeline.

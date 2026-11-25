@@ -18,6 +18,12 @@ import path from "path";
 import { promisify } from "util";
 import type { Scene } from "./types";
 import { ensureSceneAssetsLocal, sceneImageFile, sceneWavFile, buildSrtFromSegments } from "./story";
+import {
+  stageFingerprint,
+  fileIdentity,
+  getCachedSceneSegment,
+  putCachedSceneSegment,
+} from "./stage-cache";
 import { buildSmartSrt, captionOverridesFor } from "./captions";
 import { videoDir } from "./ai";
 import { zaiClientFor } from "./zai-client";
@@ -2276,6 +2282,69 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
         planAudio.ambience.get(scene.index) ?? null,
         AMBIENCE_CATALOG
       );
+      // P3 — THE STAGE FINGERPRINT CACHE: a Ken Burns / still-deck scene
+      // whose every deterministic input is unchanged reuses its rendered
+      // segment instead of re-paying the ffmpeg encode. The fingerprint
+      // covers the scene content, the art identity, the motion plan, the
+      // measured narration length + WAV identity, the creative layer, the
+      // sound picks and the geometry — any pixel-relevant change misses,
+      // anything else hits. Engine segments, i2v, native-rig, stock footage
+      // and M2 shot graphs deliberately stay OUT (their inputs include
+      // metered/expiring providers and per-shot art); caching those comes
+      // with its own design slice. Cache failures degrade to the plain
+      // render path — the cache can make a render cheaper, never wronger.
+      const cacheable =
+        chan === "kenburns" &&
+        shotPlans?.[i] == null &&
+        slideSpecs === null;
+      let cacheFp: string | null = null;
+      if (cacheable) {
+        cacheFp = stageFingerprint({
+          stage: "compositor-segment",
+          videoId: opts.videoId,
+          scene,
+          dur: durations[i],
+          mode: opts.mode,
+          visualKind: sceneKindOf(i),
+          assetSource: assetSourceOf(i),
+          motion,
+          plan: plans[i] ?? null,
+          sfx: opts.sfx !== false,
+          sfxKind,
+          ambienceKind,
+          docLevels: doc
+            ? {
+                voice: doc.voiceLevel ?? 1,
+                sfx: doc.sfxLevel ?? 0.35,
+                ambient: doc.ambientLevel ?? 0.1,
+              }
+            : null,
+          docGrade: doc?.grade ?? null,
+          docTitle: doc?.titleOverlay ?? null,
+          docCamera: doc?.cameraKeys ?? null,
+          docSpeed: doc?.speed ?? null,
+          docFades: doc?.voiceFades ?? null,
+          docChroma: doc?.chroma ?? null,
+          docPip: doc?.pip ?? null,
+          quality: opts.quality ?? "standard",
+          wavDur: wavs[i],
+          wavIdentity: await fileIdentity(path.join(dir, sceneWavFile(scene.index))),
+          aspect: motionAspect,
+          fps: motionFps,
+        });
+        const cached = await getCachedSceneSegment(opts.videoId, cacheFp);
+        if (cached) {
+          try {
+            await fs.promises.copyFile(cached, segPath);
+            segPaths.push(segPath);
+            report(i, `Composing scene ${i + 1} — stage cache hit`);
+            continue;
+          } catch {
+            // unreadable cached copy — fall through to the plain render
+            cacheFp = null;
+          }
+        }
+      }
       await buildSegment({
         videoId: opts.videoId,
         scene,
@@ -2353,6 +2422,9 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
         fps: motionFps,
       });
       segPaths.push(segPath);
+      // P3 — store the segment for future fingerprints (best-effort; a
+      // quota refusal or storage error never fails the render).
+      if (cacheFp) await putCachedSceneSegment(opts.videoId, cacheFp, segPath);
     }
 
     // S143 — the engine's own clock wins for its scenes: probe each staged

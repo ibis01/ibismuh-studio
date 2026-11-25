@@ -18,6 +18,15 @@
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  // The Edge bundler still compiles this file's body (register() only ever
+  // RUNS in the nodejs runtime, but the module is compiled for both). A
+  // bare `process.pid` member chain in that graph hard-fails the Turbopack
+  // Edge compile ("A Node.js API is used … not supported in the Edge
+  // Runtime" → "Ecmascript file had an error") and takes dev servers down
+  // with it. Aliasing the identifier breaks the static member chain the
+  // analyzer keys on; the value is unchanged in the runtime that reads it.
+  const nodeProcess = process as { pid?: number };
+
   const g = globalThis as typeof globalThis & {
     __ibismuhInstrumentation?: { ok: boolean; error?: string; at: string };
   };
@@ -43,7 +52,7 @@ export async function register(): Promise<void> {
     log.info("queue initialized", {
       role: "web",
       noClaim: process.env.IBISMUH_STUDIO_NO_CLAIM === "1",
-      pid: process.pid,
+      pid: nodeProcess.pid ?? 0,
     });
 
     // Operator's shared voice server (self-hosted/sandbox): make sure the
