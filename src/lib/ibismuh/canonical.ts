@@ -50,3 +50,8 @@ export function canonicalStringify(value: unknown): string {
 export function sha256Hex(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
+
+/** sha256 hex over bytes — the content-hash primitive for asset provenance (sandbox studio). */
+export function sha256HexBytes(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}

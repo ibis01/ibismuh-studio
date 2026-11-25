@@ -1205,3 +1205,146 @@ model RateLimitCounter {
   @@id([key, windowStart])
   @@index([updatedAt]) // the sweep scan
 }
+
+// ---------- sandbox studio persistence (planner pipeline + QC + render jobs) ----------
+// JSON documents ride as canonical JSON TEXT columns; every row is tenant-scoped
+// by organizationId ("local" for single-user local runs).
+model StudioProject {
+  id                    String   @id @default(cuid())
+  organizationId        String   @default("local")
+  title                 String
+  lane                  String // canonical VideoType — validated by the registry before write
+  format                String // lane.format (legacy-compatible)
+  renderMode            String // lane.renderMode (legacy-compatible)
+  status                String   @default("draft") // ProjectStatus vocabulary
+  briefJson             String   @default("{}") // canonical StudioBrief JSON
+  briefHash             String   @default("") // sha256 of canonical brief
+  aspect                String   @default("16:9")
+  fps                   Int      @default(30)
+  voice                 String   @default("tongtong")
+  tone                  String   @default("informative")
+  currentPlanRevisionId String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  planRevisions         PlanRevision[]
+  assets                AssetRecord[]
+  audioReceipts         AudioReceiptRecord[]
+  jobs                  RenderJob[]
+  qcReports             QcReportRecord[]
+  events                StudioEvent[]
+
+  @@index([organizationId, updatedAt])
+}
+
+model PlanRevision {
+  id             String        @id @default(cuid())
+  projectId      String
+  organizationId String
+  revision       Int
+  parentRevision Int?
+  status         String        @default("draft") // draft | approved | superseded
+  lane           String
+  schemaVersion  Int           @default(1)
+  fingerprint    String
+  briefHash      String
+  planJson       String // serialized plan envelope (canonical)
+  laneDocJson    String // PlannerOutput JSON (scenes, story bible, continuity, plannerMeta)
+  createdAt      DateTime      @default(now())
+  project        StudioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, revision])
+  @@index([projectId, status])
+}
+
+model AssetRecord {
+  id             String        @id @default(cuid())
+  projectId      String
+  organizationId String
+  assetId        String // manifest id (stable per scene, e.g. "img-s1")
+  kind           String // image | audio
+  sourceKind     String // generated | uploaded | stock | builtin | reused
+  provider       String?
+  storageKey     String // relative path under db/assets/
+  contentHash    String
+  width          Int?
+  height         Int?
+  durationMs     Int?
+  license        String
+  sceneRef       String?
+  bytes          Int           @default(0)
+  createdAt      DateTime      @default(now())
+  project        StudioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, assetId])
+  @@index([projectId, kind])
+}
+
+model AudioReceiptRecord {
+  id               String        @id @default(cuid())
+  projectId        String
+  organizationId   String
+  sourceHash       String
+  durationMs       Int
+  sampleRate       Int
+  channels         Int
+  receiptJson      String // canonical AudioReceipt JSON
+  narrationAssetId String? // AssetRecord.id of the narration wav
+  createdAt        DateTime      @default(now())
+  project          StudioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model RenderJob {
+  id              String    @id @default(cuid())
+  projectId       String
+  organizationId  String
+  kind            String // lane.queueJobKind
+  state           String    @default("queued")
+  stage           String?
+  progress        Float     @default(0)
+  label           String?
+  failureClass    String?
+  failureDetail   String?
+  planFingerprint String?
+  stagesJson      String    @default("[]") // StageRunDTO[] JSON
+  eventsJson      String    @default("[]") // RenderEvent[] JSON
+  cancelRequested Boolean   @default(false)
+  retryCount      Int       @default(0)
+  idempotencyKey  String?   @unique
+  createdAt       DateTime  @default(now())
+  startedAt       DateTime?
+  endedAt         DateTime?
+  updatedAt       DateTime  @updatedAt
+  project         StudioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, state])
+}
+
+model QcReportRecord {
+  id              String   @id @default(cuid())
+  projectId       String
+  organizationId  String
+  overall         String // pass | warn | fail
+  qcProfile       String
+  planFingerprint String?
+  checksJson      String // QcCheck[] JSON
+  ranAt           DateTime @default(now())
+  project         StudioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, ranAt])
+}
+
+model StudioEvent {
+  id             String   @id @default(cuid())
+  projectId      String
+  organizationId String
+  stage          String
+  sceneRef       String?
+  level          String   @default("info")
+  message        String
+  createdAt      DateTime @default(now())
+  project        StudioProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+}
