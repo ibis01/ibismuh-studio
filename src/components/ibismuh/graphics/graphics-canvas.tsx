@@ -45,8 +45,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   APPLY_GRAPHICS_FRAME_FN,
   composeGraphicsScene,
-  caveatFontFaceCss,
-  docUsesFont,
   graphicsFramePayload,
   graphicsGroupClaims,
   placedGraphicsFrame,
@@ -224,13 +222,7 @@ export default function GraphicsCanvas({
     if (!iframe) return;
     const scene = doc.scenes[activeScene];
     if (!scene) return;
-    const fontCss = docUsesFont(doc, "caveat")
-      ? caveatFontFaceCss("/fonts/caveat/Caveat%5Bwght%5D.ttf")
-      : undefined;
-    const composed = composeGraphicsScene(scene, doc, {
-      ...(spriteAssets ? { spriteAssets } : {}),
-      ...(fontCss !== undefined ? { fontCss } : {}),
-    });
+    const composed = composeGraphicsScene(scene, doc, spriteAssets ? { spriteAssets } : undefined);
     iframe.srcdoc = composed.html;
     loadedSceneRef.current = activeScene;
   }, [doc, activeScene, spriteAssets]);

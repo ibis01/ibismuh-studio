@@ -108,13 +108,6 @@ const ASR_PRIORS: Record<string, ProviderPriors> = {
   zai: { quality: 0.78, latency: 0.85, fit: 0.6 }, // no word timestamps — the silence ladder covers timing
 };
 
-/** S121 — ASR priors: fit is dominated by WORD-TIMESTAMP support (the
- *  measured alignment rung's whole point). */
-const ASR_PRIORS: Record<string, ProviderPriors> = {
-  voicestudio: { quality: 0.85, latency: 0.5, fit: 0.95 }, // verbose_json word timestamps
-  openai: { quality: 0.82, latency: 0.75, fit: 0.8 }, // whisper-1 word granularity
-  zai: { quality: 0.78, latency: 0.85, fit: 0.6 }, // no word timestamps — the silence ladder covers timing
-};
 
 /** Image priors — fit is dominated by identity-locked EDIT support. */
 const IMAGE_PRIORS: Record<string, ProviderPriors> = {

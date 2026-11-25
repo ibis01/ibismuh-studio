@@ -53,7 +53,7 @@ import {
   Film,
   LayoutGrid,
   ScanText,
-  Youtube,
+  Play,
   Clapperboard,
   ChevronDown,
   Coins,
@@ -170,7 +170,7 @@ const KIND_META: Record<string, { label: string; icon: typeof Mic }> = {
   scene: { label: "Scene art", icon: ImageIcon },
   verify: { label: "Narration check", icon: ScanText },
   comments: { label: "Engagement kit", icon: History },
-  upload: { label: "YT upload", icon: Youtube },
+  upload: { label: "YT upload", icon: Play },
   convert: { label: "Scene conversion", icon: Clapperboard },
   stock: { label: "Stock b-roll", icon: Film },
   script: { label: "Script", icon: Wand2 },
@@ -1807,7 +1807,7 @@ export function SettingsView() {
       <Card id="youtube" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
         <div className="flex items-center gap-2.5 mb-1">
           <div className="h-9 w-9 rounded-xl bg-red-600/90 flex items-center justify-center shrink-0 shadow-[0_0_18px_rgba(239,43,70,0.25)]">
-            <Youtube className="h-4.5 w-4.5 text-white" />
+            <Play className="h-4.5 w-4.5 text-white" />
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold leading-tight">YouTube Connection</h3>
@@ -1834,7 +1834,7 @@ export function SettingsView() {
                 />
               ) : (
                 <div className="h-10 w-10 rounded-full bg-white/8 flex items-center justify-center">
-                  <Youtube className="h-4 w-4 text-red-200" />
+                  <Play className="h-4 w-4 text-red-200" />
                 </div>
               )}
               <div className="min-w-0">
@@ -1946,7 +1946,7 @@ export function SettingsView() {
                 {ytConnecting ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <Youtube className="h-3.5 w-3.5" />
+                  <Play className="h-3.5 w-3.5" />
                 )}
                 Connect channel
               </Button>
