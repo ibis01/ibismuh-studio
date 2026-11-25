@@ -93,7 +93,7 @@ directory listing — corrected in `baseline.md`) and then REPRODUCED on the cur
 | W1 harness reproduction | PASS | fresh run gate GREEN (table above) |
 | Typecheck + lint | PASS (pending final re-run) | `tsc --noEmit`, eslint clean |
 | Full unit suite | PASS (pending final re-run) | `npm run test` |
-| CI on the branch | PENDING FIRST RUN | pushed at the end of this session |
+| CI on the branch | **PASS** | PR #18, run `45569661527`: completed/success — Typecheck Lint Unit GREEN with the three new suites visible in the matrix (UI event catalog, Drawable IR, Plan contracts), plus PostgreSQL integration, clean-clone bootstrap, production build, secret scan, money-path, E2E Playwright all GREEN |
 | Blind human rubric (fresh kit) | NOT VERIFIED | open human work — no machine can close it |
 | E2E browser battery | NOT VERIFIED this session | the plan's §8.5 remains scheduled work |
 | Docker/PostgreSQL verification | NOT VERIFIED this session | plan §8.6 — deployment-scoped |
