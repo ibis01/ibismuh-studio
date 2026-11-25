@@ -63,6 +63,22 @@ export const ORG_SCOPED_MODELS = new Set(
     "storagereservation",
     "storageusage",
     "usagerecord",
+    // The sandbox planner pipeline's rows (the /studio surface + the projects
+    // API) carry organizationId and are org content like every other row.
+    // Registered after the S136 schema-scan pin caught them unscoped on the
+    // merged tree — the pipeline's current call sites filter explicitly
+    // (where: { projectId, organizationId: ORG }) and its routes carry no
+    // tenant ctx yet, so scoping is dormant until a ctx-entered caller
+    // appears; when one does, the guard is already in place (the same
+    // defense-in-depth shape the graphicsImport + whiteboardassetupload
+    // registrations bought).
+    "studioproject",
+    "planrevision",
+    "assetrecord",
+    "audioreceiptrecord",
+    "renderjob",
+    "qcreportrecord",
+    "studioevent",
   ].map((m) => m.toLowerCase())
 );
 

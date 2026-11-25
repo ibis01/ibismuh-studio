@@ -34,6 +34,7 @@ import {
 } from "./stock-index";
 import { rankCandidates } from "./stock-ranker";
 import { verifyClip } from "./stock-verify";
+import { fetchImagesForScenes } from "./stock-image";
 import type { Scene, StockRef } from "./types";
 import { currentCtx } from "./tenant";
 import { log } from "./log";
@@ -275,6 +276,10 @@ export interface StockRunResult {
   matched: number; // scenes that got (or already had) a clip
   fetched: number; // clips downloaded this run
   skipped: number; // scenes with no match — Smart Motion art covers them
+  // The image pass (the photo lane) — additive optionals: legacy callers
+  // reading matched/fetched/skipped are untouched.
+  imagesMatched?: number; // scenes that got (or already had) a photo
+  imagesFetched?: number; // photos downloaded this run
 }
 
 /**
@@ -375,7 +380,44 @@ export async function fetchStockForScenes(opts: {
     if (i < missing.length - 1) await sleep(1200); // pace both free APIs
   }
 
-  return { matched, fetched, skipped: Math.max(opts.scenes.length - matched, 0) };
+  // The image pass — the photo lane (stock-image.ts). Scenes the clip search
+  // left uncovered get a real photo downloaded as their art-slot fallback:
+  // "the image the scene needs, fetched at the moment it's needed". Clips
+  // stay senior — a matched scene never spends an image slot — and the pass
+  // never fails the footage run: a photo search that breaks is logged and
+  // skipped, the way a failed provider query already is.
+  let imagesMatched = 0;
+  let imagesFetched = 0;
+  if (keys.pexels || keys.pixabay) {
+    try {
+      const imgResult = await fetchImagesForScenes({
+        videoId: opts.videoId,
+        scenes: opts.scenes,
+        keys,
+        force: opts.force,
+        onlyScene: opts.onlyScene,
+        queryOverride: opts.queryOverride,
+        shouldCancel: opts.shouldCancel,
+        onProgress: (done, total, label) => opts.onProgress?.(done, total, label),
+      });
+      imagesMatched = imgResult.matched;
+      imagesFetched = imgResult.fetched;
+    } catch (err) {
+      if (err instanceof Error && err.message === "__CANCELLED__") throw err;
+      stockLog.warn("stock image pass failed (skipped)", {
+        video: opts.videoId,
+        err: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
+  return {
+    matched,
+    fetched,
+    skipped: Math.max(opts.scenes.length - matched, 0),
+    imagesMatched,
+    imagesFetched,
+  };
 }
 
 /** Remove all stock clips + refs (storyboard stays untouched).

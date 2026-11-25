@@ -7738,3 +7738,67 @@ P2-E natural-speed pacing + motion floor) and the human blind gate
 - THE PROOF (scripts/s150-typography-proof.mts, GATE GREEN — 41 assertions): three scenes through the REAL engine — wrap-only, word-cascade, char-cascade in Caveat. The fixture first FAILED the readcheck lens honestly ("31 chars needs 1330ms, holds 1000ms") and the FIXTURE was fixed, never the lens. Receipts: every scene H.264 with the contract's frame count (96/120/96, probed total = delivered 312); the cascade moves REAL pixels (mid vs settled: 90,492 differing bytes, PNG-decoded from the ENCODED MP4 — the renderer cleans frame dirs post-encode, the S75 law, so the probe reads the deliverable); the face rasterizes (Caveat vs the system-font twin: 128,404 differing bytes — a failed face load would read identical, the silent lie the probe refuses); BOTH renders' scene MP4s byte-identical (the encode pinned too) + five decoded frames per scene identical (survives muxer metadata drift). Receipt in gitignored validation/s150/.
 - HONEST GAPS: no stroke-drawn text (the whiteboard glyph-outline route is a W4-sized slice — the cascade IS this slice's reveal; the outline route stays named C1.5); no planner emission changes (scaffolds stay byte-identical; the vocabulary choices are C2's decision surface); no studio UX (the face picker / wrap button / tween list is C2 verbatim); no write-time measurement yet (the studio's measure-and-write refinement rides C2).
 - NEXT per the audit's sequencing: C2 (the tween/camera/event authoring UX), then D1/D2/D5, E1–E4, C3–C6, F, G, E5.
+
+## The stock photo lane + the CI repair (2026-11-25)
+
+- THE CI REPAIR FIRST (the red the last push left behind): the planner
+  pipeline's seven org-carrier models (StudioProject, PlanRevision,
+  AssetRecord, AudioReceiptRecord, RenderJob, QcReportRecord, StudioEvent)
+  landed without their ORG_SCOPED_MODELS registration — the S136 schema-scan
+  pin caught them the moment CI ran the merged tree (unit battery red, the
+  money-path coverage job red downstream of it). All seven are registered
+  now, with the honest comment: their current call sites filter explicitly
+  and carry no tenant ctx yet, so scoping is dormant until a ctx-entered
+  caller appears — the same defense-in-depth shape graphicsImport and
+  whiteboardassetupload bought when their turns came. The T-3.2 size pin and
+  the schema-driven registry test updated with the set. No behavior change
+  on any live path.
+- THE STOCK PHOTO LANE (the still-image sibling of the S89 footage lane —
+  "the image a scene needs, downloaded at the moment it needs it"): the
+  story pipeline now downloads real, licensed PHOTOS for scenes the clip
+  search leaves uncovered. Pexels photo search + Pixabay photo search are
+  the first two photo adapters (stock-image-index.ts, the S89 adapter
+  contract restated for stills; the guarded JSON transport is ONE exported
+  seam both lanes ride); the pure ranker (stock-image-ranker.ts) floors
+  license-less/portrait/sub-720p candidates and weighs resolution 40 ·
+  aspect 20 · tag semantics 40 (neutral for tag-less sources, never a
+  penalty) with the same fixed cross-scene duplicate penalty; the
+  orchestrator (stock-image.ts) downloads through safeFetch (byte caps, time
+  bounds), verifies DECODE FIRST (ffprobe — garbage bytes never reach the
+  inspector, no dimensions claimed) then ONE relevance inspection (score ≥ 8
+  pass, ≤ 3 reject, between or outage = kept but stamped "unverified" — the
+  never-silent law), and lands `stockimg-XX.jpg` through the storage driver
+  with a `stockImage` ref carrying provenance + verification.
+- THE WIRING: fetchStockForScenes runs the photo pass AFTER the clip loop
+  (clips stay senior — a matched scene never spends an image slot; the pass
+  never fails the footage run); the per-scene re-pick (POST /stock/[n])
+  tries the clip then the photo; the render gate accepts a downloaded photo
+  exactly like scene art; the Ken Burns executor resolves ART FIRST (the
+  creator's look wins) and substitutes the photo only when art is missing —
+  and when it substitutes, the Director shot list is skipped (its crops were
+  composed against the approved art; the single-image Smart Motion graph
+  plays over the photo). ensureSceneAssetsLocal restores the photo into the
+  scratch tree beside art/wavs (the s3-published-inputs law). The storyboard
+  DTO, the stock status route and the DELETE route speak both lanes
+  additively; GET /api/videos/[id]/stock-images/[n] serves a scene's photo.
+- THE LENS THAT ISN'T (recorded for the next agent): the repo's own tracer
+  REJECTS photographs with a named reason ("filled artwork and photographs
+  do not trace into drawable strokes") — so downloaded photos deliberately
+  DO NOT feed the whiteboard stroke library; the whiteboard vocabulary grows
+  through authored SVGs, validated tracing, and the AI-illustration bridge.
+  The library's explanation (both lanes, the whiteboard relationship, the
+  keys, the HTTP surface) landed as docs/reference/stock-library.md, linked
+  from the README's documentation table.
+- THE PINS: unit battery 1064/0 (+17: photo adapter normalization + license
+  law + index dedupe both sources, the ranker floors/weights/duplicate
+  penalty/deterministic order, the relevance-band reducer, the file-name
+  law, REAL decode fixtures — a generated JPEG through pass/reject/
+  unverified/throwing-inspector/garbage-bytes — and the scene-doc
+  round-trip with the tolerant-parse law). tsc clean; changed-file eslint
+  clean; the tenant registry + T-3.2 pins updated with the seven models.
+- AN ENVIRONMENT RECEIPT (not a repo fact): this sandbox's terminal output
+  path swallows literal "[m" byte sequences in displayed file content — the
+  same artifact that once read a VALID array literal as corruption (the
+  push-trigger glob saga's "fix" was byte-verified against exactly this
+  class). Display output lies; od/esbuild are the ground truth. All content
+  written this session was verified byte-level (esbuild parse + battery run).

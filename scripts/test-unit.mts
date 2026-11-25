@@ -91,6 +91,26 @@ import {
   stockFrameTimes,
 } from "../src/lib/ibismuh/stock-ranker";
 import {
+  configuredImageSources,
+  imageKey,
+  mergeIntoImageIndex,
+  pexelsPhotoParse,
+  pixabayPhotoParse,
+  type SceneImageIndexEntry,
+  type StockImageCandidate,
+} from "../src/lib/ibismuh/stock-image-index";
+import {
+  DUPLICATE_IMAGE_PENALTY,
+  IMAGE_RELEVANCE_PASS_SCORE,
+  IMAGE_RELEVANCE_REJECT_SCORE,
+  imageCandidateFloors,
+  imageRelevanceVerdict,
+  imageSemanticFactor,
+  RANK_IMAGE_WEIGHTS,
+  rankImageCandidates,
+} from "../src/lib/ibismuh/stock-image-ranker";
+import type { Scene } from "../src/lib/ibismuh/types";
+import {
   costEfficiencyFromMicroUsd,
   DEFAULT_WEIGHTS,
   latencyBlend,
@@ -2620,6 +2640,10 @@ await test("tenant-db: every org-scoped model matches the lowercased lookup", as
     // future request-scoped access).
     "session", "spendreservation", "storagereservation", "storageusage",
     "usagerecord",
+    // The sandbox planner pipeline's rows (the /studio surface) — registered
+    // when the S136 schema-scan pin caught them unscoped on the merged tree.
+    "studioproject", "planrevision", "assetrecord", "audioreceiptrecord",
+    "renderjob", "qcreportrecord", "studioevent",
   ];
   for (const m of expected) {
     ok(ORG_SCOPED_MODELS.has(m), `"${m}" is org-scoped`);
@@ -26115,6 +26139,322 @@ await test("excellence P1-F: ONE page setup — the renderer and the parity harn
   ok(!paritySrc.includes("from \"fs\"") && !paritySrc.includes("from \"node:fs\"") && !paritySrc.includes("require(\"fs\")"), "parity.ts does not touch fs (pure)");
   ok(!paritySrc.includes("from \"child_process\"") && !paritySrc.includes("require(\"child_process\")") && !paritySrc.includes("from \"playwright\"") && !paritySrc.includes("import(\"playwright\")"), "parity.ts does not touch processes or browsers (pure)");
   ok(!paritySrc.includes("Date.now") && !paritySrc.includes("performance.now"), "parity.ts does not read the clock (deterministic)");
+});
+
+// ---------- the stock IMAGE lane — photo adapters, ranker, verifier ----------
+
+/** The scene fixture for the image verifier (verifyImage consumes only the
+ *  index/title/visual/mood/narration fields). */
+function imgScene(): Scene {
+  return {
+    index: 3,
+    id: "scn-stockimg",
+    title: "Harbor at dusk",
+    narration: "The fishing boats return to the harbor as the sun sets.",
+    visual: "a small fishing boat returning to a harbor at dusk",
+    camera: "zoom-in",
+    mood: "warm amber light",
+    caption: "The boats come home",
+    hostInScene: false,
+    rehook: false,
+    sfx: "none",
+  } as unknown as Scene;
+}
+
+suiteStart("stock image index — photo adapter normalization + dedupe");
+
+await test("pexelsPhotoParse: landscape >=1280 photo picked, license stamped, original URL preferred", () => {
+  const data = {
+    photos: [
+      {
+        id: 501,
+        width: 1920,
+        height: 1080,
+        url: "https://pexels.com/p/501",
+        photographer: "Grace",
+        src: { original: "https://cdn/501-original.jpeg", large2x: "https://cdn/501-2x.jpeg", landscape: "https://cdn/501-land.jpeg" },
+      },
+      { id: 502, width: 720, height: 1280, src: { original: "https://cdn/502.jpeg" } },
+    ],
+  };
+  const out = pexelsPhotoParse(data);
+  eq(out.length, 1, "only the landscape >=1280 candidate survives");
+  eq(out[0].id, "501", "provider id carried (the dedupe key half)");
+  eq(out[0].url, "https://cdn/501-original.jpeg", "the original rendition preferred");
+  eq(out[0].license, "Pexels License", "license stamped by the adapter");
+  eq(out[0].author, "Grace", "author carried for the credit line");
+  ok(out[0].tags === undefined, "pexels photo search carries no tags (semantic factor neutral)");
+});
+
+await test("pexelsPhotoParse: falls back to large2x when the original is hidden", () => {
+  const out = pexelsPhotoParse({
+    photos: [{ id: 7, width: 3000, height: 2000, src: { large2x: "https://cdn/7-2x.jpeg" } }],
+  });
+  eq(out.length, 1, "one candidate");
+  eq(out[0].url, "https://cdn/7-2x.jpeg", "large2x is the fallback rendition");
+});
+
+await test("pixabayPhotoParse: tags carried, license stamped, large rendition picked", () => {
+  const data = {
+    hits: [
+      {
+        id: 88,
+        pageURL: "https://pixabay.com/p/88",
+        tags: "harbor, boats, dusk",
+        imageWidth: 2400,
+        imageHeight: 1350,
+        largeImageURL: "https://cdn/88-large.jpg",
+        user: "Ray",
+      },
+    ],
+  };
+  const out = pixabayPhotoParse(data);
+  eq(out.length, 1, "one candidate");
+  eq(out[0].id, "88", "id");
+  eq(out[0].url, "https://cdn/88-large.jpg", "largeImageURL picked");
+  eq(out[0].license, "Pixabay Content License", "license");
+  ok(out[0].tags != null && out[0].tags.includes("harbor"), "tags split + carried");
+});
+
+await test("mergeIntoImageIndex: source:id dedupe, matchedQueries union, namespaces distinct, license law", () => {
+  const mk = (source: "pexels" | "pixabay", id: string): StockImageCandidate => ({
+    source,
+    id,
+    url: `https://cdn/${source}-${id}.jpg`,
+    width: 1920,
+    height: 1080,
+    author: "A",
+    pageUrl: "p",
+    license: "L",
+  });
+  const index = new Map<string, SceneImageIndexEntry>();
+  mergeIntoImageIndex(index, "ocean waves", [mk("pexels", "12"), mk("pixabay", "12")]);
+  mergeIntoImageIndex(index, "aerial coast", [mk("pexels", "12"), mk("pexels", "13")]);
+  eq(index.size, 3, "pexels:12 + pixabay:12 + pexels:13 — namespaces distinct, no dupes");
+  eq(
+    index.get("pexels:12")?.matchedQueries.join("|") ?? "",
+    "ocean waves|aerial coast",
+    "matchedQueries union across queries"
+  );
+  const lawless = { ...mk("pexels", "99"), license: "" };
+  mergeIntoImageIndex(index, "q", [lawless]);
+  ok(!index.has("pexels:99"), "THE LICENSE LAW: a photo without a license never enters the index");
+  eq(imageKey(mk("pixabay", "12")), "pixabay:12", "imageKey is the namespaced dedupe key");
+});
+
+await test("configuredImageSources: zero keys throws the SAME pinned operator error", () => {
+  let msg = "";
+  try {
+    configuredImageSources({ pexels: "", pixabay: "" });
+  } catch (e) {
+    msg = e instanceof Error ? e.message : "";
+  }
+  eq(
+    msg,
+    "No stock provider is configured — add a free Pexels or Pixabay key in Settings → Stock footage",
+    "byte-identical to the footage lane's message (the queue suite + POST gate assert it)"
+  );
+  const only = configuredImageSources({ pexels: "k", pixabay: "" });
+  eq(only.length, 1, "one key → one photo adapter");
+  eq(only[0].id, "pexels", "the configured one");
+});
+
+suiteStart("stock image ranker — floors + factors + verdict bands");
+
+await test("imageCandidateFloors: portrait, sub-720p, license-less are UNUSABLE", () => {
+  const base: StockImageCandidate = {
+    source: "pexels", id: "1", url: "u", width: 1920, height: 1080, author: "a", pageUrl: "p", license: "L",
+  };
+  eq(imageCandidateFloors(base), null, "a healthy landscape HD photo passes");
+  ok(imageCandidateFloors({ ...base, width: 800, height: 1200 }) !== null, "portrait dropped");
+  ok(imageCandidateFloors({ ...base, width: 640, height: 360 }) !== null, "below 720p dropped");
+  ok(imageCandidateFloors({ ...base, license: "" }) !== null, "no license dropped");
+  ok(imageCandidateFloors({ ...base, url: "" }) !== null, "no download url dropped");
+});
+
+await test("rankImageCandidates: deterministic order, the duplicate penalty sinks a reused photo", () => {
+  const mk = (id: string, width: number): SceneImageIndexEntry => ({
+    candidate: { source: "pixabay", id, url: `https://cdn/${id}.jpg`, width, height: Math.round((width * 9) / 16), author: "a", pageUrl: "p", license: "L" },
+    matchedQueries: ["q"],
+  });
+  const fresh = rankImageCandidates([mk("a", 3840), mk("b", 1920)], { usedImageKeys: new Set(), sceneTerms: [] });
+  ok(fresh[0].score > fresh[1].score, "the sharper photo ranks first");
+  eq(fresh[0].entry.candidate.id, "a", "4K outranks 1080p");
+  const again = rankImageCandidates([mk("b", 1920), mk("a", 3840)], { usedImageKeys: new Set(), sceneTerms: [] });
+  eq(again[0].entry.candidate.id, "a", "score desc is stable across input orders (deterministic walk)");
+  const dup = rankImageCandidates([mk("a", 3840), mk("b", 1920)], { usedImageKeys: new Set(["pixabay:a"]), sceneTerms: [] });
+  eq(dup[0].entry.candidate.id, "b", "the fresh candidate outranks the duplicate");
+  ok(dup[1].factors.duplicatePenalty === DUPLICATE_IMAGE_PENALTY, "the duplicate carries the fixed penalty");
+});
+
+await test("imageSemanticFactor: neutral for tag-less candidates, full marks at 3+ shared terms", () => {
+  const noTags: StockImageCandidate = { source: "pexels", id: "1", url: "u", width: 1920, height: 1080, author: "a", pageUrl: "p", license: "L" };
+  eq(imageSemanticFactor(noTags, ["harbor"]), 0, "no tags → neutral (never a penalty)");
+  const tagged: StockImageCandidate = { ...noTags, source: "pixabay", tags: ["harbor", "boats", "dusk"] };
+  eq(imageSemanticFactor(tagged, ["harbor", "boats", "dusk"]), 1, "3+ shared terms → full marks");
+});
+
+await test("imageRelevanceVerdict: the inspector's bands map to pass / reject / keep-unverified", () => {
+  eq(imageRelevanceVerdict(IMAGE_RELEVANCE_PASS_SCORE).pass, true, "8 (the clear band) passes");
+  eq(imageRelevanceVerdict(10).pass, true, "10 passes");
+  eq(imageRelevanceVerdict(IMAGE_RELEVANCE_REJECT_SCORE).pass, false, "3 (the unrelated band) rejects");
+  eq(imageRelevanceVerdict(0).pass, false, "0 rejects");
+  eq(imageRelevanceVerdict(5).pass, null, "the vague band keeps, unverified");
+  eq(imageRelevanceVerdict(null).pass, null, "no score (inspector outage) never rejects");
+  ok(imageRelevanceVerdict(null).reason.includes("unverified"), "the degradation is named");
+});
+
+await test("RANK_IMAGE_WEIGHTS: resolution + aspect + semantic complete to 100", () => {
+  eq(RANK_IMAGE_WEIGHTS.resolution + RANK_IMAGE_WEIGHTS.aspect + RANK_IMAGE_WEIGHTS.semantic, 100, "the photo weights complete to 100");
+});
+
+suiteStart("stock image lane — file naming + the decode/relevance gate (real fixtures)");
+
+await test("stockImageFile: the two-digit jpg name", async () => {
+  const { stockImageFile } = await import("../src/lib/ibismuh/stock-image");
+  eq(stockImageFile(1), "stockimg-01.jpg", "scene 1");
+  eq(stockImageFile(12), "stockimg-12.jpg", "scene 12");
+});
+
+await test("probeImage + verifyImage: a real photo decodes and passes the injected gate", async () => {
+  const { probeImage, verifyImage } = await import("../src/lib/ibismuh/stock-image");
+  const imgPath = path.join(os.tmpdir(), `tf-unit-stockimg-${process.pid}.jpg`);
+  await genFixture(imgPath, [
+    "-f", "lavfi", "-i", "color=c=steelblue:size=1280x720:rate=1",
+    "-frames:v", "1", "-q:v", "2",
+  ]);
+  try {
+    const probe = await probeImage(imgPath);
+    ok(probe != null && probe.width === 1280 && probe.height === 720, "ffprobe reads the real dimensions");
+    const verdict = await verifyImage({
+      imagePath: imgPath,
+      scene: imgScene(),
+      relevance: async () => ({ pass: true, score: 9, summary: "clearly the harbor" }),
+    });
+    eq(verdict.pass, true, "the clear band passes");
+    eq(verdict.width, 1280, "the ref carries the PROBED width");
+    eq(verdict.height, 720, "the ref carries the PROBED height");
+  } finally {
+    await fsp.rm(imgPath, { force: true });
+  }
+});
+
+await test("verifyImage: the unrelated band REJECTS; no score keeps the photo, stamped unverified", async () => {
+  const { verifyImage } = await import("../src/lib/ibismuh/stock-image");
+  const imgPath = path.join(os.tmpdir(), `tf-unit-stockimg-${process.pid}-2.jpg`);
+  await genFixture(imgPath, [
+    "-f", "lavfi", "-i", "color=c=tomato:size=1280x720:rate=1",
+    "-frames:v", "1", "-q:v", "2",
+  ]);
+  try {
+    const rejected = await verifyImage({
+      imagePath: imgPath,
+      scene: imgScene(),
+      relevance: async () => ({ pass: false, score: 2, summary: "a grocery market" }),
+    });
+    eq(rejected.pass, false, "the unrelated band rejects (the ref is never attached)");
+    const unchecked = await verifyImage({
+      imagePath: imgPath,
+      scene: imgScene(),
+      relevance: async () => ({ pass: null, score: null, summary: null }),
+    });
+    eq(unchecked.pass, null, "an inspector outage keeps the photo");
+    ok(unchecked.summary != null && unchecked.summary.includes("unverified"), "the degradation is recorded, never silent");
+  } finally {
+    await fsp.rm(imgPath, { force: true });
+  }
+});
+
+await test("verifyImage: garbage bytes degrade to unverified (the decode gate runs first)", async () => {
+  const { verifyImage } = await import("../src/lib/ibismuh/stock-image");
+  const imgPath = path.join(os.tmpdir(), `tf-unit-stockimg-${process.pid}-garbage.jpg`);
+  await fsp.writeFile(imgPath, "definitely not an image");
+  try {
+    const verdict = await verifyImage({
+      imagePath: imgPath,
+      scene: imgScene(),
+      relevance: async () => ({ pass: true, score: 10, summary: "would-be pass" }),
+    });
+    eq(verdict.pass, null, "undecodable bytes NEVER pass (and never reach the inspector)");
+    ok(verdict.summary != null && verdict.summary.includes("could not be decoded"), "the decode failure is named");
+    eq(verdict.width, null, "no dimensions are claimed");
+  } finally {
+    await fsp.rm(imgPath, { force: true });
+  }
+});
+
+await test("verifyImage: a throwing inspector never rejects (fail-open, recorded)", async () => {
+  const { verifyImage } = await import("../src/lib/ibismuh/stock-image");
+  const imgPath = path.join(os.tmpdir(), `tf-unit-stockimg-${process.pid}-throw.jpg`);
+  await genFixture(imgPath, [
+    "-f", "lavfi", "-i", "color=c=gray:size=1280x720:rate=1",
+    "-frames:v", "1", "-q:v", "2",
+  ]);
+  try {
+    const verdict = await verifyImage({
+      imagePath: imgPath,
+      scene: imgScene(),
+      relevance: async () => {
+        throw new Error("vision provider down");
+      },
+    });
+    eq(verdict.pass, null, "a throwing inspector keeps the photo");
+    ok(verdict.summary != null && verdict.summary.includes("unverified"), "stamped unverified");
+  } finally {
+    await fsp.rm(imgPath, { force: true });
+  }
+});
+
+suiteStart("stock image ref round-trip — verification survives the doc");
+
+await test("parseScenes: the image ref survives with provenance + verification", async () => {
+  const { parseScenes } = await import("../src/lib/ibismuh/story.ts");
+  const scene = {
+    index: 2,
+    title: "T",
+    narration: "n",
+    visual: "v",
+    stockImage: {
+      source: "pexels",
+      file: "stockimg-02.jpg",
+      query: "harbor boats",
+      credit: "Photo by Grace (Pexels)",
+      pageUrl: "https://pexels.com/p/501",
+      license: "Pexels License",
+      providerId: "501",
+      width: 1280,
+      height: 720,
+      verification: { verdict: "pass", score: 9, summary: "clearly the harbor" },
+    },
+  };
+  const parsed = parseScenes(JSON.stringify([scene]));
+  const ref = parsed[0].stockImage;
+  ok(ref != null, "the image ref parses");
+  eq(ref?.file, "stockimg-02.jpg", "the file name survives");
+  eq(ref?.license, "Pexels License", "license survives");
+  eq(ref?.providerId, "501", "providerId survives (the dedupe key)");
+  eq(ref?.width, 1280, "width survives");
+  eq(ref?.verification?.verdict, "pass", "the verdict survives");
+  eq(ref?.verification?.score, 9, "the score survives");
+});
+
+await test("parseScenes: a legacy scene parses undefined; junk image refs drop", async () => {
+  const { parseScenes } = await import("../src/lib/ibismuh/story.ts");
+  const parsed = parseScenes(JSON.stringify([
+    { index: 1, title: "T", narration: "n", visual: "v" },
+  ]));
+  ok(parsed[0].stockImage === undefined, "absent stays absent (not faked)");
+
+  const badFile = parseScenes(JSON.stringify([
+    { index: 1, title: "T", narration: "n", visual: "v", stockImage: { source: "pexels", file: "stock-01.mp4", query: "q", credit: "c", pageUrl: "u" } },
+  ]));
+  ok(badFile[0].stockImage === undefined, "a CLIP file name on the image ref drops the ref");
+
+  const badVerdict = parseScenes(JSON.stringify([
+    { index: 1, title: "T", narration: "n", visual: "v", stockImage: { source: "pixabay", file: "stockimg-01.jpg", query: "q", credit: "c", pageUrl: "u", verification: { verdict: "certainly", score: "high" } } },
+  ]));
+  ok(badVerdict[0].stockImage != null, "the REF survives a bad verification record");
+  ok(badVerdict[0].stockImage?.verification === undefined, "the bad RECORD drops");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

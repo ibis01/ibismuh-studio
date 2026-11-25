@@ -190,6 +190,7 @@ runner stalls — see the worklog's CI-flake receipts).
 | [`SECURITY.md`](SECURITY.md) | security requirements + audit findings |
 | [`ROADMAP.md`](ROADMAP.md) / [`MASTER_PLAN.md`](MASTER_PLAN.md) | the original development programme (Stages 1–7, all closed at the code level) + the Post-Stage-7 2.0 tracks (Whiteboard, Creator Intelligence, the shared quality systems) |
 | [`WHITEBOARD_ENGINE_DESIGN.md`](WHITEBOARD_ENGINE_DESIGN.md) | the Whiteboard Engine's laws, budgets, and the E0–E12 milestone matrix |
+| [`docs/reference/stock-library.md`](docs/reference/stock-library.md) | the stock library — the footage lane + the photo lane: adapters, ranking, verification, keys, and the render integration |
 | [`TASKS.md`](TASKS.md) | task ledgers per stage **+ the S-series drift-closure index (S1→S65) and the S47 integrity ledger** — the living trail through S135 and the W-track is `worklog.md` |
 | [`RISK_REGISTER.md`](RISK_REGISTER.md) | technical debt and risk register |
 | `worklog.md` | the audit-trail worklog — every stage's final gate, in order |

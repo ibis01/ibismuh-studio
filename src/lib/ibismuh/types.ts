@@ -184,6 +184,39 @@ export interface StockRef {
   verification?: StockVerification;
 }
 
+/**
+ * The image lane's verification record — the same never-silent law as
+ * StockVerification, shaped for a STILL: one relevance inspection replaces
+ * the multi-frame sampling (there is nothing to move), so verdict "pass"
+ * means the VLM clearly recognized the required content (score ≥ 8) and
+ * anything weaker — a vague match, an inspector outage — is recorded as
+ * "unverified", visible on the ref, never claimed as clean.
+ */
+export interface StockImageVerification {
+  verdict: "pass" | "unverified";
+  score: number | null; // the inspector's 0-10 relevance score — null when unchecked
+  summary: string | null; // the inspector's one-sentence reason (or the degradation note)
+}
+
+/** A downloaded stock PHOTO attached to one scene (stock-image.ts) — the
+ *  still-image sibling of StockRef. The photo covers the scene's ART slot
+ *  when the AI art is missing or failed; a matched b-roll clip is always
+ *  senior (a scene with a clip never spends an image slot). */
+export interface StockImageRef {
+  source: "pexels" | "pixabay";
+  file: string; // stockimg-XX.jpg inside the video dir
+  query: string; // the search terms that matched
+  credit: string; // "Photo by NAME (Pexels)"
+  pageUrl: string; // source page for attribution
+  // Provenance + verification, additive like StockRef's — legacy refs
+  // (written before this module) lack all five and parse with them undefined.
+  license?: string;
+  providerId?: string; // the photo's id at its source — the duplicate-dedupe key half
+  width?: number;
+  height?: number;
+  verification?: StockImageVerification;
+}
+
 export const CAMERAS = [
   { id: "zoom-in", label: "Zoom in" },
   { id: "zoom-out", label: "Zoom out" },
@@ -308,6 +341,7 @@ export interface Scene {
   sfx: string; // one of SFX_KINDS or "none"
   focal?: string; // where the eye must stay (Smart Motion) — e.g. "upper-right"
   stock?: StockRef; // matched real-footage clip (render mode "stock")
+  stockImage?: StockImageRef; // downloaded stock photo — the art-slot fallback
   style?: string; // per-scene art style override (SCENE_ART_STYLES id; default = pipeline look)
   seedVariant?: number; // generation-take counter — bumped on every explicit
   // re-roll so pinned seeds (identity locking on text-to-image providers)
@@ -340,6 +374,13 @@ export interface SceneDTO {
   stockSource: string | null; // "pexels" | "pixabay"
   stockQuery: string | null;
   stockCredit: string | null;
+  // The photo lane (stock-image.ts) — additive optionals: legacy DTO
+  // constructors and older clients are untouched.
+  hasStockImage?: boolean;
+  stockImageUrl?: string | null;
+  stockImageSource?: string | null; // "pexels" | "pixabay"
+  stockImageCredit?: string | null;
+  stockImageVerified?: string | null; // "pass" | "unverified" | null (no photo)
   /** Stage 5 (module C) — the cast's logged look for this scene (host scenes
    * only; null when no look is logged). The director pass proposes it; the
    * human edits it in Scene Studio; an approved plan weaves it into the

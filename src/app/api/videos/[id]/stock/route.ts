@@ -5,6 +5,7 @@ import { db } from "@/lib/ibismuh/tenant-db";
 import { requireUser } from "@/lib/ibismuh/tenant";
 import { parseScenes } from "@/lib/ibismuh/story";
 import { clearStock, readStockKeys } from "@/lib/ibismuh/stock";
+import { clearStockImages } from "@/lib/ibismuh/stock-image";
 import { runStockRefresh } from "@/lib/ibismuh/queue-handlers";
 import {
   startJob,
@@ -71,6 +72,9 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     error: lastJobError(id, "stock") ?? fleet.error,
     matched: scenes.filter((s) => s.stock).length,
     total: scenes.length,
+    // The image lane — additive: scenes without a clip can carry a
+    // downloaded photo (the render's art-slot fallback).
+    matchedImages: scenes.filter((s) => s.stockImage).length,
     providersConfigured: {
       pexels: Boolean(keys.pexels),
       pixabay: Boolean(keys.pixabay),
@@ -94,6 +98,15 @@ export async function GET(req: NextRequest, ctx: Ctx) {
             summary: s.stock.verification.summary,
           }
         : null,
+      // The photo lane — additive per-scene fields.
+      hasStockImage: Boolean(s.stockImage),
+      stockImageSource: s.stockImage?.source ?? null,
+      stockImageQuery: s.stockImage?.query ?? null,
+      stockImageCredit: s.stockImage?.credit ?? null,
+      stockImagePageUrl: s.stockImage?.pageUrl ?? null,
+      stockImageLicense: s.stockImage?.license ?? null,
+      stockImageVerified: s.stockImage?.verification?.verdict ?? null,
+      stockImageSummary: s.stockImage?.verification?.summary ?? null,
     })),
     // S4 — per-scene job flags (composite entityIds) so a studio inspector
     // can watch ONE scene's re-pick without polling the binary GET. S151 —
@@ -176,6 +189,7 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
 
   const scenes = parseScenes(video.scenes);
   const cleared = await clearStock(id, scenes);
+  const clearedImages = await clearStockImages(id, scenes);
   await invalidateRenders(id);
   await db.video.update({
     where: { id },
@@ -187,9 +201,12 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
       userId: auth.ctx.userId,
       videoId: id,
       stage: "stock",
-      message: `Stock b-roll cleared — ${cleared} clip${cleared === 1 ? "" : "s"} removed`,
+      message:
+        cleared > 0 || clearedImages > 0
+          ? `Stock cleared — ${cleared} clip${cleared === 1 ? "" : "s"}, ${clearedImages} photo${clearedImages === 1 ? "" : "s"} removed`
+          : "Stock cleared — nothing to remove",
     },
   });
 
-  return NextResponse.json({ cleared });
+  return NextResponse.json({ cleared, clearedImages });
 }

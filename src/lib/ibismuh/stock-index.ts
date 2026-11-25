@@ -68,7 +68,13 @@ export function clipKey(c: Pick<StockCandidate, "source" | "id">): string {
 
 // ---------- fetch plumbing (the only I/O in this module) ----------
 
-async function fetchJson(
+/**
+ * The guarded JSON transport both stock lanes ride (footage + photos): the
+ * destination is provider-shaped, the bytes are capped, the time is bounded,
+ * and the operator-facing errors are pinned. Exported for the image lane
+ * (stock-image-index.ts) so the transport law lives exactly once.
+ */
+export async function fetchJson(
   url: string,
   headers: Record<string, string>,
   timeoutMs = 20000

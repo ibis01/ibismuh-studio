@@ -998,7 +998,21 @@ async function buildSegment(opts: {
   // produce its clip degrades HERE — the liveliness pick never breaks the
   // render, it just plays the next-liveliest channel.
   const runKenburns = async (): Promise<void> => {
-    const img = path.join(dir, sceneImageFile(scene.index));
+    // The visual resolution law: the AI art WINS when it exists (the look
+    // the creator chose); the downloaded stock photo covers the GAP when
+    // art is missing (failed generation, no image provider) — the photo
+    // lane never repaints an approved scene.
+    const artImg = path.join(dir, sceneImageFile(scene.index));
+    const stockImg = scene.stockImage ? path.join(dir, scene.stockImage.file) : null;
+    const artMissing = !fs.existsSync(artImg);
+    const img = artMissing && stockImg != null && fs.existsSync(stockImg) ? stockImg : artImg;
+    // The stock photo substituted the art → the Director shot list is
+    // SKIPPED: its per-shot crops/pseudo-crops were composed against the
+    // approved art, and a "scene"-source shot would point at the missing
+    // file. The single-image Smart Motion graph plays over the photo
+    // instead — the honest degradation, visible in the graph choice.
+    const shotInputs =
+      !artMissing && shotPlan?.available?.length ? resolveShotInputs(dir, shotPlan, img) : null;
 
     // M2 — the approved Director shot list drives the scene (spec §1.7):
     // per-shot image (scene art / fresh AI render / pseudo crop), per-shot
@@ -1006,9 +1020,6 @@ async function buildSegment(opts: {
     // zoompan math engine (multiShotSceneGraph → shotZoompan). The scene-
     // level motion-map override does NOT apply here — per-shot Director
     // decisions are senior; it keeps governing plan-less scenes (§1.3).
-    const shotInputs = shotPlan?.available?.length
-      ? resolveShotInputs(dir, shotPlan, img)
-      : null;
     if (shotInputs) {
       const audioInputCount = audio.inputs.filter((a) => a === "-i").length;
       const inputFor = new Map<string, number>([[img, 0]]);
@@ -1806,8 +1817,17 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
   // no storyboard image". Restore each scene's published inputs locally
   // first (no-op when the local copy is already there), then gate as
   // before: an asset missing in BOTH storage and scratch still refuses
-  // with the same actionable message.
-  await ensureSceneAssetsLocal(opts.videoId, dir, scenes.map((s) => s.index));
+  // with the same actionable message. The stock-image lane's photos are
+  // published inputs too — a scene carrying one restores it alongside.
+  const stockImageFiles = new Map<number, string>();
+  for (const s of scenes) if (s.stockImage) stockImageFiles.set(s.index, s.stockImage.file);
+  await ensureSceneAssetsLocal(
+    opts.videoId,
+    dir,
+    scenes.map((s) => s.index),
+    ["image", "wav"],
+    stockImageFiles
+  );
 
   // Validate inputs up-front with actionable messages. S87 slice 4 — the
   // first legacy branch COLLAPSES onto the contract: the storyboard-art
@@ -1820,7 +1840,17 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
   // per-scene truth instead of the video-level proxy. Narration timing
   // is still mandatory in every mode.
   for (const [i, scene] of scenes.entries()) {
-    if (sceneKindOf(i) !== "image" && !fs.existsSync(path.join(dir, sceneImageFile(scene.index))))
+    // The stock-image lane: a scene with a downloaded photo HAS a visual —
+    // the gate accepts it exactly like the art (the Ken Burns executor
+    // below resolves art first, photo second, so the video never loses the
+    // creator's chosen look when art exists).
+    const stockImg = scene.stockImage ? path.join(dir, scene.stockImage.file) : null;
+    const hasStockImg = stockImg != null && fs.existsSync(stockImg);
+    if (
+      sceneKindOf(i) !== "image" &&
+      !fs.existsSync(path.join(dir, sceneImageFile(scene.index))) &&
+      !hasStockImg
+    )
       throw new Error(`Scene ${scene.index} has no storyboard image — generate the storyboard first`);
     if (!fs.existsSync(path.join(dir, sceneWavFile(scene.index))))
       throw new Error(`Scene ${scene.index} has no voiceover — generate the voiceover first`);

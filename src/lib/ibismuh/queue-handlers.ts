@@ -115,7 +115,13 @@ export async function runStockRefresh(
         userId: ctx.userId,
         videoId,
         stage: "stock",
-        message: `Stock b-roll — ${result.fetched} clip${result.fetched === 1 ? "" : "s"} downloaded, ${result.matched}/${scenes.length} scenes covered`,
+        // The photo clause appears ONLY when the image pass actually landed
+        // photos — the message is byte-identical to the pre-image-lane shape
+        // on a clips-only run.
+        message:
+          result.imagesFetched && result.imagesFetched > 0
+            ? `Stock b-roll — ${result.fetched} clip${result.fetched === 1 ? "" : "s"} downloaded, ${result.matched}/${scenes.length} scenes covered, ${result.imagesFetched} photo${result.imagesFetched === 1 ? "" : "s"} for the uncovered scenes`
+            : `Stock b-roll — ${result.fetched} clip${result.fetched === 1 ? "" : "s"} downloaded, ${result.matched}/${scenes.length} scenes covered`,
       },
     });
   } catch (err) {
@@ -212,8 +218,15 @@ export async function runStockSceneJob(
         userId: ctx.userId,
         videoId,
         stage: "stock",
-        message: `Scene ${sceneIndex} stock clip ${
-          scene.stock ? "re-matched" : "matched"
+        // The scene's own state AFTER the run speaks: a clip beats a photo,
+        // and a photo-only scene says so honestly (the inspector badge and
+        // this row must tell the same story).
+        message: `Scene ${sceneIndex} stock ${
+          scene.stock
+            ? "clip re-matched"
+            : scene.stockImage
+              ? "photo matched (no clip found — the photo covers the art slot)"
+              : "clip matched"
         } — searched ${
           opts.queryOverride ? `“${opts.queryOverride}”` : "the scene's script"
         }`,

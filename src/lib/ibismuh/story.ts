@@ -12,7 +12,7 @@ import { aiCall } from "./budget";
 import { runQualityGate } from "./quality";
 import { closestPriorDistance, imageHash, sceneImageHashes } from "./arthash";
 import { mergeWavs, wavDurationSec } from "./wav";
-import { CAMERAS, SCENE_COUNTS, SCENE_COUNT_RANGES, SFX_KINDS, sanitizeSceneStyle, sceneStylePrompt, type Scene, type StockRef, type StockVerification } from "./types";
+import { CAMERAS, SCENE_COUNTS, SCENE_COUNT_RANGES, SFX_KINDS, sanitizeSceneStyle, sceneStylePrompt, type Scene, type StockImageRef, type StockImageVerification, type StockRef, type StockVerification } from "./types";
 import { normalizeFocalToken } from "./motion";
 import { characterSceneFragment, readPortrait } from "./characters";
 import { chatComplete } from "./providers/chat";
@@ -80,6 +80,11 @@ export async function ensureSceneAssetsLocal(
   dir: string,
   indexes: number[],
   parts: Array<"image" | "wav"> = ["image", "wav"],
+  /** The stock-image lane: scenes carrying a downloaded photo restore it too
+   *  (index → the ref's file name). The photo is a published input exactly
+   *  like the art — the render gate and the Ken Burns executor consume it
+   *  from the scratch tree, so an s3-published photo needs the same restore. */
+  stockImageFilesByIndex?: ReadonlyMap<number, string>
 ): Promise<void> {
   for (const index of indexes) {
     if (parts.includes("image")) {
@@ -91,6 +96,13 @@ export async function ensureSceneAssetsLocal(
     if (parts.includes("wav")) {
       const key = `${videoId}/${sceneWavFile(index)}`;
       const file = path.join(dir, sceneWavFile(index));
+      if (!fs.existsSync(file) && (await storage.exists(key)))
+        fs.writeFileSync(file, await storage.get(key));
+    }
+    const stockImgFile = stockImageFilesByIndex?.get(index);
+    if (stockImgFile) {
+      const key = `${videoId}/${stockImgFile}`;
+      const file = path.join(dir, stockImgFile);
       if (!fs.existsSync(file) && (await storage.exists(key)))
         fs.writeFileSync(file, await storage.get(key));
     }
@@ -149,6 +161,44 @@ function parseStockRef(raw: unknown): StockRef | undefined {
   };
 }
 
+/** Validate a persisted StockImageRef (the photo lane's tolerant parse — the
+ *  same law as parseStockRef: legacy/unknown shapes are dropped, the
+ *  provenance + verification fields are additive and individually tolerated). */
+function parseStockImageVerification(raw: unknown): StockImageVerification | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const v = raw as Record<string, unknown>;
+  if (v.verdict !== "pass" && v.verdict !== "unverified") return undefined;
+  const score = v.score == null ? null : Number(v.score);
+  return {
+    verdict: v.verdict,
+    score: score != null && Number.isFinite(score) ? Math.max(0, Math.min(10, Math.round(score))) : null,
+    summary: v.summary == null ? null : String(v.summary),
+  };
+}
+
+function parseStockImageRef(raw: unknown): StockImageRef | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const s = raw as Record<string, unknown>;
+  if (
+    (s.source !== "pexels" && s.source !== "pixabay") ||
+    typeof s.file !== "string" ||
+    !/^stockimg-\d{2}\.jpg$/.test(s.file)
+  )
+    return undefined;
+  return {
+    source: s.source,
+    file: s.file,
+    query: String(s.query ?? ""),
+    credit: String(s.credit ?? ""),
+    pageUrl: String(s.pageUrl ?? ""),
+    license: typeof s.license === "string" && s.license ? s.license : undefined,
+    providerId: typeof s.providerId === "string" && s.providerId ? s.providerId : undefined,
+    width: positiveIntOrUndefined(s.width),
+    height: positiveIntOrUndefined(s.height),
+    verification: parseStockImageVerification(s.verification),
+  };
+}
+
 export function parseScenes(json: string | null | undefined): Scene[] {
   if (!json) return [];
   try {
@@ -178,6 +228,7 @@ export function parseScenes(json: string | null | undefined): Scene[] {
             : "none",
         focal: normalizeFocalToken(s.focal as string | null | undefined) ?? undefined,
         stock: parseStockRef(s.stock),
+        stockImage: parseStockImageRef(s.stockImage),
         style: s.style != null ? sanitizeSceneStyle(s.style) : undefined,
         seedVariant:
           Number.isInteger(s.seedVariant) && Number(s.seedVariant) >= 0
@@ -289,6 +340,11 @@ export async function serializeScenes(
       stockSource: s.stock?.source ?? null,
       stockQuery: s.stock?.query ?? null,
       stockCredit: s.stock?.credit ?? null,
+      hasStockImage: Boolean(s.stockImage),
+      stockImageUrl: s.stockImage ? `/api/videos/${videoId}/stock-images/${s.index}` : null,
+      stockImageSource: s.stockImage?.source ?? null,
+      stockImageCredit: s.stockImage?.credit ?? null,
+      stockImageVerified: s.stockImage?.verification?.verdict ?? null,
       appearance: s.hostInScene
         ? appearanceByScene.get(s.index) ?? { outfit: null, accessory: null }
         : null,
