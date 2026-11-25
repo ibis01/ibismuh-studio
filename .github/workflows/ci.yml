@@ -51,7 +51,7 @@ name: CI
 on:
   push:
     # The file's own header contract: check on every push/PR. This line
-    # shipped corrupted as `branches: ain]` since the 83ef064 restore — an
+    # shipped corrupted as a mangled glob (the open-bracket and the m it opened were eaten, leaving an invalid unmatched-bracket pattern) since the 83ef064 restore — an
     # invalid glob that silently narrowed push coverage (branch pushes never
     # fired the battery; main kept working only because the PR lane and the
     # coincidental glob behavior aligned). Restored to the documented list.
@@ -270,6 +270,26 @@ jobs:
       # self-seeding/cleanup pattern as the billing battery above.
       - name: Scene revision battery (surgical per-scene editing)
         run: npm run test:scene-revisions
+
+      # Master plan commit group 1: the legacy tf-* browser event names
+      # (music preview + auth gate) were renamed into the declared
+      # ibismuh-* catalog (src/lib/ibismuh/ui-events.ts). This suite keeps
+      # the rebrand law executable: neutral names only, consumers import
+      # the catalog, and no undeclared browser event literal returns.
+      - name: UI event catalog (rebrand event-name law)
+        run: npm run test:ui-events
+
+            # Master plan workstream E: the Whiteboard Drawable IR — the versioned,
+      # provenance-carrying, deterministically serialized drawable document the
+      # lane's timing, caching, repair, and parity contracts read. Pure suite.
+      - name: Whiteboard Drawable IR (versioned drawable contract)
+        run: npm run test:drawable-ir
+
+      # Master plan commit groups 3+4: the shared production spine — the
+      # versioned immutable plan envelope, the measured-audio receipt, and
+      # the shared 12-op timeline, all fail-closed and tamper-evident.
+      - name: Plan contracts (envelope + audio receipt + timeline)
+        run: npm run test:plan-contracts
 
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AUTH_GATE_EVENT } from "@/lib/ibismuh/ui-events";
 import { useAppStore, type ViewId } from "@/lib/store";
 import { IbismuhLogo, IbismuhWordmark } from "@/components/ibismuh/logo";
 import {
@@ -196,8 +197,8 @@ export function AppSidebar() {
   useEffect(() => {
     const onGate = (e: Event) =>
       setGateOn(Boolean((e as CustomEvent).detail?.enabled));
-    window.addEventListener("tf-gate", onGate);
-    return () => window.removeEventListener("tf-gate", onGate);
+    window.addEventListener(AUTH_GATE_EVENT, onGate);
+    return () => window.removeEventListener(AUTH_GATE_EVENT, onGate);
   }, []);
 
   const active = activeNavId(view);

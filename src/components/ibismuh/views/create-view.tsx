@@ -73,6 +73,7 @@ import {
 } from "lucide-react";
 import { clsx } from "clsx";
 import { LANE_ORDER, LANE_REGISTRY, LANE_UI_META } from "@/lib/ibismuh/video-lanes";
+import { LaneTruthChips } from "@/components/ibismuh/lane-capability-badges";
 
 type Stage = "script" | "storyboard" | "stock" | "voiceover" | "thumbnail" | "render";
 type StageState = "idle" | "running" | "done" | "error";
@@ -1350,6 +1351,10 @@ export function CreateView() {
                   <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">
                     {t.desc}
                   </p>
+                  {/* §6.5 honest capability UX — the registry declares what
+                      this lane requires and (for character) how it can
+                      truthfully run; the chips render straight from it. */}
+                  <LaneTruthChips lane={t.id} />
                 </button>
               );
             })}

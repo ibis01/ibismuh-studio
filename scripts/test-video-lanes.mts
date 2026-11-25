@@ -37,6 +37,12 @@ import {
   ENGINE_LANE_RENDER_MODES,
   resolveRenderAspect,
   validateLaneRegistry,
+  LANE_CAPABILITY_IDS,
+  LANE_REPAIR_OPERATIONS,
+  isVideoType,
+  resolveLane,
+  resolveLaneOrNull,
+  resolveLaneFromRow,
 } from "../src/lib/ibismuh/video-lanes";
 import { FORMATS, RENDER_MODES } from "../src/lib/ibismuh/types";
 import { isEngineLaneId } from "../src/lib/ibismuh/render-lane";
@@ -201,6 +207,131 @@ await test("heavy kinds stay within the renderer/queue vocabulary", () => {
   for (const kind of HEAVY_JOB_KINDS) {
     ok(known.has(kind), `${kind} is a known render-class kind`);
   }
+});
+
+// --- 7. EXTENDED CONTRACT (master plan §4.1) -------------------------------------
+
+suiteStart("extended contract declarations");
+
+await test("every lane declares a preview renderer, queue kind, analytics id, capabilities, repairs, and fps", () => {
+  for (const id of LANE_ORDER) {
+    const c = LANE_REGISTRY[id];
+    ok(c.previewRenderer.trim().length > 0, `${id}.previewRenderer must be declared`);
+    ok(HEAVY_JOB_KINDS.includes(c.queueJobKind), `${id}.queueJobKind ${c.queueJobKind} must seat in HEAVY_JOB_KINDS`);
+    ok(c.analyticsId === `lane.${id}`, `${id}.analyticsId must be lane.${id}`);
+    ok(c.capabilities.length > 0, `${id}.capabilities must be declared`);
+    for (const cap of c.capabilities) {
+      ok((LANE_CAPABILITY_IDS as readonly string[]).includes(cap), `${id} capability ${cap} must seat in the closed vocabulary`);
+    }
+    ok(c.repairOperations.length > 0, `${id}.repairOperations must be declared`);
+    for (const op of c.repairOperations) {
+      ok((LANE_REPAIR_OPERATIONS as readonly string[]).includes(op), `${id} repair ${op} must seat in the closed vocabulary`);
+    }
+    ok(c.supportedFps.length > 0 && c.supportedFps.every((f) => Number.isInteger(f) && f > 0), `${id}.supportedFps must be positive integers`);
+  }
+});
+
+await test("the engine lanes pin their real queue kinds (whiteboard/graphics are their own kind)", () => {
+  eq(LANE_REGISTRY.whiteboard.queueJobKind, "whiteboard");
+  eq(LANE_REGISTRY.graphics2d.queueJobKind, "graphics");
+  eq(LANE_REGISTRY.classic.queueJobKind, "render");
+  eq(LANE_REGISTRY.story.queueJobKind, "render");
+  eq(LANE_REGISTRY.character.queueJobKind, "render");
+  eq(LANE_REGISTRY.slides.queueJobKind, "render");
+});
+
+await test("character is the only lane with declared modes, and they are honest", () => {
+  for (const id of LANE_ORDER) {
+    if (id === "character") continue;
+    eq(LANE_REGISTRY[id].modes, undefined, `${id} must not declare modes (single default)`);
+  }
+  const modes = LANE_REGISTRY.character.modes;
+  ok(modes, "character must declare its modes");
+  eq(modes.map((m) => m.id), ["native-rig", "storyboard-fallback"]);
+  eq(modes?.find((m) => m.id === "native-rig")?.label, "Rig attached");
+  eq(modes?.find((m) => m.id === "storyboard-fallback")?.label, "Storyboard fallback");
+  for (const m of modes) {
+    ok(m.when.includes("never silent") || m.when.includes("pose-by-pose"), `${m.id}.when must state its condition honestly`);
+  }
+});
+
+await test("fps truth: whiteboard declares 24 and 30 (preview quantizes 24); everything else 30", () => {
+  eq(LANE_REGISTRY.whiteboard.supportedFps, [24, 30]);
+  for (const id of LANE_ORDER) {
+    if (id === "whiteboard") continue;
+    eq(LANE_REGISTRY[id].supportedFps, [30]);
+  }
+});
+
+// --- 8. TYPED LOOKUP — FAIL CLOSED ----------------------------------------------
+
+suiteStart("typed lane lookup");
+
+await test("isVideoType guards the closed set", () => {
+  ok(isVideoType("whiteboard"));
+  ok(!isVideoType("kenburns"));
+  ok(!isVideoType(""));
+  ok(!isVideoType("CLASSIC"), "lane ids are case-sensitive");
+});
+
+await test("resolveLane returns the contract for every lane id", () => {
+  for (const id of LANE_ORDER) {
+    eq(resolveLane(id).type, id);
+    ok(resolveLaneOrNull(id) !== null);
+  }
+});
+
+await test("resolveLane throws on unknown values with the valid ids in the error", () => {
+  let threw: unknown = null;
+  try {
+    resolveLane("holagram");
+  } catch (err) {
+    threw = err;
+  }
+  ok(threw instanceof Error && /holagram/.test(threw.message) && /classic/.test(threw.message), `got: ${String(threw)}`);
+});
+
+await test("resolveLaneOrNull returns null on unknown values", () => {
+  eq(resolveLaneOrNull("nope"), null);
+});
+
+// --- 9. PERSISTENCE ADAPTER — NO SILENT KEN BURNS --------------------------------
+
+suiteStart("persistence adapter");
+
+await test("unambiguous pairs resolve to their lane", () => {
+  eq(resolveLaneFromRow("script", "kenburns").status, "resolved");
+  if (resolveLaneFromRow("script", "kenburns").status === "resolved") {
+    eq(resolveLaneFromRow("script", "kenburns").lane.type, "classic");
+  }
+  for (const [format, mode, expected] of [
+    ["story", "whiteboard", "whiteboard"],
+    ["story", "graphics", "graphics2d"],
+    ["story", "slides", "slides"],
+  ] as const) {
+    const r = resolveLaneFromRow(format, mode);
+    eq(r.status, "resolved", `${format}/${mode} must resolve`);
+    if (r.status === "resolved") eq(r.lane.type, expected);
+  }
+});
+
+await test("the shared story/kenburns pair is AMBIGUOUS, never a silent default", () => {
+  const r = resolveLaneFromRow("story", "kenburns");
+  eq(r.status, "ambiguous");
+  if (r.status === "ambiguous") {
+    eq(r.candidates, ["story", "character"]);
+    ok(/no silent Ken Burns default/.test(r.message));
+  }
+});
+
+await test("unknown pairs fail closed", () => {
+  const r = resolveLaneFromRow("story", "hologram");
+  eq(r.status, "unknown");
+  if (r.status === "unknown") ok(/fail closed/.test(r.message));
+});
+
+await test("the registry still validates clean after the extension", () => {
+  eq(validateLaneRegistry(), [], "the extended contract must stay coherent");
 });
 
 // --- teardown -------------------------------------------------------------------
