@@ -10,6 +10,7 @@
 // The whiteboard module stays a leaf: this planner imports shared whiteboard
 // modules + the story Scene type only — never Director, never generation
 // APIs (the design §1 laws 1 and 5: native scaffold is $0 work).
+import crypto from "node:crypto";
 import type { WhiteboardAsset } from "./assets";
 import { applyWhiteboardProfile } from "./profiles";
 import type { WhiteboardAssetPlacement, WhiteboardProject, WhiteboardScene } from "./storyboard";
@@ -510,6 +511,102 @@ export function scaffoldWhiteboardProject(input: {
 export interface WhiteboardDoc {
   rev: number;
   project: WhiteboardProject;
+}
+
+// ---------------------------------------------------------------------------
+// W-repair — the engine-lane scene repair. A whiteboard scene's pixels come
+// from the ENGINE DOC (placements), never a scene-NN.png, so the S115 repair
+// ladder's image-lane paths (editSceneImage / generateSceneImage) cannot
+// serve it. This seam re-picks ONE scene's concept placements deterministically
+// from the repair instruction: same instruction → same board (the determinism
+// law), different instruction → a visibly different board. The concept picks
+// are the SAME rule table the scaffold uses, so a repair speaks the planner's
+// vocabulary; title/close cards and user-imported art stay untouched (the
+// narration and its measured timing are untouched by construction — the
+// repair changes WHAT is drawn, never WHAT is said).
+// ---------------------------------------------------------------------------
+
+/** The concept ids a repair may rotate through (the scaffold's own picks). */
+const WB_CONCEPT_IDS: ReadonlySet<string> = new Set<string>([
+  ...FALLBACK_CYCLE,
+  ...KEYWORD_PICKS.map((k) => k.assetId),
+]);
+
+/** The board furniture a repair must never move (generated + legacy cards). */
+function isWbCardAsset(id: string): boolean {
+  return (
+    id.startsWith(WB_GENERATED_TITLE_PREFIX) ||
+    id.startsWith(WB_GENERATED_CLOSE_PREFIX) ||
+    id === "title-hero" ||
+    id === "close-card"
+  );
+}
+
+export function repairWhiteboardSceneDoc(input: {
+  doc: WhiteboardDoc;
+  sceneIndex: number;
+  instruction: string;
+}): WhiteboardDoc {
+  const instruction = input.instruction.trim();
+  const scene = input.doc.project.scenes.find((s) => s.id === `scene-${input.sceneIndex}`);
+  if (!scene)
+    throw new Error(
+      `the whiteboard project carries no "scene-${input.sceneIndex}" — the scaffold names engine scenes scene-<index>; re-scaffold from the storyboard first`
+    );
+
+  // The repair nonce: a digest-derived cycle offset. Deterministic on the
+  // instruction, yet decorrelated from the scene position so two different
+  // instructions on the same scene reliably rotate the cycle differently.
+  const digest = crypto.createHash("sha256").update(instruction, "utf8").digest();
+  const nonce = (digest[0] ?? 0) % FALLBACK_CYCLE.length;
+  // The instruction can NAME a concept the narration didn't ("draw a bigger
+  // chart" → bar-chart) — first keyword hit wins for the primary slot.
+  const keywordPick =
+    KEYWORD_PICKS.find(({ re }) => re.test(instruction))?.assetId ?? null;
+
+  const position = Math.max(0, input.sceneIndex - 1);
+  const taken = new Set<string>();
+  let changed = false;
+  let conceptSeen = 0;
+
+  const placements = scene.placements.map((p) => {
+    if (!WB_CONCEPT_IDS.has(p.assetId) || isWbCardAsset(p.assetId)) return p;
+    const slot = conceptSeen++;
+    const exclude = new Set(taken);
+    exclude.add(p.assetId); // the repair must VISIBLY change the board
+    let nextId: string | null =
+      slot === 0 && keywordPick !== null && !exclude.has(keywordPick) ? keywordPick : null;
+    if (nextId === null) {
+      for (let k = 0; k < FALLBACK_CYCLE.length; k++) {
+        const cand =
+          FALLBACK_CYCLE[(position + nonce + slot * 3 + k) % FALLBACK_CYCLE.length];
+        if (!exclude.has(cand)) {
+          nextId = cand;
+          break;
+        }
+      }
+    }
+    if (nextId === null) nextId = p.assetId; // degenerate single-concept cycle — keep
+    taken.add(nextId);
+    if (nextId !== p.assetId) changed = true;
+    return { ...p, assetId: nextId };
+  });
+
+  if (!changed) {
+    throw new Error(
+      "the repair picked the same board — rephrase the instruction (name a concept: coin, growth, chart, lightbulb, globe, clock, rocket, badge)"
+    );
+  }
+
+  return {
+    rev: input.doc.rev + 1,
+    project: {
+      ...input.doc.project,
+      scenes: input.doc.project.scenes.map((s) =>
+        s.id === scene.id ? { ...scene, placements } : s
+      ),
+    },
+  };
 }
 
 /** Read the doc column (tolerant parse discipline: null on invalid — never

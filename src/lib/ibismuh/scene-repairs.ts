@@ -37,8 +37,12 @@ const repairLog = log.child({ mod: "scene-repairs" });
 /** A repair regenerates the art take (seedVariant bump) — and in an animated
  *  render the clip follows. The estimate uses the SAME per-capability table
  *  the credit gate uses (billing.ESTIMATED_COST_MICRO), so the number the
- *  human approves is the number the admission enforces. */
+ *  human approves is the number the admission enforces.
+ *  Engine lanes (whiteboard/graphics) re-pick the board and re-encode
+ *  LOCALLY — the repair spends nothing, and the estimate says so (the
+ *  approval UI's number stays honest per lane). */
 export function repairEstimateMicroUsd(mode: string): number {
+  if (mode === "whiteboard" || mode === "graphics") return 0;
   return ESTIMATED_COST_MICRO.image + (mode === "animated" ? ESTIMATED_COST_MICRO.video : 0);
 }
 

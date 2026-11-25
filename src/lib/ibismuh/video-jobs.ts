@@ -39,6 +39,7 @@ import {
   editSceneImage,
   storyboardComplete,
   parseScenes,
+  buildSrtFromSegments,
 } from "./story";
 import type { Scene } from "./types";
 import type { Video } from "@prisma/client";
@@ -74,6 +75,7 @@ import {
 } from "./visual-qc";
 import { expectedCutsForTimeline } from "./render-qc";
 import type { ExpectedCuts } from "./render-qc";
+import { log } from "./log";
 import { applyQcPolicy, qcEnforcementMode } from "./qc-policy";
 import { parsePlan, getApprovedAudioMap } from "./director-plan";
 import { parseTimeline, docSceneSettings, type DocSceneSettings } from "./timeline";
@@ -105,6 +107,8 @@ import { loadVideoLibrary } from "./whiteboard/asset-store";
 import type { WhiteboardAsset } from "./whiteboard/assets";
 import {
   parseWhiteboardDoc,
+  repairWhiteboardSceneDoc,
+  serializeWhiteboardDoc,
   type WhiteboardDoc,
 } from "./whiteboard/whiteboard-planner";
 import { validateWhiteboardProject, validWhiteboardId, type WhiteboardProject } from "./whiteboard/storyboard";
@@ -463,6 +467,52 @@ export async function runSceneJob(
   const instruction =
     typeof opts.instruction === "string" ? opts.instruction.trim() : "";
   const mode = instruction ? "edit" : "reroll";
+
+  // Engine lanes (whiteboard/graphics) have NO scene-NN.png to repaint — the
+  // scene's pixels come from the ENGINE DOC. Routing this repair through the
+  // image lane failed with "Scene N has no image yet" (the receipt that
+  // caught it). The engine-lane repair edits the DOC — a deterministic
+  // instruction-driven re-pick for whiteboard; a lane-aware refusal for
+  // graphics (its doc is edited in the Graphics Studio Canvas) — then
+  // invalidates exactly that scene's encode + the video-level renders (the
+  // S113 scene-scoped sweep), so the next render re-uses every other scene's
+  // cached segments: the stage-fingerprint scene-level repair, end to end.
+  if (video.renderMode === "whiteboard" || video.renderMode === "graphics") {
+    if (!instruction)
+      throw new Error(
+        "Engine-lane scenes repair with an instruction — describe what should change on the board"
+      );
+    if (video.renderMode === "graphics")
+      throw new Error(
+        "Graphics scenes are declarative — edit the scene's elements in the Graphics Studio Canvas, then re-render"
+      );
+    const doc = parseWhiteboardDoc(video.whiteboardProject);
+    if (!doc)
+      throw new Error(
+        "this video has no whiteboard project to repair — open the Whiteboard Studio and scaffold one first"
+      );
+    const next = repairWhiteboardSceneDoc({ doc, sceneIndex, instruction });
+    await invalidateRenderedArtifacts(videoId, { slidePngs: true, sceneIndex });
+    await db.video.update({
+      where: { id: videoId },
+      data: {
+        whiteboardProject: serializeWhiteboardDoc(next),
+        hasVideo: false,
+        videoDuration: null,
+        error: null,
+      },
+    });
+    await db.activity.create({
+      data: {
+        organizationId: video.organizationId,
+        userId: ctx.userId,
+        videoId,
+        stage: "storyboard",
+        message: `Scene ${sceneIndex} board repaired — ${instruction.slice(0, 80)}`,
+      },
+    });
+    return;
+  }
 
   try {
     if (mode === "edit") {
@@ -2399,6 +2449,37 @@ export async function runWhiteboardJob(
         ),
       },
     });
+
+    // The caption track — the whiteboard full render never published
+    // subtitles.srt (the export ZIP shipped without it and the captions
+    // endpoint 404'd: the receipt that caught the gap). The engine's
+    // composition plan IS the delivered clock (S143: the engine's own
+    // scene windows win), so the cues are built from the plan's windows
+    // with the story captions' text — the SAME buildSrtFromSegments the
+    // classic render publishes, never a forked format. ASR word-synced
+    // cues stay the smart path's upgrade; the scene-level ladder here is
+    // the honest floor (the VO anchors are already engine-measured).
+    try {
+      const capScenes = parseScenes(video.scenes);
+      if (capScenes.length > 0) {
+        const segments = result.plan.scenes.map((ps) => ({
+          start: ps.startSec,
+          duration: Math.max(0.5, ps.durationSec),
+        }));
+        const srt = buildSrtFromSegments(capScenes, segments);
+        if (srt.trim()) {
+          const srtPath = path.join(videoDir(videoId), "subtitles.srt");
+          fs.writeFileSync(srtPath, srt);
+          await putFromPath(`${videoId}/subtitles.srt`, srtPath);
+        }
+      }
+    } catch (capErr) {
+      // Record-keeping only — a caption failure must never fail the render.
+      log.child({ mod: "video-jobs" }).warn("whiteboard caption track publish failed (non-fatal)", {
+        videoId,
+        err: capErr instanceof Error ? capErr.message : capErr,
+      });
+    }
 
     // The QC battery rides the standing final.mp4 (runQcJob re-derives
     // everything from the row). A crashed battery never fails the render —

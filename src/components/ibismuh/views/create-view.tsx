@@ -1782,7 +1782,7 @@ export function CreateView() {
           </>
           )}
 
-          {step === 3 && (
+          {step === 4 && (
             <>
           {/* Review summary — the whole brief at a glance before launch */}
           <div className="rounded-xl border border-white/10 bg-white/3 p-3.5">
