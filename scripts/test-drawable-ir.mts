@@ -88,7 +88,8 @@ suiteStart("measured geometry");
 
 await test("path length, bbox, commands, and pen anchors come from the real grammar", () => {
   const ir = compile({ id: "geo", svg: BASE_SVG });
-  const p1 = ir.paths.find((p) => p.id === "p1")!;
+  const p1 = ir.paths.find((p) => p.id === "p1");
+  ok(p1, "p1 must exist");
   eq(p1.length, 80, "the 10,10→90,10 line is exactly 80 long");
   eq(p1.bbox, { x: 10, y: 10, w: 80, h: 0 });
   ok(p1.commands >= 2, `expanded commands ${p1.commands} cover M + L`);
@@ -98,7 +99,8 @@ await test("path length, bbox, commands, and pen anchors come from the real gram
 
 await test("closed paths measure their full perimeter", () => {
   const ir = compile({ id: "rect", svg: BASE_SVG });
-  const p2 = ir.paths.find((p) => p.id === "p2")!;
+  const p2 = ir.paths.find((p) => p.id === "p2");
+  ok(p2, "p2 must exist");
   eq(p2.length, 80 + 30 + 80 + 30, "the 80x30 rectangle closes at 220");
   eq(p2.bbox, { x: 10, y: 20, w: 80, h: 30 });
 });
@@ -126,8 +128,8 @@ suiteStart("role law");
 
 await test("filled-only paths are fill regions; stroked paths are outlines", () => {
   const ir = compile({ id: "roles", svg: BASE_SVG });
-  eq(ir.paths.find((p) => p.id === "p1")!.role, "outline");
-  eq(ir.paths.find((p) => p.id === "p2")!.role, "fill");
+  eq(ir.paths.find((p) => p.id === "p1")?.role, "outline");
+  eq(ir.paths.find((p) => p.id === "p2")?.role, "fill");
 });
 
 await test("stroked AND filled paths read as outline (the drawn line dominates)", () => {
@@ -144,20 +146,20 @@ suiteStart("order and semantic groups");
 
 await test("explicit drawOrder pins the sequence; the rest follows document order", () => {
   const ir = compile({ id: "ord", svg: BASE_SVG, drawOrder: ["p2", "p1"] });
-  eq(ir.paths.find((p) => p.id === "p2")!.order, 0);
-  eq(ir.paths.find((p) => p.id === "p1")!.order, 1);
+  eq(ir.paths.find((p) => p.id === "p2")?.order, 0);
+  eq(ir.paths.find((p) => p.id === "p1")?.order, 1);
 });
 
 await test("a partial drawOrder lets unlisted paths follow after the explicit block", () => {
   const ir = compile({ id: "ord2", svg: BASE_SVG, drawOrder: ["p1"] });
-  eq(ir.paths.find((p) => p.id === "p1")!.order, 0);
-  eq(ir.paths.find((p) => p.id === "p2")!.order, 1);
+  eq(ir.paths.find((p) => p.id === "p1")?.order, 0);
+  eq(ir.paths.find((p) => p.id === "p2")?.order, 1);
 });
 
 await test("pen-group membership names the semantic group; outsiders stay default", () => {
   const ir = compile({ id: "grp", svg: BASE_SVG, penGroups: { head: ["p1"] } });
-  eq(ir.paths.find((p) => p.id === "p1")!.semanticGroup, "head");
-  eq(ir.paths.find((p) => p.id === "p2")!.semanticGroup, "default");
+  eq(ir.paths.find((p) => p.id === "p1")?.semanticGroup, "head");
+  eq(ir.paths.find((p) => p.id === "p2")?.semanticGroup, "default");
 });
 
 // --- 5. DETERMINISM -------------------------------------------------------------
