@@ -24,6 +24,13 @@ import { splitSentences } from "../whiteboard/beat-plan";
 import { estimateNarrationMs } from "../whiteboard/timing";
 import type { Placement } from "../whiteboard/svg";
 import { GRAPHICS_MOTION_SEMANTICS } from "./frame";
+import { GRAPHICS_ICON_LIBRARY } from "./icons";
+
+// G1.5 — the icon vocabulary moved to ./icons.ts (the audit's Priority 1:
+// 4 starter icons → the production vocabulary). planner.ts RE-EXPORTS the
+// same object so every legacy import path (llm-planner.ts, the unit suite,
+// stored catalogs) keeps resolving to the ONE icon source — never a second
+// table.
 import {
   GRAPHICS_BUDGETS,
   GRAPHICS_SURFACES,
@@ -37,6 +44,13 @@ import {
   type GraphicsScene,
 } from "./types";
 
+// G1.5 — the icon vocabulary moved to ./icons.ts (the audit's Priority 1:
+// 4 starter icons → the production vocabulary). planner.ts RE-EXPORTS the
+// same object so every legacy import path (llm-planner.ts, the unit suite,
+// stored catalogs) keeps resolving to the ONE icon source — never a second
+// table.
+export { GRAPHICS_ICON_LIBRARY };
+
 /** The minimal story-scene shape the planner consumes (the whiteboard
  *  scaffold's input, structurally identical — one call site feeds both
  *  engines). */
@@ -47,22 +61,174 @@ export interface GraphicsSceneInput {
 }
 
 // ---------------------------------------------------------------------------
-// The icon library — the native scaffold's whole concept vocabulary. Tiny
-// 24-unit-grid stroke paths (2–4 commands each, far under the
-// iconPathCommandBudget wall); the composer scales them via `at.scale`.
-// The LLM planner's catalog is exactly these ids (llm-planner.ts) — ONE
-// icon source, never a second table.
+// The icon table lives in ./icons.ts (ONE source). This module owns the
+// DETERMINISTIC SELECTION: the ordered keyword → icon rule table below
+// (first hit wins — the whiteboard planner's KEYWORD_PICKS pattern) plus
+// the no-cue fallback cycle. The table is intentionally ordered: general
+// concepts first, domain-specific later, so a "grow your savings" scene
+// picks the finance icon over the plant icon — the order IS the policy.
 // ---------------------------------------------------------------------------
 
-export const GRAPHICS_ICON_LIBRARY: Readonly<Record<string, { paths: string[]; tags: string[] }>> = {
-  check: { paths: ["M 3 13 L 9 19 L 21 5"], tags: ["check", "verify", "done", "proven"] },
-  "arrow-up": { paths: ["M 12 21 L 12 5", "M 5 12 L 12 5 L 19 12"], tags: ["growth", "rise", "trend", "more"] },
-  bolt: { paths: ["M 13 2 L 5 14 L 11 14 L 10 22 L 19 9 L 13 9 Z"], tags: ["fast", "energy", "power", "instant"] },
-  xmark: { paths: ["M 5 5 L 19 19", "M 19 5 L 5 19"], tags: ["no", "wrong", "avoid", "myth"] },
-};
+/** Exported for the catalog integrity suite: every pick must name a
+ *  library icon (the dead-end law). */
+export const ICON_KEYWORD_PICKS: { re: RegExp; iconId: string }[] = [
+  { re: /\b(check|verify|correct|right|proven|safe|quality|benefit|advantage|done)\b/i, iconId: "check" },
+  { re: /\b(myth|wrong|never|avoid|stop|mistake|fail|failed|error|invalid)\b/i, iconId: "xmark" },
+  { re: /\b(grow|growth|increase|rise|trend|boost|scale|higher|improve|improvement)\b/i, iconId: "arrow-up" },
+  { re: /\b(fast|quick|instant|energy|power|speed|faster|electric)\b/i, iconId: "bolt" },
+  { re: /\b(money|cash|price|pricing|payment|paid|wallet|purchase|spend|budget)\b/i, iconId: "dollar" },
+  { re: /\b(coin|coins|savings|save|thrift|wealth|rich)\b/i, iconId: "coins" },
+  { re: /\b(revenue|profit|sales|sell|earn|income|monetize)\b/i, iconId: "chart-up" },
+  { re: /\b(loss|decline|decrease|drop|shrink|downfall|fall)\b/i, iconId: "chart-down" },
+  { re: /\b(bank|loan|mortgage|credit|interest)\b/i, iconId: "bank" },
+  { re: /\b(invoice|billing|receipt|accounting|order)\b/i, iconId: "invoice" },
+  { re: /\b(data|chart|graph|stats|statistics|analytics|metrics|percent|percentage)\b/i, iconId: "pie-chart" },
+  { re: /\b(goal|target|aim|objective|focus|bullseye)\b/i, iconId: "target" },
+  { re: /\b(business|company|startup|enterprise|corporate|firm|agency)\b/i, iconId: "briefcase" },
+  { re: /\b(office|workplace|work job|career|profession)\b/i, iconId: "office-building" },
+  { re: /\b(meeting|deal|agreement|partnership|negotiat|contract|terms|sign)\b/i, iconId: "handshake" },
+  { re: /\b(compare|comparison|versus|fair|justice|equal|balance|weigh|law|legal)\b/i, iconId: "balance-scale" },
+  { re: /\b(team|group|community|together|staff|employees|members|collective)\b/i, iconId: "person-group" },
+  { re: /\b(crowd|audience|public|society|population|customers|users|followers)\b/i, iconId: "crowd" },
+  { re: /\b(person|people|human|individual|user|customer|someone)\b/i, iconId: "person" },
+  { re: /\b(like|approve|recommend|positive|good|great|awesome|best)\b/i, iconId: "thumbs-up" },
+  { re: /\b(hello|welcome|greeting|hi |greet)\b/i, iconId: "waving" },
+  { re: /\b(fit|fitness|exercise|workout|sport|run|running|active|sprint)\b/i, iconId: "runner" },
+  { re: /\b(worker|labor|builder|construction|crew|engineer)\b/i, iconId: "worker" },
+  { re: /\b(farm|farmer|agriculture|rural|crops|field|fields)\b/i, iconId: "farmer" },
+  { re: /\b(tractor|machinery|harvest equipment)\b/i, iconId: "tractor" },
+  { re: /\b(cow|cattle|livestock|dairy|milk|beef)\b/i, iconId: "cow" },
+  { re: /\b(chicken|poultry|hen|eggs)\b/i, iconId: "chicken" },
+  { re: /\b(seed|seedling|sprout|planting|sow)\b/i, iconId: "seedling" },
+  { re: /\b(wheat|grain|corn|cereal|crop|harvest|yield)\b/i, iconId: "wheat" },
+  { re: /\b(greenhouse|nursery|garden|gardening)\b/i, iconId: "greenhouse" },
+  { re: /\b(plant|plants|pot|flower)\b/i, iconId: "plant" },
+  { re: /\b(tree|trees|forest|woods|woodland)\b/i, iconId: "tree" },
+  { re: /\b(leaf|leaves|organic|eco|natural|green)\b/i, iconId: "leaf" },
+  { re: /\b(water|irrigation|rainfall|liquid|hydration|raindrop)\b/i, iconId: "water-drop" },
+  { re: /\b(rain|rainy|storm|weather|climate|forecast)\b/i, iconId: "rain-cloud" },
+  { re: /\b(sun|sunny|sunlight|solar|daylight|shine)\b/i, iconId: "sun" },
+  { re: /\b(wind|turbine|renewable|sustainable|clean energy)\b/i, iconId: "wind-turbine" },
+  { re: /\b(recycle|recycling|reuse|waste|circular|sustainability)\b/i, iconId: "recycle" },
+  { re: /\b(world|global|earth|planet|international|worldwide)\b/i, iconId: "earth" },
+  { re: /\b(mountain|summit|peak|climb|challenge)\b/i, iconId: "mountain" },
+  { re: /\b(book|read|reading|textbook|literature|chapter)\b/i, iconId: "book" },
+  { re: /\b(study|studies|lesson|learn|learning|research|student|school)\b/i, iconId: "book-open" },
+  { re: /\b(graduat|degree|diploma|certificate|college|university|academic)\b/i, iconId: "graduation-cap" },
+  { re: /\b(write|writing|note|notes|journal|record|log)\b/i, iconId: "notebook" },
+  { re: /\b(experiment|chemistry|chemical|lab|laboratory|test tube|science)\b/i, iconId: "flask" },
+  { re: /\b(biology|microscope|cells|organisms|discovery|analysis)\b/i, iconId: "microscope" },
+  { re: /\b(physics|atom|nuclear|particle|quantum|molecule)\b/i, iconId: "atom" },
+  { re: /\b(math|mathematics|calculate|arithmetic|numbers|sum|count)\b/i, iconId: "calculator" },
+  { re: /\b(classroom|teaching|chalkboard|class|instructor)\b/i, iconId: "blackboard" },
+  { re: /\b(dna|genetic|gene|heredity|biotech|genome)\b/i, iconId: "dna" },
+  { re: /\b(doctor|physician|medical|clinic|health|healthcare|treatment|patient)\b/i, iconId: "doctor" },
+  { re: /\b(hospital|emergency|first-aid|first aid|ambulance)\b/i, iconId: "hospital-cross" },
+  { re: /\b(medicine|medication|drug|pill|dose|pharmacy|tablet)\b/i, iconId: "pill" },
+  { re: /\b(vaccine|vaccination|injection|syringe|immunization|shot)\b/i, iconId: "syringe" },
+  { re: /\b(heart|cardio|pulse|heartbeat|blood|vitals)\b/i, iconId: "heart-pulse" },
+  { re: /\b(brain|mind|thinking|memory|psychology|mental|neuro|smart)\b/i, iconId: "brain" },
+  { re: /\b(tooth|teeth|dental|dentist|oral|smile)\b/i, iconId: "tooth" },
+  { re: /\b(eye|vision|see|sight|watch|observe|visual|inspection)\b/i, iconId: "eye" },
+  { re: /\b(temperature|fever|thermometer|heat|cold)\b/i, iconId: "thermometer" },
+  { re: /\b(wrench|fix|repair|maintenance|tool|tools|settings)\b/i, iconId: "wrench" },
+  { re: /\b(hammer|build|building|construction site|strike)\b/i, iconId: "hammer" },
+  { re: /\b(gear|cog|process|system|configuration|machinery|engine|mechanism)\b/i, iconId: "gear" },
+  { re: /\b(robot|automation|ai|artificial intelligence|machine learning|bot)\b/i, iconId: "robot" },
+  { re: /\b(chip|processor|cpu|semiconductor|hardware|compute)\b/i, iconId: "chip" },
+  { re: /\b(laptop|computer|pc|desktop|coding|programming|software)\b/i, iconId: "laptop" },
+  { re: /\b(code|developer|script|syntax|program|api)\b/i, iconId: "code" },
+  { re: /\b(database|storage|records|archive|sql|dataset)\b/i, iconId: "database" },
+  { re: /\b(server|hosting|infrastructure|datacenter|cloud|saas|remote)\b/i, iconId: "server" },
+  { re: /\b(wifi|wireless|internet|online|network|connection|connectivity)\b/i, iconId: "wifi" },
+  { re: /\b(signal|broadcast|transmit|antenna|telecom|tower)\b/i, iconId: "signal-tower" },
+  { re: /\b(battery|charge|charging|capacity|drain)\b/i, iconId: "battery" },
+  { re: /\b(terminal|console|command|shell|dev ops|devops)\b/i, iconId: "terminal" },
+  { re: /\b(camera|photo|photography|picture|image|capture|video)\b/i, iconId: "camera" },
+  { re: /\b(smartphone|mobile|cellphone|phone|app)\b/i, iconId: "smartphone" },
+  { re: /\b(tablet|ipad|screen|display|monitor|desktop)\b/i, iconId: "tablet" },
+  { re: /\b(headphones|listen|audio|music|sound|voiceover|podcast)\b/i, iconId: "headphones" },
+  { re: /\b(microphone|record|voice|narration|speaking)\b/i, iconId: "microphone" },
+  { re: /\b(lock|locked|secure|security|private|protected|encryption|password|confidential)\b/i, iconId: "lock" },
+  { re: /\b(unlock|open access|public|available|free)\b/i, iconId: "unlock" },
+  { re: /\b(shield|protect|protection|defense|guard|firewall|safety)\b/i, iconId: "shield" },
+  { re: /\b(verified|trusted|audited|certified|compliance)\b/i, iconId: "shield-check" },
+  { re: /\b(key|credential|api key|access token|secret)\b/i, iconId: "key" },
+  { re: /\b(fingerprint|identity|biometric|authenticate|verification)\b/i, iconId: "fingerprint" },
+  { re: /\b(bug|defect|debug|malware|virus|vulnerability|exploit)\b/i, iconId: "bug" },
+  { re: /\b(chat|message|comment|feedback|reply|conversation|talk|discuss)\b/i, iconId: "chat-bubble" },
+  { re: /\b(email|mail|letter|inbox|contact|send|newsletter)\b/i, iconId: "mail" },
+  { re: /\b(announce|announcement|marketing|promote|promotion|campaign|launch|loud)\b/i, iconId: "megaphone" },
+  { re: /\b(call|phone call|support|hotline|ring)\b/i, iconId: "phone-call" },
+  { re: /\b(share|social|distribute|spread|forward|viral|referral)\b/i, iconId: "share" },
+  { re: /\b(link|url|reference|hyperlink|website|attach)\b/i, iconId: "link" },
+  { re: /\b(question|ask|help|faq|support|unclear|curious|wonder)\b/i, iconId: "question" },
+  { re: /\b(info|information|about|detail|explain|notice|tip)\b/i, iconId: "info" },
+  { re: /\b(notification|notify|reminder|alert|alarm|attention)\b/i, iconId: "bell" },
+  { re: /\b(warning|caution|danger|risk|risky|careful|hazard)\b/i, iconId: "warning-triangle" },
+  { re: /\b(success|successful|complete|completed|passed|valid|approved|achieve|achievement)\b/i, iconId: "check-circle" },
+  { re: /\b(ban|forbidden|blocked|denied|restricted|prohibited)\b/i, iconId: "ban" },
+  { re: /\b(star|favorite|rating|featured|important|excellent)\b/i, iconId: "star" },
+  { re: /\b(flag|milestone|priority|finish|mark)\b/i, iconId: "flag" },
+  { re: /\b(location|place|address|destination|where|map|region)\b/i, iconId: "map-pin" },
+  { re: /\b(time|timing|duration|deadline|schedule|when|minutes|hours|seconds)\b/i, iconId: "clock" },
+  { re: /\b(wait|waiting|loading|processing|delay|patience)\b/i, iconId: "hourglass" },
+  { re: /\b(calendar|date|month|event|deadline day|planning)\b/i, iconId: "calendar" },
+  { re: /\b(idea|ideas|innovate|innovation|invent|insight|creative|creativity|solution|brainstorm)\b/i, iconId: "lightbulb" },
+  { re: /\b(house|home|residence|property|real estate|living|family)\b/i, iconId: "house" },
+  { re: /\b(store|shop|retail|market|commerce|shopping|sell products)\b/i, iconId: "store" },
+  { re: /\b(warehouse|inventory|stock|logistics|distribution)\b/i, iconId: "warehouse" },
+  { re: /\b(barn|farmhouse|rural home|homestead)\b/i, iconId: "farm-house" },
+  { re: /\b(school|academy|campus|education building)\b/i, iconId: "school-building" },
+  { re: /\b(factory|industry|manufacturing|production|industrial)\b/i, iconId: "factory" },
+  { re: /\b(crane|construction site|hoist|lifting)\b/i, iconId: "crane" },
+  { re: /\b(blueprint|design|plan|architecture|draft|schema|layout)\b/i, iconId: "blueprint" },
+  { re: /\b(measure|measurement|ruler|dimension|precision|scale|size)\b/i, iconId: "ruler" },
+  { re: /\b(pipeline|flow|sequence|steps|workflow|stages)\b/i, iconId: "pipeline" },
+  { re: /\b(assembly|robot arm|manufacturing arm|automation line)\b/i, iconId: "robot-arm" },
+  { re: /\b(bridge|connect|infrastructure|crossing|link between)\b/i, iconId: "bridge" },
+  { re: /\b(car|vehicle|drive|driving|automobile|road)\b/i, iconId: "car" },
+  { re: /\b(truck|delivery|shipping|logistics transport|freight|cargo)\b/i, iconId: "truck" },
+  { re: /\b(bus|transit|public transport|commute)\b/i, iconId: "bus" },
+  { re: /\b(bicycle|bike|cycling|ride)\b/i, iconId: "bicycle" },
+  { re: /\b(plane|airplane|flight|fly|air travel|aviation)\b/i, iconId: "airplane" },
+  { re: /\b(train|rail|metro|subway|journey)\b/i, iconId: "train" },
+  { re: /\b(ship|boat|vessel|marine|export goods|sea)\b/i, iconId: "ship" },
+  { re: /\b(rocket|launch|liftoff|spaceship|blast off|ship it)\b/i, iconId: "rocket" },
+  { re: /\b(solar panel|photovoltaic|solar energy)\b/i, iconId: "solar-panel" },
+  { re: /\b(trash|delete|remove|discard|garbage|litter)\b/i, iconId: "trash-bin" },
+  { re: /\b(tv|television|watch video|streaming|video content)\b/i, iconId: "tv" },
+  { re: /\b(print|printer|paper|report|document output)\b/i, iconId: "printer" },
+  { re: /\b(watch|wristwatch|wearable|smartwatch)\b/i, iconId: "watch" },
+  { re: /\b(plug|power outlet|electricity|electrical|socket)\b/i, iconId: "plug" },
+  { re: /\b(speaker|present|presentation|talk|voice out|amplify)\b/i, iconId: "speaker" },
+  { re: /\b(teacher|teach|educator|instructor|professor|mentor)\b/i, iconId: "teacher" },
+  { re: /\b(clinic visit|stethoscope|checkup|diagnosis|examine)\b/i, iconId: "stethoscope" },
+  { re: /\b(bandage|injury|wound|heal|healing|recover|recovery)\b/i, iconId: "bandage" },
+  { re: /\b(backpack|bag|school bag|carry|travel pack)\b/i, iconId: "backpack" },
+  { re: /\b(diploma|credential|qualification|award|certificate award)\b/i, iconId: "diploma" },
+  { re: /\b(warehouse shelf|pallet|boxes)\b/i, iconId: "warehouse" },
+];
 
-/** The no-cue fallback cycle (deterministic by scene position). */
-const FALLBACK_ICON_CYCLE = ["check", "arrow-up", "bolt", "xmark"] as const;
+/** The no-cue fallback cycle (deterministic by scene position): a diverse
+ *  rotation across the vocabulary so consecutive iconless scenes don't
+ *  stamp the same mark. Every id must exist in GRAPHICS_ICON_LIBRARY — the
+ *  catalog contract suite pins that. */
+/** Exported for the catalog integrity suite (the dead-end law). */
+export const FALLBACK_ICON_CYCLE = [
+  "lightbulb",
+  "chart-up",
+  "rocket",
+  "target",
+  "book-open",
+  "clock",
+  "person-group",
+  "check-circle",
+  "seedling",
+  "gear",
+  "chart-down",
+  "star",
+] as const;
 
 // ---------------------------------------------------------------------------
 // The rule tables — deterministic keyword → archetype matching
@@ -377,11 +543,10 @@ function textPayload(kind: GraphicsElementKind, text: string): { text: string; s
 }
 
 function iconForScene(text: string, position: number): string {
-  if (/\b(grow|growth|increase|rise|trend|boost|scale|higher|more)\b/i.test(text)) return "arrow-up";
-  if (/\b(check|verify|correct|right|proven|safe|quality|benefit|advantage)\b/i.test(text)) return "check";
-  if (/\b(fast|quick|instant|energy|power|speed|faster)\b/i.test(text)) return "bolt";
-  if (/\b(myth|wrong|never|avoid|stop|mistake)\b/i.test(text)) return "xmark";
-  return FALLBACK_ICON_CYCLE[position % FALLBACK_ICON_CYCLE.length] ?? "check";
+  for (const pick of ICON_KEYWORD_PICKS) {
+    if (pick.re.test(text)) return pick.iconId;
+  }
+  return FALLBACK_ICON_CYCLE[position % FALLBACK_ICON_CYCLE.length] ?? "lightbulb";
 }
 
 function bulletElements(narration: string, maxBullets: number, width: number, height: number): GraphicsElement[] {
