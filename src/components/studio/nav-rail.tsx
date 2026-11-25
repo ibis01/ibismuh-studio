@@ -58,7 +58,7 @@ export function NavRail({
           {showDetail && (
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold tracking-tight text-zinc-100">Ibismuh Studio</span>
-              <span className="block text-[10px] text-zinc-500 tf-mono">six-lane production</span>
+              <span className="block text-xs text-zinc-500 tf-mono">six-lane production</span>
             </span>
           )}
           {variant === "rail" && (
@@ -104,7 +104,7 @@ export function NavRail({
 
         <div className="studio-scroll mt-3 min-h-0 flex-1 overflow-y-auto px-2.5 pb-4">
           {/* lanes — the create flow */}
-          <p className={`mb-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500 ${showDetail ? "" : "text-center"}`}>
+          <p className={`mb-1.5 text-xs font-medium uppercase tracking-wider text-zinc-500 ${showDetail ? "" : "text-center"}`}>
             {showDetail ? "Lanes" : "Lanes"}
           </p>
           <ul className="mb-4 space-y-1" aria-label="Video lanes">
@@ -139,7 +139,7 @@ export function NavRail({
           </ul>
 
           {/* projects */}
-          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+          <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-zinc-500">
             {showDetail ? `Projects (${projects.length})` : "Projects"}
           </p>
           {projects.length === 0 ? (
@@ -169,7 +169,7 @@ export function NavRail({
                           {showDetail ? (
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-[13px] leading-tight text-zinc-200">{p.title}</span>
-                              <span className="flex items-center gap-1.5 pt-0.5 text-[10px] leading-tight text-zinc-500">
+                              <span className="flex items-center gap-1.5 pt-0.5 text-xs leading-tight text-zinc-500">
                                 <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${tone.dot}`} aria-hidden />
                                 <span className="truncate">{p.status}</span>
                                 {p.durationMs != null && (

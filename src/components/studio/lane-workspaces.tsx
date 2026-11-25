@@ -67,17 +67,17 @@ export function SceneRail({ scenes, assets, windows, selectedRef, onSelect, acce
           >
             <span className="flex items-center gap-1.5">
               <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: accentHex }} aria-hidden />
-              <span className="text-[11px] font-medium text-zinc-200 tf-mono">{scene.id}</span>
+              <span className="text-xs font-medium text-zinc-200 tf-mono">{scene.id}</span>
               <span
                 className={`ml-auto h-2 w-2 rounded-full ${imageFree ? "bg-teal-400/70" : hasArt ? "bg-emerald-500" : "bg-amber-400"}`}
                 title={imageFree ? "image-free lane" : hasArt ? "art generated" : "art missing — gradient board fallback"}
                 aria-label={imageFree ? "image-free lane" : hasArt ? "art generated" : "art missing"}
               />
             </span>
-            <span className="mt-1 block truncate text-[11px] text-zinc-400" title={scene.caption ?? scene.visualIntent}>
+            <span className="mt-1 block truncate text-xs text-zinc-400" title={scene.caption ?? scene.visualIntent}>
               {scene.caption ?? scene.visualIntent}
             </span>
-            <span className="mt-0.5 block text-[10px] text-zinc-500 tf-num">
+            <span className="mt-0.5 block text-xs text-zinc-500 tf-num">
               {win ? `${((win.endMs - win.startMs) / 1000).toFixed(1)}s` : `${(scene.estimatedDurationMs / 1000).toFixed(1)}s est`}
               {badge ? <span className="ml-1.5 text-amber-300/80">{badge(scene)}</span> : null}
             </span>
@@ -137,7 +137,7 @@ function ReadOnlyField({
 }) {
   return (
     <div className="grid gap-1">
-      <span className="text-[11px] font-medium text-zinc-400">
+      <span className="text-xs font-medium text-zinc-400">
         {label}
         {dirty && <span className="ml-1.5 text-amber-300">· unsaved</span>}
       </span>
@@ -147,7 +147,7 @@ function ReadOnlyField({
         aria-label={`${label} (read-only)`}
         className="min-h-[64px] resize-none border-stone-800 bg-stone-950/70 text-[13px] text-zinc-300 cursor-default"
       />
-      {hint && <span className="text-[10px] text-zinc-500">{hint}</span>}
+      {hint && <span className="text-xs text-zinc-500">{hint}</span>}
     </div>
   );
 }
@@ -169,7 +169,7 @@ function EditableField({
 }) {
   return (
     <div className="grid gap-1">
-      <span className="text-[11px] font-medium text-zinc-400">
+      <span className="text-xs font-medium text-zinc-400">
         {label}
         {dirty && <span className="ml-1.5 text-amber-300">· unsaved</span>}
       </span>
@@ -180,7 +180,7 @@ function EditableField({
         rows={rows}
         className="resize-none border-stone-800 bg-stone-950/70 text-[13px] text-zinc-200"
       />
-      {hint && <span className="text-[10px] text-zinc-500">{hint}</span>}
+      {hint && <span className="text-xs text-zinc-500">{hint}</span>}
     </div>
   );
 }
@@ -188,7 +188,7 @@ function EditableField({
 function FocalRects({ scene }: { scene: LaneScene | null }) {
   const cam = scene?.camera;
   if (!cam) {
-    return <p className="text-[11px] text-zinc-500">No Smart Motion camera declared for this scene.</p>;
+    return <p className="text-xs text-zinc-500">No Smart Motion camera declared for this scene.</p>;
   }
   const box = (rect: { x: number; y: number; w: number; h: number }, label: string, color: string) => (
     <div className="relative h-20 flex-1 rounded border border-stone-800 bg-stone-950/80 overflow-hidden" aria-label={label}>
@@ -203,7 +203,7 @@ function FocalRects({ scene }: { scene: LaneScene | null }) {
           background: `${color}22`,
         }}
       />
-      <span className="absolute bottom-0.5 left-1 text-[9px] tf-mono" style={{ color }}>
+      <span className="absolute bottom-0.5 left-1 text-xs tf-mono" style={{ color }}>
         {label}
       </span>
     </div>
@@ -215,7 +215,7 @@ function FocalRects({ scene }: { scene: LaneScene | null }) {
           {box(cam.start, "start", "#e8b64c")}
           {box(cam.end, "end", "#c77dba")}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-zinc-500 tf-mono">
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-500 tf-mono">
           <span>start x{cam.start.x.toFixed(2)} y{cam.start.y.toFixed(2)} w{cam.start.w.toFixed(2)} h{cam.start.h.toFixed(2)}</span>
           <span aria-hidden>→</span>
           <span>end x{cam.end.x.toFixed(2)} y{cam.end.y.toFixed(2)} w{cam.end.w.toFixed(2)} h{cam.end.h.toFixed(2)}</span>
@@ -223,7 +223,7 @@ function FocalRects({ scene }: { scene: LaneScene | null }) {
         </div>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="w-fit text-[10px] text-zinc-500 underline decoration-dotted cursor-help">
+            <span className="w-fit text-xs text-zinc-500 underline decoration-dotted cursor-help">
               camera edits ride the repair flow (beat-camera), not the brief
             </span>
           </TooltipTrigger>
@@ -277,7 +277,7 @@ export function ClassicWorkspace({ state, selectedRef, drafts }: WorkspaceProps)
           <CardContent className="grid gap-1.5">
             {scenes.map((s) => (
               <div key={s.id} className="flex items-start gap-2 rounded border border-stone-800/80 bg-stone-950/50 px-2 py-1.5">
-                <span className="text-[10px] tf-mono text-zinc-500 pt-0.5">{s.id}</span>
+                <span className="text-xs tf-mono text-zinc-500 pt-0.5">{s.id}</span>
                 <span className="text-[12px] text-zinc-300">{s.caption ?? "—"}</span>
               </div>
             ))}
@@ -319,11 +319,11 @@ export function StoryWorkspace({ state, rc, selectedRef, windows, drafts }: Work
           />
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded border border-stone-800 bg-stone-950/50 p-2">
-              <span className="text-[10px] uppercase tracking-wide text-zinc-500">transitionIn</span>
+              <span className="text-xs uppercase tracking-wide text-zinc-500">transitionIn</span>
               <p className="text-[13px] text-zinc-300 tf-mono">{scene?.transitionIn ?? "cut"}</p>
             </div>
             <div className="rounded border border-stone-800 bg-stone-950/50 p-2">
-              <span className="text-[10px] uppercase tracking-wide text-zinc-500">window</span>
+              <span className="text-xs uppercase tracking-wide text-zinc-500">window</span>
               <p className="text-[13px] text-zinc-300 tf-num">
                 {scene && windows[scene.id]
                   ? `${((windows[scene.id].endMs - windows[scene.id].startMs) / 1000).toFixed(1)}s`
@@ -344,12 +344,12 @@ export function StoryWorkspace({ state, rc, selectedRef, windows, drafts }: Work
               <>
                 {bible.characters.length > 0 && (
                   <div>
-                    <span className="text-[10px] uppercase tracking-wide text-zinc-500">Characters</span>
+                    <span className="text-xs uppercase tracking-wide text-zinc-500">Characters</span>
                     <ul className="mt-1 space-y-1">
                       {bible.characters.map((c) => (
                         <li key={c.id} className="rounded border border-stone-800/80 bg-stone-950/50 px-2 py-1.5">
                           <span className="text-[12px] font-medium text-zinc-200">{c.name}</span>
-                          <span className="block text-[11px] text-zinc-500">
+                          <span className="block text-xs text-zinc-500">
                             {c.description} · wardrobe: {c.wardrobe}
                           </span>
                         </li>
@@ -359,7 +359,7 @@ export function StoryWorkspace({ state, rc, selectedRef, windows, drafts }: Work
                 )}
                 {bible.locations.length > 0 && (
                   <div>
-                    <span className="text-[10px] uppercase tracking-wide text-zinc-500">Locations</span>
+                    <span className="text-xs uppercase tracking-wide text-zinc-500">Locations</span>
                     <ul className="mt-1 space-y-1">
                       {bible.locations.map((l) => (
                         <li key={l.id} className="rounded border border-stone-800/80 bg-stone-950/50 px-2 py-1.5 text-[12px] text-zinc-300">
@@ -370,19 +370,19 @@ export function StoryWorkspace({ state, rc, selectedRef, windows, drafts }: Work
                   </div>
                 )}
                 <div>
-                  <span className="text-[10px] uppercase tracking-wide text-zinc-500">Palette</span>
+                  <span className="text-xs uppercase tracking-wide text-zinc-500">Palette</span>
                   <div className="mt-1 flex gap-1.5">
                     {bible.palette.map((hex, i) => (
                       <Tooltip key={`${hex}-${i}`}>
                         <TooltipTrigger asChild>
                           <span className="h-6 w-6 rounded border border-stone-700" style={{ background: hex }} aria-label={hex} />
                         </TooltipTrigger>
-                        <TooltipContent className="tf-mono text-[10px]">{hex}</TooltipContent>
+                        <TooltipContent className="tf-mono text-xs">{hex}</TooltipContent>
                       </Tooltip>
                     ))}
                   </div>
                 </div>
-                <p className="text-[11px] text-zinc-500">Style: {bible.style}</p>
+                <p className="text-xs text-zinc-500">Style: {bible.style}</p>
               </>
             ) : (
               <p className="text-xs text-zinc-500">No story bible — this plan was compiled without one.</p>
@@ -402,7 +402,7 @@ export function StoryWorkspace({ state, rc, selectedRef, windows, drafts }: Work
                   <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${issue.severity === "warn" ? "bg-amber-400" : "bg-zinc-400"}`} aria-hidden />
                   <span className="min-w-0">
                     <span className="text-[12px] text-zinc-300">{issue.message}</span>
-                    <span className="ml-1.5 text-[10px] tf-mono text-zinc-500">
+                    <span className="ml-1.5 text-xs tf-mono text-zinc-500">
                       {issue.sceneRef} · {issue.kind}
                     </span>
                   </span>
@@ -450,7 +450,7 @@ export function WhiteboardWorkspace({ state, rc, selectedRef, windows }: Workspa
           ) : (
             <p className="text-xs text-zinc-500">Compile the plan to render board stills.</p>
           )}
-          <div className="flex flex-wrap gap-1.5 text-[11px] tf-mono text-zinc-400">
+          <div className="flex flex-wrap gap-1.5 text-xs tf-mono text-zinc-400">
             <span className="rounded-full border border-stone-700 bg-stone-900 px-2 py-0.5">strokes: {paths.length}</span>
             <span className="rounded-full border border-stone-700 bg-stone-900 px-2 py-0.5">calibrated: {totalStroke}ms</span>
             <span className="rounded-full border border-stone-700 bg-stone-900 px-2 py-0.5">window: {windowMs}ms</span>
@@ -458,7 +458,7 @@ export function WhiteboardWorkspace({ state, rc, selectedRef, windows }: Workspa
               speed: {windowMs > 0 ? `${Math.round((Math.min(totalStroke, drawBudget) / windowMs) * 100)}% of window` : "—"}
             </span>
           </div>
-          <p className="text-[11px] text-zinc-500">
+          <p className="text-xs text-zinc-500">
             Hand style: rounded pen, #1f2937 ink on #f7f4ed paper. Strokes reveal progressively in declared draw order; the pen
             cursor tracks the active stroke tip in the preview.
           </p>
@@ -478,12 +478,12 @@ export function WhiteboardWorkspace({ state, rc, selectedRef, windows }: Workspa
                 .sort((a, b) => a.order - b.order)
                 .map((p) => (
                   <li key={p.id} className="flex items-center gap-2 rounded border border-stone-800/80 bg-stone-950/50 px-2 py-1.5">
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-800 text-[10px] tf-mono text-zinc-300">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-800 text-xs tf-mono text-zinc-300">
                       {p.order}
                     </span>
                     <span className="text-[12px] text-zinc-300">{p.role}</span>
-                    <span className="text-[11px] text-zinc-500">· {p.semanticGroup}</span>
-                    <span className="ml-auto text-[11px] tf-num text-zinc-400">{p.strokeMs}ms</span>
+                    <span className="text-xs text-zinc-500">· {p.semanticGroup}</span>
+                    <span className="ml-auto text-xs tf-num text-zinc-400">{p.strokeMs}ms</span>
                   </li>
                 ))}
             </ol>
@@ -535,9 +535,9 @@ export function GraphicsWorkspace({ state, selectedRef }: WorkspaceProps) {
                   <LayoutMiniViz layout={c.layout} />
                   <span className="min-w-0">
                     <span className="block text-[12px] text-zinc-200">
-                      {c.kind} <span className="tf-mono text-[10px] text-zinc-500">{c.id}</span>
+                      {c.kind} <span className="tf-mono text-xs text-zinc-500">{c.id}</span>
                     </span>
-                    <span className="block text-[10px] text-zinc-500 tf-mono">
+                    <span className="block text-xs text-zinc-500 tf-mono">
                       x{c.layout.x.toFixed(2)} y{c.layout.y.toFixed(2)} w{c.layout.w.toFixed(2)} h{c.layout.h.toFixed(2)}
                     </span>
                   </span>
@@ -562,17 +562,17 @@ export function GraphicsWorkspace({ state, selectedRef }: WorkspaceProps) {
           ) : (
             comps.map((c) => (
               <div key={c.id} className="rounded border border-stone-800/80 bg-stone-950/60 p-2">
-                <span className="text-[10px] uppercase tracking-wide text-zinc-500">
+                <span className="text-xs uppercase tracking-wide text-zinc-500">
                   {c.kind}
                   {c.citation ? ` — citation: ${c.citation}` : ""}
                 </span>
-                <pre className="studio-scroll mt-1 max-h-32 overflow-auto whitespace-pre-wrap text-[11px] leading-snug text-zinc-300 tf-mono">
+                <pre className="studio-scroll mt-1 max-h-32 overflow-auto whitespace-pre-wrap text-xs leading-snug text-zinc-300 tf-mono">
                   {JSON.stringify(c.props, null, 2)}
                 </pre>
               </div>
             ))
           )}
-          <p className="text-[10px] text-zinc-500">
+          <p className="text-xs text-zinc-500">
             The declarative doc is the truth — repairs ride the component-doc operation. Pseudo-stats are never cited; only
             real numbers carry a citation.
           </p>
@@ -608,14 +608,14 @@ export function CharacterWorkspace({ state, selectedRef }: WorkspaceProps) {
         </CardHeader>
         <CardContent className="grid gap-2">
           <div className="rounded border border-stone-800/80 bg-stone-950/50 p-2.5">
-            <span className="text-[10px] uppercase tracking-wide text-zinc-500">identity anchor</span>
+            <span className="text-xs uppercase tracking-wide text-zinc-500">identity anchor</span>
             <p className="text-[13px] text-zinc-200 tf-mono">{identity}</p>
-            <p className="mt-1 text-[11px] text-zinc-500">{state.brief.characterDescription ?? "No character description in the brief."}</p>
+            <p className="mt-1 text-xs text-zinc-500">{state.brief.characterDescription ?? "No character description in the brief."}</p>
           </div>
           <div className="overflow-hidden rounded border border-stone-800/80">
             <table className="w-full text-[12px]">
               <thead>
-                <tr className="bg-stone-900/80 text-left text-[10px] uppercase tracking-wide text-zinc-500">
+                <tr className="bg-stone-900/80 text-left text-xs uppercase tracking-wide text-zinc-500">
                   <th className="px-2 py-1.5 font-medium">scene</th>
                   <th className="px-2 py-1.5 font-medium">rig mode</th>
                   <th className="px-2 py-1.5 font-medium">lip sync</th>
@@ -651,16 +651,16 @@ export function CharacterWorkspace({ state, selectedRef }: WorkspaceProps) {
             <div className="grid gap-2">
               {scene.pose.poses.map((p) => (
                 <div key={p.id} className="flex items-center gap-2">
-                  <span className="w-14 shrink-0 text-[11px] tf-num text-zinc-400">{p.at}ms</span>
+                  <span className="w-14 shrink-0 text-xs tf-num text-zinc-400">{p.at}ms</span>
                   <span className="h-5 flex-1 rounded-sm border-l-[3px]" style={{ background: "#c77dba33", borderLeftColor: "#c77dba" }} />
-                  <span className="w-32 shrink-0 text-right text-[11px] text-zinc-300 tf-mono">
+                  <span className="w-32 shrink-0 text-right text-xs text-zinc-300 tf-mono">
                     {p.pose}
                     {p.viseme ? ` · ${p.viseme}` : ""}
                     {p.hold ? " · hold" : ""}
                   </span>
                 </div>
               ))}
-              <p className="text-[10px] text-zinc-500">
+              <p className="text-xs text-zinc-500">
                 Poses interpolate over 300ms; the mouth shape follows the declared viseme. Lip sync is {scene.pose.lipSync}.
               </p>
             </div>
@@ -698,14 +698,14 @@ export function SlidesWorkspace({ state, rc, selectedRef, windows }: WorkspacePr
             <p className="text-xs text-zinc-500">Compile the plan to render slide stills.</p>
           )}
           <div className="rounded border border-stone-800/80 bg-stone-950/50 p-2.5">
-            <span className="text-[10px] uppercase tracking-wide text-zinc-500">template — read-only display</span>
+            <span className="text-xs uppercase tracking-wide text-zinc-500">template — read-only display</span>
             <p className="text-[13px] text-zinc-300 tf-mono">{slide?.template ?? "—"}</p>
-            <p className="mt-1 text-[10px] text-zinc-500">
+            <p className="mt-1 text-xs text-zinc-500">
               Template changes ride the slide-template repair operation; content changes ride slide-content.
             </p>
           </div>
           <div className="rounded border border-stone-800/80 bg-stone-950/50 p-2.5">
-            <span className="text-[10px] uppercase tracking-wide text-zinc-500">speaker notes (narration)</span>
+            <span className="text-xs uppercase tracking-wide text-zinc-500">speaker notes (narration)</span>
             <p className="mt-1 text-[12px] leading-snug text-zinc-300">{scene?.narration ?? "—"}</p>
           </div>
         </CardContent>
@@ -722,14 +722,14 @@ export function SlidesWorkspace({ state, rc, selectedRef, windows }: WorkspacePr
               <div key={op.id} className="flex items-center gap-2 rounded border border-stone-800/80 bg-stone-950/50 px-2 py-1.5">
                 {op.startMs > (windows[selectedRef ?? ""]?.startMs ?? 0) ? <ArrowUp className="h-3.5 w-3.5 text-zinc-500" aria-hidden /> : <ArrowDown className="h-3.5 w-3.5 text-zinc-500" aria-hidden />}
                 <span className="min-w-0 flex-1 truncate text-[12px] text-zinc-300">{String(op.params?.text ?? "")}</span>
-                <span className="shrink-0 text-[10px] tf-num text-zinc-500">
+                <span className="shrink-0 text-xs tf-num text-zinc-500">
                   +{op.startMs - (windows[selectedRef ?? ""]?.startMs ?? 0)}ms
                 </span>
               </div>
             ))
           )}
           {slide?.citation && (
-            <p className="flex items-center gap-1.5 text-[11px] text-teal-300">
+            <p className="flex items-center gap-1.5 text-xs text-teal-300">
               <ImageOff className="h-3.5 w-3.5" aria-hidden />
               source: {slide.citation}
             </p>

@@ -165,7 +165,7 @@ export function RenderPanel({ state }: RenderPanelProps) {
           </Button>
 
           {state.narrationAssetId && state.audioReceipt && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-800 bg-stone-950/60 px-2.5 py-1 text-[11px] text-zinc-400 tf-num">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-800 bg-stone-950/60 px-2.5 py-1 text-xs text-zinc-400 tf-num">
               measured {state.audioReceipt.durationMs}ms · {state.audioReceipt.sentenceSpans.length} sentences
             </span>
           )}
@@ -189,7 +189,7 @@ export function RenderPanel({ state }: RenderPanelProps) {
               return (
                 <span key={step} className="flex items-center gap-1.5">
                   <span
-                    className={`rounded-full border px-2.5 py-1 text-[11px] tf-mono ${
+                    className={`rounded-full border px-2.5 py-1 text-xs tf-mono ${
                       current
                         ? "border-amber-500 bg-amber-500/15 text-amber-300"
                         : passed
@@ -204,25 +204,25 @@ export function RenderPanel({ state }: RenderPanelProps) {
               );
             })}
             {job && ["retryable-failure", "quality-failure", "needs-repair", "failed", "cancelled"].includes(job.state) && (
-              <span className="rounded-full border border-red-800/60 bg-red-950/40 px-2.5 py-1 text-[11px] text-red-300 tf-mono">
+              <span className="rounded-full border border-red-800/60 bg-red-950/40 px-2.5 py-1 text-xs text-red-300 tf-mono">
                 {job.state}
                 {job.failureClass ? ` · ${job.failureClass}` : ""}
               </span>
             )}
-            {!job && <span className="text-[11px] text-zinc-500">no render job yet</span>}
+            {!job && <span className="text-xs text-zinc-500">no render job yet</span>}
           </div>
 
           {/* progress */}
           {job && active && (
             <div className="grid gap-1">
-              <div className="flex items-center justify-between text-[11px] text-zinc-400">
+              <div className="flex items-center justify-between text-xs text-zinc-400">
                 <span>{job.label ?? "working…"}</span>
                 <span className="tf-num">{Math.round((job.progress ?? 0) * 100)}%</span>
               </div>
               <Progress value={(job.progress ?? 0) * 100} className="h-2 bg-stone-800" aria-label="Render progress" />
             </div>
           )}
-          {job && !active && job.label && <p className="text-[11px] text-zinc-500">{job.label}</p>}
+          {job && !active && job.label && <p className="text-xs text-zinc-500">{job.label}</p>}
           {job?.failureDetail && (
             <p className="rounded border border-red-900/50 bg-red-950/30 px-2.5 py-1.5 text-[12px] text-red-200">
               {job.failureDetail}
@@ -276,7 +276,7 @@ export function RenderPanel({ state }: RenderPanelProps) {
             </Button>
           </div>
           {job && job.retryCount > 0 && (
-            <p className="text-[11px] text-zinc-500 tf-num">retry count: {job.retryCount}</p>
+            <p className="text-xs text-zinc-500 tf-num">retry count: {job.retryCount}</p>
           )}
         </CardContent>
       </Card>
@@ -299,21 +299,21 @@ export function RenderPanel({ state }: RenderPanelProps) {
                   <StageStatusIcon status={stage.status} />
                   <span className="text-[12px] text-zinc-200 tf-mono">{stage.stage}</span>
                   {stage.status === "cache-hit" && (
-                    <span className="rounded-full border border-amber-700/60 bg-amber-950/40 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-amber-300">
+                    <span className="rounded-full border border-amber-700/60 bg-amber-950/40 px-1.5 py-0.5 text-xs uppercase tracking-wide text-amber-300">
                       cached
                     </span>
                   )}
                   {stage.status === "skipped" && (
-                    <span className="rounded-full border border-stone-700 bg-stone-900 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-zinc-400">
+                    <span className="rounded-full border border-stone-700 bg-stone-900 px-1.5 py-0.5 text-xs uppercase tracking-wide text-zinc-400">
                       skipped
                     </span>
                   )}
                   <TooltipProvider delayDuration={100}>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="ml-auto text-[10px] text-zinc-500 tf-mono">{stage.fingerprint.slice(0, 10)}</span>
+                        <span className="ml-auto text-xs text-zinc-500 tf-mono">{stage.fingerprint.slice(0, 10)}</span>
                       </TooltipTrigger>
-                      <TooltipContent className="max-w-80 break-all tf-mono text-[10px]">
+                      <TooltipContent className="max-w-80 break-all tf-mono text-xs">
                         {stage.fingerprint}
                         {stage.detail ? <span className="block pt-1 text-zinc-400">{stage.detail}</span> : null}
                       </TooltipContent>
@@ -340,7 +340,7 @@ export function RenderPanel({ state }: RenderPanelProps) {
           ) : (
             <div className="studio-scroll max-h-40 overflow-y-auto rounded border border-stone-800/80 bg-stone-950/70 p-2" role="log" aria-label="Pipeline events">
               {lastEvents.map((e) => (
-                <p key={e.id} className="text-[11px] leading-relaxed tf-mono">
+                <p key={e.id} className="text-xs leading-relaxed tf-mono">
                   <span className="text-zinc-600">[{e.stage}]</span>{" "}
                   <span className={e.level === "error" ? "text-red-400" : e.level === "warn" ? "text-amber-400" : "text-zinc-400"}>
                     {e.message}
@@ -349,7 +349,7 @@ export function RenderPanel({ state }: RenderPanelProps) {
               ))}
             </div>
           )}
-          <p className="mt-2 flex items-center gap-1 text-[10px] text-zinc-600">
+          <p className="mt-2 flex items-center gap-1 text-xs text-zinc-600">
             <Download className="h-3 w-3" aria-hidden />
             The manifest export (QC & Delivery) carries the full event history.
           </p>

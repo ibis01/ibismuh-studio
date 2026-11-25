@@ -7796,6 +7796,16 @@ P2-E natural-speed pacing + motion floor) and the human blind gate
   unverified/throwing-inspector/garbage-bytes — and the scene-doc
   round-trip with the tolerant-parse law). tsc clean; changed-file eslint
   clean; the tenant registry + T-3.2 pins updated with the seven models.
+- THE SECOND REPAIR the first CI run surfaced (the check job's typography
+  step, after the unit battery went green): the planner pipeline's own
+  studio UI (src/components/studio/*) shipped 126 sub-12px arbitrary
+  font-size utilities — the exact class the S150 typography pass paid off
+  everywhere else. All 126 paid with text-xs (the S150 cleanup's own
+  replacement); the 12px floor battery holds (0 utilities across 537
+  scanned files); tsc + the changed-file eslint clean. Lesson recorded: the
+  planner pipeline was never run through the FULL check battery on the
+  merged tree — the S136 scan and the typography floor both caught their
+  class on the first CI look.
 - AN ENVIRONMENT RECEIPT (not a repo fact): this sandbox's terminal output
   path swallows literal "[m" byte sequences in displayed file content — the
   same artifact that once read a VALID array literal as corruption (the

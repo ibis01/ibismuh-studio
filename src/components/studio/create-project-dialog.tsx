@@ -175,7 +175,7 @@ export function CreateProjectDialog({ open, onOpenChange, defaultLane, onCreated
                   <Icon className="h-4 w-4 shrink-0" style={{ color: meta.accentHex }} aria-hidden />
                   {meta.title}
                 </span>
-                <span className="line-clamp-2 text-[11px] leading-snug text-zinc-500">{meta.desc}</span>
+                <span className="line-clamp-2 text-xs leading-snug text-zinc-500">{meta.desc}</span>
               </button>
             );
           })}
@@ -265,12 +265,12 @@ export function CreateProjectDialog({ open, onOpenChange, defaultLane, onCreated
                   >
                     <RadioGroupItem value={a} className="sr-only" />
                     {a}
-                    {lane === "slides" && <span className="text-[10px] text-zinc-500">pinned</span>}
+                    {lane === "slides" && <span className="text-xs text-zinc-500">pinned</span>}
                   </label>
                 ))}
               </RadioGroup>
               {lane === "slides" && (
-                <p className="text-[10px] text-zinc-500">The keynote deck geometry is pinned to 9:16 — vertical video only.</p>
+                <p className="text-xs text-zinc-500">The keynote deck geometry is pinned to 9:16 — vertical video only.</p>
               )}
             </div>
           </div>
@@ -297,7 +297,7 @@ export function CreateProjectDialog({ open, onOpenChange, defaultLane, onCreated
                   className="h-11 border-stone-700 bg-stone-950/60"
                 />
               </div>
-              <p className="text-[10px] text-zinc-500 sm:col-span-2">
+              <p className="text-xs text-zinc-500 sm:col-span-2">
                 The native rig channel performs scenes pose-by-pose only when a valid rig is attached; otherwise storyboard art
                 carries each scene (declared per scene, never silent).
               </p>

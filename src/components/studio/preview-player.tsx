@@ -348,12 +348,12 @@ export function PreviewPlayer({ state, accentHex }: PreviewPlayerProps) {
             {capturing && (
               <div className="absolute top-2 right-2 flex items-center gap-1.5 rounded-full bg-red-950/80 border border-red-800 px-2.5 py-1">
                 <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" aria-hidden />
-                <span className="text-[11px] tf-mono text-red-200">capturing preview…</span>
+                <span className="text-xs tf-mono text-red-200">capturing preview…</span>
               </div>
             )}
             {!rc && (
               <div className="absolute inset-x-0 bottom-0 border-t border-stone-800 bg-black/70 px-3 py-1.5">
-                <span className="text-[11px] text-zinc-400">
+                <span className="text-xs text-zinc-400">
                   No plan yet — write a brief and press Compile plan. The preview renders the compiled plan only.
                 </span>
               </div>
@@ -474,7 +474,7 @@ export function PreviewPlayer({ state, accentHex }: PreviewPlayerProps) {
             <Tooltip>
               <TooltipTrigger asChild>
                 <span
-                  className="inline-flex items-center rounded-full border border-dashed border-amber-600/70 bg-amber-950/40 px-3 py-1.5 text-[11px] text-amber-300 cursor-help"
+                  className="inline-flex items-center rounded-full border border-dashed border-amber-600/70 bg-amber-950/40 px-3 py-1.5 text-xs text-amber-300 cursor-help"
                   aria-label="Silent preview — no measured narration"
                 >
                   silent preview — no measured narration

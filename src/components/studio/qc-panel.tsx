@@ -40,7 +40,7 @@ function CheckRow({ check, onSelectScene }: { check: QcCheck; onSelectScene: (re
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] font-medium text-zinc-200">
           {check.title}
-          {!check.pass && <span className="ml-2 text-[10px] uppercase tracking-wide text-red-400">{check.severity}</span>}
+          {!check.pass && <span className="ml-2 text-xs uppercase tracking-wide text-red-400">{check.severity}</span>}
         </span>
         <span className="block text-[12px] text-zinc-400">{check.message}</span>
       </span>
@@ -48,7 +48,7 @@ function CheckRow({ check, onSelectScene }: { check: QcCheck; onSelectScene: (re
         <Button
           variant="outline"
           size="sm"
-          className="h-9 shrink-0 border-stone-700 text-[11px]"
+          className="h-9 shrink-0 border-stone-700 text-xs"
           aria-label={`Inspect scene ${check.sceneRef}`}
           onClick={() => onSelectScene(check.sceneRef as string)}
         >
@@ -148,7 +148,7 @@ export function QcPanel({ state }: QcPanelProps) {
                   {overall === "pass" ? <CheckCircle2 className="h-4 w-4" aria-hidden /> : <XCircle className="h-4 w-4" aria-hidden />}
                   Overall: {overall}
                 </span>
-                <span className="mt-0.5 block text-[11px] opacity-80 tf-mono">
+                <span className="mt-0.5 block text-xs opacity-80 tf-mono">
                   profile {state.qc.qcProfile} · plan {state.qc.planFingerprint?.slice(0, 8) ?? "—"} · ran {new Date(state.qc.ranAt).toLocaleTimeString()}
                 </span>
               </div>
@@ -229,7 +229,7 @@ export function QcPanel({ state }: QcPanelProps) {
             </Button>
           </div>
 
-          <p className="flex items-start gap-1.5 text-[11px] text-zinc-500">
+          <p className="flex items-start gap-1.5 text-xs text-zinc-500">
             <Download className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
             The manifest carries the full verified plan envelope, asset provenance, the audio receipt, the declared timing
             source, and the latest QC report. The SRT is built from the plan beats.

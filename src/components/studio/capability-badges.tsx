@@ -27,7 +27,7 @@ export function CapabilityBadges({ capabilities, lane, timingSource }: Capabilit
           <Tooltip>
             <TooltipTrigger asChild>
               <span
-                className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] ${
+                className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
                   isMeasured
                     ? "border-emerald-700/60 bg-emerald-950/40 text-emerald-300"
                     : "border-dashed border-amber-600/70 bg-amber-950/40 text-amber-300"
@@ -35,7 +35,7 @@ export function CapabilityBadges({ capabilities, lane, timingSource }: Capabilit
               >
                 {isMeasured ? <Clock className="h-3.5 w-3.5" aria-hidden /> : <MinusCircle className="h-3.5 w-3.5" aria-hidden />}
                 {isMeasured ? "Measured timing" : "Estimated timing"}
-                <span className="text-[10px] opacity-70 tf-mono">{timingSource.source}</span>
+                <span className="text-xs opacity-70 tf-mono">{timingSource.source}</span>
               </span>
             </TooltipTrigger>
             <TooltipContent className="max-w-72">{timingSource.reason}</TooltipContent>
@@ -47,7 +47,7 @@ export function CapabilityBadges({ capabilities, lane, timingSource }: Capabilit
             {modes.map((mode) => (
               <Tooltip key={mode.id}>
                 <TooltipTrigger asChild>
-                  <span className="inline-flex items-center rounded-full border border-stone-700 bg-stone-900 px-2.5 py-1 text-[11px] text-zinc-300">
+                  <span className="inline-flex items-center rounded-full border border-stone-700 bg-stone-900 px-2.5 py-1 text-xs text-zinc-300">
                     {mode.label}
                   </span>
                 </TooltipTrigger>
@@ -107,7 +107,7 @@ export function TimingBadge({ timingSource }: { timingSource: { source: string; 
       <Tooltip>
         <TooltipTrigger asChild>
           <span
-            className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] cursor-help ${
+            className={`inline-flex w-fit items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs cursor-help ${
               isMeasured
                 ? "border-emerald-700/60 bg-emerald-950/40 text-emerald-300"
                 : "border-dashed border-amber-600/70 bg-amber-950/40 text-amber-300"
@@ -115,7 +115,7 @@ export function TimingBadge({ timingSource }: { timingSource: { source: string; 
           >
             {isMeasured ? <Clock className="h-3.5 w-3.5" aria-hidden /> : <MinusCircle className="h-3.5 w-3.5" aria-hidden />}
             {isMeasured ? "Measured timing" : "Estimated timing"}
-            <span className="text-[10px] opacity-70 tf-mono">{timingSource.source}</span>
+            <span className="text-xs opacity-70 tf-mono">{timingSource.source}</span>
           </span>
         </TooltipTrigger>
         <TooltipContent className="max-w-72">{timingSource.reason}</TooltipContent>

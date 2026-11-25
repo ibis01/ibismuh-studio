@@ -91,7 +91,7 @@ function BriefTab({
       <Card className="studio-panel border-stone-800">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm text-zinc-200">
-            Brief <span className="ml-1 text-[11px] font-normal text-zinc-500">· {meta.title} lane ({contract.format} format)</span>
+            Brief <span className="ml-1 text-xs font-normal text-zinc-500">· {meta.title} lane ({contract.format} format)</span>
           </CardTitle>
           <CardDescription className="text-[12px] leading-snug text-zinc-500">
             The brief is what you wrote — every byte of it feeds the plan fingerprint, so edits invalidate the compiled plan.
@@ -185,7 +185,7 @@ function BriefTab({
                 ))}
               </SelectContent>
             </Select>
-            {lane === "slides" && <p className="text-[10px] text-zinc-500">The keynote deck geometry is pinned to 9:16.</p>}
+            {lane === "slides" && <p className="text-xs text-zinc-500">The keynote deck geometry is pinned to 9:16.</p>}
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="brief-voice">Voice</Label>
@@ -228,14 +228,14 @@ function BriefTab({
         {compilePending && <span className="text-[12px] text-amber-300">AI planner is drafting scenes… this takes a moment</span>}
         {dirty && !compilePending && <span className="text-[12px] text-amber-300">Unsaved edits — save before recompiling.</span>}
         {state.planRevision && (
-          <span className="ml-auto text-[11px] text-zinc-500 tf-mono">
+          <span className="ml-auto text-xs text-zinc-500 tf-mono">
             current plan: rev {state.planRevision.revision} · {state.planRevision.fingerprint.slice(0, 8)}
           </span>
         )}
       </div>
 
       {state.fallbackPolicy && (
-        <p className="rounded-lg border border-dashed border-stone-700 bg-stone-950/40 px-3 py-2 text-[11px] leading-snug text-zinc-500">
+        <p className="rounded-lg border border-dashed border-stone-700 bg-stone-950/40 px-3 py-2 text-xs leading-snug text-zinc-500">
           <span className="font-medium text-zinc-400">Declared fallback policy ({meta.title}):</span> {state.fallbackPolicy}
         </p>
       )}

@@ -116,7 +116,7 @@ export function ProjectHeader({ state, briefDirty, onPatchTitle, onOpenNav }: Pr
           <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto studio-scroll max-w-[68vw] md:max-w-none">
             {/* lane badge */}
             <span
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-700 bg-stone-900 px-2.5 py-1 text-[11px] text-zinc-300"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-700 bg-stone-900 px-2.5 py-1 text-xs text-zinc-300"
               title={meta?.title ?? lane}
             >
               <span className="h-2 w-2 rounded-full shrink-0" style={{ background: meta?.accentHex ?? "#8d8983" }} aria-hidden />
@@ -127,24 +127,24 @@ export function ProjectHeader({ state, briefDirty, onPatchTitle, onOpenNav }: Pr
             {state.planRevision ? (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-stone-700 bg-stone-900 px-2.5 py-1 text-[11px] text-zinc-300 tf-mono">
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-stone-700 bg-stone-900 px-2.5 py-1 text-xs text-zinc-300 tf-mono">
                     rev {state.planRevision.revision}
                     <span className="text-zinc-500">{state.planRevision.fingerprint.slice(0, 8)}</span>
                   </span>
                 </TooltipTrigger>
-                <TooltipContent className="max-w-80 tf-mono text-[10px] break-all">
+                <TooltipContent className="max-w-80 tf-mono text-xs break-all">
                   fingerprint {state.planRevision.fingerprint}
                 </TooltipContent>
               </Tooltip>
             ) : (
-              <span className="inline-flex shrink-0 items-center rounded-full border border-dashed border-stone-700 px-2.5 py-1 text-[11px] text-zinc-500">
+              <span className="inline-flex shrink-0 items-center rounded-full border border-dashed border-stone-700 px-2.5 py-1 text-xs text-zinc-500">
                 no plan
               </span>
             )}
 
             {/* saved state */}
             {briefDirty && (
-              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-600/60 bg-amber-950/40 px-2.5 py-1 text-[11px] text-amber-300">
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-amber-600/60 bg-amber-950/40 px-2.5 py-1 text-xs text-amber-300">
                 <span className="h-2 w-2 rounded-full bg-amber-400" aria-hidden />
                 Unsaved
               </span>
@@ -152,7 +152,7 @@ export function ProjectHeader({ state, briefDirty, onPatchTitle, onOpenNav }: Pr
 
             {/* render state chip */}
             {renderState && (
-              <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[11px] ${jobStateTone(renderState)}`}>
+              <span className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-xs ${jobStateTone(renderState)}`}>
                 render: {renderState}
               </span>
             )}
@@ -160,7 +160,7 @@ export function ProjectHeader({ state, briefDirty, onPatchTitle, onOpenNav }: Pr
             {/* QC chip */}
             {qcOverall && (
               <span
-                className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[11px] ${
+                className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-xs ${
                   qcOverall === "pass"
                     ? "border-emerald-700/60 bg-emerald-950/40 text-emerald-300"
                     : qcOverall === "warn"
@@ -174,21 +174,21 @@ export function ProjectHeader({ state, briefDirty, onPatchTitle, onOpenNav }: Pr
 
             {/* publish readiness */}
             {ready ? (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-950/40 px-2.5 py-1 text-[11px] text-emerald-300">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-emerald-700/60 bg-emerald-950/40 px-2.5 py-1 text-xs text-emerald-300">
                 <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
                 Ready
               </span>
             ) : null}
 
             {/* geometry */}
-            <span className="inline-flex shrink-0 items-center rounded-full border border-stone-800 bg-stone-950/60 px-2.5 py-1 text-[11px] text-zinc-400 tf-mono">
+            <span className="inline-flex shrink-0 items-center rounded-full border border-stone-800 bg-stone-950/60 px-2.5 py-1 text-xs text-zinc-400 tf-mono">
               {state.project.aspect} · {state.project.fps}fps
             </span>
 
             {/* voice + timing */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex shrink-0 items-center rounded-full border border-stone-800 bg-stone-950/60 px-2.5 py-1 text-[11px] text-zinc-400">
+                <span className="inline-flex shrink-0 items-center rounded-full border border-stone-800 bg-stone-950/60 px-2.5 py-1 text-xs text-zinc-400">
                   {state.project.voice} · {timingLabel(state.timingSource?.source)}
                 </span>
               </TooltipTrigger>
@@ -199,7 +199,7 @@ export function ProjectHeader({ state, briefDirty, onPatchTitle, onOpenNav }: Pr
 
             {/* duration */}
             {state.project.durationMs != null && (
-              <span className="inline-flex shrink-0 items-center rounded-full border border-stone-800 bg-stone-950/60 px-2.5 py-1 text-[11px] text-zinc-400 tf-num">
+              <span className="inline-flex shrink-0 items-center rounded-full border border-stone-800 bg-stone-950/60 px-2.5 py-1 text-xs text-zinc-400 tf-num">
                 {formatTimeMs(state.project.durationMs)}
               </span>
             )}

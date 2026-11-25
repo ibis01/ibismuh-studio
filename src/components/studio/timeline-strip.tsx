@@ -170,7 +170,7 @@ export function TimelineStrip({ state, accentHex }: TimelineStripProps) {
                 />
               ))}
               {audioBars.length === 0 && (
-                <div className="flex h-full w-full items-center px-3 text-[10px] text-zinc-500 tf-mono">
+                <div className="flex h-full w-full items-center px-3 text-xs text-zinc-500 tf-mono">
                   no measured audio — estimate timing
                 </div>
               )}
@@ -185,7 +185,7 @@ export function TimelineStrip({ state, accentHex }: TimelineStripProps) {
                   ))}
                 </div>
               )}
-              <span className="absolute right-2 top-0.5 text-[9px] tf-mono text-zinc-500 uppercase tracking-wide pointer-events-none">
+              <span className="absolute right-2 top-0.5 text-xs tf-mono text-zinc-500 uppercase tracking-wide pointer-events-none">
                 audio
               </span>
             </div>
@@ -213,16 +213,16 @@ export function TimelineStrip({ state, accentHex }: TimelineStripProps) {
                       requestSeek(beat.narrationWindow.startMs + 40, beat.sceneRef ?? beat.id);
                     }}
                   >
-                    <span className="block px-1.5 pt-0.5 text-[10px] leading-tight text-zinc-200 truncate tf-mono">
+                    <span className="block px-1.5 pt-0.5 text-xs leading-tight text-zinc-200 truncate tf-mono">
                       {beat.sceneRef ?? beat.id}
                     </span>
-                    <span className="hidden sm:block px-1.5 text-[10px] leading-tight text-zinc-400 truncate">
+                    <span className="hidden sm:block px-1.5 text-xs leading-tight text-zinc-400 truncate">
                       {beat.visualIntent}
                     </span>
                   </button>
                 );
               })}
-              <span className="absolute right-2 top-0.5 text-[9px] tf-mono text-zinc-500 uppercase tracking-wide pointer-events-none">
+              <span className="absolute right-2 top-0.5 text-xs tf-mono text-zinc-500 uppercase tracking-wide pointer-events-none">
                 scenes · {scenes.length || beats.length}
               </span>
             </div>
@@ -245,7 +245,7 @@ export function TimelineStrip({ state, accentHex }: TimelineStripProps) {
                   />
                 );
               })}
-              <span className="absolute right-2 top-0.5 text-[9px] tf-mono text-zinc-500 uppercase tracking-wide pointer-events-none">
+              <span className="absolute right-2 top-0.5 text-xs tf-mono text-zinc-500 uppercase tracking-wide pointer-events-none">
                 ops · {ops.length}
               </span>
             </div>
@@ -261,7 +261,7 @@ export function TimelineStrip({ state, accentHex }: TimelineStripProps) {
                 />
               ))}
               {markers.length === 0 && (
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] tf-mono text-zinc-600">
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs tf-mono text-zinc-600">
                   no QC or repair markers
                 </span>
               )}
@@ -276,7 +276,7 @@ export function TimelineStrip({ state, accentHex }: TimelineStripProps) {
               <span className="absolute -top-0 -left-[5px] h-2.5 w-3 bg-amber-400" style={{ clipPath: "polygon(0 0, 100% 0, 50% 100%)" }} />
             </div>
             <span
-              className="absolute top-0 ml-2 text-[9px] tf-num text-amber-300/90 pointer-events-none"
+              className="absolute top-0 ml-2 text-xs tf-num text-amber-300/90 pointer-events-none"
               style={{ left: playheadX }}
               aria-hidden
             >

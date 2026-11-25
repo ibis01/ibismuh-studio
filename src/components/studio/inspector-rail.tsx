@@ -25,7 +25,7 @@ function Section({
 }) {
   return (
     <section className="border-b border-stone-800/80 px-3.5 py-3 last:border-b-0" aria-label={title}>
-      <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">
+      <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500">
         {icon}
         {title}
       </h3>
@@ -37,8 +37,8 @@ function Section({
 function MonoRow({ label, value, tooltip }: { label: string; value: string; tooltip?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className="shrink-0 text-[11px] text-zinc-500">{label}</span>
-      <span className="min-w-0 truncate text-[11px] text-zinc-300 tf-mono" title={tooltip ?? value}>
+      <span className="shrink-0 text-xs text-zinc-500">{label}</span>
+      <span className="min-w-0 truncate text-xs text-zinc-300 tf-mono" title={tooltip ?? value}>
         {value}
       </span>
     </div>
@@ -61,14 +61,14 @@ function AssetRow({ asset }: { asset: AssetDTO }) {
         </span>
       )}
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[11px] text-zinc-300 tf-mono">
+        <span className="block truncate text-xs text-zinc-300 tf-mono">
           {asset.kind} · {asset.sourceKind}
           {asset.sceneRef ? ` · ${asset.sceneRef}` : ""}
         </span>
-        <span className="block truncate text-[10px] text-zinc-500">
+        <span className="block truncate text-xs text-zinc-500">
           {asset.provider ?? "builtin"} · {asset.license}
         </span>
-        <span className="block truncate text-[10px] text-zinc-600 tf-mono" title={asset.contentHash}>
+        <span className="block truncate text-xs text-zinc-600 tf-mono" title={asset.contentHash}>
           sha {asset.contentHash.slice(0, 8)}
           {asset.bytes ? ` · ${(asset.bytes / 1024).toFixed(0)}KB` : ""}
         </span>
@@ -133,11 +133,11 @@ function RepairBench({ state, onRepaired, selectedSceneRef }: { state: ProjectSt
     <div className="grid gap-2">
       <div className="grid grid-cols-2 gap-1.5">
         <label className="grid gap-1">
-          <span className="text-[10px] uppercase tracking-wide text-zinc-500">op (registry)</span>
+          <span className="text-xs uppercase tracking-wide text-zinc-500">op (registry)</span>
           <select
             value={op}
             onChange={(e) => setOp(e.target.value)}
-            className="h-8 rounded border border-stone-700 bg-stone-950 px-1.5 text-[11px] text-zinc-200 tf-mono"
+            className="h-8 rounded border border-stone-700 bg-stone-950 px-1.5 text-xs text-zinc-200 tf-mono"
             aria-label="Repair operation"
           >
             {lane.repairOperations.map((o) => (
@@ -148,11 +148,11 @@ function RepairBench({ state, onRepaired, selectedSceneRef }: { state: ProjectSt
           </select>
         </label>
         <label className="grid gap-1">
-          <span className="text-[10px] uppercase tracking-wide text-zinc-500">scene (scope)</span>
+          <span className="text-xs uppercase tracking-wide text-zinc-500">scene (scope)</span>
           <select
             value={sceneRef}
             onChange={(e) => setSceneRef(e.target.value)}
-            className="h-8 rounded border border-stone-700 bg-stone-950 px-1.5 text-[11px] text-zinc-200 tf-mono"
+            className="h-8 rounded border border-stone-700 bg-stone-950 px-1.5 text-xs text-zinc-200 tf-mono"
             aria-label="Repair scene scope"
           >
             {scenes.map((s) => (
@@ -164,7 +164,7 @@ function RepairBench({ state, onRepaired, selectedSceneRef }: { state: ProjectSt
         </label>
       </div>
       {activeScene && (
-        <p className="text-[10px] leading-snug text-zinc-500" title={activeScene.visualIntent}>
+        <p className="text-xs leading-snug text-zinc-500" title={activeScene.visualIntent}>
           scoped to <span className="tf-mono text-zinc-400">{activeScene.id}</span> — current intent: “{activeScene.visualIntent.slice(0, 70)}…”
         </p>
       )}
@@ -185,7 +185,7 @@ function RepairBench({ state, onRepaired, selectedSceneRef }: { state: ProjectSt
         <Wrench className="h-3.5 w-3.5" aria-hidden />
         {busy ? "Applying repair — new revision…" : "Apply repair (new revision)"}
       </button>
-      <p className="text-[10px] leading-snug text-zinc-600">
+      <p className="text-xs leading-snug text-zinc-600">
         A repair creates a new linked revision — the amended plan is recompiled, never silently rewritten; unrelated scenes keep their assets.
       </p>
     </div>
@@ -216,9 +216,9 @@ export function InspectorRail({ state, accentHex, onRepaired, selectedSceneRef }
             <MonoRow label="briefHash" value={plan.briefHash.slice(0, 12) + "…"} tooltip={plan.briefHash} />
             <MonoRow label="planner" value={rev.plannerMeta.planner} />
             <div className="flex items-center justify-between">
-              <span className="text-[11px] text-zinc-500">llm pass</span>
+              <span className="text-xs text-zinc-500">llm pass</span>
               <span
-                className={`rounded-full border px-2 py-0.5 text-[10px] ${
+                className={`rounded-full border px-2 py-0.5 text-xs ${
                   rev.plannerMeta.llmPass === "full"
                     ? "border-emerald-700/60 bg-emerald-950/40 text-emerald-300"
                     : rev.plannerMeta.llmPass === "partial"
@@ -230,13 +230,13 @@ export function InspectorRail({ state, accentHex, onRepaired, selectedSceneRef }
               </span>
             </div>
             <div className="rounded border border-stone-800/80 bg-stone-950/50 px-2 py-1.5">
-              <span className="text-[10px] uppercase tracking-wide text-zinc-500">fallback decision — declared</span>
-              <p className="mt-0.5 text-[11px] text-zinc-300 tf-mono">{plan.fallback.mode}</p>
-              <p className="text-[10px] leading-snug text-zinc-500">{plan.fallback.reason}</p>
+              <span className="text-xs uppercase tracking-wide text-zinc-500">fallback decision — declared</span>
+              <p className="mt-0.5 text-xs text-zinc-300 tf-mono">{plan.fallback.mode}</p>
+              <p className="text-xs leading-snug text-zinc-500">{plan.fallback.reason}</p>
               {plan.fallback.perScene && plan.fallback.perScene.length > 0 && (
                 <ul className="mt-1 grid gap-0.5">
                   {plan.fallback.perScene.map((ps) => (
-                    <li key={ps.sceneRef} className="text-[10px] text-zinc-400 tf-mono">
+                    <li key={ps.sceneRef} className="text-xs text-zinc-400 tf-mono">
                       {ps.sceneRef}: {ps.mode}
                     </li>
                   ))}
@@ -245,7 +245,7 @@ export function InspectorRail({ state, accentHex, onRepaired, selectedSceneRef }
             </div>
             <MonoRow label="qc profile" value={plan.qcProfile} />
             <MonoRow label="renderer" value={plan.rendererVersion} />
-            {rev.plannerMeta.note && <p className="text-[10px] leading-snug text-zinc-500">{rev.plannerMeta.note}</p>}
+            {rev.plannerMeta.note && <p className="text-xs leading-snug text-zinc-500">{rev.plannerMeta.note}</p>}
           </div>
         ) : (
           <p className="text-xs text-zinc-500">No plan compiled yet — write the brief and compile the plan.</p>
@@ -279,29 +279,29 @@ export function InspectorRail({ state, accentHex, onRepaired, selectedSceneRef }
           {bible ? (
             <div className="grid gap-2">
               <div>
-                <span className="text-[10px] uppercase tracking-wide text-zinc-500">characters</span>
+                <span className="text-xs uppercase tracking-wide text-zinc-500">characters</span>
                 <ul className="mt-0.5 grid gap-0.5">
                   {bible.characters.map((c) => (
-                    <li key={c.id} className="text-[11px] text-zinc-300">
+                    <li key={c.id} className="text-xs text-zinc-300">
                       <span className="text-zinc-200">{c.name}</span> — {c.description}
                     </li>
                   ))}
-                  {bible.characters.length === 0 && <li className="text-[11px] text-zinc-500">none declared</li>}
+                  {bible.characters.length === 0 && <li className="text-xs text-zinc-500">none declared</li>}
                 </ul>
               </div>
               <div>
-                <span className="text-[10px] uppercase tracking-wide text-zinc-500">locations</span>
+                <span className="text-xs uppercase tracking-wide text-zinc-500">locations</span>
                 <ul className="mt-0.5 grid gap-0.5">
                   {bible.locations.map((l) => (
-                    <li key={l.id} className="text-[11px] text-zinc-300">
+                    <li key={l.id} className="text-xs text-zinc-300">
                       <span className="text-zinc-200">{l.name}</span> — {l.description}
                     </li>
                   ))}
-                  {bible.locations.length === 0 && <li className="text-[11px] text-zinc-500">none declared</li>}
+                  {bible.locations.length === 0 && <li className="text-xs text-zinc-500">none declared</li>}
                 </ul>
               </div>
               <div>
-                <span className="text-[10px] uppercase tracking-wide text-zinc-500">palette</span>
+                <span className="text-xs uppercase tracking-wide text-zinc-500">palette</span>
                 <div className="mt-1 flex gap-1">
                   {bible.palette.map((hex, i) => (
                     <span key={`${hex}-${i}`} className="h-4 w-4 rounded-sm border border-stone-700" style={{ background: hex }} title={hex} aria-label={hex} />
@@ -310,10 +310,10 @@ export function InspectorRail({ state, accentHex, onRepaired, selectedSceneRef }
               </div>
               {rev && rev.continuity.length > 0 && (
                 <div>
-                  <span className="text-[10px] uppercase tracking-wide text-zinc-500">continuity</span>
+                  <span className="text-xs uppercase tracking-wide text-zinc-500">continuity</span>
                   <ul className="mt-0.5 grid gap-1">
                     {rev.continuity.slice(0, 6).map((issue, i) => (
-                      <li key={`${issue.sceneRef}-${i}`} className="flex items-start gap-1.5 text-[11px] text-zinc-300">
+                      <li key={`${issue.sceneRef}-${i}`} className="flex items-start gap-1.5 text-xs text-zinc-300">
                         <span
                           className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${issue.severity === "warn" ? "bg-amber-400" : "bg-zinc-500"}`}
                           aria-hidden
