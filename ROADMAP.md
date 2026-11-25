@@ -3,18 +3,58 @@
 **Status:** Stages 1–7 closed at the code level; the S-series hardening
 sprints landed on top (S1→S74 — the S-series index and the
 S47 integrity ledger live in [`TASKS.md`](TASKS.md)); the Post-Stage-7
-2.0 era is CLOSED THROUGH S135 (S75–S135: whiteboard production
+2.0 era is CLOSED THROUGH S147 (S75–S135: whiteboard production
 readiness, the Universal Timeline at S87, the motion-graphics engine
 G1 at S123, the element editor at S124, the character rig K1 at S125,
 the import lane at S126, the roadmap close at S127, CI hardening at
 S128, the Procedural Animation Engine adapter S129–S134, the S135 CI
-repair). **S136 = the Stabilisation Wave (2026-11-15)** — the read-only
-Stabilisation Gate audit (9 exit conditions: 4 PASS / 5 PARTIAL /
-0 FAIL) drove proof-infrastructure waves + the B1/B2 defect fixes with
-the feature freeze intact; the blind re-scores remain the humans'
-open item (the S128 kit owns the session).
-**Last updated:** 2026-11-15 (the Stabilisation Gate era opened — the
-governing order is the gate audit's repair plan, not new features)
+repair — the close record is `docs/audits/s135-ci-repair.md`).
+**S136 = the Stabilisation Wave (2026-11-15, merged as PR #28, CI run
+#327 green 8/8 + 37/37 e2e)** — the read-only Stabilisation Gate audit
+drove proof-infrastructure waves + the B1/B2 defect fixes; the gate was
+**SEALED at 8/9 PASS** (condition 7 PARTIAL by design — the blind
+re-scores remain the humans' open item, the S128/S144 kits own the
+sessions), which legally re-opened feature stages:
+**S137** the whiteboard scaffold's own title/close cards + rich boards ·
+**S138** the music bed heal-or-fallback wall · **S139** the naturalist
+pen (eased lockstep, tremble, breathing ink, sketch passes) · **S140**
+the import admission wall (atomic admission, in-transaction count wall,
+compensation sweep) · **S141** the BVH admission wall + O(1) joint map ·
+**S142** the effects asset library (the emphasis vocabulary) ·
+**S143 Stage X-full** — the per-scene mixed-engine dispatch (a MIXED
+composition plan — whiteboard + video + graphics scenes — renders; the
+audit's F5, the last P) · **S144** the blind re-score kit session on the
+final head · **S145** the PAE Phase 3 production benchmarks (frameAt
+3.9–7.6 µs; SIGKILL-resume byte-identical) · **S146** the stabilized
+baseline + the fresh W1 "before" receipt (the layer-upgrade program's
+Phase 1; 846/0 on a fresh DB, determinism pin identical) · **S147** the
+rhetorical beat layer (the directive's typed beat schema, the matcher's
+alts/emphasis wiring, the mark that fires after its claim; 849/0).
+**2026-11-16:** the voice-expansion TTS lanes (Gemini, Cartesia,
+Deepgram, PlayHT) joined the registry, and their missing S90 priors
+rows — the CI regression they caused — were repaired (the sync pins
+demand a priors row for EVERY registry provider). **S148 = the MG-1
+motion-quality slice** — the motion-graphics audit's Phase B: the
+easing table grows `anticipation` + `spring` (the design-doc slice,
+docs/design/mg1-motion-quality.md), the stagger primitive becomes
+substrate data (`anim/stagger.ts`, the planner byte-identical), the 3D
+keyframes gain the destination-key ease field (default linear =
+byte-identity), and the motion-preset registry lands
+(`anim/presets.ts` — six presets compiled into the existing directives;
+849 → 852 tests; record: docs/audits/s148-mg1-motion-quality.md).
+**S149 = the B4 substrate wiring** — the dormant anim substrate wakes:
+the gait walk compiles gait-driven leg rows (`characters/locomote.ts` —
+the phase rides the body's OWN distance through `gaitPhaseAt`, the foot
+arc IS `footArcAt`, the legs ride anti-phase, the lexicon is tight, the
+compile wall falls an oversized walk through to its gesture pair), the
+IK reach solves the rig's own arm chain (refuse-not-clamp; the fk
+round-trip lands the hand EXACTLY on the target), and the graphics
+camera gains the validate-once discipline behind the S130 keys
+(`validateGraphicsCameraKeys`, named refusals, the render-seam tripwire;
+860 tests; record: docs/audits/s149-substrate-wiring.md).
+**Last updated:** 2026-11-16 (the motion-graphics audit's phased
+MG-1…MG-6 program is executing — Phase A docs + Phase B motion quality
+landed; Phase C breadth is next)
 **Source:** `MASTER_PLAN.md` + `FOUNDATION_AUDIT.md` findings + the S47 external audit + the stage records
 
 ---

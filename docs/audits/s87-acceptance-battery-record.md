@@ -26,6 +26,29 @@ the artifacts stay for human review.
 | 4.C-4 | A saved timeline reopens and renders identically | **B** the saved doc reopens and re-serializes byte-identically (1883 bytes); the render's own clock agrees with the delivered file. **A** the engine's tracks re-derive byte-identically from the same frame plan (the derive-at-render projection law). |
 | 4.C-5 | Every future engine can produce compatible timeline assets | **A** the engine-authored tracks parse through the SAME `planFromTracks` reader with the scaffold's row linkages intact (`sceneIndex [1, 2, 3]`) — the structural `{ tracks }` carrier is the entire integration surface a new engine must speak. |
 
+## Part C — the Graphics lane (added with the S123 graphics engine; decode-side since S136)
+
+Part C proves the SAME §4.C conditions on the graphics engine lane —
+the G1 close (`docs/audits/s123-motion-graphics.md`) wired the lane into
+this battery, and the Stabilisation Gate (2026-11-15) required the
+DECODE-SIDE half: the battery ffprobe-measures the delivered MP4, not
+just the engine's self-report:
+
+- **4.C-1** — the graphics engine emits contract tracks and the plan IS
+  the tracks read (one consumer, every engine): re-derivation from the
+  returned plan is byte-identical; `origin=tracks`.
+- **4.C-3 (decode-side)** — every per-scene encode lands on its contract
+  window (ffprobe `probeDurationSec`, ±0.06 s) and the concat total is
+  the contract total (±0.25 s) — measured on the DELIVERED artifacts.
+- **4.C-2** — the final carries the mixed audio (the VO slot + the ducked
+  bed): a real audio stream, not a silent container.
+- **4.C-5** — the scene linkages ride the shared reader
+  (`sceneIndex [1, 2]`).
+
+The Part C fixture renders through the ZERO-AI native scaffold (the
+deterministic rule-table base — the production degradation floor), so the
+battery spends $0 AI and stays deterministic.
+
 ## The find: a real engine bug the battery caught on its first run
 
 Part A's fixture deliberately mixes duration sources (explicit /
