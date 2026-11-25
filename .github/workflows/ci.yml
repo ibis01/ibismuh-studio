@@ -51,7 +51,7 @@ name: CI
 on:
   push:
     # The file's own header contract: check on every push/PR. This line
-    # shipped corrupted as `branches: ain]` since the 83ef064 restore — an
+    # shipped corrupted as a mangled glob (the open-bracket and the m it opened were eaten, leaving an invalid unmatched-bracket pattern) since the 83ef064 restore — an
     # invalid glob that silently narrowed push coverage (branch pushes never
     # fired the battery; main kept working only because the PR lane and the
     # coincidental glob behavior aligned). Restored to the documented list.
