@@ -318,7 +318,7 @@ export function DirectorCard({
                 <SelectItem key={p.id} value={p.id} className="text-xs">
                   <div className="flex flex-col gap-0.5 py-0.5">
                     <span className="font-medium">{p.label}</span>
-                    <span className="text-[11px] text-muted-foreground">{p.blurb}</span>
+                    <span className="text-xs text-muted-foreground">{p.blurb}</span>
                   </div>
                 </SelectItem>
               ))}
@@ -358,7 +358,7 @@ export function DirectorCard({
           className="flex items-center justify-between gap-2 flex-wrap rounded-md border border-amber-500/25 bg-amber-500/8 px-2.5 py-2"
           data-testid="director-policy-advisory"
         >
-          <p className="text-[11px] text-amber-200/90">
+          <p className="text-xs text-amber-200/90">
             Islamic visual protection is <span className="font-semibold">off</span> — the profile composes
             around revered figures, but the enforcement layers (prompt sanitization, QC visual gate,
             export hold) only run with the policy on.
@@ -377,12 +377,12 @@ export function DirectorCard({
       {protectionOn && (
         <div className="flex items-center justify-end gap-2">
           {confirmPolicyOff ? (
-            <span className="flex items-center gap-1.5 text-[11px] text-red-200">
+            <span className="flex items-center gap-1.5 text-xs text-red-200">
               Disable restricted-subject protection for this video?
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-6 px-2 text-[11px] text-red-200 hover:bg-red-500/15"
+                className="h-6 px-2 text-xs text-red-200 hover:bg-red-500/15"
                 disabled={policyBusy}
                 onClick={() => void setPolicy(null)}
               >
@@ -391,7 +391,7 @@ export function DirectorCard({
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-6 px-2 text-[11px]"
+                className="h-6 px-2 text-xs"
                 disabled={policyBusy}
                 onClick={() => setConfirmPolicyOff(false)}
               >
@@ -402,7 +402,7 @@ export function DirectorCard({
             <Button
               size="sm"
               variant="ghost"
-              className="h-6 px-2 text-[11px] text-muted-foreground"
+              className="h-6 px-2 text-xs text-muted-foreground"
               disabled={policyBusy}
               onClick={() => setConfirmPolicyOff(true)}
             >
@@ -427,18 +427,18 @@ export function DirectorCard({
               className="rounded-md border border-amber-500/25 bg-amber-500/8 px-2.5 py-2 space-y-1"
               data-testid="director-profile-notes"
             >
-              <p className="text-[11px] font-medium text-amber-200">
+              <p className="text-xs font-medium text-amber-200">
                 {authoring ? `${authoring.label} profile notes` : "Profile notes"} — advisory, review before approving:
               </p>
               <ul className="space-y-0.5">
                 {data.profileNotes.map((note, i) => (
-                  <li key={i} className="text-[11px] text-amber-100/80">• {note}</li>
+                  <li key={i} className="text-xs text-amber-100/80">• {note}</li>
                 ))}
               </ul>
             </div>
           )}
           {(plan.musicMood || plan.ducking) && (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               <span className="text-white/60">Audio direction:</span>{" "}
               {plan.musicMood ? <>music <span className="text-emerald-300">{plan.musicMood}</span>{" · "}</> : null}
               {plan.ducking ? <>ducking <span className="text-emerald-300">{plan.ducking}</span>{" · "}</> : null}
@@ -451,7 +451,7 @@ export function DirectorCard({
               return (
                 <span
                   key={s.sceneIndex}
-                  className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/4 px-2 py-0.5 text-[11px] text-white/70"
+                  className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/4 px-2 py-0.5 text-xs text-white/70"
                   title={`${s.shots.length} shot(s) · ${s.mood || "no mood"}${s.transitionIn ? ` · in: ${s.transitionIn}` : ""}${
                     s.needsI2V ? " · director suggests animating this scene (i2v)" : ""
                   }${s.useStock ? " · director suggests real-world stock footage" : ""}${
@@ -469,28 +469,28 @@ export function DirectorCard({
                   <span className="tf-num">{secs.toFixed(1)}s</span>
                   {s.transitionIn && <span className="ml-0.5 text-white/40">({s.transitionIn})</span>}
                   {s.needsI2V && (
-                    <span className="ml-0.5 rounded bg-violet-500/15 px-1 text-[10px] text-violet-200">i2v</span>
+                    <span className="ml-0.5 rounded bg-violet-500/15 px-1 text-xs text-violet-200">i2v</span>
                   )}
                   {s.useStock && (
-                    <span className="rounded bg-sky-500/15 px-1 text-[10px] text-sky-200">stock</span>
+                    <span className="rounded bg-sky-500/15 px-1 text-xs text-sky-200">stock</span>
                   )}
                   {s.motion !== "smart" && (
-                    <span className="rounded bg-white/8 px-1 text-[10px] text-white/55">{s.motion}</span>
+                    <span className="rounded bg-white/8 px-1 text-xs text-white/55">{s.motion}</span>
                   )}
                   {s.pacing !== "normal" && (
-                    <span className="rounded bg-amber-500/15 px-1 text-[10px] text-amber-200">↷{s.pacing}</span>
+                    <span className="rounded bg-amber-500/15 px-1 text-xs text-amber-200">↷{s.pacing}</span>
                   )}
                   {s.ambience !== "none" && (
-                    <span className="rounded bg-teal-500/15 px-1 text-[10px] text-teal-200">♫{s.ambience}</span>
+                    <span className="rounded bg-teal-500/15 px-1 text-xs text-teal-200">♫{s.ambience}</span>
                   )}
                   {s.sfx !== "none" && (
-                    <span className="rounded bg-fuchsia-500/15 px-1 text-[10px] text-fuchsia-200">{s.sfx}</span>
+                    <span className="rounded bg-fuchsia-500/15 px-1 text-xs text-fuchsia-200">{s.sfx}</span>
                   )}
                   {s.locations?.map((l) => (
-                    <span key={`loc-${l}`} className="rounded bg-lime-500/15 px-1 text-[10px] text-lime-200">⌖{l}</span>
+                    <span key={`loc-${l}`} className="rounded bg-lime-500/15 px-1 text-xs text-lime-200">⌖{l}</span>
                   ))}
                   {s.props?.map((p) => (
-                    <span key={`pr-${p}`} className="rounded bg-orange-500/15 px-1 text-[10px] text-orange-200">✦{p}</span>
+                    <span key={`pr-${p}`} className="rounded bg-orange-500/15 px-1 text-xs text-orange-200">✦{p}</span>
                   ))}
                 </span>
               );
@@ -536,7 +536,7 @@ export function DirectorCard({
           <div className="space-y-1.5">
             {data.consistency.scenes.map((c) => (
               <div key={c.sceneIndex} className="space-y-1">
-                <div className="flex items-center gap-2 text-[11px]">
+                <div className="flex items-center gap-2 text-xs">
                   <span className="tf-num w-8 text-white/70">S{c.sceneIndex}</span>
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/8">
                     {/* null score = nothing was checkable — a neutral empty bar,
@@ -559,7 +559,7 @@ export function DirectorCard({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 px-2 text-[11px]"
+                        className="h-6 px-2 text-xs"
                         disabled={storyGenerating}
                         onClick={() => onRepaintScene(c.sceneIndex)}
                       >
@@ -568,7 +568,7 @@ export function DirectorCard({
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 px-2 text-[11px]"
+                        className="h-6 px-2 text-xs"
                         disabled={storyGenerating}
                         onClick={() => {
                           setFixScene(fixScene === c.sceneIndex ? null : c.sceneIndex);
@@ -588,7 +588,7 @@ export function DirectorCard({
                       value={fixText}
                       onChange={(e) => setFixText(e.target.value)}
                       placeholder={`e.g. repaint scene ${c.sceneIndex} with the reference outfit and hair`}
-                      className="h-7 text-[11px]"
+                      className="h-7 text-xs"
                       maxLength={500}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && fixText.trim()) {
@@ -600,7 +600,7 @@ export function DirectorCard({
                     />
                     <Button
                       size="sm"
-                      className="h-7 px-2 text-[11px]"
+                      className="h-7 px-2 text-xs"
                       disabled={!fixText.trim() || storyGenerating}
                       onClick={() => {
                         onRepaintScene(c.sceneIndex, fixText.trim());
@@ -620,7 +620,7 @@ export function DirectorCard({
                 .filter((c) => c.issues.length > 0)
                 .flatMap((c) =>
                   c.issues.slice(0, 2).map((issue, i) => (
-                    <li key={`${c.sceneIndex}-${i}`} className="text-[11px] text-muted-foreground">
+                    <li key={`${c.sceneIndex}-${i}`} className="text-xs text-muted-foreground">
                       <span className="tf-num text-white/60">S{c.sceneIndex}</span> — {issue}
                     </li>
                   ))

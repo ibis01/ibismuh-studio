@@ -650,7 +650,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
           >
           {/* library palette — built-ins (client bundle) + uploads (wire) */}
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-white/40">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-white/40">
               Library — click to place {selAsset ? "· selected: " + selAsset : ""}
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -661,7 +661,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                     key={a.id}
                     onClick={() => addPlacement(a.id)}
                     title={a.tags.join(", ")}
-                    className={`rounded-md px-2 py-1 text-[11px] ${
+                    className={`rounded-md px-2 py-1 text-xs ${
                       placedAssets.some((pl) => pl.assetId === a.id)
                         ? "bg-white/15 text-white/70"
                         : "bg-white/5 text-white/80 hover:bg-white/15"
@@ -676,7 +676,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
           {/* S69 Phase C — uploads: the §7 gates' palette surface */}
           <div className="rounded-lg border border-white/10 bg-black/20 p-2.5">
             <div className="mb-1.5 flex items-center justify-between gap-2">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-white/40">
+              <p className="text-xs font-medium uppercase tracking-wide text-white/40">
                 Uploads — SVG / PNG / JPG (rasters trace to strokes)
               </p>
               <label className={`${btnGhost} cursor-pointer`} title="Upload an SVG, PNG or JPEG through the seven gates (rasters are traced into drawable strokes)">
@@ -694,7 +694,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
               </label>
             </div>
             {(data?.library ?? []).filter((a) => a.uploaded).length === 0 ? (
-              <p className="text-[11px] text-white/35">
+              <p className="text-xs text-white/35">
                 No uploads yet — add a drawing, logo or diagram you own the rights to.
               </p>
             ) : (
@@ -704,7 +704,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                   .map((a) => (
                     <div
                       key={a.id}
-                      className={`flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[11px] ${
+                      className={`flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs ${
                         placedAssets.some((pl) => pl.assetId === a.id)
                           ? "bg-white/15 text-white/80"
                           : "bg-white/5 text-white/80"
@@ -748,7 +748,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
           {/* placement inspector */}
           {selAsset && (
             <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-2.5">
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-cyan-200/70">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-cyan-200/70">
                 {selAsset} — {selEntry ? `${selEntry.w}×${selEntry.h} asset` : "placed"}
               </p>
               {(() => {
@@ -815,13 +815,13 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
 
           {/* events */}
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-white/40">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-white/40">
               Events — explicit timing is senior; the fill law schedules the unclaimed rest
             </p>
             <div className="space-y-1.5">
               {scene.animations.map((ev, i) => (
                 <div key={`${ev.type}-${i}`} className="flex flex-wrap items-center gap-2 rounded-md bg-black/20 px-2 py-1.5 text-xs">
-                  <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[10px] text-white/70">{ev.type}</span>
+                  <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-xs text-white/70">{ev.type}</span>
                   <span className="text-white/60">{ev.assetId}</span>
                   {ev.type === "draw_path" && <span className="font-mono text-white/50">{ev.pathId}</span>}
                   {ev.type === "write_text" && <span className="font-mono text-white/50">{ev.textId}</span>}
@@ -884,7 +884,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
 
           {/* camera keys */}
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-white/40">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-white/40">
               Camera keys — eased between keys; the permanent drift rides on top
             </p>
             <div className="space-y-1.5">
@@ -948,7 +948,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
               the hard wipe. Scene 1 has nothing to carry (the validator
               rejects it there, so the control disables itself). */}
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-white/40">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-white/40">
               Board — what this scene inherits from scene {sceneIndex}
             </p>
             <div className="flex flex-wrap items-center gap-2">
@@ -1017,13 +1017,13 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
               )}
             </div>
             {scene.board?.mode === "continuous" && sceneIndex > 0 && (
-              <p className="mt-1.5 text-[11px] text-white/40">
+              <p className="mt-1.5 text-xs text-white/40">
                 Carrying: {prevScenePlacements.length === 0 ? "nothing (the previous scene is empty)" : "all placements"}
                 {prevScenePlacements.length > 0 && " — an asset carried here cannot be placed or animated in this scene"}
               </p>
             )}
             {sceneIndex === 0 && (
-              <p className="mt-1.5 text-[11px] text-white/40">The first scene always starts on a clean board.</p>
+              <p className="mt-1.5 text-xs text-white/40">The first scene always starts on a clean board.</p>
             )}
           </div>
 
@@ -1033,7 +1033,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
               (profiles.ts law), so the selector is honest about what it
               changed via the report. */}
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-white/40">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-white/40">
               Production profile — the recipe behind hand, paper and board
             </p>
             <div className="flex flex-col gap-1.5">
@@ -1054,7 +1054,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                 ))}
               </select>
               {project.profile && (
-                <p className="text-[11px] leading-snug text-white/40">
+                <p className="text-xs leading-snug text-white/40">
                   {WHITEBOARD_PROFILES[project.profile as keyof typeof WHITEBOARD_PROFILES]?.description}
                 </p>
               )}
@@ -1064,7 +1064,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
           {/* W7 — hand + sound: the tool hand, its side, and the optional
               whiteboard SFX (off by default; audio-only). */}
           <div>
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-white/40">
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-white/40">
               Hand &amp; sound — the drawing hand and the pen foley
             </p>
             <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -1194,7 +1194,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
       {notice && <p className="text-xs text-emerald-300/90">{notice}</p>}
       {error && <p className="text-xs text-red-300">{error}</p>}
 
-      <p className="text-[11px] leading-relaxed text-white/40">
+      <p className="text-xs leading-relaxed text-white/40">
         rev {data?.rev ?? 0} · {sceneCount} scene{sceneCount === 1 ? "" : "s"} · {data?.library.length ?? 0} library
         assets ·{" "}
         {data?.voMs?.[scene.id]

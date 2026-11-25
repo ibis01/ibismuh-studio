@@ -88,7 +88,7 @@ function EaseSelect({
     <select
       value={value ?? "linear"}
       onChange={(e) => onCommit((e.target.value === "linear" ? undefined : e.target.value) as GraphicsEase | undefined)}
-      className="h-7 rounded-md border border-white/10 bg-white/5 px-1 text-[11px] text-white/85"
+      className="h-7 rounded-md border border-white/10 bg-white/5 px-1 text-xs text-white/85"
       aria-label={ariaLabel}
     >
       {EASE_NAMES.map((n) => (
@@ -115,7 +115,7 @@ function KindSelect({
     <select
       value={value}
       onChange={(e) => onCommit(e.target.value as GraphicsMotionKind)}
-      className="h-7 rounded-md border border-white/10 bg-white/5 px-1 text-[11px] text-white/85"
+      className="h-7 rounded-md border border-white/10 bg-white/5 px-1 text-xs text-white/85"
       aria-label={ariaLabel}
     >
       {legal.map((n) => (
@@ -154,7 +154,7 @@ export function GraphicsMotionPanel({
     const legalMotions = MOTION_KINDS_BY_ELEMENT[selected.kind];
     return (
       <div key={slot} className="flex flex-wrap items-center gap-1.5 rounded bg-white/4 px-2 py-1.5">
-        <span className="w-28 shrink-0 text-[10px] text-muted-foreground">{MOTION_SLOT_LABELS[slot]}</span>
+        <span className="w-28 shrink-0 text-xs text-muted-foreground">{MOTION_SLOT_LABELS[slot]}</span>
         {m ? (
           <>
             <KindSelect
@@ -196,7 +196,7 @@ export function GraphicsMotionPanel({
               <button
                 type="button"
                 disabled={disabled}
-                className="ml-auto rounded px-1.5 py-0.5 text-[10px] text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+                className="ml-auto rounded px-1.5 py-0.5 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-40"
                 onClick={() =>
                   onPatchElement(selected.id, (el) => {
                     const next = { ...el };
@@ -213,7 +213,7 @@ export function GraphicsMotionPanel({
           <button
             type="button"
             disabled={disabled}
-            className="rounded px-2 py-0.5 text-[10px] text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
+            className="rounded px-2 py-0.5 text-xs text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
             onClick={() =>
               onPatchElement(selected.id, (el) => ({
                 ...el,
@@ -232,14 +232,14 @@ export function GraphicsMotionPanel({
     <div className="mt-2 space-y-3 border-t border-white/10 pt-2" data-testid="graphics-motion-panel">
       {/* Insertion palette — the closed grammar, legal defaults per kind */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[10px] font-medium text-white/60">Add element</span>
+        <span className="text-xs font-medium text-white/60">Add element</span>
         {(["headline", "subhead", "bullet", "counter", "bar", "shape"] as const).map((k) => (
           <button
             key={k}
             type="button"
             disabled={disabled}
             onClick={() => onInsertElement(k)}
-            className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[10px] text-white/80 hover:border-white/25 disabled:opacity-40"
+            className="rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/80 hover:border-white/25 disabled:opacity-40"
           >
             + {k}
           </button>
@@ -248,7 +248,7 @@ export function GraphicsMotionPanel({
 
       {selected && legal ? (
         <div className="space-y-2">
-          <p className="text-[11px] font-medium text-white/80">Motion · {selected.id}</p>
+          <p className="text-xs font-medium text-white/80">Motion · {selected.id}</p>
           {motionSlot("enter")}
           {motionSlot("exit")}
           {motionSlot("emphasis")}
@@ -256,13 +256,13 @@ export function GraphicsMotionPanel({
           {/* Tween editor — S129 channels/keys over the scene clock */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-medium text-white/80">
+              <span className="text-xs font-medium text-white/80">
                 Tweens · {selected.tweens?.length ?? 0}
               </span>
               <button
                 type="button"
                 disabled={disabled}
-                className="rounded px-2 py-0.5 text-[10px] text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
+                className="rounded px-2 py-0.5 text-xs text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
                 onClick={() =>
                   onPatchElement(selected.id, (el) => ({
                     ...el,
@@ -279,7 +279,7 @@ export function GraphicsMotionPanel({
             {(selected.tweens ?? []).map((tw, ti) => (
               <div key={ti} className="space-y-1 rounded bg-white/4 px-2 py-1.5">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] text-white/50">window</span>
+                  <span className="text-xs text-white/50">window</span>
                   <Num
                     value={tw.delayMs}
                     min={0}
@@ -305,7 +305,7 @@ export function GraphicsMotionPanel({
                   <button
                     type="button"
                     disabled={disabled}
-                    className="ml-auto rounded px-1.5 py-0.5 text-[10px] text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+                    className="ml-auto rounded px-1.5 py-0.5 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-40"
                     onClick={() =>
                       onPatchElement(selected.id, (el) => ({
                         ...el,
@@ -335,7 +335,7 @@ export function GraphicsMotionPanel({
                           ),
                         }))
                       }
-                      className="h-6 rounded border border-white/10 bg-white/5 px-1 text-[10px] text-white/85"
+                      className="h-6 rounded border border-white/10 bg-white/5 px-1 text-xs text-white/85"
                       aria-label={`tween ${ti + 1} channel ${ci + 1}`}
                     >
                       {TWEEN_CHANNELS.map((c) => (
@@ -419,7 +419,7 @@ export function GraphicsMotionPanel({
                     <button
                       type="button"
                       disabled={disabled}
-                      className="rounded px-1.5 py-0.5 text-[10px] text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
+                      className="rounded px-1.5 py-0.5 text-xs text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
                       onClick={() =>
                         onPatchElement(selected.id, (el) => ({
                           ...el,
@@ -443,7 +443,7 @@ export function GraphicsMotionPanel({
                     <button
                       type="button"
                       disabled={disabled}
-                      className="rounded px-1.5 py-0.5 text-[10px] text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+                      className="rounded px-1.5 py-0.5 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-40"
                       onClick={() =>
                         onPatchElement(selected.id, (el) => ({
                           ...el,
@@ -460,7 +460,7 @@ export function GraphicsMotionPanel({
                 <button
                   type="button"
                   disabled={disabled}
-                  className="rounded px-2 py-0.5 text-[10px] text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
+                  className="rounded px-2 py-0.5 text-xs text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
                   onClick={() =>
                     onPatchElement(selected.id, (el) => ({
                       ...el,
@@ -477,7 +477,7 @@ export function GraphicsMotionPanel({
           </div>
         </div>
       ) : (
-        <p className="text-[10px] text-white/40">
+        <p className="text-xs text-white/40">
           Pick an element above — its motions, eases and tweens live here.
         </p>
       )}
@@ -485,14 +485,14 @@ export function GraphicsMotionPanel({
       {/* Scene camera keys — S130, the CAMERA_BOUNDS pins surfaced */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-medium text-white/80">
+          <span className="text-xs font-medium text-white/80">
             Scene camera · {scene.camera?.length ?? 0} keys
             <span className="ml-1 text-white/40">(zoom {CAMERA_BOUNDS.zoomMin}–{CAMERA_BOUNDS.zoomMax})</span>
           </span>
           <button
             type="button"
             disabled={disabled}
-            className="rounded px-2 py-0.5 text-[10px] text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
+            className="rounded px-2 py-0.5 text-xs text-sky-300 hover:bg-sky-500/10 disabled:opacity-40"
             onClick={() =>
               onPatchScene((s) => ({
                 ...s,
@@ -569,7 +569,7 @@ export function GraphicsMotionPanel({
             <button
               type="button"
               disabled={disabled}
-              className="ml-auto rounded px-1.5 py-0.5 text-[10px] text-red-300 hover:bg-red-500/10 disabled:opacity-40"
+              className="ml-auto rounded px-1.5 py-0.5 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-40"
               onClick={() =>
                 onPatchScene((s) => ({ ...s, camera: (s.camera ?? []).filter((_, j) => j !== i) }))
               }

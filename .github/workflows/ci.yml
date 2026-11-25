@@ -291,6 +291,13 @@ jobs:
       - name: Plan contracts (envelope + audio receipt + timeline)
         run: npm run test:plan-contracts
 
+      # The 12px floor law (docs/design/tf-naming-policy.md §3): the 714
+      # sub-12px arbitrary font-size utilities found by the typography
+      # census are paid, and this suite keeps them paid — no text-[9px] /
+      # text-[10px] / text-[11px] class may return under src/.
+      - name: Typography scale (12px floor law)
+        run: npm run test:typography-scale
+
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes
       # → print the measured RTO. "A backup that has never been restored is

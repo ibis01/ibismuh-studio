@@ -103,7 +103,7 @@ export default function LoginPage() {
             <h1 className="mt-4 text-2xl font-bold tracking-tight">
               Ibismuh <span className="text-gradient">Studio</span>
             </h1>
-            <p className="mt-1.5 text-[10px] uppercase tracking-[0.35em] text-muted-foreground">
+            <p className="mt-1.5 text-xs uppercase tracking-[0.35em] text-muted-foreground">
               Ideas → Videos → Impact
             </p>
           </div>
@@ -164,7 +164,7 @@ export default function LoginPage() {
         </div>
         </div>
 
-        <p className="mt-4 text-center text-[11px] text-muted-foreground leading-relaxed">
+        <p className="mt-4 text-center text-xs text-muted-foreground leading-relaxed">
           The code is the <code className="text-foreground">IBISMUH_STUDIO_ACCESS_TOKEN</code> value
           in your <code className="text-foreground">.env</code> file.
         </p>

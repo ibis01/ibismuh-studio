@@ -196,7 +196,7 @@ export function AnalyticsView() {
             <p className="text-sm font-medium truncate">
               {yt?.channelTitle ?? "YouTube channel"}
             </p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {data.lastSyncAt ? `Last sync ${timeAgo(data.lastSyncAt)}` : "Not synced yet"}
               {yt?.connected ? "" : " · channel not connected"}
             </p>
@@ -276,7 +276,7 @@ export function AnalyticsView() {
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">{row.title}</p>
-                  <p className="text-[11px] text-muted-foreground flex items-center gap-2">
+                  <p className="text-xs text-muted-foreground flex items-center gap-2">
                     <span>{formatNum(row.views)} views</span>
                     {row.viewDelta > 0 && (
                       <span className="text-emerald-300 inline-flex items-center gap-0.5">
@@ -313,13 +313,13 @@ export function AnalyticsView() {
               <div className="flex items-end gap-2 h-40">
                 {data.series.map((point) => (
                   <div key={point.day} className="flex-1 flex flex-col items-center gap-1.5 min-w-0">
-                    <span className="text-[10px] text-muted-foreground tabular-nums">{formatNum(point.views)}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums">{formatNum(point.views)}</span>
                     <div
                       className="w-full rounded-t-md bg-brand-gradient"
                       style={{ height: `${Math.max(4, (point.views / maxSeries) * 100)}%` }}
                       title={`${point.day}: ${point.views.toLocaleString()} cumulative views`}
                     />
-                    <span className="text-[9px] text-muted-foreground/70 truncate w-full text-center">
+                    <span className="text-xs text-muted-foreground/70 truncate w-full text-center">
                       {point.day.slice(5)}
                     </span>
                   </div>
@@ -339,11 +339,11 @@ export function AnalyticsView() {
                 Performance feedback loop
               </h3>
               {data.feedback.active ? (
-                <Badge variant="outline" className="border-emerald-500/25 bg-emerald-500/10 text-emerald-200 text-[10px]">
+                <Badge variant="outline" className="border-emerald-500/25 bg-emerald-500/10 text-emerald-200 text-xs">
                   active
                 </Badge>
               ) : (
-                <Badge variant="outline" className="border-amber-500/25 bg-amber-500/10 text-amber-200 text-[10px]">
+                <Badge variant="outline" className="border-amber-500/25 bg-amber-500/10 text-amber-200 text-xs">
                   warming up
                 </Badge>
               )}
@@ -355,7 +355,7 @@ export function AnalyticsView() {
             </p>
             {data.feedback.winners.length > 0 && (
               <div className="mt-3 space-y-1.5">
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
                   Feeding the loop
                 </p>
                 {data.feedback.winners.slice(0, 3).map((w) => (
@@ -369,7 +369,7 @@ export function AnalyticsView() {
             {data.feedback.topKeywords.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {data.feedback.topKeywords.map((k) => (
-                  <Badge key={k} variant="outline" className="border-primary/25 bg-primary/10 text-cyan-200 text-[10px]">
+                  <Badge key={k} variant="outline" className="border-primary/25 bg-primary/10 text-cyan-200 text-xs">
                     {k}
                   </Badge>
                 ))}
@@ -393,12 +393,12 @@ export function AnalyticsView() {
                 <h3 className="text-sm font-semibold">Niche trends</h3>
                 <Badge
                   variant="outline"
-                  className="border-white/15 bg-white/5 text-muted-foreground text-[10px]"
+                  className="border-white/15 bg-white/5 text-muted-foreground text-xs"
                 >
                   {data.niches.length} niche{data.niches.length === 1 ? "" : "s"} tracked
                 </Badge>
               </div>
-              <p className="text-[11px] text-muted-foreground mb-3">
+              <p className="text-xs text-muted-foreground mb-3">
                 Where your views actually come from — lean into the leaders.
               </p>
               <div className="space-y-2.5">
@@ -408,7 +408,7 @@ export function AnalyticsView() {
                     <div key={n.niche}>
                       <div className="flex items-baseline justify-between gap-2">
                         <p className="text-xs font-medium truncate">{n.niche}</p>
-                        <p className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+                        <p className="text-xs text-muted-foreground tabular-nums shrink-0">
                           {formatNum(n.views)} views · {(n.engagement * 100).toFixed(1)}% eng ·{" "}
                           {n.videos} video{n.videos === 1 ? "" : "s"}
                         </p>

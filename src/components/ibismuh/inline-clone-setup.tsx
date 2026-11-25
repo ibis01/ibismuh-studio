@@ -70,7 +70,7 @@ export function InlineCloneSetup({ hint }: { hint?: string }) {
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center justify-between text-left"
       >
-        <span className="text-[11px] leading-relaxed text-amber-200/95">
+        <span className="text-xs leading-relaxed text-amber-200/95">
           {hint ?? "Set up your self-hosted voice server to synthesize cloned voices."}
         </span>
         {open ? (
@@ -119,14 +119,14 @@ export function InlineCloneSetup({ hint }: { hint?: string }) {
             {saving ? "Saving…" : "Save server"}
           </Button>
           {err && (
-            <p className="text-[10px] leading-relaxed text-red-300/90" role="alert">
+            <p className="text-xs leading-relaxed text-red-300/90" role="alert">
               {err}
             </p>
           )}
           {ok && (
-            <p className="text-[10px] leading-relaxed text-emerald-300/90">{ok}</p>
+            <p className="text-xs leading-relaxed text-emerald-300/90">{ok}</p>
           )}
-          <p className="text-[10px] leading-relaxed text-muted-foreground">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Saved under the <b>self-hosted</b> provider — your active voiceover stays
             unchanged. Cloned voices route to this server at synthesis time.
           </p>

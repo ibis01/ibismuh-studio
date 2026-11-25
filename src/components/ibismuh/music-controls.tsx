@@ -254,7 +254,7 @@ export function MusicPickerCard({
           <div className="min-w-0">
             <p className="text-sm font-medium leading-none">Background music</p>
             {!compact && (
-              <p className="text-[11px] text-muted-foreground mt-1 truncate">
+              <p className="text-xs text-muted-foreground mt-1 truncate">
                 {pinned
                   ? `Pinned: ${pinned.name}`
                   : effectiveEnabled
@@ -333,7 +333,7 @@ export function MusicPickerCard({
             {/* Story mood — steers the AUTO track pick (hidden when pinned). */}
             {!pinned && (
               <div className="flex items-center gap-3">
-                <span className="text-[11px] text-muted-foreground w-14 shrink-0">Mood</span>
+                <span className="text-xs text-muted-foreground w-14 shrink-0">Mood</span>
                 <Select
                   value={value.mood ?? "auto"}
                   onValueChange={(v) => onChange({ ...value, mood: v === "auto" ? null : v })}
@@ -354,7 +354,7 @@ export function MusicPickerCard({
             )}
 
             <div className="flex items-center gap-3">
-              <span className="text-[11px] text-muted-foreground w-14 shrink-0">Volume</span>
+              <span className="text-xs text-muted-foreground w-14 shrink-0">Volume</span>
               <Slider
                 value={[Math.round((value.volume ?? settings?.volume ?? 0.5) * 100)]}
                 min={0}
@@ -364,14 +364,14 @@ export function MusicPickerCard({
                 aria-label="Music volume"
                 className="flex-1"
               />
-              <span className="text-[11px] w-8 text-right tabular-nums">
+              <span className="text-xs w-8 text-right tabular-nums">
                 {Math.round((value.volume ?? settings?.volume ?? 0.5) * 100)}%
               </span>
             </div>
 
             {/* Auto-ducking — the bed dips while the narrator speaks. */}
             <div className="flex items-center gap-3">
-              <span className="text-[11px] text-muted-foreground w-14 shrink-0">Ducking</span>
+              <span className="text-xs text-muted-foreground w-14 shrink-0">Ducking</span>
               <Switch
                 checked={effectiveDucking}
                 onCheckedChange={(v) => onChange({ ...value, ducking: v })}
@@ -385,7 +385,7 @@ export function MusicPickerCard({
                       type="button"
                       onClick={() => onChange({ ...value, duckingIntensity: l.id })}
                       aria-pressed={effectiveIntensity === l.id}
-                      className={`px-2 py-0.5 text-[10px] rounded-md transition-colors ${
+                      className={`px-2 py-0.5 text-xs rounded-md transition-colors ${
                         effectiveIntensity === l.id
                           ? "bg-primary/20 text-primary"
                           : "text-muted-foreground hover:text-foreground"
@@ -400,7 +400,7 @@ export function MusicPickerCard({
 
             {!compact && (
               <div className="flex items-center gap-3">
-                <span className="text-[11px] text-muted-foreground w-14 shrink-0">Fade in/out</span>
+                <span className="text-xs text-muted-foreground w-14 shrink-0">Fade in/out</span>
                 <Slider
                   value={[
                     value.fadeIn ?? settings?.fadeInSec ?? 1.5,
@@ -413,7 +413,7 @@ export function MusicPickerCard({
                   aria-label="Fade in and out seconds"
                   className="flex-1"
                 />
-                <span className="text-[11px] w-14 text-right tabular-nums">
+                <span className="text-xs w-14 text-right tabular-nums">
                   {(value.fadeIn ?? settings?.fadeInSec ?? 1.5).toFixed(1)}/{(value.fadeOut ?? settings?.fadeOutSec ?? 2.5).toFixed(1)}s
                 </span>
               </div>
@@ -424,14 +424,14 @@ export function MusicPickerCard({
             <div className="flex items-center gap-2 pt-0.5">
               <MixPreviewButton videoId={videoId} disabled={!canPreview} />
               {!canPreview && (
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   Generate the voiceover first
                 </span>
               )}
             </div>
           )}
 
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Every track carries a license record — originals are synthesized in-app (zero Content ID risk).
             {pinned?.license.attributionRequired && pinned.license.attributionText
               ? ` This track needs credit: “${pinned.license.attributionText}”`

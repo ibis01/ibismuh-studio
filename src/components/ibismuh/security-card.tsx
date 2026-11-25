@@ -564,11 +564,11 @@ export function SecurityAccessCard() {
 
           {tkFresh && (
             <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-              <p className="text-[11px] text-amber-300 mb-1.5">
+              <p className="text-xs text-amber-300 mb-1.5">
                 {tkFresh.name ? `“${tkFresh.name}”` : "New token"} — shown once, store it now:
               </p>
               <div className="flex items-center gap-2">
-                <code className="flex-1 min-w-0 truncate font-mono text-[11px] text-amber-200">
+                <code className="flex-1 min-w-0 truncate font-mono text-xs text-amber-200">
                   {tkFresh.token}
                 </code>
                 <Button
@@ -590,9 +590,9 @@ export function SecurityAccessCard() {
 
           <div className="mt-3 space-y-2">
             {tokens === null ? (
-              <p className="text-[11px] text-muted-foreground">Loading tokens…</p>
+              <p className="text-xs text-muted-foreground">Loading tokens…</p>
             ) : tokens.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground">No tokens yet — mint one for CLI or script access.</p>
+              <p className="text-xs text-muted-foreground">No tokens yet — mint one for CLI or script access.</p>
             ) : (
               tokens.map((t) => (
                 <div
@@ -601,7 +601,7 @@ export function SecurityAccessCard() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-medium truncate">{t.name || "Unnamed token"}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       created {new Date(t.createdAt).toLocaleDateString()}
                       {" · "}
                       {t.revokedAt
@@ -614,7 +614,7 @@ export function SecurityAccessCard() {
                     </p>
                   </div>
                   {t.revokedAt ? (
-                    <span className="text-[10px] text-muted-foreground shrink-0">revoked</span>
+                    <span className="text-xs text-muted-foreground shrink-0">revoked</span>
                   ) : (
                     <Button
                       size="sm"
@@ -633,7 +633,7 @@ export function SecurityAccessCard() {
       )}
 
       {on && hasPassword && (
-        <p className="flex items-start gap-1.5 text-[11px] text-muted-foreground mt-4">
+        <p className="flex items-start gap-1.5 text-xs text-muted-foreground mt-4">
           <TerminalSquare className="h-3.5 w-3.5 shrink-0 mt-px" />
           <span>
             Locked out on another device? Run <code className="text-foreground/80">bun run auth:reset</code> on the

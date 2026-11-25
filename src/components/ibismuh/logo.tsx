@@ -42,7 +42,7 @@ export function IbismuhWordmark() {
       <p className="font-semibold leading-tight">
         Ibismuh <span className="text-gradient">Studio</span>
       </p>
-      <p className="text-[11px] text-muted-foreground">AI Video Studio</p>
+      <p className="text-xs text-muted-foreground">AI Video Studio</p>
     </div>
   );
 }

@@ -246,7 +246,7 @@ export function CommandPalette() {
             )}
           </div>
 
-          <div className="flex items-center justify-between px-4 h-10 border-t border-white/8 text-[11px] text-white/40">
+          <div className="flex items-center justify-between px-4 h-10 border-t border-white/8 text-xs text-white/40">
             <span className="flex items-center gap-1.5">
               <Kbd>↑</Kbd>
               <Kbd>↓</Kbd> navigate <Kbd>↵</Kbd> open

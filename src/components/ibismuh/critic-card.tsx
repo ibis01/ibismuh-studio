@@ -306,7 +306,7 @@ export function CriticCard({
   return (
     <div className="rounded-xl border border-white/10 bg-white/3 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+        <p className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground font-medium">
           <Drama className="h-3.5 w-3.5 text-primary shrink-0" />
           Video critic
           {report && (
@@ -318,7 +318,7 @@ export function CriticCard({
         </p>
         <div className="flex items-center gap-2">
           {v && (
-            <Badge variant="outline" className={clsx("text-[10px]", v.badge)}>
+            <Badge variant="outline" className={clsx("text-xs", v.badge)}>
               <v.icon className="h-2.5 w-2.5 mr-1" />
               {report?.verdict === "hold" && holds > 0
                 ? `Hold · ${holds} dimension${holds > 1 ? "s" : ""} flagged`
@@ -328,7 +328,7 @@ export function CriticCard({
           <Button
             variant="outline"
             size="sm"
-            className="h-6 text-[10px] px-2 border-white/15 bg-white/4"
+            className="h-6 text-xs px-2 border-white/15 bg-white/4"
             disabled={busy || disabled || !hasVideo || !report}
             onClick={() => void runCritic()}
             title={
@@ -348,7 +348,7 @@ export function CriticCard({
       {/* The report — a verdict for the human, never a new gate (S84 §0.4). */}
       {report ? (
         <>
-          <p className="mt-1.5 text-[11px] text-muted-foreground">
+          <p className="mt-1.5 text-xs text-muted-foreground">
             Judges the rendered cut as a story: the QC battery (technical / motion /
             audio), the consistency report, and one fail-open VLM pass over sampled
             frames (narrative / visual). Advisory — the ship gate stays the QC policy&apos;s.
@@ -375,26 +375,26 @@ export function CriticCard({
                     <p className="text-xs font-semibold flex-1 min-w-0 truncate">
                       {DIMENSION_LABELS[d.id]}
                     </p>
-                    <span className="text-[9px] uppercase tracking-wide text-muted-foreground/70 shrink-0">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground/70 shrink-0">
                       {SOURCE_LABELS[d.source]}
                     </span>
                   </div>
                   {d.issues.length > 0 && (
                     <ul className="mt-1.5 space-y-0.5">
                       {d.issues.slice(0, 3).map((issue, i) => (
-                        <li key={i} className="text-[10px] text-foreground/75 leading-snug">
+                        <li key={i} className="text-xs text-foreground/75 leading-snug">
                           {issue}
                         </li>
                       ))}
                       {d.issues.length > 3 && (
-                        <li className="text-[10px] text-muted-foreground">
+                        <li className="text-xs text-muted-foreground">
                           +{d.issues.length - 3} more
                         </li>
                       )}
                     </ul>
                   )}
                   {d.evidence.length > 0 && (
-                    <p className="mt-1 text-[9px] text-muted-foreground/60 truncate" title={d.evidence.join(" · ")}>
+                    <p className="mt-1 text-xs text-muted-foreground/60 truncate" title={d.evidence.join(" · ")}>
                       {d.evidence.slice(0, 3).join(" · ")}
                     </p>
                   )}
@@ -409,7 +409,7 @@ export function CriticCard({
               unmeasured dimensions ask for evidence, not repair. */}
           {report.proposals.length > 0 && (
             <div className="mt-3">
-              <p className="text-[11px] font-semibold mb-1.5">
+              <p className="text-xs font-semibold mb-1.5">
                 Proposed repairs{" "}
                 <span className="text-muted-foreground font-normal">
                   — one click through the existing tools; nothing regenerates without you
@@ -428,10 +428,10 @@ export function CriticCard({
                           ? onRerender
                           : undefined;
                   return (
-                    <li key={i} className="flex items-start gap-2 text-[11px]">
+                    <li key={i} className="flex items-start gap-2 text-xs">
                       <Badge
                         variant="outline"
-                        className="text-[9px] h-4 px-1.5 shrink-0 mt-0.5 border-white/15 bg-white/5 text-muted-foreground"
+                        className="text-xs h-4 px-1.5 shrink-0 mt-0.5 border-white/15 bg-white/5 text-muted-foreground"
                       >
                         {p.dimension}
                       </Badge>
@@ -440,7 +440,7 @@ export function CriticCard({
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-5 px-2 text-[10px] shrink-0 border-white/15 bg-white/4"
+                          className="h-5 px-2 text-xs shrink-0 border-white/15 bg-white/4"
                           disabled={disabled && action.kind !== "storyboard"}
                           onClick={fire}
                           title={action.title}
@@ -460,12 +460,12 @@ export function CriticCard({
               never a silent pass, never a silent block. */}
           {report.engine.unavailable.length > 0 && (
             <div className="mt-3">
-              <p className="text-[10px] text-muted-foreground/80 font-medium mb-1">
+              <p className="text-xs text-muted-foreground/80 font-medium mb-1">
                 Not measured (honest gaps — the verdict above accounts for them):
               </p>
               <ul className="space-y-0.5">
                 {report.engine.unavailable.slice(0, 4).map((u, i) => (
-                  <li key={i} className="text-[10px] text-muted-foreground/70 leading-snug">
+                  <li key={i} className="text-xs text-muted-foreground/70 leading-snug">
                     {u}
                   </li>
                 ))}
@@ -475,7 +475,7 @@ export function CriticCard({
         </>
       ) : (
         <div className="mt-2">
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             {hasVideo ? (
               <>
                 The critic hasn&apos;t judged this cut yet. It reads the standing QC
@@ -491,7 +491,7 @@ export function CriticCard({
           {hasVideo && (
             <Button
               size="sm"
-              className="mt-2.5 bg-brand-gradient hover:opacity-90 text-white font-semibold h-7 text-[11px]"
+              className="mt-2.5 bg-brand-gradient hover:opacity-90 text-white font-semibold h-7 text-xs"
               disabled={busy || disabled}
               onClick={() => void runCritic()}
             >
@@ -504,7 +504,7 @@ export function CriticCard({
 
       {/* The job's last recorded error — surfaced, never swallowed. */}
       {jobError && (
-        <p className="mt-2 text-[11px] text-red-300 bg-red-500/8 border border-red-500/20 rounded-lg px-3 py-1.5">
+        <p className="mt-2 text-xs text-red-300 bg-red-500/8 border border-red-500/20 rounded-lg px-3 py-1.5">
           {jobError}
         </p>
       )}

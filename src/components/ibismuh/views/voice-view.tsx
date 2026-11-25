@@ -483,10 +483,10 @@ export function VoiceView() {
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5 shrink-0">
-          <Badge variant="outline" className="border-white/15 bg-white/5 text-zinc-300 text-[11px]">
+          <Badge variant="outline" className="border-white/15 bg-white/5 text-zinc-300 text-xs">
             {PROVIDER_LABELS[provider] ?? provider}
           </Badge>
-          <Badge variant="outline" className="border-white/15 bg-white/5 text-zinc-300 text-[11px]">
+          <Badge variant="outline" className="border-white/15 bg-white/5 text-zinc-300 text-xs">
             {studioCount} studio · {cloneCount} cloned
           </Badge>
         </div>
@@ -494,7 +494,7 @@ export function VoiceView() {
 
       {/* Catalog grid */}
       <div>
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-3 px-1">
+        <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-3 px-1">
           Narration voices
         </p>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -516,7 +516,7 @@ export function VoiceView() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-sm truncate">{displayName}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="text-xs text-muted-foreground truncate">
                       {isClone
                         ? `Clone · ${profile.sourceLabel ?? "sample"}${
                             profile.durationSec ? ` · ${profile.durationSec.toFixed(0)}s` : ""
@@ -527,7 +527,7 @@ export function VoiceView() {
                   {isDefault && (
                     <Badge
                       variant="outline"
-                      className="border-amber-500/30 bg-amber-500/10 text-amber-200 text-[10px] shrink-0"
+                      className="border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs shrink-0"
                       title="This voice pre-fills every new video in Create"
                     >
                       <Star className="h-2.5 w-2.5 mr-1 fill-current" />
@@ -542,7 +542,7 @@ export function VoiceView() {
                       <Badge
                         key={c.id}
                         variant="outline"
-                        className="border-white/10 bg-white/4 text-muted-foreground text-[10px]"
+                        className="border-white/10 bg-white/4 text-muted-foreground text-xs"
                         title={`${c.name} narrates with this voice`}
                       >
                         <Users className="h-2.5 w-2.5 mr-1" />
@@ -575,7 +575,7 @@ export function VoiceView() {
                     {isLoading ? "Synthesizing…" : isPlaying ? "Playing" : "Audition"}
                   </Button>
                   {isDefault ? (
-                    <span className="inline-flex items-center gap-1 text-[11px] text-amber-200/90 px-1.5">
+                    <span className="inline-flex items-center gap-1 text-xs text-amber-200/90 px-1.5">
                       <Check className="h-3 w-3" />
                       Default
                     </span>
@@ -602,7 +602,7 @@ export function VoiceView() {
           })}
         </div>
         {previewError && (
-          <p className="text-[11px] leading-relaxed text-red-400/90 mt-3 px-1" role="alert">
+          <p className="text-xs leading-relaxed text-red-400/90 mt-3 px-1" role="alert">
             {previewError}
           </p>
         )}
@@ -616,7 +616,7 @@ export function VoiceView() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-sm">Pronunciation</p>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               Teach the narrator tricky words — applied server-side to every narration,
               preview and clone, in every video.
             </p>
@@ -624,7 +624,7 @@ export function VoiceView() {
           {pronEntries.length > 0 && (
             <Badge
               variant="outline"
-              className="border-white/15 bg-white/5 text-zinc-300 text-[10px] shrink-0"
+              className="border-white/15 bg-white/5 text-zinc-300 text-xs shrink-0"
             >
               {pronEntries.length} override{pronEntries.length === 1 ? "" : "s"}
             </Badge>
@@ -636,7 +636,7 @@ export function VoiceView() {
             {pronEntries.map((e) => (
               <span
                 key={e.from}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/4 pl-2.5 pr-1.5 py-1 text-[11px]"
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/4 pl-2.5 pr-1.5 py-1 text-xs"
               >
                 <span className="text-foreground/90">{e.from}</span>
                 <span className="text-muted-foreground/70">→</span>
@@ -734,7 +734,7 @@ export function VoiceView() {
           </div>
           <div>
             <p className="font-semibold text-sm">Clone a voice</p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               3–30s of clean speech becomes a reusable narration voice
             </p>
           </div>
@@ -751,7 +751,7 @@ export function VoiceView() {
           </div>
         )}
         {cloneStatus !== "unknown" && cloneHint && (
-          <p className="text-[10px] leading-relaxed text-sky-300/80 mt-2">{cloneHint}</p>
+          <p className="text-xs leading-relaxed text-sky-300/80 mt-2">{cloneHint}</p>
         )}
         <div className="mt-4 space-y-3">
           <div className="inline-flex rounded-lg border border-white/10 bg-white/3 p-0.5" role="group" aria-label="Sample source">
@@ -884,7 +884,7 @@ export function VoiceView() {
               {cloning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
               {cloning ? "Cloning the voice…" : "Clone this voice"}
             </Button>
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               The sample becomes a reusable narration voice in every picker. Only clone voices you
               own or have permission to use.
             </p>
@@ -896,7 +896,7 @@ export function VoiceView() {
         <Card className="glass border-white/8 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold">Your cloned voices</p>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {profiles.length} total · audition plays the clone-time preview
             </span>
           </div>
@@ -943,7 +943,7 @@ export function VoiceView() {
                       <span className="text-amber-200/90"> · default narrator</span>
                     )}
                   </p>
-                  <p className="text-[10px] text-muted-foreground truncate">
+                  <p className="text-xs text-muted-foreground truncate">
                     {p.sourceLabel ?? "sample"}
                     {p.durationSec ? ` · ${p.durationSec.toFixed(0)}s` : ""} ·{" "}
                     {PROVIDER_LABELS[p.provider] ?? p.provider}

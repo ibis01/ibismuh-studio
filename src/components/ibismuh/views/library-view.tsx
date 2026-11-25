@@ -211,13 +211,13 @@ export function LibraryView() {
                   <div className="absolute bottom-2.5 left-3 right-3 flex items-center gap-2 flex-wrap">
                     <StatusBadge status={v.status} />
                     {v.hasVideo && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/80 backdrop-blur px-2 py-0.5 text-[11px] text-white font-medium">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/80 backdrop-blur px-2 py-0.5 text-xs text-white font-medium">
                         <Clapperboard className="h-3 w-3" />
                         MP4
                       </span>
                     )}
                     {v.hasVoiceover && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-black/60 backdrop-blur px-2 py-0.5 text-[11px] text-white/85">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-black/60 backdrop-blur px-2 py-0.5 text-xs text-white/85">
                         <AudioLines className="h-3 w-3" />
                         {formatDuration(v.audioDuration)}
                       </span>
@@ -232,7 +232,7 @@ export function LibraryView() {
                       <p className="font-medium leading-snug line-clamp-2 group-hover:text-cyan-200 transition-colors">
                         {v.title ?? v.topic}
                       </p>
-                      <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                      <p className="text-xs text-muted-foreground mt-1 truncate">
                         {v.niche} · {v.wordCount ?? 0}w · {timeAgo(v.createdAt)}
                         {v.channelName ? ` · ${v.channelName}` : ""}
                       </p>

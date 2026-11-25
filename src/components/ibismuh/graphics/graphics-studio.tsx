@@ -580,7 +580,7 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
         voMsBySceneId={data?.voMs}
       />
       {missingImports.length > 0 && (
-        <p className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-400/25 rounded-lg px-3 py-2">
+        <p className="text-xs text-amber-300 bg-amber-500/10 border border-amber-400/25 rounded-lg px-3 py-2">
           Unresolved sprite imports: {missingImports.join(", ")} — upload them through the import lane or remove the sprites (the render refuses on them).
         </p>
       )}
@@ -610,7 +610,7 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
         <span className="text-xs tabular-nums text-white/70">
           {(tMs / 1000).toFixed(1)}s / {(totalMs / 1000).toFixed(1)}s
         </span>
-        <span className="text-[10px] text-white/40">
+        <span className="text-xs text-white/40">
           scene {activeSceneIndex + 1}/{buffer.scenes.length} · {buffer.width}×{buffer.height} @ {buffer.fps}fps
         </span>
       </div>

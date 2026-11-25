@@ -208,10 +208,10 @@ export function ProductionBoard({
                 title={s.detail ?? s.state}
               >
                 <span className={`h-1.5 w-1.5 rounded-full ${STAGE_DOT[s.state]}`} />
-                <span className="text-[11px] text-zinc-300">{s.label}</span>
+                <span className="text-xs text-zinc-300">{s.label}</span>
                 {s.state === "running" && <Loader2 className="h-3 w-3 animate-spin text-primary" />}
                 {s.detail && (
-                  <span className="text-[10px] text-muted-foreground">{s.detail}</span>
+                  <span className="text-xs text-muted-foreground">{s.detail}</span>
                 )}
               </button>
             </div>
@@ -225,7 +225,7 @@ export function ProductionBoard({
           {attention.map((c) => (
             <span
               key={c.id}
-              className="inline-flex items-center gap-1 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-200"
+              className="inline-flex items-center gap-1 rounded-lg border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-200"
             >
               <AlertTriangle className="h-3 w-3" />
               {c.label}: {c.detail}
@@ -240,7 +240,7 @@ export function ProductionBoard({
           {visibleCheckpoints.map((c) => (
             <span
               key={c.id}
-              className="inline-flex items-center gap-1 text-[10px] text-muted-foreground"
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground"
               title={c.detail}
             >
               {c.state === "ok" ? (
@@ -258,7 +258,7 @@ export function ProductionBoard({
         </div>
         {data.costs.video.spendMicroUsd > 0 && (
           <span
-            className="text-[10px] text-foreground/80"
+            className="text-xs text-foreground/80"
             title={
               data.costs.video.ceilingMicroUsd != null
                 ? `This video's metered AI spend (the UsageRecord bridge), against its ${dollars(data.costs.video.ceilingMicroUsd)} ceiling`
@@ -272,7 +272,7 @@ export function ProductionBoard({
         )}
         {data.costs.totalCalls > 0 && (
           <span
-            className="text-[10px] text-muted-foreground"
+            className="text-xs text-muted-foreground"
             title={`${data.costs.totalCalls} AI calls, ${data.costs.failedCalls} failed · ${topLanes}`}
           >
             {dollars(data.costs.totalMicroUsd)} org AI spend · {data.costs.totalCalls} calls (
@@ -286,7 +286,7 @@ export function ProductionBoard({
         <button
           type="button"
           onClick={() => setShowHistory((v) => !v)}
-          className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronDown className={`h-3 w-3 transition-transform ${showHistory ? "" : "-rotate-90"}`} />
           Production history · {data.history.length} events
@@ -294,14 +294,14 @@ export function ProductionBoard({
         {history.length > 0 && (
           <div className="mt-1.5 space-y-0.5">
             {history.map((h) => (
-              <div key={h.id} className="flex items-start gap-2 text-[11px] leading-relaxed">
+              <div key={h.id} className="flex items-start gap-2 text-xs leading-relaxed">
                 <span
                   className={`mt-1 h-1 w-1 rounded-full shrink-0 ${
                     h.level === "warn" || h.level === "error" ? "bg-amber-400" : "bg-zinc-600"
                   }`}
                 />
                 <span className="text-zinc-400 min-w-0 flex-1">{h.message}</span>
-                <span className="text-[10px] text-zinc-600 shrink-0">{timeAgo(h.createdAt)}</span>
+                <span className="text-xs text-zinc-600 shrink-0">{timeAgo(h.createdAt)}</span>
               </div>
             ))}
           </div>

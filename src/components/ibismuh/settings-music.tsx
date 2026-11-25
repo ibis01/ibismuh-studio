@@ -41,18 +41,18 @@ function LicenseBadge({ track }: { track: MusicTrackDTO }) {
   const l = track.license;
   if (l.commercialUse && !l.attributionRequired)
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">
+      <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">
         <BadgeCheck className="h-3 w-3" /> {l.type}
       </span>
     );
   if (!l.commercialUse)
     return (
-      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/20">
+      <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/20">
         <ShieldAlert className="h-3 w-3" /> Non-commercial
       </span>
     );
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/20">
+    <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full bg-sky-500/15 text-sky-300 border border-sky-500/20">
       <ShieldCheck className="h-3 w-3" /> {l.type} · credit required
     </span>
   );
@@ -243,7 +243,7 @@ export function MusicLibrarySection() {
                     type="button"
                     onClick={() => void patch({ duckingIntensity: l.id })}
                     aria-pressed={settings.duckingIntensity === l.id}
-                    className={`px-2.5 py-0.5 text-[10px] rounded-md transition-colors ${
+                    className={`px-2.5 py-0.5 text-xs rounded-md transition-colors ${
                       settings.duckingIntensity === l.id
                         ? "bg-primary/20 text-primary"
                         : "text-muted-foreground hover:text-foreground"
@@ -282,10 +282,10 @@ export function MusicLibrarySection() {
                   <p className="text-xs font-medium truncate">
                     {t.name}
                     {t.isOriginal && (
-                      <span className="ml-1.5 text-[10px] text-muted-foreground">original</span>
+                      <span className="ml-1.5 text-xs text-muted-foreground">original</span>
                     )}
                   </p>
-                  <p className="text-[10px] text-muted-foreground truncate">
+                  <p className="text-xs text-muted-foreground truncate">
                     {fmt(t.durationSec)} · {(t.fileSizeBytes / 1048576).toFixed(1)} MB ·{" "}
                     {t.moods.slice(0, 3).join(" / ")}
                     {t.license.contentIdNotes ? ` · ⚠ ${t.license.contentIdNotes.slice(0, 40)}` : ""}
@@ -310,7 +310,7 @@ export function MusicLibrarySection() {
             ))}
           </div>
         )}
-        <p className="text-[10px] text-muted-foreground leading-relaxed">
+        <p className="text-xs text-muted-foreground leading-relaxed">
           Ibismuh Studio originals are synthesized in-app from pure oscillators — no third-party
           audio, no Content ID risk. Uploaded tracks are loudness-normalized (−16 LUFS) and
           mixed ~20 dB under narration with automatic ducking; voiceover WAVs are never

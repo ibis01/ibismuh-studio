@@ -96,10 +96,10 @@ export function BrandLockup({
           Ibismuh <span className="text-gradient">Studio</span>
         </p>
         {subtitle && (
-          <p className="text-[11px] text-muted-foreground truncate">{subtitle}</p>
+          <p className="text-xs text-muted-foreground truncate">{subtitle}</p>
         )}
         {tagline && (
-          <p className="mt-1 text-[10px] uppercase tracking-[0.35em] text-muted-foreground">
+          <p className="mt-1 text-xs uppercase tracking-[0.35em] text-muted-foreground">
             Ideas → Videos → Impact
           </p>
         )}

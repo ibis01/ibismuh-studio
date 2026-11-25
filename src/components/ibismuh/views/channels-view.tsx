@@ -162,10 +162,10 @@ export function ChannelsView() {
               </div>
               <p className="font-semibold mt-3.5 leading-snug">{c.name}</p>
               <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                <Badge variant="outline" className="border-primary/25 bg-primary/10 text-red-300 text-[11px]">
+                <Badge variant="outline" className="border-primary/25 bg-primary/10 text-red-300 text-xs">
                   {c.niche}
                 </Badge>
-                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                   <Film className="h-3 w-3" />
                   {c.videoCount ?? 0} video{(c.videoCount ?? 0) === 1 ? "" : "s"}
                 </span>
@@ -177,7 +177,7 @@ export function ChannelsView() {
               )}
               <div className="mt-4 pt-3.5 border-t border-white/6 flex items-center justify-between">
                 <span
-                  className={`text-[11px] inline-flex items-center gap-1 ${
+                  className={`text-xs inline-flex items-center gap-1 ${
                     c.isActive ? "text-emerald-300" : "text-muted-foreground"
                   }`}
                 >

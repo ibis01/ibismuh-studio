@@ -147,7 +147,7 @@ export function BrandKitCard({
         <Palette className="h-4 w-4 text-primary shrink-0" />
         <div className="min-w-0">
           <p className="text-sm font-medium leading-none">Brand kit</p>
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Keynote slides only — your accent + logo on every slide
           </p>
         </div>
@@ -164,7 +164,7 @@ export function BrandKitCard({
             aria-pressed={accent === null}
             title="Auto — the art director picks a per-slide accent"
             className={clsx(
-              "h-8 rounded-lg border px-2.5 text-[11px] transition-all",
+              "h-8 rounded-lg border px-2.5 text-xs transition-all",
               accent === null
                 ? "border-primary/50 bg-primary/10 text-foreground"
                 : "border-white/10 bg-white/3 text-muted-foreground hover:border-white/25"
@@ -213,7 +213,7 @@ export function BrandKitCard({
           </label>
           {savingAccent && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
         </div>
-        <p className="text-[10px] text-muted-foreground/80">
+        <p className="text-xs text-muted-foreground/80">
           {accent
             ? `${accent.toUpperCase()} replaces every slide accent (badges, highlights, price chips) — ink contrast is auto-picked.`
             : "Auto — each slide keeps its own accent from the design pass."}
@@ -234,7 +234,7 @@ export function BrandKitCard({
                 disabled={disabled || uploading}
                 onCheckedChange={(v) => void patch({ showLogo: v })}
               />
-              <span className="text-[10px] text-muted-foreground w-8">
+              <span className="text-xs text-muted-foreground w-8">
                 {value.showLogo ? "On" : "Off"}
               </span>
             </div>
@@ -249,7 +249,7 @@ export function BrandKitCard({
               alt="Brand logo"
               className="h-10 w-16 rounded-md bg-white/6 object-contain p-1"
             />
-            <p className="text-[10px] text-muted-foreground flex-1 leading-snug">
+            <p className="text-xs text-muted-foreground flex-1 leading-snug">
               {value.showLogo
                 ? "Shows top-right on every slide, ~7% of frame height."
                 : "Uploaded but hidden — flip the switch to show it."}
@@ -259,7 +259,7 @@ export function BrandKitCard({
               variant="outline"
               disabled={disabled || uploading}
               onClick={onRemove}
-              className="h-7 text-[11px] border-white/15 text-red-300 hover:bg-red-500/10 hover:text-red-200"
+              className="h-7 text-xs border-white/15 text-red-300 hover:bg-red-500/10 hover:text-red-200"
             >
               {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
               Remove
@@ -267,7 +267,7 @@ export function BrandKitCard({
           </div>
         ) : (
           <div className="space-y-2">
-            <p className="text-[10px] text-muted-foreground leading-snug">
+            <p className="text-xs text-muted-foreground leading-snug">
               PNG / WebP / SVG up to 5 MB — transparency looks best. It sits in
               the top-right corner of every slide.
             </p>
@@ -286,13 +286,13 @@ export function BrandKitCard({
                 variant="outline"
                 disabled={disabled || uploading}
                 onClick={() => fileRef.current?.click()}
-                className="h-7 text-[11px] border-white/15 bg-white/4"
+                className="h-7 text-xs border-white/15 bg-white/4"
               >
                 {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ImageUp className="h-3 w-3" />}
                 Upload logo…
               </Button>
               <BadgeCheck className="h-3.5 w-3.5 text-emerald-300/70" />
-              <span className="text-[10px] text-muted-foreground">optional — slides work without it</span>
+              <span className="text-xs text-muted-foreground">optional — slides work without it</span>
             </div>
           </div>
         )}

@@ -145,7 +145,7 @@ function SettingsSectionNav() {
             }
             aria-current={active === s.id ? "true" : undefined}
             className={clsx(
-              "tf-focusable shrink-0 rounded-full px-3 py-1.5 text-[11px] font-medium border transition-colors",
+              "tf-focusable shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors",
               active === s.id
                 ? "border-primary/50 bg-primary/15 text-cyan-200"
                 : "border-white/10 bg-white/4 text-muted-foreground hover:text-foreground hover:border-white/25"
@@ -1045,11 +1045,11 @@ export function SettingsView() {
               <p className="text-sm font-medium flex items-center gap-1.5">
                 <KeyRound className="h-3.5 w-3.5 text-primary" />
                 Shared AI credentials
-                <Badge className="bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 text-[10px]">
+                <Badge className="bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 text-xs">
                   shared
                 </Badge>
               </p>
-              <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed max-w-xl">
+              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed max-w-xl">
                 Your single account for the built-in Z.ai gateway: one API key
                 that powers every capability left on the Z.ai default — script
                 writing, voiceover, artwork, scene animation — plus the
@@ -1060,7 +1060,7 @@ export function SettingsView() {
               </p>
             </div>
             {zaiCreds.hasKey && (
-              <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[11px] shrink-0">
+              <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-xs shrink-0">
                 {zaiCreds.maskedKey}
               </Badge>
             )}
@@ -1083,28 +1083,28 @@ export function SettingsView() {
             </button>
             {sharedHelpOpen && (
               <ul className="px-3 pb-3 pt-2 border-t border-white/10 space-y-1.5">
-                <li className="flex gap-2 text-[11px] leading-relaxed text-muted-foreground">
+                <li className="flex gap-2 text-xs leading-relaxed text-muted-foreground">
                   <span className="text-primary shrink-0">•</span>
                   <span>
                     Defaults ride it — leave a row on Z.ai and that task uses
                     this key, zero per-task setup.
                   </span>
                 </li>
-                <li className="flex gap-2 text-[11px] leading-relaxed text-muted-foreground">
+                <li className="flex gap-2 text-xs leading-relaxed text-muted-foreground">
                   <span className="text-primary shrink-0">•</span>
                   <span>
                     Background jobs inherit it — scheduled script generation,
                     voiceover and one-click pipeline runs all read it.
                   </span>
                 </li>
-                <li className="flex gap-2 text-[11px] leading-relaxed text-muted-foreground">
+                <li className="flex gap-2 text-xs leading-relaxed text-muted-foreground">
                   <span className="text-primary shrink-0">•</span>
                   <span>
                     Per-capability rows override it — a key saved inside a row
                     below wins for that task only.
                   </span>
                 </li>
-                <li className="flex gap-2 text-[11px] leading-relaxed text-muted-foreground">
+                <li className="flex gap-2 text-xs leading-relaxed text-muted-foreground">
                   <span className="text-primary shrink-0">•</span>
                   <span>
                     Keys are encrypted at rest — saved keys are stored
@@ -1261,7 +1261,7 @@ export function SettingsView() {
                     <div className="min-w-0">
                       <p className="text-sm font-medium">{meta.label}</p>
                       <p
-                        className="text-[11px] text-muted-foreground truncate"
+                        className="text-xs text-muted-foreground truncate"
                         title={meta.desc}
                       >
                         {meta.desc}
@@ -1270,13 +1270,13 @@ export function SettingsView() {
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     {row.provider !== "zai" && row.hasKey && (
-                      <Badge className="bg-white/6 text-zinc-300 border border-white/10 text-[10px] shrink-0">
+                      <Badge className="bg-white/6 text-zinc-300 border border-white/10 text-xs shrink-0">
                         {shortLabel} · {row.maskedKey}
                       </Badge>
                     )}
                     {tier && (
                       <Badge
-                        className={`${TIER_META[tier].cls} text-[10px] shrink-0`}
+                        className={`${TIER_META[tier].cls} text-xs shrink-0`}
                       >
                         {TIER_META[tier].label}
                       </Badge>
@@ -1311,14 +1311,14 @@ export function SettingsView() {
 
                 {/* The selected provider's pricing, in one honest line */}
                 {active.pricing && (
-                  <p className="text-[11px] text-white/55 leading-relaxed">
+                  <p className="text-xs text-white/55 leading-relaxed">
                     {active.pricing}
                   </p>
                 )}
 
                 {/* Affordable picks — the $0/local lanes, one click away */}
                 {affordable.length > 0 && (
-                  <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-muted-foreground">
+                  <div className="flex items-center gap-1.5 flex-wrap text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1">
                       <Coins className="h-3 w-3 text-primary" />
                       Affordable picks:
@@ -1331,7 +1331,7 @@ export function SettingsView() {
                         aria-label={`Use ${p.label} for ${meta.label}`}
                         aria-pressed={row.provider === p.id}
                         title={p.pricing ?? p.label}
-                        className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                        className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
                           row.provider === p.id
                             ? "border-primary/50 bg-primary/15 text-primary"
                             : "border-white/10 bg-white/4 text-muted-foreground hover:text-foreground"
@@ -1364,7 +1364,7 @@ export function SettingsView() {
                       <span className="inline-flex items-center gap-1.5">
                         <BookOpen className="h-3.5 w-3.5 text-primary" />
                         Setup guide
-                        <span className="text-[10px] font-normal text-muted-foreground">
+                        <span className="text-xs font-normal text-muted-foreground">
                           {setup.steps.length} steps
                         </span>
                       </span>
@@ -1382,7 +1382,7 @@ export function SettingsView() {
                               key={i}
                               className="flex gap-2.5 text-xs leading-relaxed text-muted-foreground"
                             >
-                              <span className="shrink-0 h-4.5 w-4.5 rounded-full bg-white/6 border border-white/10 text-[10px] flex items-center justify-center text-foreground/80 mt-px">
+                              <span className="shrink-0 h-4.5 w-4.5 rounded-full bg-white/6 border border-white/10 text-xs flex items-center justify-center text-foreground/80 mt-px">
                                 {i + 1}
                               </span>
                               <span>{step}</span>
@@ -1398,7 +1398,7 @@ export function SettingsView() {
                                 href={setup.consoleUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1"
+                                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1"
                               >
                                 <ExternalLink className="h-3 w-3" />
                                 Console
@@ -1409,7 +1409,7 @@ export function SettingsView() {
                                 href={setup.docsUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1"
+                                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1"
                               >
                                 <BookOpen className="h-3 w-3" />
                                 Docs
@@ -1420,7 +1420,7 @@ export function SettingsView() {
                                 href={setup.pricingUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1"
+                                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1"
                               >
                                 <Coins className="h-3 w-3" />
                                 Pricing
@@ -1429,7 +1429,7 @@ export function SettingsView() {
                           </div>
                         )}
                         {setup.keyFormat && (
-                          <p className="text-[11px] text-white/40">
+                          <p className="text-xs text-white/40">
                             Key format: {setup.keyFormat}
                           </p>
                         )}
@@ -1452,7 +1452,7 @@ export function SettingsView() {
                       s.factors.reliability,
                     )} · ${s.reasons[0] ?? ""}`;
                   return (
-                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    <p className="text-xs leading-relaxed text-muted-foreground">
                       <Sparkles className="inline h-3 w-3 mr-1 text-primary align-[-2px]" />
                       {top.provider === row.provider ? (
                         <>
@@ -1539,7 +1539,7 @@ export function SettingsView() {
                       />
                     </div>
                   ) : (
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       Uses the shared key below unless you save your own
                       {cap === "tts"
                         ? " · 7 studio voices"
@@ -1565,7 +1565,7 @@ export function SettingsView() {
                       }
                       className="bg-white/5 border-white/10 text-xs font-mono h-9 max-w-md"
                     />
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       Your key stays encrypted per account (Stage 3). Leave
                       blank to keep using the shared platform key.
                     </p>
@@ -1635,7 +1635,7 @@ export function SettingsView() {
                                   [cap]: { ...f[cap], model: m.id },
                                 }))
                               }
-                              className={`text-[10px] px-2 py-0.5 rounded-full border transition-colors ${
+                              className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
                                 row.model === m.id
                                   ? "border-primary/50 bg-primary/15 text-primary"
                                   : "border-white/10 bg-white/4 text-muted-foreground hover:text-foreground"
@@ -1659,13 +1659,13 @@ export function SettingsView() {
                           : active.models[0];
                         if (modelId && !sel)
                           return (
-                            <p className="text-[10px] text-muted-foreground pt-0.5">
+                            <p className="text-xs text-muted-foreground pt-0.5">
                               custom model id — not from the catalog
                             </p>
                           );
                         if (!sel) return null;
                         return (
-                          <p className="text-[10px] text-muted-foreground pt-0.5">
+                          <p className="text-xs text-muted-foreground pt-0.5">
                             <span className="text-foreground/80">{sel.id}</span>
                             {sel.hint ? ` — ${sel.hint}` : ""}
                           </p>
@@ -1673,7 +1673,7 @@ export function SettingsView() {
                       })()}
                       {cap === "chat" && (
                         <div className="space-y-1.5 pt-1">
-                          <Label className="text-[11px]">
+                          <Label className="text-xs">
                             Vision model (optional — quality gate)
                           </Label>
                           <Input
@@ -1694,7 +1694,7 @@ export function SettingsView() {
                           />
                         </div>
                       )}
-                      <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      <p className="text-xs text-muted-foreground leading-relaxed">
                         {active.note}{" "}
                         <a
                           href={active.keyUrl}
@@ -1710,7 +1710,7 @@ export function SettingsView() {
                       <button
                         type="button"
                         onClick={() => copyChatAccount(cap)}
-                        className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1"
+                        className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 inline-flex items-center gap-1"
                       >
                         <Copy className="h-3 w-3" />
                         Use the same account as Script writing
@@ -1728,7 +1728,7 @@ export function SettingsView() {
                       if (test?.needsConfirm) testCapability(cap, cap, true);
                       else testCapability(cap, cap);
                     }}
-                    className="border-white/15 bg-white/6 hover:bg-white/10 h-7 text-[11px]"
+                    className="border-white/15 bg-white/6 hover:bg-white/10 h-7 text-xs"
                     title={
                       cap === "image" && !imageTestFreeLane(row.provider, row.model)
                         ? "Generates a small real image — may cost a few cents"
@@ -1744,7 +1744,7 @@ export function SettingsView() {
                     )}
                     {test?.needsConfirm ? "Confirm — runs a paid test" : "Test"}
                   </Button>
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {cap === "chat"
                       ? "pings the model with a tiny prompt"
                       : cap === "tts"
@@ -1791,7 +1791,7 @@ export function SettingsView() {
             )}
             Save &amp; apply
           </Button>
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             Applies to the very next AI call — no restart needed
           </span>
         </div>
@@ -1816,7 +1816,7 @@ export function SettingsView() {
             </p>
           </div>
           {yt?.connected && yt.channelTitle && (
-            <Badge className="bg-red-500/15 text-red-200 border border-red-500/30 text-[11px] shrink-0">
+            <Badge className="bg-red-500/15 text-red-200 border border-red-500/30 text-xs shrink-0">
               <Check className="h-3 w-3 mr-1" />
               {yt.channelTitle}
             </Badge>
@@ -1841,7 +1841,7 @@ export function SettingsView() {
                 <p className="text-sm font-medium truncate">
                   {yt.channelTitle ?? "Connected channel"}
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Uploads publish as {yt.privacyStatus} · uploads from the video
                   dialog
                 </p>
@@ -1882,7 +1882,7 @@ export function SettingsView() {
             </div>
 
             <div className="rounded-xl border border-white/10 bg-white/3 p-3">
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 In{" "}
                 <a
                   href="https://console.cloud.google.com/apis/credentials"
@@ -1896,7 +1896,7 @@ export function SettingsView() {
                 authorized redirect URI:
               </p>
               <div className="flex items-center gap-2 mt-2">
-                <code className="flex-1 min-w-0 truncate rounded-lg bg-black/40 border border-white/10 px-2.5 py-1.5 text-[11px] text-foreground/80">
+                <code className="flex-1 min-w-0 truncate rounded-lg bg-black/40 border border-white/10 px-2.5 py-1.5 text-xs text-foreground/80">
                   {yt?.callbackUrl ?? "…"}
                 </code>
                 <Button
@@ -2045,7 +2045,7 @@ export function SettingsView() {
               onValueChange={(v) => setForm((f) => ({ ...f, defaultVoice: v }))}
               voices={voices}
             />
-            <p className="text-[10px] text-muted-foreground leading-relaxed">
+            <p className="text-xs text-muted-foreground leading-relaxed">
               Tap the <span className="text-primary">▶</span> next to a voice in
               the picker to hear how it sounds.
             </p>
@@ -2129,7 +2129,7 @@ export function SettingsView() {
                   </SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 The visual consistency engine (identity, appearance, style)
                 scores the storyboard art and proposes repairs. Auto runs it
                 after a full storyboard paint and after each scene repaint;
@@ -2155,7 +2155,7 @@ export function SettingsView() {
                   </SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 A vision model inspects generated art and re-rolls it once when
                 it scores below the threshold.
               </p>
@@ -2177,7 +2177,7 @@ export function SettingsView() {
                 }
                 aria-label="Quality re-roll threshold"
               />
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Images scoring under this get one automatic re-roll (best
                 attempt is kept).
               </p>
@@ -2224,7 +2224,7 @@ export function SettingsView() {
                   className="bg-white/5 tabular-nums"
                   aria-label={`${r.label} calls per minute`}
                 />
-                <p className="text-[10px] leading-tight text-muted-foreground">
+                <p className="text-xs leading-tight text-muted-foreground">
                   {r.hint}
                 </p>
               </div>
@@ -2250,7 +2250,7 @@ export function SettingsView() {
             {anyActive && (
               <Badge
                 variant="outline"
-                className="border-amber-500/30 bg-amber-500/10 text-amber-200 text-[10px]"
+                className="border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs"
                 title="Auto-refreshing while jobs run"
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse mr-1" />
@@ -2291,7 +2291,7 @@ export function SettingsView() {
               type="button"
               onClick={() => setKindFilter(f.id)}
               aria-pressed={kindFilter === f.id}
-              className={`rounded-full border px-2.5 py-1 text-[11px] transition-all ${
+              className={`rounded-full border px-2.5 py-1 text-xs transition-all ${
                 kindFilter === f.id
                   ? "border-primary/50 bg-primary/15 text-cyan-200"
                   : "border-white/10 bg-white/4 text-muted-foreground hover:border-white/25"
@@ -2341,12 +2341,12 @@ export function SettingsView() {
                         {meta.label}
                       </p>
                       <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded-md border font-semibold ${status.cls} ${isRunning ? "animate-pulse" : ""}`}
+                        className={`text-xs px-1.5 py-0.5 rounded-md border font-semibold ${status.cls} ${isRunning ? "animate-pulse" : ""}`}
                       >
                         {status.label}
                       </span>
                       {isCancelling && (
-                        <span className="text-[10px] text-amber-300/90">
+                        <span className="text-xs text-amber-300/90">
                           stopping…
                         </span>
                       )}
@@ -2357,7 +2357,7 @@ export function SettingsView() {
                     </p>
                     {isRunning &&
                       (job.label ? (
-                        <p className="text-[10px] text-primary/90 truncate mt-0.5">
+                        <p className="text-xs text-primary/90 truncate mt-0.5">
                           {job.label}
                           {typeof job.progress === "number"
                             ? ` · ${Math.round(job.progress * 100)}%`
@@ -2401,7 +2401,7 @@ export function SettingsView() {
                       <p className="text-xs font-medium tabular-nums">
                         {formatDuration(job.durationMs)}
                       </p>
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-xs text-muted-foreground">
                         {new Date(job.startedAt).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
@@ -2586,7 +2586,7 @@ function StockFootageSection() {
         </div>
       </div>
 
-      <p className="text-[11px] text-muted-foreground leading-relaxed mt-3 mb-4">
+      <p className="text-xs text-muted-foreground leading-relaxed mt-3 mb-4">
         Both providers are free. Pexels needs a key from{" "}
         <a
           href={keyUrls.pexels}
@@ -2618,14 +2618,14 @@ function StockFootageSection() {
                 {row.state?.hasKey ? (
                   <Badge
                     variant="outline"
-                    className="border-emerald-500/25 bg-emerald-500/8 text-emerald-300 text-[10px]"
+                    className="border-emerald-500/25 bg-emerald-500/8 text-emerald-300 text-xs"
                   >
                     saved · {row.state.maskedKey}
                   </Badge>
                 ) : (
                   <Badge
                     variant="outline"
-                    className="border-white/15 bg-white/5 text-muted-foreground text-[10px]"
+                    className="border-white/15 bg-white/5 text-muted-foreground text-xs"
                   >
                     not set
                   </Badge>
@@ -2638,7 +2638,7 @@ function StockFootageSection() {
                     (!row.state?.hasKey && !row.value.trim())
                   }
                   onClick={() => test(row.id)}
-                  className="border border-white/15 bg-white/6 hover:bg-white/10 h-7 text-[11px] px-2"
+                  className="border border-white/15 bg-white/6 hover:bg-white/10 h-7 text-xs px-2"
                 >
                   {testing === row.id ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -2692,7 +2692,7 @@ function StockFootageSection() {
           )}
           Save keys
         </Button>
-        <span className="text-[11px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           Test runs one real search (free) against the saved key
         </span>
       </div>

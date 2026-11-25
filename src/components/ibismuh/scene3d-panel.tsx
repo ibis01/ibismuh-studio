@@ -59,7 +59,7 @@ function Num({
     onCommit(out);
   };
   return (
-    <label className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+    <label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
       {label}
       <input
         type="number"
@@ -94,7 +94,7 @@ function Vec({
   const axes = ["x", "y", "z"] as const;
   return (
     <span className="inline-flex items-center gap-1">
-      <span className="text-[10px] text-muted-foreground">{label}</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
       {axes.map((a, i) => (
         <Num
           key={a}
@@ -115,7 +115,7 @@ function Vec({
 
 function Color({ label, value, onCommit }: { label: string; value: string; onCommit: (v: string) => void }) {
   return (
-    <label className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+    <label className="inline-flex items-center gap-1 text-xs text-muted-foreground">
       {label}
       <input
         type="color"
@@ -242,21 +242,21 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
           <Box className="h-4 w-4 text-sky-300" />
           <div>
             <p className="text-sm font-semibold text-white/90">3D scene clip</p>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Optional layer — a staged 3D shot (camera, lights, materials) rendered by the native engine.
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {generating && (
-            <span className="inline-flex items-center gap-1 text-[11px] text-sky-200">
+            <span className="inline-flex items-center gap-1 text-xs text-sky-200">
               <Loader2 className="h-3 w-3 animate-spin" /> Rendering…
             </span>
           )}
           {!doc && !generating && (
             <Button
               size="sm"
-              className="h-7 text-[11px] bg-brand-gradient hover:opacity-90 text-white font-semibold"
+              className="h-7 text-xs bg-brand-gradient hover:opacity-90 text-white font-semibold"
               disabled={busy !== null}
               onClick={() => void scaffold()}
             >
@@ -269,7 +269,7 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-[11px] border-white/15 bg-white/4"
+                className="h-7 text-xs border-white/15 bg-white/4"
                 disabled={busy !== null || !dirty}
                 onClick={() => void save(false)}
               >
@@ -278,7 +278,7 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
               </Button>
               <Button
                 size="sm"
-                className="h-7 text-[11px] bg-brand-gradient hover:opacity-90 text-white font-semibold"
+                className="h-7 text-xs bg-brand-gradient hover:opacity-90 text-white font-semibold"
                 disabled={busy !== null}
                 onClick={() => void save(true)}
               >
@@ -291,10 +291,10 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
       </div>
 
       {msg && (
-        <p className="text-[11px] text-sky-200 bg-sky-500/8 border border-sky-500/20 rounded-lg px-2.5 py-1.5">{msg}</p>
+        <p className="text-xs text-sky-200 bg-sky-500/8 border border-sky-500/20 rounded-lg px-2.5 py-1.5">{msg}</p>
       )}
       {state?.error && (
-        <p className="text-[11px] text-red-300 bg-red-500/8 border border-red-500/20 rounded-lg px-2.5 py-1.5">{state.error}</p>
+        <p className="text-xs text-red-300 bg-red-500/8 border border-red-500/20 rounded-lg px-2.5 py-1.5">{state.error}</p>
       )}
 
       {!doc ? (
@@ -316,7 +316,7 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
                   aria-label="3D scene preview"
                 />
               ) : (
-                <p className="inline-flex items-center gap-1.5 text-[11px] text-sky-200">
+                <p className="inline-flex items-center gap-1.5 text-xs text-sky-200">
                   <Loader2 className="h-3 w-3 animate-spin" /> The clip appears here when the render lands.
                 </p>
               )}
@@ -324,7 +324,7 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 text-[10px] px-2 ml-2"
+                  className="h-6 text-xs px-2 ml-2"
                   onClick={() => setClipStamp(Date.now())}
                 >
                   <Play className="h-2.5 w-2.5" /> Reload preview
@@ -335,7 +335,7 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
 
           {/* Camera */}
           <div className="rounded-lg border border-white/10 bg-white/4 p-3 space-y-2">
-            <p className="text-[11px] font-medium text-white/80">Camera</p>
+            <p className="text-xs font-medium text-white/80">Camera</p>
             <div className="flex flex-wrap items-center gap-2">
               <Num
                 label="fov"
@@ -376,7 +376,7 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
                   }))
                 }
               />
-              <span className="text-[10px] text-white/40">{doc.camera.keyframes.length} camera keys</span>
+              <span className="text-xs text-white/40">{doc.camera.keyframes.length} camera keys</span>
             </div>
             {doc.camera.keyframes.length > 0 && (
               <div className="space-y-1">
@@ -417,7 +417,7 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
                     />
                     <button
                       type="button"
-                      className="ml-auto rounded px-1.5 py-0.5 text-[10px] text-red-300 hover:bg-red-500/10"
+                      className="ml-auto rounded px-1.5 py-0.5 text-xs text-red-300 hover:bg-red-500/10"
                       onClick={() =>
                         patch((d) => ({
                           ...d,
@@ -436,7 +436,7 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
 
           {/* Look */}
           <div className="rounded-lg border border-white/10 bg-white/4 p-3 space-y-2">
-            <p className="text-[11px] font-medium text-white/80">Look</p>
+            <p className="text-xs font-medium text-white/80">Look</p>
             <div className="flex flex-wrap items-center gap-2">
               <Color
                 label="bg"
@@ -453,7 +453,7 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
                 value={doc.sky?.horizon ?? "#93c5fd"}
                 onCommit={(v) => patch((d) => ({ ...d, sky: { top: d.sky?.top ?? "#1e3a8a", horizon: v } }))}
               />
-              <label className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                 <input
                   type="checkbox"
                   checked={doc.shadows ?? false}
@@ -467,12 +467,12 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
 
           {/* Objects */}
           <div className="rounded-lg border border-white/10 bg-white/4 p-3 space-y-2">
-            <p className="text-[11px] font-medium text-white/80">Objects · {doc.objects.length}</p>
+            <p className="text-xs font-medium text-white/80">Objects · {doc.objects.length}</p>
             <div className="space-y-1.5">
               {doc.objects.map((o, i) => (
                 <div key={o.id} className="rounded bg-white/4 px-2 py-1.5 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] font-medium text-white/85">
+                    <span className="text-xs font-medium text-white/85">
                       {o.kind} · {o.id}
                     </span>
                     <Vec
@@ -547,7 +547,7 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
                       }
                     />
                     {o.keyframes && o.keyframes.length > 0 && (
-                      <span className="text-[10px] text-white/40">{o.keyframes.length} keyframes</span>
+                      <span className="text-xs text-white/40">{o.keyframes.length} keyframes</span>
                     )}
                   </div>
                 </div>
@@ -557,11 +557,11 @@ export function Scene3DPanel({ videoId, onChanged }: { videoId: string; onChange
 
           {/* Lights */}
           <div className="rounded-lg border border-white/10 bg-white/4 p-3 space-y-2">
-            <p className="text-[11px] font-medium text-white/80">Lights · {doc.lights.length}</p>
+            <p className="text-xs font-medium text-white/80">Lights · {doc.lights.length}</p>
             <div className="space-y-1.5">
               {doc.lights.map((l, i) => (
                 <div key={i} className="flex flex-wrap items-center gap-2 rounded bg-white/4 px-2 py-1.5">
-                  <span className="text-[11px] font-medium text-white/85">{l.kind}</span>
+                  <span className="text-xs font-medium text-white/85">{l.kind}</span>
                   <Num
                     label="intensity"
                     value={l.intensity}

@@ -175,7 +175,7 @@ export function DashboardView() {
         <div className="relative p-5 sm:p-7">
           <div className="flex flex-col md:flex-row md:items-center gap-5">
             <div className="flex-1 min-w-0">
-              <div className="inline-flex items-center gap-2 rounded-full border border-primary/35 bg-primary/15 px-3 py-1 text-[11px] font-medium text-cyan-100">
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/35 bg-primary/15 px-3 py-1 text-xs font-medium text-cyan-100">
                 <span className="animate-pulse-dot h-1.5 w-1.5 rounded-full bg-primary" />
                 Studio ready
               </div>
@@ -423,7 +423,7 @@ export function DashboardView() {
                   className="flex-1 h-full flex flex-col items-center justify-end gap-1.5 min-w-0 group"
                   title={`${d.day}: ${d.count} video${d.count === 1 ? "" : "s"}`}
                 >
-                  <span className="text-[11px] text-muted-foreground tabular-nums">
+                  <span className="text-xs text-muted-foreground tabular-nums">
                     {d.count > 0 ? d.count : ""}
                   </span>
                   <div className="flex-1 w-full max-w-12 flex items-end">
@@ -435,7 +435,7 @@ export function DashboardView() {
                       }}
                     />
                   </div>
-                  <span className="text-[10px] text-muted-foreground truncate">
+                  <span className="text-xs text-muted-foreground truncate">
                     {d.day}
                   </span>
                 </div>
@@ -543,13 +543,13 @@ export function DashboardView() {
                   <div className="absolute bottom-2 left-2.5 flex items-center gap-2">
                     <StatusBadge status={v.status} />
                     {v.videoDuration ? (
-                      <span className="tf-num text-[11px] text-white/85 px-1.5 py-0.5 rounded bg-black/55">
+                      <span className="tf-num text-xs text-white/85 px-1.5 py-0.5 rounded bg-black/55">
                         {formatDuration(v.videoDuration)}
                       </span>
                     ) : null}
                   </div>
                   {v.stats?.views ? (
-                    <span className="tf-num absolute top-2 right-2 flex items-center gap-1 text-[11px] text-white/85 px-1.5 py-0.5 rounded bg-black/55">
+                    <span className="tf-num absolute top-2 right-2 flex items-center gap-1 text-xs text-white/85 px-1.5 py-0.5 rounded bg-black/55">
                       <Eye className="h-3 w-3" />
                       {compactNumber(v.stats.views)}
                     </span>
@@ -612,7 +612,7 @@ export function DashboardView() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm leading-snug">{a.message}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                      <p className="text-xs text-muted-foreground mt-0.5">
                         {a.stage} · {timeAgo(a.createdAt)}
                       </p>
                     </div>

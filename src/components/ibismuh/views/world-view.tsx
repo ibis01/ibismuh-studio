@@ -105,7 +105,7 @@ function WorldSection({
         <h2 className="text-sm font-semibold tracking-wide text-muted-foreground flex items-center gap-2">
           <meta.icon className="h-4 w-4 text-primary" />
           {meta.plural}
-          <span className="text-[11px] font-normal">{items.length}</span>
+          <span className="text-xs font-normal">{items.length}</span>
         </h2>
         <Button
           size="sm"
@@ -170,7 +170,7 @@ function WorldSection({
                   </div>
                 )}
                 <label
-                  className={`inline-flex items-center gap-1.5 text-[11px] rounded-md border border-white/10 bg-white/4 px-2 py-1 cursor-pointer hover:bg-white/8 transition-colors ${
+                  className={`inline-flex items-center gap-1.5 text-xs rounded-md border border-white/10 bg-white/4 px-2 py-1 cursor-pointer hover:bg-white/8 transition-colors ${
                     it.referenceCount >= 4 ? "opacity-50 pointer-events-none" : ""
                   }`}
                   title={
@@ -200,7 +200,7 @@ function WorldSection({
               </div>
               <div className="mt-auto pt-3.5 border-t border-white/6 flex items-center justify-between">
                 <span
-                  className={`text-[11px] inline-flex items-center gap-1 ${
+                  className={`text-xs inline-flex items-center gap-1 ${
                     it.isActive ? "text-emerald-300" : "text-muted-foreground"
                   }`}
                 >
@@ -504,7 +504,7 @@ export function WorldView() {
                 rows={3}
                 maxLength={600}
               />
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {form.description.trim().length}/600
               </p>
             </div>

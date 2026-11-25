@@ -210,7 +210,7 @@ export default function RigPreview({ doc, parts, narration, durationMs }: RigPre
           aria-label="Scrub the rig preview"
           className="h-1.5 flex-1 cursor-pointer accent-violet-400"
         />
-        <span className="w-12 text-right text-[10px] text-muted-foreground tabular-nums">
+        <span className="w-12 text-right text-xs text-muted-foreground tabular-nums">
           {(tMs / 1000).toFixed(1)}s
         </span>
       </div>
@@ -238,7 +238,7 @@ export default function RigPreview({ doc, parts, narration, durationMs }: RigPre
             style={{ left: `${(tMs / totalMs) * 100}%` }}
           />
         </div>
-        <p className="mt-1 text-[10px] text-muted-foreground leading-relaxed">
+        <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
           <span className="text-violet-300">Violet</span> = gesture holds ·{" "}
           <span className="text-emerald-300">green</span> = mouth-open beats
           inside their word spans. Beat-sync, not phoneme lip-sync — the honest

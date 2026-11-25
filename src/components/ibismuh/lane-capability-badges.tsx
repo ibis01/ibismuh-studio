@@ -44,7 +44,7 @@ export function LaneCapabilityChips({ lane }: { lane: VideoType }) {
             variant="outline"
             title={meta ? `${meta.label} — declared capability of the ${contract.type} lane` : `Undeclared capability id: ${cap}`}
             className={clsx(
-              "text-[11px] font-normal px-1.5 py-0 rounded-md",
+              "text-xs font-normal px-1.5 py-0 rounded-md",
               meta ? chipTone(meta.tone) : "border-amber-400/40 bg-amber-400/10 text-amber-200",
             )}
           >
@@ -68,7 +68,7 @@ export function LaneModeChips({ lane }: { lane: VideoType }) {
           key={mode.id}
           variant="outline"
           title={mode.when}
-          className="text-[11px] font-normal px-1.5 py-0 rounded-md border-primary/30 bg-primary/10 text-foreground"
+          className="text-xs font-normal px-1.5 py-0 rounded-md border-primary/30 bg-primary/10 text-foreground"
         >
           {mode.label}
         </Badge>

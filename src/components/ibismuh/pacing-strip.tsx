@@ -97,7 +97,7 @@ export function PacingStrip({ videoId }: { videoId: string }) {
       {open && worst.length > 0 && (
         <div className="mt-1.5 space-y-0.5">
           {worst.map((r) => (
-            <div key={r.index} className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <div key={r.index} className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className={`h-1.5 w-1.5 rounded-full ${BAND_DOT[r.band]}`} />
               <span>
                 scene {r.index} ({r.role}) — {r.wpm?.toFixed(0)} wpm, {r.band} ·{" "}

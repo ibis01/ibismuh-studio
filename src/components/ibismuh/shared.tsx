@@ -85,7 +85,7 @@ export function StatusBadge({
   return (
     <span
       className={clsx(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
         meta.color,
         className
       )}
@@ -124,7 +124,7 @@ export function StatCard({
           <p className="text-2xl sm:text-[28px] font-bold tracking-tight mt-1 tabular-nums">
             {value}
           </p>
-          {sub && <p className="text-[11px] text-muted-foreground mt-1 truncate">{sub}</p>}
+          {sub && <p className="text-xs text-muted-foreground mt-1 truncate">{sub}</p>}
         </div>
         <div
           className={clsx(
@@ -688,7 +688,7 @@ export function VoiceSelectWithPreview({
         </SelectContent>
       </Select>
       {error && (
-        <p className="text-[11px] leading-relaxed text-red-400/90" role="alert">
+        <p className="text-xs leading-relaxed text-red-400/90" role="alert">
           {error}
         </p>
       )}

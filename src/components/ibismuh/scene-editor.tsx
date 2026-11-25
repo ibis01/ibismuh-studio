@@ -404,7 +404,7 @@ export function SceneStudioPanel({
                   <Presentation className="h-3.5 w-3.5 text-violet-300 shrink-0" />
                   <Label className="text-xs">Slide design</Label>
                   {slide && (
-                    <span className="text-[10px] text-muted-foreground truncate">
+                    <span className="text-xs text-muted-foreground truncate">
                       · {SLIDE_LAYOUT_LABELS[slide.layout] ?? slide.layout}
                     </span>
                   )}
@@ -415,7 +415,7 @@ export function SceneStudioPanel({
                     variant="outline"
                     disabled={anyBusy || slideBusy || !onRerollSlide}
                     onClick={onRerollSlide}
-                    className="h-7 text-[11px] border-white/15 bg-white/4"
+                    className="h-7 text-xs border-white/15 bg-white/4"
                     title="Ask the art director for a fresh take on this one slide — the rest of the deck keeps its design"
                   >
                     {slideBusy ? (
@@ -430,7 +430,7 @@ export function SceneStudioPanel({
               {slide ? (
                 <>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/4 px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                    <span className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/4 px-1.5 py-0.5 text-xs text-muted-foreground">
                       <span
                         aria-hidden
                         className="h-2 w-2 rounded-full"
@@ -439,12 +439,12 @@ export function SceneStudioPanel({
                       {slide.accent}
                     </span>
                     {slide.badge && (
-                      <span className="rounded-md border border-white/10 bg-white/4 px-1.5 py-0.5 text-[9px] text-muted-foreground uppercase">
+                      <span className="rounded-md border border-white/10 bg-white/4 px-1.5 py-0.5 text-xs text-muted-foreground uppercase">
                         badge: {slide.badge}
                       </span>
                     )}
                     {slide.useImage && (
-                      <span className="rounded-md border border-white/10 bg-white/4 px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                      <span className="rounded-md border border-white/10 bg-white/4 px-1.5 py-0.5 text-xs text-muted-foreground">
                         uses this scene&apos;s art
                       </span>
                     )}
@@ -463,18 +463,18 @@ export function SceneStudioPanel({
                         ) : (
                           <Presentation className="h-5 w-5 text-muted-foreground" />
                         )}
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           Preview appears after the next render
                         </span>
                       </div>
                     )}
                   </div>
-                  <p className="text-[10px] text-muted-foreground/80">
+                  <p className="text-xs text-muted-foreground/80">
                     Headline: “{slide.headline}” — re-rolling keeps the narration, changes only this slide&apos;s design.
                   </p>
                 </>
               ) : (
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   The deck is designed when the video renders (or on your first
                   re-roll) — one designed slide per scene, timed to the narration.
                 </p>
@@ -498,7 +498,7 @@ export function SceneStudioPanel({
                       type="button"
                       onClick={() => setCompare(side)}
                       aria-pressed={compare === side}
-                      className={`tf-focusable h-6 px-2 rounded-md text-[10px] font-medium capitalize transition-colors ${
+                      className={`tf-focusable h-6 px-2 rounded-md text-xs font-medium capitalize transition-colors ${
                         compare === side ? "bg-white/10 text-foreground" : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
@@ -516,7 +516,7 @@ export function SceneStudioPanel({
                 className="w-full aspect-video object-cover"
               />
             ) : (
-              <div className="w-full aspect-video bg-white/4 flex items-center justify-center text-[11px] text-muted-foreground">
+              <div className="w-full aspect-video bg-white/4 flex items-center justify-center text-xs text-muted-foreground">
                 No art yet — set the look below and regenerate
               </div>
             )}
@@ -524,11 +524,11 @@ export function SceneStudioPanel({
               <div className="absolute inset-0 bg-black/55 backdrop-blur-[2px] flex flex-col items-center justify-center gap-2">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
                 <p className="text-xs text-white/85">Repainting scene {scene.index}…</p>
-                <p className="text-[10px] text-white/55">The new take appears here — compare it with the old one after.</p>
+                <p className="text-xs text-white/55">The new take appears here — compare it with the old one after.</p>
               </div>
             )}
             {scene.hasStock && !repainting && (
-              <span className="absolute bottom-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[9px] text-white">
+              <span className="absolute bottom-2 right-2 rounded-md bg-black/70 px-1.5 py-0.5 text-xs text-white">
                 stock clip plays in this scene
               </span>
             )}
@@ -549,7 +549,7 @@ export function SceneStudioPanel({
                     onClick={() => setStyle(s.id)}
                     aria-pressed={style === s.id}
                     className={clsx(
-                      "flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] transition-all",
+                      "flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition-all",
                       style === s.id
                         ? "border-primary/50 bg-primary/8 text-foreground"
                         : "border-white/10 bg-white/3 hover:border-white/25 text-muted-foreground"
@@ -567,7 +567,7 @@ export function SceneStudioPanel({
                 );
               })}
             </div>
-            <p className="text-[10px] text-muted-foreground/80">
+            <p className="text-xs text-muted-foreground/80">
               {SCENE_ART_STYLES.find((s) => s.id === style)?.prompt ||
                 "The standard Ibismuh Studio cinematic look"}
             </p>
@@ -592,7 +592,7 @@ export function SceneStudioPanel({
                 className="text-xs"
               />
               {narration !== scene.narration && (
-                <p className="text-[10px] text-amber-300/90 leading-snug">
+                <p className="text-xs text-amber-300/90 leading-snug">
                   Saving this clears the stale voiceover — re-render it from the Inspector area.
                 </p>
               )}
@@ -609,7 +609,7 @@ export function SceneStudioPanel({
                 disabled={anyBusy}
                 className="h-8 text-xs"
               />
-              <p className="text-[10px] text-muted-foreground/80 leading-snug">
+              <p className="text-xs text-muted-foreground/80 leading-snug">
                 One line shown across this scene — the voice never reads it. Empty
                 falls back to the word-synced narration captions.
               </p>
@@ -627,7 +627,7 @@ export function SceneStudioPanel({
                 {appearanceDirty && (
                   <Button
                     size="sm"
-                    className="h-7 px-2.5 text-[11px]"
+                    className="h-7 px-2.5 text-xs"
                     disabled={anyBusy}
                     onClick={() => void saveAppearance()}
                   >
@@ -637,7 +637,7 @@ export function SceneStudioPanel({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 <div className="space-y-1">
-                  <Label htmlFor={`outfit-${scene.index}`} className="text-[10px] text-muted-foreground">
+                  <Label htmlFor={`outfit-${scene.index}`} className="text-xs text-muted-foreground">
                     Outfit
                   </Label>
                   <Input
@@ -651,7 +651,7 @@ export function SceneStudioPanel({
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor={`accessory-${scene.index}`} className="text-[10px] text-muted-foreground">
+                  <Label htmlFor={`accessory-${scene.index}`} className="text-xs text-muted-foreground">
                     Accessory
                   </Label>
                   <Input
@@ -665,7 +665,7 @@ export function SceneStudioPanel({
                   />
                 </div>
               </div>
-              <p className="text-[10px] text-muted-foreground leading-snug">
+              <p className="text-xs text-muted-foreground leading-snug">
                 Applies at the next re-roll, under an approved director plan. Clear both to stop
                 directing the outfit.
               </p>
@@ -732,7 +732,7 @@ export function SceneStudioPanel({
               <Sparkles className="h-3.5 w-3.5 text-primary" />
               <Label className="text-xs">AI edit — keep the shot, change the details</Label>
             </div>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Describe a change and the model repaints THIS image in place —
               same composition, your tweak. Perfect for “make it night”,
               “warmer light”, “remove the crowd”.
@@ -761,7 +761,7 @@ export function SceneStudioPanel({
               </Button>
             </div>
             {!scene.hasImage && (
-              <p className="text-[10px] text-amber-300/90">
+              <p className="text-xs text-amber-300/90">
                 Generate this scene&apos;s image first — edits need art to work from.
               </p>
             )}
@@ -773,7 +773,7 @@ export function SceneStudioPanel({
               <ImageUp className="h-3.5 w-3.5 text-primary" />
               <Label className="text-xs">Use your own image</Label>
             </div>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               PNG / JPEG / WebP / HEIC (iPhone photos) up to 15 MB. It&apos;s
               center-cropped to the video canvas (16:9) automatically.
               Replacing art removes existing renders — render again afterwards.
@@ -815,7 +815,7 @@ export function SceneStudioPanel({
               <ShieldCheck className="h-3.5 w-3.5 text-primary" />
               <Label className="text-xs">History, checks &amp; approval</Label>
             </div>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Every edit is an immutable revision. Re-check this scene (its preview,
               its cues, its seams), approve the checked version to pin it into the
               render, or restore an older one — restorations never erase history.

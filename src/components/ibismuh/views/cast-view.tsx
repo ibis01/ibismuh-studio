@@ -428,7 +428,7 @@ function CharacterCard({ character: c, onOpen }: { character: CharacterDTO; onOp
             ) : (
               <UserRound className="h-10 w-10" />
             )}
-            <span className="text-[11px]">
+            <span className="text-xs">
               {busy ? "Painting portrait…" : "No portrait yet"}
             </span>
           </div>
@@ -445,11 +445,11 @@ function CharacterCard({ character: c, onOpen }: { character: CharacterDTO; onOp
         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{c.role}</p>
       )}
       <div className="flex items-center gap-1.5 mt-2 flex-wrap min-h-6">
-        <Badge variant="outline" className="border-primary/25 bg-primary/10 text-red-300 text-[10px]">
+        <Badge variant="outline" className="border-primary/25 bg-primary/10 text-red-300 text-xs">
           <Palette className="h-2.5 w-2.5 mr-1" />
           {artStyleLabel(c.artStyle)}
         </Badge>
-        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
           <Film className="h-3 w-3" />
           {c.videoCount}
         </span>
@@ -486,7 +486,7 @@ function ReadyChip({
     <span
       title={title}
       className={clsx(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
         ok
           ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
           : "border-white/10 bg-white/4 text-muted-foreground/80"
@@ -780,7 +780,7 @@ function CharacterStudio({
                   ) : (
                     <ImageIcon className="h-10 w-10" />
                   )}
-                  <span className="text-[11px] px-4 text-center">
+                  <span className="text-xs px-4 text-center">
                     {portraitBusy
                       ? "CogView is painting the reference portrait…"
                       : "No reference portrait yet"}
@@ -821,7 +821,7 @@ function CharacterStudio({
                   Consistency sheet
                 </p>
                 {c.poseCount > 0 && (
-                  <span className="text-[10px] text-emerald-300">
+                  <span className="text-xs text-emerald-300">
                     {c.poseCount}/{POSES.length} locked
                   </span>
                 )}
@@ -842,7 +842,7 @@ function CharacterStudio({
                           className="h-full w-full object-cover"
                         />
                       ) : (
-                        <div className="h-full w-full flex items-center justify-center text-[9px] text-muted-foreground text-center px-1">
+                        <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground text-center px-1">
                           {posesBusy ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                           ) : (
@@ -868,7 +868,7 @@ function CharacterStudio({
                     ? "Re-generate poses"
                     : "Generate consistency sheet"}
               </Button>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Image-editing re-renders the exact same face in 3 canonical poses —
                 the storyboard bricks for scene generation.
               </p>
@@ -882,7 +882,7 @@ function CharacterStudio({
                   Reference photos
                 </p>
                 {c.referenceCount > 0 && (
-                  <span className="text-[10px] text-sky-300">{c.referenceCount}/6</span>
+                  <span className="text-xs text-sky-300">{c.referenceCount}/6</span>
                 )}
               </div>
 
@@ -936,7 +936,7 @@ function CharacterStudio({
                 {refBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
                 {c.referenceCount >= 6 ? "Limit reached (6)" : "Add a photo"}
               </Button>
-              <p className="text-[10px] text-muted-foreground leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Your photos are ground truth: the portrait is derived from the
                 newest one, and the continuity checker reads them alongside it.
               </p>
@@ -1011,7 +1011,7 @@ function CharacterStudio({
               >
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-300" />
                 Identity anchor
-                <span className="text-[10px] font-normal text-muted-foreground">
+                <span className="text-xs font-normal text-muted-foreground">
                   (stamped into every scene)
                 </span>
               </Label>
@@ -1070,7 +1070,7 @@ function CharacterStudio({
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {dirty ? "Save changes" : "Saved"}
               </Button>
-              <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+              <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
                 <Film className="h-3 w-3" />
                 {c.videoCount} video{c.videoCount === 1 ? "" : "s"} cast this character
               </span>
@@ -1084,13 +1084,13 @@ function CharacterStudio({
                   Cast in
                 </p>
                 {c.videoCount > 0 && (
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {c.videoCount} video{c.videoCount === 1 ? "" : "s"} total
                   </span>
                 )}
               </div>
               {c.recentVideos.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
+                <p className="text-xs text-muted-foreground/80 leading-relaxed">
                   No videos yet — assign this character in Create and they’ll appear
                   here with their live pipeline status.
                 </p>
@@ -1121,7 +1121,7 @@ function CharacterStudio({
                           {v.title ?? "Untitled video"}
                         </p>
                         <span
-                          className={`inline-block text-[10px] px-1.5 py-0.5 rounded-md border font-semibold ${STATUS_META[v.status].color}`}
+                          className={`inline-block text-xs px-1.5 py-0.5 rounded-md border font-semibold ${STATUS_META[v.status].color}`}
                         >
                           {STATUS_META[v.status].label}
                         </span>
@@ -1130,7 +1130,7 @@ function CharacterStudio({
                     </button>
                   ))}
                   {c.videoCount > c.recentVideos.length && (
-                    <p className="text-[10px] text-muted-foreground/70 px-1">
+                    <p className="text-xs text-muted-foreground/70 px-1">
                       +{c.videoCount - c.recentVideos.length} earlier — open the Library to see them all.
                     </p>
                   )}

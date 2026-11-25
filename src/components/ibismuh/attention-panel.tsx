@@ -205,7 +205,7 @@ export function AttentionPanel() {
                     <p className="text-xs font-medium truncate">
                       {j.entityTitle ?? j.entityId}
                     </p>
-                    <p className="text-[10px] text-muted-foreground truncate">
+                    <p className="text-xs text-muted-foreground truncate">
                       {meta?.label ?? j.kind}
                       {j.label ? ` · ${j.label}` : ""}
                       {j.progress != null ? ` · ${Math.round(j.progress * 100)}%` : ""}
@@ -214,7 +214,7 @@ export function AttentionPanel() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 px-2 text-[10px] text-red-300 hover:bg-red-500/10"
+                    className="h-7 px-2 text-xs text-red-300 hover:bg-red-500/10"
                     onClick={() => void cancelAll(j)}
                     aria-label={`Cancel ${meta?.label ?? j.kind}`}
                   >
@@ -254,7 +254,7 @@ export function AttentionPanel() {
                         — {meta?.label ?? j.kind}
                       </span>
                     </p>
-                    <p className="text-[10px] text-muted-foreground truncate" title={j.error ?? ""}>
+                    <p className="text-xs text-muted-foreground truncate" title={j.error ?? ""}>
                       {j.status === "interrupted" ? "Server restarted mid-stage" : (j.error ?? "failed")}
                     </p>
                   </div>
@@ -263,7 +263,7 @@ export function AttentionPanel() {
                     variant="outline"
                     disabled={resuming === j.id}
                     onClick={() => void resume(j)}
-                    className="h-7 px-2.5 text-[11px] border-amber-500/30 text-amber-200 hover:bg-amber-500/10 shrink-0"
+                    className="h-7 px-2.5 text-xs border-amber-500/30 text-amber-200 hover:bg-amber-500/10 shrink-0"
                   >
                     {resuming === j.id ? (
                       <Loader2 className="h-3 w-3 animate-spin" />

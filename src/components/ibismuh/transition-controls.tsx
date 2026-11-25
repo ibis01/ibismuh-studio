@@ -165,7 +165,7 @@ export function TransitionControlsCard({
         <Blend className="h-4 w-4 text-primary shrink-0" />
         <div className="min-w-0">
           <p className="text-sm font-medium leading-none">Scene transitions</p>
-          <p className="text-[11px] text-muted-foreground mt-1 truncate">
+          <p className="text-xs text-muted-foreground mt-1 truncate">
             How scenes flow into each other — video and audio blend together
           </p>
         </div>
@@ -183,13 +183,13 @@ export function TransitionControlsCard({
             frameB={frameB}
             className="h-20"
           />
-          <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-medium text-white pointer-events-none">
+          <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white pointer-events-none">
             SCENE A
           </span>
-          <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-medium text-white pointer-events-none">
+          <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white pointer-events-none">
             SCENE B
           </span>
-          <span className="absolute top-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[9px] tabular-nums text-white pointer-events-none">
+          <span className="absolute top-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-xs tabular-nums text-white pointer-events-none">
             {isCut ? "instant" : `${t.durationSec.toFixed(1)}s blend`}
           </span>
         </div>
@@ -233,7 +233,7 @@ export function TransitionControlsCard({
                 />
                 <span
                   className={clsx(
-                    "block mt-1 text-[10px] leading-tight",
+                    "block mt-1 text-xs leading-tight",
                     selected ? "text-foreground font-medium" : "text-muted-foreground"
                   )}
                 >
@@ -243,7 +243,7 @@ export function TransitionControlsCard({
             );
           })}
         </div>
-        <p className="text-[10px] text-muted-foreground/80 pt-0.5">
+        <p className="text-xs text-muted-foreground/80 pt-0.5">
           {TRANSITIONS.find((x) => x.id === t.style)?.desc}
         </p>
       </div>
@@ -266,7 +266,7 @@ export function TransitionControlsCard({
             onValueChange={([v]) => onChange({ ...value, durationSec: v })}
             aria-label="Transition blend length in seconds"
           />
-          <div className="flex justify-between text-[10px] text-muted-foreground/70">
+          <div className="flex justify-between text-xs text-muted-foreground/70">
             <span>Snappy</span>
             <span>Cinematic</span>
           </div>
@@ -274,13 +274,13 @@ export function TransitionControlsCard({
       )}
 
       {/* Current configuration — mirrors what the renderer will do */}
-      <p className="text-[10px] text-muted-foreground leading-relaxed border-t border-white/5 pt-2.5">
+      <p className="text-xs text-muted-foreground leading-relaxed border-t border-white/5 pt-2.5">
         <span className="text-foreground/70">Current configuration:</span>{" "}
         {transitionSummaryLine(value)} — applied at render time; narration sits
         inside the scene lead/tail silence so blends never clip words.
       </p>
       {note && !compact && (
-        <p className="text-[10px] text-sky-300/90 leading-relaxed -mt-1.5">{note}</p>
+        <p className="text-xs text-sky-300/90 leading-relaxed -mt-1.5">{note}</p>
       )}
     </Card>
   );

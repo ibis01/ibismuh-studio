@@ -298,14 +298,14 @@ export function SceneTrustPanel({
       <div className="flex flex-wrap items-center gap-2">
         <span
           className={clsx(
-            "rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+            "rounded border px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide",
             STATUS_CHIP[feed.head?.status ?? "draft"] ?? STATUS_CHIP.draft
           )}
         >
           {feed.head ? `head v${feed.head.version} · ${feed.head.status}` : "no history yet"}
         </span>
         {feed.head?.status === "approved" && (
-          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-300">
+          <span className="inline-flex items-center gap-1 text-xs text-emerald-300">
             <BadgeCheck className="h-3.5 w-3.5" /> approved — the render source is pinned to it
           </span>
         )}
@@ -313,7 +313,7 @@ export function SceneTrustPanel({
           <Button
             size="sm"
             variant="secondary"
-            className="h-7 text-[11px]"
+            className="h-7 text-xs"
             onClick={renderPreview}
             disabled={busy !== null}
           >
@@ -323,7 +323,7 @@ export function SceneTrustPanel({
           <Button
             size="sm"
             variant="secondary"
-            className="h-7 text-[11px]"
+            className="h-7 text-xs"
             onClick={runRecheck}
             disabled={busy !== null}
           >
@@ -332,7 +332,7 @@ export function SceneTrustPanel({
           </Button>
           <Button
             size="sm"
-            className="h-7 text-[11px]"
+            className="h-7 text-xs"
             onClick={approve}
             disabled={busy !== null || !feed.approval.ok || feed.approval.ok === true && "already" in feed.approval && feed.approval.already}
             title={feed.approval.ok ? undefined : feed.approval.message}
@@ -343,7 +343,7 @@ export function SceneTrustPanel({
         </span>
       </div>
       {!feed.approval.ok && (
-        <p className="text-[11px] leading-relaxed text-amber-300/90">
+        <p className="text-xs leading-relaxed text-amber-300/90">
           {feed.approval.message}
         </p>
       )}
@@ -356,7 +356,7 @@ export function SceneTrustPanel({
             Recheck verdict — v{verdict.revisionVersion ?? "?"}
             <span
               className={clsx(
-                "ml-auto text-[10px] uppercase tracking-wide",
+                "ml-auto text-xs uppercase tracking-wide",
                 verdict.passed ? "text-emerald-300" : "text-amber-300"
               )}
             >
@@ -365,7 +365,7 @@ export function SceneTrustPanel({
           </div>
           <div className="grid gap-1">
             {verdict.checks.map((c) => (
-              <div key={c.id} className="flex items-start gap-1.5 text-[11px] leading-tight">
+              <div key={c.id} className="flex items-start gap-1.5 text-xs leading-tight">
                 {c.status === "pass" ? (
                   <CheckCircle2 className={clsx("mt-0.5 h-3 w-3 shrink-0", CHECK_DOT.pass)} />
                 ) : c.status === "fail" ? (
@@ -381,7 +381,7 @@ export function SceneTrustPanel({
           {verdict.seams.length > 0 && (
             <div className="space-y-1 border-t border-white/5 pt-2">
               {verdict.seams.map((s) => (
-                <div key={s.afterScene} className="flex items-center gap-1.5 text-[11px]">
+                <div key={s.afterScene} className="flex items-center gap-1.5 text-xs">
                   <span className="text-zinc-400">
                     seam {s.afterScene}|{s.afterScene + 1}
                   </span>
@@ -397,7 +397,7 @@ export function SceneTrustPanel({
                     <Button
                       size="sm"
                       variant="outline"
-                      className="ml-auto h-6 px-2 text-[10px]"
+                      className="ml-auto h-6 px-2 text-xs"
                       onClick={() => renderBoundary(s.afterScene)}
                       disabled={busy !== null}
                     >
@@ -423,8 +423,8 @@ export function SceneTrustPanel({
           </div>
           {repairs.map((r) => (
             <div key={r.id} className="space-y-1 rounded border border-white/5 bg-white/[0.03] p-2">
-              <p className="text-[11px] leading-snug text-zinc-200">{r.instruction}</p>
-              <p className="text-[10px] text-zinc-500">
+              <p className="text-xs leading-snug text-zinc-200">{r.instruction}</p>
+              <p className="text-xs text-zinc-500">
                 {r.origin} · based on v{r.sourceVersion} · estimate {microToUsd(r.estimateMicroUsd)} ·
                 regenerates {r.affectedAssets.sceneKeys.length} asset{r.affectedAssets.sceneKeys.length === 1 ? "" : "s"}
                 {r.affectedAssets.videoRenders ? " + the video renders" : ""}
@@ -432,7 +432,7 @@ export function SceneTrustPanel({
               <div className="flex gap-1.5">
                 <Button
                   size="sm"
-                  className="h-6 px-2 text-[10px]"
+                  className="h-6 px-2 text-xs"
                   onClick={() => approveRepair(r.id)}
                   disabled={busy !== null}
                 >
@@ -442,7 +442,7 @@ export function SceneTrustPanel({
                 <Button
                   size="sm"
                   variant="ghost"
-                  className="h-6 px-2 text-[10px] text-zinc-400"
+                  className="h-6 px-2 text-xs text-zinc-400"
                   onClick={() => rejectRepair(r.id)}
                   disabled={busy !== null}
                 >
@@ -468,11 +468,11 @@ export function SceneTrustPanel({
             />
           </button>
           {visibleRevisions.map((r) => (
-            <div key={r.version} className="flex items-center gap-2 text-[11px]">
+            <div key={r.version} className="flex items-center gap-2 text-xs">
               <span className="w-8 shrink-0 font-mono text-zinc-400">v{r.version}</span>
               <span
                 className={clsx(
-                  "shrink-0 rounded border px-1 py-px text-[9px] uppercase tracking-wide",
+                  "shrink-0 rounded border px-1 py-px text-xs uppercase tracking-wide",
                   STATUS_CHIP[r.status] ?? STATUS_CHIP.draft
                 )}
               >
@@ -485,7 +485,7 @@ export function SceneTrustPanel({
               <Button
                 size="sm"
                 variant="ghost"
-                className="ml-auto h-6 shrink-0 px-2 text-[10px] text-zinc-400"
+                className="ml-auto h-6 shrink-0 px-2 text-xs text-zinc-400"
                 onClick={() => rollback(r.version)}
                 disabled={busy !== null || r.version === feed.head?.version}
                 title={

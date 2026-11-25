@@ -615,7 +615,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               : "Already registered? Sign in instead"}
           </button>
 
-          <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground pt-1">
+          <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground pt-1">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
             Sessions are HttpOnly + signed; every API route is tenant-scoped.
           </p>

@@ -186,11 +186,11 @@ function SectionLabel({
 }) {
   return (
     <div className="pt-3 mt-1 border-t border-white/8">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
       </p>
       {hint && (
-        <p className="text-[10px] text-muted-foreground/80 mt-0.5 leading-snug">
+        <p className="text-xs text-muted-foreground/80 mt-0.5 leading-snug">
           {hint}
         </p>
       )}
@@ -1245,13 +1245,13 @@ export function CreateView() {
                   >
                     <span
                       className={clsx(
-                        "flex items-center gap-1.5 text-[11px] font-semibold leading-none",
+                        "flex items-center gap-1.5 text-xs font-semibold leading-none",
                         state === "current" ? "text-primary" : "text-white/70",
                       )}
                     >
                       <span
                         className={clsx(
-                          "h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] shrink-0",
+                          "h-4.5 w-4.5 rounded-full flex items-center justify-center text-xs shrink-0",
                           state === "current" && "bg-primary text-white",
                           state === "done" && "bg-emerald-400/20 text-emerald-300 border border-emerald-400/40",
                           state === "todo" && "bg-white/8 text-white/50 border border-white/12",
@@ -1261,7 +1261,7 @@ export function CreateView() {
                       </span>
                       {s.label}
                     </span>
-                    <span className="block text-[9.5px] text-muted-foreground mt-1 truncate">
+                    <span className="block text-xs text-muted-foreground mt-1 truncate">
                       {s.hint}
                     </span>
                   </button>
@@ -1348,7 +1348,7 @@ export function CreateView() {
                     <Icon className={clsx("h-4 w-4", t.accent)} />
                     <span className="text-sm font-medium">{t.title}</span>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">
+                  <p className="text-xs text-muted-foreground mt-1.5 leading-snug">
                     {t.desc}
                   </p>
                   {/* §6.5 honest capability UX — the registry declares what
@@ -1359,7 +1359,7 @@ export function CreateView() {
               );
             })}
           </div>
-          <p className="text-[11px] text-muted-foreground leading-relaxed pt-1">
+          <p className="text-xs text-muted-foreground leading-relaxed pt-1">
             Nothing is generated yet — this only sets what the brief builds.
             You can still fine-tune the render style on the next steps.
           </p>
@@ -1388,7 +1388,7 @@ export function CreateView() {
                   type="button"
                   onClick={() => setTopic(t)}
                   disabled={busy}
-                  className="text-[11px] rounded-full border border-white/10 bg-white/4 px-2.5 py-1 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors truncate"
+                  className="text-xs rounded-full border border-white/10 bg-white/4 px-2.5 py-1 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors truncate"
                 >
                   {t.length > 38 ? t.slice(0, 36) + "…" : t}
                 </button>
@@ -1423,7 +1423,7 @@ export function CreateView() {
                 {useOwnScript && (
                   <Badge
                     variant="outline"
-                    className="border-primary/40 bg-primary/10 text-primary text-[10px] font-normal"
+                    className="border-primary/40 bg-primary/10 text-primary text-xs font-normal"
                   >
                     skips AI
                   </Badge>
@@ -1448,7 +1448,7 @@ export function CreateView() {
                   disabled={busy}
                   className="bg-white/5 resize-y font-mono text-[13px] leading-relaxed min-h-[180px]"
                 />
-                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>
                     {customScript.trim() ? (
                       <>
@@ -1471,7 +1471,7 @@ export function CreateView() {
                 </div>
                 {isStory && (
                   <Alert className="border-amber-500/30 bg-amber-500/5 py-2">
-                    <AlertDescription className="text-[11px] text-amber-200/90 leading-relaxed">
+                    <AlertDescription className="text-xs text-amber-200/90 leading-relaxed">
                       Custom scripts work with the <strong>Classic</strong> format only — Story mode needs AI to split your text into scenes. Switch the format below or toggle this off.
                     </AlertDescription>
                   </Alert>
@@ -1514,7 +1514,7 @@ export function CreateView() {
 
                     {analysisState === "error" && analysisError && (
                       <Alert className="border-rose-500/30 bg-rose-500/5 py-2">
-                        <AlertDescription className="text-[11px] text-rose-200/90 leading-relaxed">
+                        <AlertDescription className="text-xs text-rose-200/90 leading-relaxed">
                           Analysis failed: {analysisError}
                         </AlertDescription>
                       </Alert>
@@ -1539,7 +1539,7 @@ export function CreateView() {
                 <Label>Rendering style</Label>
                 <Badge
                   variant="outline"
-                  className="border-white/15 bg-white/5 text-muted-foreground text-[10px]"
+                  className="border-white/15 bg-white/5 text-muted-foreground text-xs"
                 >
                   {sceneCountLabel} ·{" "}
                   {LENGTHS.find((l) => l.id === length)?.label ?? length}
@@ -1571,27 +1571,27 @@ export function CreateView() {
                       )}
                       <span className="text-[13px] font-medium">{m.label}</span>
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-1 leading-snug">
+                    <p className="text-xs text-muted-foreground mt-1 leading-snug">
                       {m.desc}
                     </p>
                   </button>
                 ))}
               </div>
               {renderMode === "animated" && (
-                <p className="text-[11px] text-sky-300/90 leading-relaxed">
+                <p className="text-xs text-sky-300/90 leading-relaxed">
                   The studio renders the full animated video — every scene is
                   animated via image-to-video (~4 min per scene, tracked live).
                 </p>
               )}
               {renderMode === "slides" && (
-                <p className="text-[11px] text-violet-300/90 leading-relaxed">
+                <p className="text-xs text-violet-300/90 leading-relaxed">
                   The studio designs a keynote slide deck from your script — one
                   huge-typography beat per scene, rendered vertical 9:16 with no
                   image generation. Pairs best with hard-cut transitions.
                 </p>
               )}
               {renderMode === "stock" && (
-                <p className="text-[11px] text-emerald-300/90 leading-relaxed">
+                <p className="text-xs text-emerald-300/90 leading-relaxed">
                   The studio matches free stock footage (Pexels + Pixabay) to every
                   scene and renders real b-roll — scenes without a match keep their
                   Smart Motion art. Add your free keys in Settings → Stock footage.
@@ -1673,7 +1673,7 @@ export function CreateView() {
                 </AlertDescription>
               </Alert>
             ) : (
-              <p className="text-[10px] text-muted-foreground leading-relaxed">
+              <p className="text-xs text-muted-foreground leading-relaxed">
                 Tap the <span className="text-primary">▶</span> next to a voice
                 to hear how it sounds before picking. Not feeling these voices?
                 After creating, open the video&apos;s Inspector area →{" "}
@@ -1728,7 +1728,7 @@ export function CreateView() {
                         <span className="block text-sm font-medium leading-tight">
                           Camera moves & transitions
                         </span>
-                        <span className="block text-[11px] text-muted-foreground truncate">
+                        <span className="block text-xs text-muted-foreground truncate">
                           {motionSummary} · {transitionSummary} — tap to adjust
                         </span>
                       </span>
@@ -1793,46 +1793,46 @@ export function CreateView() {
           <div className="rounded-xl border border-white/10 bg-white/3 p-3.5">
             <p className="tf-kicker mb-2.5">Your brief</p>
             <div className="flex flex-wrap gap-1.5">
-              <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-[11px]">
+              <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-xs">
                 {isStory ? "Scene story" : "Classic narration"}
               </Badge>
               {isStory && (
-                <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-[11px]">
+                <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-xs">
                   {RENDER_MODES.find((m) => m.id === renderMode)?.label ?? renderMode}
                 </Badge>
               )}
-              <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-[11px]">
+              <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-xs">
                 {niche} · {TONES.find((t) => t.id === tone)?.label ?? tone}
               </Badge>
-              <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-[11px]">
+              <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-xs">
                 {LENGTHS.find((l) => l.id === length)?.label ?? length}
                 {isStory ? ` · ${sceneCountLabel}` : ""}
               </Badge>
-              <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-[11px]">
+              <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-xs">
                 {voice} · {speed.toFixed(1)}x
               </Badge>
               {isStory && (
-                <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-[11px]">
+                <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-xs">
                   {motionSummary} · {transitionSummary}
                 </Badge>
               )}
               {music.enabled !== false && (
-                <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-[11px]">
+                <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-xs">
                   {music.trackId ? "Pinned track" : "Mood-matched music"}
                 </Badge>
               )}
               {castCharacter && (
-                <Badge variant="outline" className="border-emerald-400/30 bg-emerald-400/10 text-emerald-300 text-[11px]">
+                <Badge variant="outline" className="border-emerald-400/30 bg-emerald-400/10 text-emerald-300 text-xs">
                   Host: {castCharacter.name}
                 </Badge>
               )}
               {channelId !== "none" && (
-                <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-[11px]">
+                <Badge variant="outline" className="border-white/15 bg-white/5 text-white/80 text-xs">
                   {channels.find((c) => c.id === channelId)?.name ?? "Channel"}
                 </Badge>
               )}
             </div>
-            <p className="text-[11px] text-muted-foreground mt-2.5 leading-snug">
+            <p className="text-xs text-muted-foreground mt-2.5 leading-snug">
               {useOwnScript
                 ? "Your pasted script ships verbatim (AI analysis approved)."
                 : "AI writes the script from your topic, then the pipeline runs."}
@@ -1886,7 +1886,7 @@ export function CreateView() {
                 </SelectContent>
               </Select>
               {castCharacter && (
-                <p className="text-[11px] text-emerald-300/90 leading-relaxed">
+                <p className="text-xs text-emerald-300/90 leading-relaxed">
                   {castCharacter.name} hosts this video — identity is stamped
                   into the storyboard and thumbnail, and the voice defaults to
                   their persona.
@@ -1918,7 +1918,7 @@ export function CreateView() {
               <FileText className="h-4 w-4" />
               Script Only
             </Button>
-            <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
+            <p className="text-xs text-muted-foreground text-center leading-relaxed">
               {isStory
                 ? `Production runs: scene script → storyboard → ${renderMode === "stock" ? "stock b-roll → " : ""}${autoVoice ? "voiceover → " : ""}${autoThumb ? "thumbnail → " : ""}render ${renderMode === "animated" ? "full AI animation" : "MP4"}`
                 : `Production runs: script → ${autoVoice ? "voiceover → " : ""}${autoThumb ? "thumbnail → " : ""}ready (configure in Settings)`}
@@ -1933,7 +1933,7 @@ export function CreateView() {
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium leading-tight">Series batch</p>
-                <p className="text-[10px] text-muted-foreground leading-snug">
+                <p className="text-xs text-muted-foreground leading-snug">
                   One topic → {batchCount} distinct videos, scripts auto-written
                 </p>
               </div>
@@ -1980,7 +1980,7 @@ export function CreateView() {
               Back
             </Button>
           ) : (
-            <p className="text-[11px] text-muted-foreground leading-snug">
+            <p className="text-xs text-muted-foreground leading-snug">
               The blueprint saves itself — leave and pick up where you left off.
             </p>
           )}
@@ -1996,7 +1996,7 @@ export function CreateView() {
               <ChevronRight className="h-4 w-4" />
             </Button>
           ) : (
-            <p className="text-[11px] text-muted-foreground text-right leading-snug">
+            <p className="text-xs text-muted-foreground text-right leading-snug">
               Review the brief, then launch above.
             </p>
           )}
@@ -2081,12 +2081,12 @@ export function CreateView() {
                         <def.icon className="h-4 w-4" />
                       )}
                     </div>
-                    <span className="text-[10px] text-muted-foreground tabular-nums">
+                    <span className="text-xs text-muted-foreground tabular-nums">
                       STEP {i + 1}
                     </span>
                   </div>
                   <p className="text-sm font-medium mt-2.5">{def.label}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
                     {/* S135 — engine lanes scaffold the doc from the landed
                         scenes (native planner, $0); only art lanes paint. */}
                     {isStory
@@ -2156,7 +2156,7 @@ export function CreateView() {
               <div className="p-5 border-b border-white/6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
                       Generated Title
                     </p>
                     <h3 className="text-lg font-bold leading-snug mt-1">
@@ -2182,7 +2182,7 @@ export function CreateView() {
 
               {video.hasVideo && video.videoUrl && (
                 <div className="p-5 border-b border-white/6">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
                     Rendered video · {formatDuration(video.videoDuration)}
                   </p>
                   <video
@@ -2198,7 +2198,7 @@ export function CreateView() {
 
               {isStory && (video.scenes ?? []).length > 0 && (
                 <div className="p-5 border-b border-white/6">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
                     Storyboard · {video.sceneCount} scenes
                   </p>
                   <div className="flex gap-2 overflow-x-auto tf-scroll-bar pb-2">
@@ -2225,14 +2225,14 @@ export function CreateView() {
                         {s.hasStock && (
                           <div className="absolute top-1.5 left-1.5 flex items-center gap-1 rounded-md bg-black/70 backdrop-blur px-1.5 py-0.5 border border-emerald-500/30">
                             <Film className="h-2.5 w-2.5 text-emerald-300" />
-                            <span className="text-[9px] font-semibold uppercase tracking-wide text-emerald-300">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
                               {s.stockSource === "pixabay" ? "Pixabay" : "Pexels"}
                             </span>
                           </div>
                         )}
                         <div className="p-2">
-                          <p className="text-[11px] font-medium truncate">{s.title}</p>
-                          <p className="text-[10px] text-muted-foreground truncate">
+                          <p className="text-xs font-medium truncate">{s.title}</p>
+                          <p className="text-xs text-muted-foreground truncate">
                             {s.hasStock && s.stockQuery ? `stock: ${s.stockQuery}` : s.caption || s.mood}
                           </p>
                         </div>
@@ -2244,7 +2244,7 @@ export function CreateView() {
 
               {video.hasThumbnail && (
                 <div className="px-5 pt-5">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
                     Thumbnail
                   </p>
                   <img
@@ -2258,10 +2258,10 @@ export function CreateView() {
               {video.hasVoiceover && (
                 <div className="p-5">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                    <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
                       Voiceover · {formatDuration(video.audioDuration)}
                     </p>
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {voices.find((v) => v.id === video.voice)?.label ??
                         VOICES.find((v) => v.id === video.voice)?.label ??
                         video.voice}
@@ -2281,7 +2281,7 @@ export function CreateView() {
 
             <Card className="glass rounded-2xl p-5">
               <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
                   {isStory ? "Scene Narration" : "Full Script"}
                 </p>
                 <div className="flex items-center gap-2">
@@ -2337,7 +2337,7 @@ export function CreateView() {
                     autoFocus
                     className="bg-white/5 resize-y font-mono text-[13px] leading-relaxed min-h-[280px]"
                   />
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>
                       {draftScript.trim().split(/\s+/).filter(Boolean).length} words · {draftScript.length.toLocaleString()} chars
                     </span>
@@ -2382,14 +2382,14 @@ export function CreateView() {
               )}
 
               {isStory && !editingScript && (
-                <p className="mt-3 text-[11px] text-muted-foreground/80 leading-relaxed">
+                <p className="mt-3 text-xs text-muted-foreground/80 leading-relaxed">
                   Scene-by-scene narration lives in the Storyboard — open the Scene Editor to tweak individual scene lines.
                 </p>
               )}
 
               {tags.length > 0 && !editingScript && (
                 <div className="mt-4 pt-4 border-t border-white/6">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
                     SEO Tags
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -2593,7 +2593,7 @@ function AnalysisReportCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <p className={`text-sm font-semibold ${verdictText}`}>{verdictLabel}</p>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <span>{wordCount} words</span>
               <span>·</span>
               <span>~{fmtDur(estimatedDurationSec)} narration</span>
@@ -2623,7 +2623,7 @@ function AnalysisReportCard({
               style={{ width: `${score}%` }}
             />
           </div>
-          <p className="text-[10px] text-muted-foreground mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             Engine score: <span className={verdictText}>{score}/100</span>
           </p>
         </div>
@@ -2632,7 +2632,7 @@ function AnalysisReportCard({
       {/* Strengths */}
       {strengths.length > 0 && (
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1.5">
             Strengths
           </p>
           <ul className="space-y-1">
@@ -2649,7 +2649,7 @@ function AnalysisReportCard({
       {/* Issues */}
       {issues.length > 0 && (
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1.5">
             Issues ({issues.length})
           </p>
           <ul className="space-y-1.5">
@@ -2671,17 +2671,17 @@ function AnalysisReportCard({
                   <div className="flex items-center gap-2 flex-wrap">
                     <Badge
                       variant="outline"
-                      className={`border-current/30 bg-transparent ${sevColor} text-[10px] font-normal py-0`}
+                      className={`border-current/30 bg-transparent ${sevColor} text-xs font-normal py-0`}
                     >
                       {sevLabel}
                     </Badge>
-                    <span className="text-muted-foreground text-[10px] uppercase tracking-wider">
+                    <span className="text-muted-foreground text-xs uppercase tracking-wider">
                       {String(issue.category).replace(/_/g, " ")}
                     </span>
                   </div>
                   <p className="mt-1 text-foreground/90">{String(issue.message)}</p>
                   {issue.suggestion && (
-                    <p className="mt-1 text-muted-foreground text-[11px] italic">
+                    <p className="mt-1 text-muted-foreground text-xs italic">
                       → {String(issue.suggestion)}
                     </p>
                   )}
@@ -2695,7 +2695,7 @@ function AnalysisReportCard({
       {/* Recommendations */}
       {recommendations.length > 0 && (
         <div>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-1.5">
             Recommendations
           </p>
           <ul className="space-y-1">
@@ -2711,7 +2711,7 @@ function AnalysisReportCard({
 
       {/* Approve / Revoke toggle */}
       <div className="pt-2 border-t border-white/8 flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-[11px] text-muted-foreground leading-relaxed">
+        <p className="text-xs text-muted-foreground leading-relaxed">
           {approved ? (
             <span className="text-emerald-300">✓ Approved — you can generate the video.</span>
           ) : verdict === "rejected" ? (

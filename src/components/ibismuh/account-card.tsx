@@ -176,7 +176,7 @@ export function AccountDataCard() {
                 key={d}
                 onClick={() => setUsageDays(d)}
                 className={clsx(
-                  "h-7 px-2.5 rounded-lg text-[11px] transition-colors",
+                  "h-7 px-2.5 rounded-lg text-xs transition-colors",
                   usageDays === d
                     ? "bg-primary/15 text-primary font-medium"
                     : "text-muted-foreground hover:bg-white/5"
@@ -202,18 +202,18 @@ export function AccountDataCard() {
             <div className="grid grid-cols-3 gap-3 mt-3">
               <div>
                 <p className="text-lg font-semibold leading-none">{usage.totals.calls}</p>
-                <p className="text-[11px] text-muted-foreground mt-1">AI calls</p>
+                <p className="text-xs text-muted-foreground mt-1">AI calls</p>
               </div>
               <div>
                 <p className="text-lg font-semibold leading-none">{fmtCost(usage.totals.costUsd)}</p>
-                <p className="text-[11px] text-muted-foreground mt-1">estimated spend</p>
+                <p className="text-xs text-muted-foreground mt-1">estimated spend</p>
               </div>
               <div>
                 <p className="text-lg font-semibold leading-none flex items-center gap-1.5">
                   <HardDrive className="h-4 w-4 text-muted-foreground" />
                   {fmtBytes(st?.usedBytes ?? 0)}
                 </p>
-                <p className="text-[11px] text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   of {fmtBytes(st?.quotaBytes ?? 0)} storage
                 </p>
               </div>

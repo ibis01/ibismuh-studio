@@ -370,7 +370,7 @@ export function CalendarView() {
               >
                 <Card className="glass border-white/8 rounded-2xl p-3.5 flex flex-row items-center gap-3 hover:bg-white/4">
                   <div className="text-center shrink-0 bg-white/5 border border-white/10 rounded-lg px-2.5 py-1.5">
-                    <p className="text-[10px] uppercase text-muted-foreground">
+                    <p className="text-xs uppercase text-muted-foreground">
                       {format(new Date(slot.slotDate), "EEE")}
                     </p>
                     <p className="text-sm font-bold leading-none">
@@ -400,7 +400,7 @@ export function CalendarView() {
             {WEEKDAYS.map((d) => (
               <div
                 key={d}
-                className="py-2.5 text-center text-[11px] font-medium uppercase tracking-wider text-foreground/75"
+                className="py-2.5 text-center text-xs font-medium uppercase tracking-wider text-foreground/75"
               >
                 {d}
               </div>
@@ -451,7 +451,7 @@ export function CalendarView() {
                         key={slot.id}
                         onClick={() => setDetail(slot)}
                         className={clsx(
-                          "w-full text-left rounded-md border px-1.5 py-1 text-[11px] leading-tight transition-colors",
+                          "w-full text-left rounded-md border px-1.5 py-1 text-xs leading-tight transition-colors",
                           slotSlotClass(slot)
                         )}
                       >
@@ -462,7 +462,7 @@ export function CalendarView() {
                       </button>
                     ))}
                     {daySlots.length > 3 && (
-                      <p className="text-[10px] text-muted-foreground px-1.5">
+                      <p className="text-xs text-muted-foreground px-1.5">
                         +{daySlots.length - 3} more
                       </p>
                     )}

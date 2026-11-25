@@ -157,7 +157,7 @@ export function MotionStage({
         className="tf-kb-frame"
         style={{ backgroundImage: `url("${frameUrl}")` }}
       />
-      <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-medium text-white pointer-events-none">
+      <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-xs font-medium text-white pointer-events-none">
         {anim.chip.toUpperCase()}
       </span>
     </div>
@@ -193,7 +193,7 @@ export function MotionControlsCard({
         <Move3d className="h-4 w-4 text-primary shrink-0" />
         <div className="min-w-0">
           <p className="text-sm font-medium leading-none">Image Motion</p>
-          <p className="text-[11px] text-muted-foreground mt-1 truncate">
+          <p className="text-xs text-muted-foreground mt-1 truncate">
             Ken Burns camera work over still art — focal points stay in frame
           </p>
         </div>
@@ -231,7 +231,7 @@ export function MotionControlsCard({
               )}
             >
               <span className="text-[12px] font-medium leading-none">{mode.label}</span>
-              <p className="text-[10px] text-muted-foreground mt-1 leading-snug">{mode.desc}</p>
+              <p className="text-xs text-muted-foreground mt-1 leading-snug">{mode.desc}</p>
             </button>
           ))}
         </div>
@@ -254,7 +254,7 @@ export function MotionControlsCard({
           onValueChange={([v]) => onChange({ ...value, intensity: v })}
           aria-label="Zoom intensity percent"
         />
-        <div className="flex justify-between text-[10px] text-muted-foreground/70">
+        <div className="flex justify-between text-xs text-muted-foreground/70">
           <span>None</span>
           <span>Subtle</span>
           <span>Strong</span>
@@ -272,7 +272,7 @@ export function MotionControlsCard({
                 disabled={disabled}
                 onClick={() => onChange({ ...value, curve: "smooth" })}
                 className={clsx(
-                  "rounded-lg border px-2 py-1.5 text-[11px] transition-all",
+                  "rounded-lg border px-2 py-1.5 text-xs transition-all",
                   m.curve === "smooth"
                     ? "border-primary/50 bg-primary/8 text-foreground"
                     : "border-white/10 bg-white/3 hover:border-white/25 text-muted-foreground"
@@ -285,7 +285,7 @@ export function MotionControlsCard({
                 disabled={disabled}
                 onClick={() => onChange({ ...value, curve: "linear" })}
                 className={clsx(
-                  "rounded-lg border px-2 py-1.5 text-[11px] transition-all",
+                  "rounded-lg border px-2 py-1.5 text-xs transition-all",
                   m.curve === "linear"
                     ? "border-primary/50 bg-primary/8 text-foreground"
                     : "border-white/10 bg-white/3 hover:border-white/25 text-muted-foreground"
@@ -298,7 +298,7 @@ export function MotionControlsCard({
           <div className="flex items-center justify-between">
             <div className="min-w-0">
               <Label className="text-xs cursor-pointer">Vary direction between scenes</Label>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Alternate zooms, pan sides and tilts so no two scenes move alike
               </p>
             </div>
@@ -313,16 +313,16 @@ export function MotionControlsCard({
       )}
 
       {/* Current configuration — mirrors what the renderer will do */}
-      <p className="text-[10px] text-muted-foreground leading-relaxed border-t border-white/5 pt-2.5">
+      <p className="text-xs text-muted-foreground leading-relaxed border-t border-white/5 pt-2.5">
         <span className="text-foreground/70">Current configuration:</span>{" "}
         {motionSummaryLine(value)} — applied at render time; 16:9 masters and
         9:16 Shorts each get framing shaped for their format.
       </p>
       {note && (
-        <p className="text-[10px] text-sky-300/90 leading-relaxed -mt-1.5">{note}</p>
+        <p className="text-xs text-sky-300/90 leading-relaxed -mt-1.5">{note}</p>
       )}
       {compact ? null : (
-        <p className="text-[10px] text-muted-foreground/70 leading-relaxed -mt-1.5">
+        <p className="text-xs text-muted-foreground/70 leading-relaxed -mt-1.5">
           Rehook scenes keep their punch-in hook; text-heavy art automatically
           drops to a near-static hold so captions stay readable.
         </p>

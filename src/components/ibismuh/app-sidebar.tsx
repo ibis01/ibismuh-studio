@@ -265,7 +265,7 @@ export function AppSidebar() {
             <span className="animate-pulse-dot h-2 w-2 rounded-full bg-primary shrink-0" />
             <p className="text-xs font-medium">Studio online</p>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+          <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
             Every pipeline stage runs in the background — progress lands
             here and in Activity.
           </p>

@@ -1867,7 +1867,7 @@ export function ProductionWorkspace({
             {scenes.length} scenes · {video.characterName ? `host: ${video.characterName}` : "no host"}
           </p>
           {scenes.length > 0 && (
-            <Badge variant="outline" className="tf-num border-white/12 bg-white/4 text-muted-foreground text-[10px] font-normal">
+            <Badge variant="outline" className="tf-num border-white/12 bg-white/4 text-muted-foreground text-xs font-normal">
               ≈ {formatDuration(totalEstimate)} spoken
             </Badge>
           )}
@@ -1977,24 +1977,24 @@ export function ProductionWorkspace({
                     ) : (
                       <LayoutGrid className="h-5 w-5 text-muted-foreground" />
                     )}
-                    <span className="text-[10px] text-muted-foreground">no art yet</span>
+                    <span className="text-xs text-muted-foreground">no art yet</span>
                   </div>
                 )}
-                <Badge className="absolute top-2 left-2 bg-black/70 text-white border-none text-[10px] px-1.5 h-5">
+                <Badge className="absolute top-2 left-2 bg-black/70 text-white border-none text-xs px-1.5 h-5">
                   SCENE {s.index}
                 </Badge>
                 {showSlideTile && (
-                  <Badge className="absolute top-2 right-2 bg-violet-500/80 text-white border-none text-[9px] px-1.5 h-5 gap-0.5">
+                  <Badge className="absolute top-2 right-2 bg-violet-500/80 text-white border-none text-xs px-1.5 h-5 gap-0.5">
                     <Presentation className="h-2.5 w-2.5" /> SLIDE
                   </Badge>
                 )}
                 {s.hostInScene && !showSlideTile && (
-                  <Badge className="absolute top-2 right-2 bg-primary/80 text-white border-none text-[9px] px-1.5 h-5 gap-0.5">
+                  <Badge className="absolute top-2 right-2 bg-primary/80 text-white border-none text-xs px-1.5 h-5 gap-0.5">
                     <UserRound className="h-2.5 w-2.5" /> HOST
                   </Badge>
                 )}
                 {s.rehook && (
-                  <Badge className="absolute bottom-2 right-2 bg-amber-500/85 text-black border-none text-[9px] px-1.5 h-5 gap-0.5">
+                  <Badge className="absolute bottom-2 right-2 bg-amber-500/85 text-black border-none text-xs px-1.5 h-5 gap-0.5">
                     <Zap className="h-2.5 w-2.5" /> REHOOK
                   </Badge>
                 )}
@@ -2008,33 +2008,33 @@ export function ProductionWorkspace({
               </div>
               <div className="p-3 flex-1 flex flex-col gap-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Badge variant="outline" className={clsx("text-[9px] font-normal px-1.5 h-5", status.cls)}>
+                  <Badge variant="outline" className={clsx("text-xs font-normal px-1.5 h-5", status.cls)}>
                     {status.label}
                   </Badge>
-                  <span className="tf-num text-[10px] text-muted-foreground">≈ {Math.round(est)}s</span>
+                  <span className="tf-num text-xs text-muted-foreground">≈ {Math.round(est)}s</span>
                 </div>
                 <div>
                   <p className="text-sm font-medium">{showSlideTile ? slide.headline || s.title : s.title}</p>
-                  <p className="text-[11px] text-muted-foreground leading-snug mt-0.5 line-clamp-3">
+                  <p className="text-xs text-muted-foreground leading-snug mt-0.5 line-clamp-3">
                     {s.narration}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-1 mt-auto">
-                  <Badge variant="outline" className="border-white/12 bg-white/4 text-muted-foreground text-[9px] font-normal">
+                  <Badge variant="outline" className="border-white/12 bg-white/4 text-muted-foreground text-xs font-normal">
                     {s.cameraLabel}
                   </Badge>
                   {s.sfx && s.sfx !== "none" && (
-                    <Badge variant="outline" className="border-fuchsia-500/25 bg-fuchsia-500/10 text-fuchsia-200 text-[9px] font-normal uppercase">
+                    <Badge variant="outline" className="border-fuchsia-500/25 bg-fuchsia-500/10 text-fuchsia-200 text-xs font-normal uppercase">
                       sfx: {s.sfx}
                     </Badge>
                   )}
                   {s.caption && (
-                    <Badge variant="outline" className="border-sky-500/25 bg-sky-500/10 text-sky-200 text-[9px] font-normal">
+                    <Badge variant="outline" className="border-sky-500/25 bg-sky-500/10 text-sky-200 text-xs font-normal">
                       “{s.caption}”
                     </Badge>
                   )}
                   {s.mood && (
-                    <Badge variant="outline" className="border-white/12 bg-white/4 text-muted-foreground text-[9px] font-normal truncate max-w-full">
+                    <Badge variant="outline" className="border-white/12 bg-white/4 text-muted-foreground text-xs font-normal truncate max-w-full">
                       {s.mood}
                     </Badge>
                   )}
@@ -2048,7 +2048,7 @@ export function ProductionWorkspace({
                       setCanvasScene(s.index);
                       changeTab("canvas");
                     }}
-                    className="h-7 text-[11px] text-muted-foreground hover:text-foreground hover:bg-white/6 w-fit px-2"
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground hover:bg-white/6 w-fit px-2"
                     title="Open in Canvas — style, prompt, AI edit, or upload your own art"
                   >
                     <Brush className="h-3 w-3" />
@@ -2060,7 +2060,7 @@ export function ProductionWorkspace({
                       size="sm"
                       disabled={Boolean(busy) || slide.generating}
                       onClick={() => rerollSlide(s.index, s.title)}
-                      className="h-7 text-[11px] text-violet-200/90 hover:text-foreground hover:bg-white/6 w-fit px-2"
+                      className="h-7 text-xs text-violet-200/90 hover:text-foreground hover:bg-white/6 w-fit px-2"
                       title="Fresh design for this one slide — layout, accent and headline treatment"
                     >
                       {busy === `slide-${s.index}` || slide.generating ? (
@@ -2077,7 +2077,7 @@ export function ProductionWorkspace({
                       size="sm"
                       disabled={Boolean(busy) || s.generating}
                       onClick={() => regenScene(s.index, s.title)}
-                      className="h-7 text-[11px] text-muted-foreground hover:text-foreground hover:bg-white/6 w-fit px-2"
+                      className="h-7 text-xs text-muted-foreground hover:text-foreground hover:bg-white/6 w-fit px-2"
                     >
                       {busy === `scene-${s.index}` || s.generating ? (
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -2157,7 +2157,7 @@ export function ProductionWorkspace({
         </span>
         <div className="min-w-0">
           <p className="text-sm font-semibold tracking-tight">Render &amp; Ship</p>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Tune the cut, roll the render, deliver — one deck under the lanes
           </p>
         </div>
@@ -2192,9 +2192,9 @@ export function ProductionWorkspace({
                   <Clapperboard className="h-3.5 w-3.5 text-sky-300" />
                 )}
                 <span className="text-sm font-medium">{m.label}</span>
-                <span className="ml-auto text-[10px] text-muted-foreground">{m.eta}</span>
+                <span className="ml-auto text-xs text-muted-foreground">{m.eta}</span>
               </div>
-              <p className="text-[11px] text-muted-foreground mt-1 leading-snug">{m.desc}</p>
+              <p className="text-xs text-muted-foreground mt-1 leading-snug">{m.desc}</p>
             </button>
           ))}
         </div>
@@ -2230,9 +2230,9 @@ export function ProductionWorkspace({
         {/* S3 — export presets: one chip configures the delivery target
             (aspect + fps on the row, captions + quality for this render). */}
         <div className="space-y-1.5">
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
             <Package className="h-3 w-3" /> Export preset
-            <span className="rounded bg-emerald-500/15 px-1.5 py-px text-[9px] normal-case tracking-normal text-emerald-200">
+            <span className="rounded bg-emerald-500/15 px-1.5 py-px text-xs normal-case tracking-normal text-emerald-200">
               render honors
             </span>
           </div>
@@ -2258,7 +2258,7 @@ export function ProductionWorkspace({
                   )}
                 >
                   <div className="text-xs font-medium">{p.label}</div>
-                  <div className="text-[10px] text-muted-foreground">{p.note}</div>
+                  <div className="text-xs text-muted-foreground">{p.note}</div>
                 </button>
               );
             })}
@@ -2312,7 +2312,7 @@ export function ProductionWorkspace({
         </div>
 
         {renderDisabledReason && (
-          <p className="text-[11px] text-amber-300/90">{renderDisabledReason}.</p>
+          <p className="text-xs text-amber-300/90">{renderDisabledReason}.</p>
         )}
         {renderLabel && (
           <p className="text-xs text-primary/90 flex items-center gap-1.5">
@@ -2406,7 +2406,7 @@ export function ProductionWorkspace({
           )}
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+            <p className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground font-medium">
               {video.qcGate.blocked && !video.qcGate.overridden ? (
                 <ShieldAlert className="h-3.5 w-3.5 text-red-400 shrink-0" />
               ) : (
@@ -2418,7 +2418,7 @@ export function ProductionWorkspace({
             <Badge
               variant="outline"
               className={clsx(
-                "text-[10px]",
+                "text-xs",
                 video.qcGate.blocked && !video.qcGate.overridden
                   ? "border-red-500/30 bg-red-500/10 text-red-200"
                   : video.qcGate.overridden || video.qcGate.blockers.length > 0
@@ -2445,19 +2445,19 @@ export function ProductionWorkspace({
           {(video.qcGate.blocked || video.qcGate.overridden) && !video.qcGate.missingReport && (
             <ul className="mt-2 space-y-1.5">
               {video.qcGate.blockers.map((b) => (
-                <li key={b.id} className="text-[11px]">
+                <li key={b.id} className="text-xs">
                   <span className="text-foreground/90 font-medium">{b.label}</span>
                   <span className="text-muted-foreground">
                     {" "}— {b.value}
                     {b.status === "unmeasured" ? " (not measured)" : ""}
                   </span>
-                  <p className="text-muted-foreground/70 text-[10px]">{b.why}</p>
+                  <p className="text-muted-foreground/70 text-xs">{b.why}</p>
                 </li>
               ))}
             </ul>
           )}
           {video.qcGate.missingReport && (
-            <p className="mt-2 text-[11px] text-foreground/85">
+            <p className="mt-2 text-xs text-foreground/85">
               No QC report stands behind this render — run the QC battery (no re-render needed) before shipping.
             </p>
           )}
@@ -2468,7 +2468,7 @@ export function ProductionWorkspace({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-[11px] px-2.5 border-white/15 bg-white/4"
+                className="h-7 text-xs px-2.5 border-white/15 bg-white/4"
                 disabled={qcRerunning || Boolean(busy) || pubBusy}
                 onClick={() => void rerunQc()}
                 title="Re-run the QC battery against the standing render — no re-render needed"
@@ -2479,7 +2479,7 @@ export function ProductionWorkspace({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-[11px] px-2.5 border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
+                className="h-7 text-xs px-2.5 border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/15"
                 disabled={overriding || video.qcGate.missingReport}
                 onClick={() => setOverrideOpen((o) => !o)}
                 title={
@@ -2508,21 +2508,21 @@ export function ProductionWorkspace({
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
-                  className="bg-brand-gradient hover:opacity-90 text-white font-semibold h-7 text-[11px]"
+                  className="bg-brand-gradient hover:opacity-90 text-white font-semibold h-7 text-xs"
                   disabled={overriding || overrideNote.trim().length < 3}
                   onClick={() => void shipAnyway()}
                 >
                   {overriding ? <Loader2 className="h-3 w-3 animate-spin" /> : <Unlock className="h-3 w-3" />}
                   Accept findings & export
                 </Button>
-                <Button variant="ghost" size="sm" className="h-7 text-[11px]" onClick={() => setOverrideOpen(false)} disabled={overriding}>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setOverrideOpen(false)} disabled={overriding}>
                   Cancel
                 </Button>
               </div>
             </div>
           )}
           {video.qcGate.overridden && video.qcGate.overrideNote && (
-            <p className="mt-2 text-[11px] text-muted-foreground">
+            <p className="mt-2 text-xs text-muted-foreground">
               Accepted on record: “{video.qcGate.overrideNote}” — the gate re-arms automatically when a new QC report lands.
             </p>
           )}
@@ -2534,7 +2534,7 @@ export function ProductionWorkspace({
       {video.qc ? (
         <div className="rounded-xl border border-white/10 bg-white/3 p-4">
           <div className="flex items-center justify-between gap-2 mb-3">
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
               Quality check{video.qc.scope === "preview" ? " (preview — first scenes only)" : ""} · {new Date(video.qc.checkedAt).toLocaleString()}
             </p>
             {/* S17 — the pre-flight gate: the /qc route re-measures the
@@ -2544,7 +2544,7 @@ export function ProductionWorkspace({
             <Button
               variant="outline"
               size="sm"
-              className="h-6 text-[10px] px-2 border-white/15 bg-white/4"
+              className="h-6 text-xs px-2 border-white/15 bg-white/4"
               disabled={qcRerunning || Boolean(busy) || pubBusy || !video.hasVideo}
               onClick={() => void rerunQc()}
               title={
@@ -2560,8 +2560,8 @@ export function ProductionWorkspace({
               variant="outline"
               className={
                 video.qc.passed
-                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-200 text-[10px]"
-                  : "border-amber-500/30 bg-amber-500/10 text-amber-200 text-[10px]"
+                  ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-200 text-xs"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs"
               }
             >
               {video.qc.passed ? (
@@ -2604,7 +2604,7 @@ export function ProductionWorkspace({
                       <p className="text-xs font-semibold">{g.title}</p>
                       <span
                         className={clsx(
-                          "text-[10px] px-1.5 py-0.5 rounded-md border font-semibold",
+                          "text-xs px-1.5 py-0.5 rounded-md border font-semibold",
                           fails === 0
                             ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
                             : "bg-amber-500/15 text-amber-400 border-amber-500/30"
@@ -2617,7 +2617,7 @@ export function ProductionWorkspace({
                     </div>
                     <ul className="space-y-1.5">
                       {g.checks.map((c) => (
-                        <li key={c.id} className="flex items-start gap-2 text-[11px]">
+                        <li key={c.id} className="flex items-start gap-2 text-xs">
                           {qcCheckStatus(c) === "pass" ? (
                             <CircleCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
                           ) : qcCheckStatus(c) === "unmeasured" ? (
@@ -2628,7 +2628,7 @@ export function ProductionWorkspace({
                           <div className="min-w-0">
                             <span className="text-foreground/85">{c.label}</span>
                             <span className="text-muted-foreground"> — {c.value}</span>
-                            {c.detail && <p className="text-muted-foreground/70 text-[10px]">{c.detail}</p>}
+                            {c.detail && <p className="text-muted-foreground/70 text-xs">{c.detail}</p>}
                           </div>
                         </li>
                       ))}
@@ -2660,10 +2660,10 @@ export function ProductionWorkspace({
       {video.hasVideo && video.videoUrl ? (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
               Final video · {formatDuration(video.videoDuration)}
             </p>
-            <Badge variant="outline" className="border-emerald-500/25 bg-emerald-500/10 text-emerald-200 text-[10px]">
+            <Badge variant="outline" className="border-emerald-500/25 bg-emerald-500/10 text-emerald-200 text-xs">
               <Check className="h-2.5 w-2.5 mr-1" />
               {video.renderMode === "animated" ? "AI animated" : "Ken Burns"}
             </Badge>
@@ -2685,7 +2685,7 @@ export function ProductionWorkspace({
         </div>
       ) : video.previewUrl ? (
         <div className="space-y-2">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
             Preview (scene 1)
           </p>
           <video
@@ -2708,15 +2708,15 @@ export function ProductionWorkspace({
         <div className="rounded-xl border border-white/10 bg-white/3 p-4 space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div>
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
                 Auto-Short · 9:16 vertical
               </p>
-              <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+              <p className="text-xs text-muted-foreground/80 mt-0.5">
                 Center-cropped punch-in with big Shorts-style captions · capped at 45s
               </p>
             </div>
             {video.hasShort && (
-              <Badge variant="outline" className="border-sky-500/25 bg-sky-500/10 text-sky-200 text-[10px]">
+              <Badge variant="outline" className="border-sky-500/25 bg-sky-500/10 text-sky-200 text-xs">
                 <Smartphone className="h-2.5 w-2.5 mr-1" />
                 Scene {video.shortScene} · {formatDuration(video.shortDuration)}
               </Badge>
@@ -2729,7 +2729,7 @@ export function ProductionWorkspace({
               disabled={Boolean(busy) || shortRunning}
               onClick={() => setShortScenePick("auto")}
               className={clsx(
-                "rounded-full border px-3 py-1 text-[11px] transition-all",
+                "rounded-full border px-3 py-1 text-xs transition-all",
                 shortScenePick === "auto"
                   ? "border-primary/50 bg-primary/15 text-cyan-200"
                   : "border-white/10 bg-white/4 text-muted-foreground hover:border-white/25"
@@ -2746,7 +2746,7 @@ export function ProductionWorkspace({
                 onClick={() => setShortScenePick(s.index)}
                 title={s.title}
                 className={clsx(
-                  "rounded-full border px-3 py-1 text-[11px] transition-all max-w-[160px] truncate",
+                  "rounded-full border px-3 py-1 text-xs transition-all max-w-[160px] truncate",
                   shortScenePick === s.index
                     ? "border-primary/50 bg-primary/15 text-cyan-200"
                     : "border-white/10 bg-white/4 text-muted-foreground hover:border-white/25"
@@ -2782,7 +2782,7 @@ export function ProductionWorkspace({
                 Your browser does not support the video element.
               </video>
               <div className="flex flex-col gap-2 items-start">
-                <p className="text-[11px] text-muted-foreground leading-relaxed max-w-[280px]">
+                <p className="text-xs text-muted-foreground leading-relaxed max-w-[280px]">
                   Vertical cut ready — upload it as a YouTube Short to squeeze extra reach out of
                   this video.
                 </p>
@@ -2802,10 +2802,10 @@ export function ProductionWorkspace({
       <div className="rounded-xl border border-white/10 bg-white/3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
           <div>
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
               Export bundle
             </p>
-            <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+            <p className="text-xs text-muted-foreground/80 mt-0.5">
               One ZIP with everything YouTube needs
             </p>
           </div>
@@ -2843,7 +2843,7 @@ export function ProductionWorkspace({
             <span
               key={row.label}
               className={clsx(
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]",
+                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs",
                 row.ok
                   ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
                   : "border-white/10 bg-white/4 text-muted-foreground/70"
@@ -2858,7 +2858,7 @@ export function ProductionWorkspace({
             </span>
           ))}
         </div>
-        <p className="text-[10px] text-muted-foreground/70 mt-2.5 leading-relaxed">
+        <p className="text-xs text-muted-foreground/70 mt-2.5 leading-relaxed">
           Absent rows mean that pipeline stage hasn’t run yet — the ZIP always reflects
           what exists today, so run the stage first if you need it inside.
         </p>
@@ -2898,7 +2898,7 @@ export function ProductionWorkspace({
           <div className="flex items-center gap-2">
             <Clapperboard className="h-4 w-4 text-sky-300" />
             <p className="text-sm font-semibold">Want the animated video?</p>
-            <Badge variant="outline" className="ml-auto border-sky-400/30 bg-sky-500/10 text-sky-200 text-[9px]">
+            <Badge variant="outline" className="ml-auto border-sky-400/30 bg-sky-500/10 text-sky-200 text-xs">
               Unlocks Storyboard + Video
             </Badge>
           </div>
@@ -2937,19 +2937,19 @@ export function ProductionWorkspace({
       {/* Audio + bring-your-own-voice */}
       <div className="mt-1">
         <div className="flex items-center justify-between gap-2 mb-2">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
             Voiceover {video.hasVoiceover ? `· ${formatDuration(video.audioDuration)}` : "· not generated"}
           </p>
           {video.voiceSource === "custom" ? (
             <Badge
               variant="outline"
-              className="border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200 text-[9px] max-w-[55%]"
+              className="border-fuchsia-400/30 bg-fuchsia-500/10 text-fuchsia-200 text-xs max-w-[55%]"
             >
               <AudioLines className="h-3 w-3 mr-1 shrink-0" />
               <span className="truncate">{video.voiceLabel ?? "Custom voice"}</span>
             </Badge>
           ) : (
-            <Badge variant="outline" className="border-white/15 bg-white/5 text-zinc-300 text-[9px] shrink-0">
+            <Badge variant="outline" className="border-white/15 bg-white/5 text-zinc-300 text-xs shrink-0">
               <Bot className="h-3 w-3 mr-1" />
               {voices.find((v) => v.id === video.voice)?.label ?? VOICES.find((v) => v.id === video.voice)?.label ?? video.voice}
             </Badge>
@@ -2968,7 +2968,7 @@ export function ProductionWorkspace({
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-white/3 px-3 py-2.5">
           <div>
             <p className="text-xs font-medium">Final mix preview</p>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               12s of the real mix — narration, ducked music bed, loudness-normalized (−16 LUFS)
             </p>
           </div>
@@ -2983,7 +2983,7 @@ export function ProductionWorkspace({
           >
             <Mic className="h-3.5 w-3.5 text-primary" />
             <span className="text-xs font-medium">Change the voice</span>
-            <span className="text-[10px] text-muted-foreground hidden sm:inline">
+            <span className="text-xs text-muted-foreground hidden sm:inline">
               AI voices, your own file, or any audio from the internet
             </span>
             <ChevronDown
@@ -3009,7 +3009,7 @@ export function ProductionWorkspace({
                     disabled={busy === "voice"}
                     onClick={() => setVoiceMode(m.id)}
                     className={clsx(
-                      "flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-50",
+                      "flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
                       voiceMode === m.id
                         ? "border-primary/50 bg-primary/15 text-primary"
                         : "border-white/10 bg-white/3 text-muted-foreground hover:bg-white/6"
@@ -3031,7 +3031,7 @@ export function ProductionWorkspace({
                     triggerClassName="h-9 text-xs"
                     itemClassName="text-xs"
                   />
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
                     Tap the <span className="text-primary">▶</span> next to a voice to hear how it
                     sounds before committing.
                   </p>
@@ -3083,7 +3083,7 @@ export function ProductionWorkspace({
                       setVoicePanelOpen(false);
                       setView("voice");
                     }}
-                    className="w-full text-left text-[11px] text-primary/90 hover:text-primary transition-colors"
+                    className="w-full text-left text-xs text-primary/90 hover:text-primary transition-colors"
                   >
                     Manage &amp; clone voices in the Voice Studio →
                   </button>
@@ -3098,7 +3098,7 @@ export function ProductionWorkspace({
                     <InlineCloneSetup hint={cloneHint} />
                   )}
                   {cloneStatus !== "unknown" && cloneHint && (
-                    <p className="text-[10px] leading-relaxed text-sky-300/80">
+                    <p className="text-xs leading-relaxed text-sky-300/80">
                       {cloneHint}
                     </p>
                   )}
@@ -3140,14 +3140,14 @@ export function ProductionWorkspace({
                     {cloning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
                     {cloning ? "Cloning the voice…" : "Clone this voice"}
                   </Button>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
                     The sample becomes a reusable narration voice — pick it under AI voices and hit
                     Generate voice. Only clone voices you own or have permission to use.
                   </p>
 
                   {cloneProfiles.length > 0 && (
                     <div className="space-y-1.5 pt-1">
-                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                         Cloned voices
                       </p>
                       <div className="max-h-40 overflow-y-auto space-y-1 pr-0.5">
@@ -3228,7 +3228,7 @@ export function ProductionWorkspace({
                       }
                     }}
                   />
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  <p className="text-xs text-muted-foreground leading-relaxed">
                     Paste a DIRECT link to an audio file — any mp3 / wav / m4a on the
                     internet. Ibismuh Studio downloads it, converts it to studio audio and
                     swaps it in.
@@ -3246,7 +3246,7 @@ export function ProductionWorkspace({
               )}
 
               {video.format === "story" && (
-                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                <p className="text-xs text-muted-foreground leading-relaxed">
                   Scene videos: whatever voice you attach is auto-cut across the scenes
                   so the timeline still maps 1:1 — then re-render the video.
                 </p>
@@ -3262,7 +3262,7 @@ export function ProductionWorkspace({
       {/* Engagement kit (Phase 4 — retention comments) */}
       <div className="mt-5">
         <div className="flex items-center justify-between gap-2 mb-2">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
             <MessageCircle className="h-3 w-3" /> Engagement kit
           </p>
           <Button
@@ -3292,12 +3292,12 @@ export function ProductionWorkspace({
             {/* Pinned comment */}
             <div>
               <div className="flex items-center justify-between gap-2 mb-1.5">
-                <Badge className="bg-primary/15 text-cyan-200 border border-primary/25 text-[10px] gap-1">
+                <Badge className="bg-primary/15 text-cyan-200 border border-primary/25 text-xs gap-1">
                   <MessageCircle className="h-2.5 w-2.5" /> Pin this comment
                 </Badge>
                 <button
                   onClick={() => copyText("pinned", commentsKit.pinnedComment)}
-                  className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
                   title="Copy the pinned comment"
                 >
                   {copiedKey === "pinned" ? (
@@ -3315,7 +3315,7 @@ export function ProductionWorkspace({
 
             {/* Reply templates */}
             <div className="space-y-1.5">
-              <p className="text-[11px] text-muted-foreground font-medium flex items-center justify-between">
+              <p className="text-xs text-muted-foreground font-medium flex items-center justify-between">
                 <span>Reply templates</span>
                 <button
                   onClick={() =>
@@ -3324,7 +3324,7 @@ export function ProductionWorkspace({
                       commentsKit.replies.map((r) => `WHEN: ${r.trigger}\nREPLY: ${r.text}`).join("\n\n")
                     )
                   }
-                  className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                  className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
                   title="Copy all reply templates"
                 >
                   {copiedKey === "all-replies" ? (
@@ -3342,7 +3342,7 @@ export function ProductionWorkspace({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="text-[10px] text-muted-foreground/80 leading-snug">
+                      <p className="text-xs text-muted-foreground/80 leading-snug">
                         When: {reply.trigger}
                       </p>
                       <p className="text-[13px] text-foreground/85 leading-relaxed mt-0.5">
@@ -3368,7 +3368,7 @@ export function ProductionWorkspace({
             {/* Heart targets */}
             {commentsKit.heartTargets.length > 0 && (
               <div>
-                <p className="text-[11px] text-muted-foreground font-medium mb-1.5">
+                <p className="text-xs text-muted-foreground font-medium mb-1.5">
                   Heart these early comments
                 </p>
                 <ul className="space-y-1">
@@ -3382,7 +3382,7 @@ export function ProductionWorkspace({
             )}
 
             {/* Strategy */}
-            <p className="text-[11px] text-muted-foreground leading-relaxed border-t border-white/8 pt-2.5 italic">
+            <p className="text-xs text-muted-foreground leading-relaxed border-t border-white/8 pt-2.5 italic">
               <span className="text-foreground/70 not-italic font-medium">Playbook: </span>
               {commentsKit.strategy}
             </p>
@@ -3393,7 +3393,7 @@ export function ProductionWorkspace({
       {/* Description */}
       {video.description && (
         <div className="mt-5">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
             YouTube Description
           </p>
           <p className="text-sm text-foreground/85 leading-relaxed whitespace-pre-wrap">
@@ -3405,7 +3405,7 @@ export function ProductionWorkspace({
       {/* Tags */}
       {tags.length > 0 && (
         <div className="mt-4">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
             <Tag className="h-3 w-3" /> Tags
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -3421,7 +3421,7 @@ export function ProductionWorkspace({
       {/* Thumbnail A/B lab */}
       <div className="mt-5">
         <div className="flex items-center justify-between gap-2 mb-2">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
             <FlaskConical className="h-3 w-3" /> Thumbnail A/B lab
           </p>
           <Button
@@ -3469,15 +3469,15 @@ export function ProductionWorkspace({
                   className="w-full aspect-video object-cover"
                 />
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent px-2 py-1.5 flex items-center justify-between gap-1">
-                  <span className="text-[10px] font-medium truncate">{v.label}</span>
+                  <span className="text-xs font-medium truncate">{v.label}</span>
                   {v.isPrimary ? (
-                    <Badge className="bg-primary/90 text-white border-none px-1.5 h-4 text-[9px] shrink-0">
+                    <Badge className="bg-primary/90 text-white border-none px-1.5 h-4 text-xs shrink-0">
                       <Check className="h-2.5 w-2.5" /> Primary
                     </Badge>
                   ) : busy === `variant-${v.style}` ? (
                     <Loader2 className="h-3 w-3 animate-spin shrink-0" />
                   ) : (
-                    <span className="text-[9px] text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-xs text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                       set primary
                     </span>
                   )}
@@ -3525,7 +3525,7 @@ export function ProductionWorkspace({
           the human reads the script against them before rendering. */}
       {video.researchSources?.length ? (
         <div className="mb-4 rounded-xl border border-white/10 bg-white/3 p-3">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5 mb-2">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5 mb-2">
             <ExternalLink className="h-3 w-3" /> Research sources ({video.researchSources.length})
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -3535,7 +3535,7 @@ export function ProductionWorkspace({
                 href={s.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-white/10 bg-white/4 px-2 py-1 text-[11px] text-white/75 hover:bg-white/8 hover:text-white transition-colors"
+                className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-white/10 bg-white/4 px-2 py-1 text-xs text-white/75 hover:bg-white/8 hover:text-white transition-colors"
                 title={s.url}
               >
                 <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -3546,7 +3546,7 @@ export function ProductionWorkspace({
               </a>
             ))}
           </div>
-          <p className="mt-2 text-[10px] text-muted-foreground leading-snug">
+          <p className="mt-2 text-xs text-muted-foreground leading-snug">
             Real pages found for this topic — verify the script&apos;s claims against them
             before rendering.
           </p>
@@ -3556,7 +3556,7 @@ export function ProductionWorkspace({
       {/* Header: counts + regeneration */}
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
         <div>
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
             <FileText className="h-3 w-3" /> {isStory ? "Scene script" : "Script"}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
@@ -3607,7 +3607,7 @@ export function ProductionWorkspace({
         scenes.length === 0 ? (
           <div className="rounded-xl border border-dashed border-white/12 bg-white/3 px-4 py-6 text-center">
             <p className="text-sm text-muted-foreground">No scene script yet.</p>
-            <p className="text-[11px] text-muted-foreground/70 mt-1 mb-3">
+            <p className="text-xs text-muted-foreground/70 mt-1 mb-3">
               One click writes a scene-by-scene script from your topic.
             </p>
             <Button
@@ -3647,7 +3647,7 @@ export function ProductionWorkspace({
                   );
                 })}
               </div>
-              <div className="flex gap-2 mt-1.5 text-[10px] text-muted-foreground">
+              <div className="flex gap-2 mt-1.5 text-xs text-muted-foreground">
                 {["Hook", "Context", "Escalation", "Payoff"].map((l) => (
                   <span key={l} className="flex items-center gap-1">
                     <span
@@ -3721,7 +3721,7 @@ export function ProductionWorkspace({
             aria-label="Script editor"
           />
           <div className="flex items-center justify-between gap-3 flex-wrap mt-2">
-            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <span
                 className={
                   scriptSaveState === "saving"
@@ -3748,7 +3748,7 @@ export function ProductionWorkspace({
                 </span>
               )}
             </div>
-            <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
               <input
                 type="checkbox"
                 checked={typoFixOnly}
@@ -3767,7 +3767,7 @@ export function ProductionWorkspace({
           nothing auto-edits. */}
       <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-3">
         <div className="flex items-center justify-between gap-2 mb-2">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
             Hook lab <span className="normal-case tracking-normal opacity-70">— panel-scored openers (heuristic)</span>
           </p>
           <Button
@@ -3791,7 +3791,7 @@ export function ProductionWorkspace({
                   className="flex items-start gap-2 rounded-lg border border-white/8 bg-black/20 px-2.5 py-1.5"
                 >
                   <span
-                    className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${
+                    className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ${
                       i === 0 ? "bg-emerald-500/15 text-emerald-300" : "bg-white/8 text-white/60"
                     }`}
                     title={c.score.notes.join(" · ")}
@@ -3800,7 +3800,7 @@ export function ProductionWorkspace({
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs text-white/85 leading-snug">{c.text}</p>
-                    <p className="text-[10px] text-white/40 mt-0.5">
+                    <p className="text-xs text-white/40 mt-0.5">
                       {c.formula} · det {c.score.total}
                       {c.judgeScore !== undefined ? ` · judge ${c.judgeScore}` : ""}
                       {c.judgeVerdict ? ` — ${c.judgeVerdict}` : ""}
@@ -3808,7 +3808,7 @@ export function ProductionWorkspace({
                   </div>
                   <button
                     onClick={() => void navigator.clipboard?.writeText(c.text)}
-                    className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-white/50 hover:bg-white/10 hover:text-white/80"
+                    className="shrink-0 rounded px-1.5 py-0.5 text-xs text-white/50 hover:bg-white/10 hover:text-white/80"
                     title="Copy this opener"
                   >
                     Copy
@@ -3816,17 +3816,17 @@ export function ProductionWorkspace({
                 </div>
               ))}
             </div>
-            <p className="text-[10px] text-white/40">
+            <p className="text-xs text-white/40">
               {hookPanel.judged ? "LLM judge active" : "deterministic scores only (judge unavailable)"} · every score is a
               heuristic, never a predictor{hookPanel.candidates.length > 0 ? ` · winner: det 60% + judge 40% blend` : ""}
             </p>
             {hookPanel.beats.length > 0 && (
-              <p className="text-[10px] text-white/40">
+              <p className="text-xs text-white/40">
                 Retention beats — {hookPanel.beats.map((b) => `scene ${b.at + 1} (${b.kind})`).join(" · ")}
               </p>
             )}
             <p
-              className={`text-[10px] ${hookPanel.titlePromise.delivers ? "text-emerald-300/80" : "text-amber-300/80"}`}
+              className={`text-xs ${hookPanel.titlePromise.delivers ? "text-emerald-300/80" : "text-amber-300/80"}`}
             >
               {hookPanel.titlePromise.delivers
                 ? "The opening delivers the title's promise."
@@ -3839,7 +3839,7 @@ export function ProductionWorkspace({
       {/* ASR accuracy check (moved from the Package tab, T-4.4) */}
       <div className="mt-6">
         <div className="flex items-center justify-between gap-2 mb-2">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
             <ScanText className="h-3 w-3" /> Accuracy check
           </p>
           <Button
@@ -3873,7 +3873,7 @@ export function ProductionWorkspace({
             <div className="flex items-center gap-2 flex-wrap">
               <Badge
                 className={clsx(
-                  "border-none text-[10px]",
+                  "border-none text-xs",
                   verifyReport.verdict === "excellent"
                     ? "bg-emerald-500/20 text-emerald-300"
                     : verifyReport.verdict === "good"
@@ -3890,10 +3890,10 @@ export function ProductionWorkspace({
               <span className="text-sm font-semibold tabular-nums">
                 {Math.round(verifyReport.similarity * 100)}% word match
               </span>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 {verifyReport.scriptWords} script words → {verifyReport.transcriptWords} spoken
               </span>
-              <span className="text-[10px] text-muted-foreground ml-auto">
+              <span className="text-xs text-muted-foreground ml-auto">
                 ran {timeAgo(verifyReport.ranAt)}
               </span>
             </div>
@@ -3905,7 +3905,7 @@ export function ProductionWorkspace({
                     key={s.index}
                     variant="outline"
                     className={clsx(
-                      "text-[9px] font-normal",
+                      "text-xs font-normal",
                       s.similarity >= 0.95
                         ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-300"
                         : s.similarity >= 0.85
@@ -3920,13 +3920,13 @@ export function ProductionWorkspace({
             )}
 
             {verifyReport.missingWords.length > 0 && (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 <span className="text-foreground/70">Missing:</span>{" "}
                 {verifyReport.missingWords.join(", ")}
               </p>
             )}
 
-            <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-3 border-t border-white/8 pt-2 italic">
+            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3 border-t border-white/8 pt-2 italic">
               “{verifyReport.transcriptPreview}…”
             </p>
           </div>
@@ -4104,7 +4104,7 @@ export function ProductionWorkspace({
           note states what the job ships (the promoted primary, or nothing). */}
       {pubOpen && (
         <div className="mb-1 rounded-xl border border-white/10 bg-white/[0.03] p-4 space-y-3">
-          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Youtube className="h-3.5 w-3.5 shrink-0 text-red-400" />
             Shipping to{" "}
             <span className="text-foreground/85 font-medium">{ytStatus?.channelTitle ?? "your channel"}</span>
@@ -4135,7 +4135,7 @@ export function ProductionWorkspace({
             </Button>
             {packLint && (
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums border ${
+                className={`rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums border ${
                   packLint.score >= 80
                     ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/25"
                     : packLint.score >= 50
@@ -4149,7 +4149,7 @@ export function ProductionWorkspace({
             )}
           </div>
           {packLint && (
-            <ul className="space-y-1 text-[11px] leading-snug">
+            <ul className="space-y-1 text-xs leading-snug">
               {packLint.checks
                 .filter((c) => c.severity !== "ok")
                 .map((c) => (
@@ -4211,7 +4211,7 @@ export function ProductionWorkspace({
               policy: a hold here names its blockers and points at the two
               ways through (fix + re-run QC, or the recorded acceptance). */}
           {video.qcGate?.blocked && !video.qcGate.overridden && (
-            <p className="text-[11px] text-amber-200 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
+            <p className="text-xs text-amber-200 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
               Publish on hold — {video.qcGate.missingReport
                 ? "no QC report stands behind this render (re-run QC first)"
                 : `${video.qcGate.blockers.length} blocking QC finding${video.qcGate.blockers.length === 1 ? "" : "s"} (${video.qcGate.blockers.map((b) => b.label).join("; ")})`}
@@ -4232,7 +4232,7 @@ export function ProductionWorkspace({
               Cancel
             </Button>
             {pubBusy && pubProgress && (
-              <span className="text-[11px] text-muted-foreground">{pubProgress}</span>
+              <span className="text-xs text-muted-foreground">{pubProgress}</span>
             )}
           </div>
         </div>
@@ -4245,7 +4245,7 @@ export function ProductionWorkspace({
       {video.youtubeUrl && (
         <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3 space-y-2">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">
               Retention findings{" "}
               <span className="normal-case tracking-normal opacity-70">— drop-off moments mapped to scenes (heuristic)</span>
             </p>
@@ -4263,19 +4263,19 @@ export function ProductionWorkspace({
           </div>
           {retention && (
             <>
-              <p className="text-[10px] text-white/40">
+              <p className="text-xs text-white/40">
                 avg watch ratio {Math.round(retention.averageWatchRatio * 100)}% · synced{" "}
                 {new Date(retention.fetchedAt).toLocaleString()} · a heuristic, never a verdict
               </p>
               {retention.drops.length === 0 ? (
-                <p className="text-[11px] text-emerald-300/80">
+                <p className="text-xs text-emerald-300/80">
                   ✓ no cliff above the noise threshold — the audience holds steady
                 </p>
               ) : (
                 <ul className="space-y-1.5">
                   {retention.drops.map((d, i) => (
                     <li key={i} className="rounded-lg border border-white/8 bg-black/20 px-2.5 py-1.5">
-                      <p className="text-[11px] text-amber-200/90 leading-snug">
+                      <p className="text-xs text-amber-200/90 leading-snug">
                         {d.atSec.toFixed(0)}s ·{" "}
                         {d.sceneIndex != null
                           ? `${d.atSceneBoundary ? "scene boundary" : "mid-scene"} ${d.sceneIndex}`
@@ -4283,9 +4283,9 @@ export function ProductionWorkspace({
                         · −{Math.round(d.magnitude * 100)}% of remaining viewers
                       </p>
                       {d.narrationExcerpt && (
-                        <p className="text-[10px] text-white/40 mt-0.5 italic">“{d.narrationExcerpt}…”</p>
+                        <p className="text-xs text-white/40 mt-0.5 italic">“{d.narrationExcerpt}…”</p>
                       )}
-                      <p className="text-[11px] text-white/70 mt-0.5">{d.suggestion}</p>
+                      <p className="text-xs text-white/70 mt-0.5">{d.suggestion}</p>
                     </li>
                   ))}
                 </ul>
@@ -4378,10 +4378,10 @@ export function ProductionWorkspace({
               />
             ) : (
               <div className="w-full aspect-video bg-white/4 flex items-center justify-center">
-                <span className="text-[10px] text-muted-foreground">no art yet</span>
+                <span className="text-xs text-muted-foreground">no art yet</span>
               </div>
             )}
-            <span className="absolute top-1.5 left-1.5 rounded bg-black/70 px-1.5 text-[10px] text-white">
+            <span className="absolute top-1.5 left-1.5 rounded bg-black/70 px-1.5 text-xs text-white">
               {s.index}
             </span>
             {(busy === `scene-${s.index}` || s.generating) && (
@@ -4625,7 +4625,7 @@ export function ProductionWorkspace({
               {renderLabel ?? "Rendering…"}
             </p>
             {renderProgress && (
-              <span className="text-[11px] text-primary/80 tf-num shrink-0">
+              <span className="text-xs text-primary/80 tf-num shrink-0">
                 {renderProgress.current}/{renderProgress.total}
               </span>
             )}
@@ -4657,7 +4657,7 @@ export function ProductionWorkspace({
                       key={t.value}
                       value={t.value}
                       title={stageState ? `${t.label} — ${stageState}` : undefined}
-                      className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs"
+                      className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-xs sm:text-xs"
                     >
                       <span className="flex items-center justify-center gap-1.5">
                         <t.icon className="h-3.5 w-3.5 shrink-0" />
@@ -4737,7 +4737,7 @@ export function ProductionWorkspace({
                     key={t.value}
                     value={t.value}
                     title={stageState ? `${t.label} — ${stageState}` : undefined}
-                    className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-[11px] sm:text-xs"
+                    className="flex-1 shrink-0 min-w-[88px] sm:min-w-0 px-3 data-[state=active]:bg-white/10 text-xs sm:text-xs"
                   >
                     <span className="flex items-center justify-center gap-1.5">
                       <t.icon className="h-3.5 w-3.5 shrink-0" />
@@ -4874,10 +4874,10 @@ function SceneScriptCard({
     <div id={`scene-card-${scene.index}`} className="tf-card p-3.5 scroll-mt-4">
       <div className="flex items-center gap-2 flex-wrap mb-2">
         <span className="text-xs font-semibold text-white/85">Scene {scene.index}</span>
-        <span className="text-[10px] text-white/50 truncate flex-1 min-w-0">{scene.title}</span>
+        <span className="text-xs text-white/50 truncate flex-1 min-w-0">{scene.title}</span>
         <Badge
           variant="outline"
-          className={`text-[9px] font-normal border-none ${
+          className={`text-xs font-normal border-none ${
             structure.label === "Hook"
               ? "bg-red-500/15 text-red-300"
               : structure.label === "Context"
@@ -4890,12 +4890,12 @@ function SceneScriptCard({
           {structure.label}
         </Badge>
         {scene.hostInScene && (
-          <Badge variant="outline" className="text-[9px] font-normal border-white/15 bg-white/5 text-white/70">
+          <Badge variant="outline" className="text-xs font-normal border-white/15 bg-white/5 text-white/70">
             Host
           </Badge>
         )}
         {scene.rehook && (
-          <Badge variant="outline" className="text-[9px] font-normal border-amber-400/30 bg-amber-400/10 text-amber-300">
+          <Badge variant="outline" className="text-xs font-normal border-amber-400/30 bg-amber-400/10 text-amber-300">
             Rehook
           </Badge>
         )}
@@ -4904,18 +4904,18 @@ function SceneScriptCard({
           title={scene.mood || "unspecified mood"}
           style={{ background: `hsl(${moodHue} 55% 55%)` }}
         />
-        <span className="tf-num text-[10px] text-muted-foreground ml-auto">
+        <span className="tf-num text-xs text-muted-foreground ml-auto">
           {words}w · ≈ {Math.round(sceneEstSeconds(narration, wordsPerSecond))}s
         </span>
         <span
           className={
             saveState === "saving"
-              ? "text-[10px] text-amber-300"
+              ? "text-xs text-amber-300"
               : saveState === "saved"
-                ? "text-[10px] text-emerald-300"
+                ? "text-xs text-emerald-300"
                 : saveState === "error"
-                  ? "text-[10px] text-red-300"
-                  : "text-[10px] text-transparent"
+                  ? "text-xs text-red-300"
+                  : "text-xs text-transparent"
           }
           aria-live="polite"
         >
@@ -4932,7 +4932,7 @@ function SceneScriptCard({
         className="bg-white/5 text-[13px] leading-relaxed resize-y"
       />
       <div className="flex items-center gap-2 mt-2">
-        <span className="text-[10px] text-muted-foreground shrink-0">Caption</span>
+        <span className="text-xs text-muted-foreground shrink-0">Caption</span>
         <Input
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
@@ -4943,7 +4943,7 @@ function SceneScriptCard({
         />
       </div>
       {narration !== synced.narration && (
-        <p className="text-[10px] text-amber-300/80 mt-1.5 leading-snug">
+        <p className="text-xs text-amber-300/80 mt-1.5 leading-snug">
           Saving this narration clears the stale voiceover — re-render it from the Inspector area.
         </p>
       )}

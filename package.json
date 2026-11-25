@@ -46,6 +46,7 @@
     "test:drawable-ir": "node --import tsx scripts/test-drawable-ir.mts",
     "test:plan-contracts": "node --import tsx scripts/test-plan-contracts.mts",
     "test:video-lanes": "node --import tsx scripts/test-video-lanes.mts",
+    "test:typography-scale": "node --import tsx scripts/test-typography-scale.mts",
     "test:stage-cache": "node --import tsx scripts/test-stage-cache.mts",
     "test:drill": "node --import tsx scripts/restore-drill.mts",
     "test:drill:pg": "node --import tsx scripts/pg-drill.mts",

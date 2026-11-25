@@ -139,7 +139,7 @@ function IdeaCard({
           <p className={clsx("text-base font-bold leading-none tabular-nums", scoreColor(idea.viralScore))}>
             {idea.viralScore}
           </p>
-          <p className="text-[9px] uppercase tracking-wider text-muted-foreground mt-0.5">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground mt-0.5">
             viral
           </p>
         </div>
@@ -148,15 +148,15 @@ function IdeaCard({
       <p className="text-sm text-muted-foreground leading-relaxed">{idea.angle}</p>
 
       <div className="flex flex-wrap gap-1.5">
-        <Badge variant="outline" className={clsx("text-[11px] border font-normal", competitionStyle(idea.competition))}>
+        <Badge variant="outline" className={clsx("text-xs border font-normal", competitionStyle(idea.competition))}>
           <Gauge className="h-3 w-3 mr-1" />
           {idea.competition} competition
         </Badge>
-        <Badge variant="outline" className={clsx("text-[11px] border font-normal", volumeStyle(idea.searchVolume))}>
+        <Badge variant="outline" className={clsx("text-xs border font-normal", volumeStyle(idea.searchVolume))}>
           <TrendingUp className="h-3 w-3 mr-1" />
           {idea.searchVolume} volume
         </Badge>
-        <Badge variant="outline" className="text-[11px] border font-normal text-zinc-300 bg-white/5 border-white/15">
+        <Badge variant="outline" className="text-xs border font-normal text-zinc-300 bg-white/5 border-white/15">
           <Clock className="h-3 w-3 mr-1" />
           {lengthLabel}
         </Badge>
@@ -164,7 +164,7 @@ function IdeaCard({
           <Badge
             variant="outline"
             className={clsx(
-              "text-[11px] border font-normal",
+              "text-xs border font-normal",
               idea.perfBoost > 0
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
                 : "border-amber-500/30 bg-amber-500/10 text-amber-200"
@@ -181,7 +181,7 @@ function IdeaCard({
       {idea.keywords.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {idea.keywords.slice(0, 6).map((k) => (
-            <Badge key={k} variant="secondary" className="text-[11px] bg-white/6 text-muted-foreground border border-white/8 font-normal">
+            <Badge key={k} variant="secondary" className="text-xs bg-white/6 text-muted-foreground border border-white/8 font-normal">
               <KeyRound className="h-2.5 w-2.5 mr-1" />
               {k}
             </Badge>
@@ -228,7 +228,7 @@ function IdeaCard({
             <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
           </Button>
         </div>
-        <p className="text-[10px] text-muted-foreground/70 text-center leading-snug">
+        <p className="text-xs text-muted-foreground/70 text-center leading-snug">
           Greenlight weaves this idea's angle &amp; SEO keywords straight into a
           {idea.suggestedLength === "long" ? " long-form" : idea.suggestedLength === "short" ? " short" : ""} scene outline — then direct the production.
         </p>
@@ -303,7 +303,7 @@ function NichePulse({ sessions }: { sessions: ResearchSessionDTO[] }) {
         <BarChart3 className="h-4 w-4 text-primary" />
         <p className="font-semibold text-sm">Niche pulse</p>
       </div>
-      <p className="text-[11px] text-muted-foreground mb-3">
+      <p className="text-xs text-muted-foreground mb-3">
         {stats.nicheCount} {stats.nicheCount === 1 ? "niche" : "niches"} ·{" "}
         {stats.totalIdeas} ideas across your last {sessions.length}{" "}
         {sessions.length === 1 ? "scan" : "scans"}
@@ -313,7 +313,7 @@ function NichePulse({ sessions }: { sessions: ResearchSessionDTO[] }) {
           <div key={n.niche}>
             <div className="flex items-baseline justify-between gap-2">
               <p className="text-xs font-medium truncate">{n.niche}</p>
-              <p className="text-[10px] text-muted-foreground tabular-nums shrink-0">
+              <p className="text-xs text-muted-foreground tabular-nums shrink-0">
                 {n.ideas} {n.ideas === 1 ? "idea" : "ideas"} · avg {n.avg}
               </p>
             </div>
@@ -335,7 +335,7 @@ function NichePulse({ sessions }: { sessions: ResearchSessionDTO[] }) {
       </div>
       {stats.topKeywords.length > 0 && (
         <div className="mt-4">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
             Recurring keywords
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -343,7 +343,7 @@ function NichePulse({ sessions }: { sessions: ResearchSessionDTO[] }) {
               <Badge
                 key={k}
                 variant="outline"
-                className="border-primary/25 bg-primary/10 text-cyan-200 text-[10px]"
+                className="border-primary/25 bg-primary/10 text-cyan-200 text-xs"
                 title={`Appears in ${n} of ${sessions.length} scans`}
               >
                 <KeyRound className="h-2.5 w-2.5 mr-1" />
@@ -553,7 +553,7 @@ export function ResearchView() {
             </div>
             <div>
               <p className="font-semibold text-sm">Scan a niche</p>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 GLM mines trending, low-competition topics
               </p>
             </div>
@@ -589,7 +589,7 @@ export function ResearchView() {
               <button
                 key={q}
                 onClick={() => setQuery(q)}
-                className="text-[11px] text-muted-foreground hover:text-foreground bg-white/4 hover:bg-white/8 border border-white/10 rounded-full px-2.5 py-1 transition-colors"
+                className="text-xs text-muted-foreground hover:text-foreground bg-white/4 hover:bg-white/8 border border-white/10 rounded-full px-2.5 py-1 transition-colors"
               >
                 {q}
               </button>
@@ -618,7 +618,7 @@ export function ResearchView() {
         {/* Recent scans */}
         {sessions.length > 0 && (
           <div>
-            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium mb-2.5 px-1">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2.5 px-1">
               Recent scans
             </p>
             <div className="space-y-2">
@@ -649,14 +649,14 @@ export function ResearchView() {
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     {s.niche} · {s.ideas.length} ideas · {timeAgo(s.createdAt)}
                   </p>
                 </div>
               ))}
             </div>
             {sessions.length > 8 && (
-              <p className="text-[11px] text-muted-foreground/70 px-1 mt-2">
+              <p className="text-xs text-muted-foreground/70 px-1 mt-2">
                 +{sessions.length - 8} older {sessions.length - 8 === 1 ? "scan" : "scans"} —
                 the pulse below counts all of them
               </p>
@@ -707,7 +707,7 @@ export function ResearchView() {
                     <div className="flex flex-wrap gap-1.5 mt-2.5">
                       <Badge
                         variant="outline"
-                        className="border-emerald-500/30 bg-emerald-500/10 text-emerald-200 text-[11px] max-w-[260px]"
+                        className="border-emerald-500/30 bg-emerald-500/10 text-emerald-200 text-xs max-w-[260px]"
                         title={`Top idea: ${insights.best.title}`}
                       >
                         <Zap className="h-3 w-3 mr-1 shrink-0" />
@@ -717,19 +717,19 @@ export function ResearchView() {
                           : insights.best.title}
                         ”
                       </Badge>
-                      <Badge variant="outline" className="border-white/15 bg-white/5 text-zinc-300 text-[11px]">
+                      <Badge variant="outline" className="border-white/15 bg-white/5 text-zinc-300 text-xs">
                         Avg {insights.avg}
                       </Badge>
                       <Badge
                         variant="outline"
-                        className="border-white/15 bg-white/5 text-zinc-300 text-[11px]"
+                        className="border-white/15 bg-white/5 text-zinc-300 text-xs"
                         title="Ideas by competition level"
                       >
                         {insights.split.low} low · {insights.split.medium} med · {insights.split.high} high
                       </Badge>
                     </div>
                   )}
-                  <p className="text-[11px] text-muted-foreground mt-2">
+                  <p className="text-xs text-muted-foreground mt-2">
                     {active.ideas.length} ideas · scanned {timeAgo(active.createdAt)} · pick one and send it straight to production
                   </p>
                   {/* Idea toolbar (T-4.8) — sort + competition filter */}
@@ -757,7 +757,7 @@ export function ResearchView() {
                             onClick={() => setCompFilter(c)}
                             aria-pressed={compFilter === c}
                             className={clsx(
-                              "rounded-full border px-2.5 py-1 text-[11px] transition-all",
+                              "rounded-full border px-2.5 py-1 text-xs transition-all",
                               compFilter === c
                                 ? "border-primary/50 bg-primary/15 text-cyan-200"
                                 : "border-white/10 bg-white/4 text-muted-foreground hover:border-white/25"
@@ -769,7 +769,7 @@ export function ResearchView() {
                         );
                       })}
                     </div>
-                    <span className="ml-auto text-[11px] text-muted-foreground/80 tabular-nums">
+                    <span className="ml-auto text-xs text-muted-foreground/80 tabular-nums">
                       {ideas.length}/{active.ideas.length} shown
                     </span>
                   </div>

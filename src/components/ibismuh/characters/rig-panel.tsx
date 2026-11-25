@@ -86,7 +86,7 @@ export default function RigPanel({ characterId, hasRig, onChanged }: RigPanelPro
           <PersonStanding className="h-3.5 w-3.5 text-violet-300" />
           Native rig (K1)
         </p>
-        <p className="text-[10px] text-muted-foreground leading-relaxed">
+        <p className="text-xs text-muted-foreground leading-relaxed">
           Decompose this character into a 2D puppet rig — layered vector parts,
           FK poses, the five-shape mouth set. Rigged characters render their
           cast scenes natively at $0: real gestures, beat-synced mouth shapes,
@@ -102,7 +102,7 @@ export default function RigPanel({ characterId, hasRig, onChanged }: RigPanelPro
           {autoBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
           {autoBusy ? "Rigging…" : "Auto-rig this character"}
         </Button>
-        {error && <p className="text-[10px] text-red-300 leading-relaxed">{error}</p>}
+        {error && <p className="text-xs text-red-300 leading-relaxed">{error}</p>}
       </div>
     );
   }
@@ -122,7 +122,7 @@ export default function RigPanel({ characterId, hasRig, onChanged }: RigPanelPro
           onClick={autoRig}
           disabled={autoBusy}
           title="Re-run the parts pass (replaces the rig)"
-          className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
         >
           {autoBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
           Re-rig
@@ -141,30 +141,30 @@ export default function RigPanel({ characterId, hasRig, onChanged }: RigPanelPro
               <span
                 key={p.id}
                 title={p.name}
-                className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px]"
+                className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-xs"
               >
                 {p.id}
               </span>
             ))}
             {doc.poses.length === 0 && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 The pose sheet is empty — re-run the parts pass or author poses
                 (the standard slots are named in the doc's warnings).
               </span>
             )}
           </div>
           {state?.warnings?.length ? (
-            <p className="text-[10px] text-amber-300/80 leading-relaxed">
+            <p className="text-xs text-amber-300/80 leading-relaxed">
               {state.warnings.slice(0, 3).join(" · ")}
             </p>
           ) : null}
-          <p className="text-[10px] text-muted-foreground leading-relaxed">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             Cast scenes (the host in frame) render through this rig when the
             video renders — native-first, before any paid animation channel.
           </p>
         </>
       ) : null}
-      {error && <p className="text-[10px] text-red-300 leading-relaxed">{error}</p>}
+      {error && <p className="text-xs text-red-300 leading-relaxed">{error}</p>}
     </div>
   );
 }

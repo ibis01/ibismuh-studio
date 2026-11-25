@@ -169,7 +169,7 @@ export function PlanCard() {
               <Badge
                 variant="outline"
                 className={clsx(
-                  "text-[10px]",
+                  "text-xs",
                   data.subscription.status === "active"
                     ? "border-emerald-500/25 bg-emerald-500/8 text-emerald-300"
                     : "border-amber-500/25 bg-amber-500/8 text-amber-300"
@@ -178,11 +178,11 @@ export function PlanCard() {
                 {data.subscription.status}
               </Badge>
             ) : (
-              <Badge variant="outline" className="border-white/15 bg-white/5 text-muted-foreground text-[10px]">
+              <Badge variant="outline" className="border-white/15 bg-white/5 text-muted-foreground text-xs">
                 free tier
               </Badge>
             )}
-            <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+            <span className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground">
               <Gauge className="h-3 w-3" />
               up to {data.plan.maxResolution}
               {data.plan.priorityRendering ? " · priority rendering" : ""}
@@ -194,7 +194,7 @@ export function PlanCard() {
               why the next invoice matters. S24: the banner's instruction
               finally has a door — the button opens the same portal. */}
           {data.access === "grace" && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-300 space-y-2">
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 space-y-2">
               <p>
                 The last payment failed — your plan keeps working for now. Update your payment method
                 in the customer portal to avoid losing paid features.
@@ -236,7 +236,7 @@ export function PlanCard() {
                 aria-label="Credits used this period"
               />
             </div>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {used.toLocaleString()} used this period · AI calls spend credits automatically
               {data.plan.tier === "starter" ? " · the free tier never hard-blocks a render" : ""}
             </p>
@@ -286,18 +286,18 @@ export function PlanCard() {
             )}
           </div>
           {!data.stripe.configured && (
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Upgrades are switched off on this deployment — the operator hasn't wired Stripe yet.
             </p>
           )}
           {data.stripe.configured && data.stripe.checkoutTiers.length === 0 && (
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Checkout needs a Stripe price id per tier (IBISMUH_STUDIO_STRIPE_PRICE_CREATOR / _STUDIO).
             </p>
           )}
 
           {data.subscription?.currentPeriodEnd && (
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Renews{" "}
               {new Date(data.subscription.currentPeriodEnd).toLocaleDateString(undefined, {
                 year: "numeric",

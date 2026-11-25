@@ -2594,16 +2594,16 @@ export function TimelineStudio({
           <Scissors className="h-4 w-4 text-primary/80" />
           <h3 className="text-sm font-semibold">Timeline Studio</h3>
           {timeline && (
-            <Badge variant="outline" className="text-[10px] font-mono">
+            <Badge variant="outline" className="text-xs font-mono">
               {timeline.sceneCount} scenes · {timeline.totalDurationSec.toFixed(1)}s
             </Badge>
           )}
           {renderInFlight ? (
-            <Badge className="text-[10px] bg-sky-500/15 text-sky-200 border-sky-500/30">
+            <Badge className="text-xs bg-sky-500/15 text-sky-200 border-sky-500/30">
               rendering…
             </Badge>
           ) : saving ? (
-            <Badge className="text-[10px] bg-sky-500/15 text-sky-200 border-sky-500/30">
+            <Badge className="text-xs bg-sky-500/15 text-sky-200 border-sky-500/30">
               saving…
             </Badge>
           ) : saveFailed ? (
@@ -2615,17 +2615,17 @@ export function TimelineStudio({
               type="button"
               onClick={() => void save()}
               title="The last save failed — click to retry (⌘S also works). Your edits are still here."
-              className="tf-focusable text-[10px] bg-red-500/15 text-red-200 border border-red-500/30 rounded-full px-2 py-0.5 font-medium"
+              className="tf-focusable text-xs bg-red-500/15 text-red-200 border border-red-500/30 rounded-full px-2 py-0.5 font-medium"
             >
               save failed — retry
             </button>
           ) : dirty ? (
-            <Badge className="text-[10px] bg-amber-500/15 text-amber-200 border-amber-500/30">
+            <Badge className="text-xs bg-amber-500/15 text-amber-200 border-amber-500/30">
               unsaved
             </Badge>
           ) : savedAt ? (
             <span
-              className="text-[10px] text-muted-foreground"
+              className="text-xs text-muted-foreground"
               title="Autosaved 2.5 s after your last edit — ⌘S saves instantly"
             >
               saved {new Date(savedAt).toLocaleTimeString()}
@@ -2650,14 +2650,14 @@ export function TimelineStudio({
               disabled={saving || loading || renderInFlight}
             >
               <SelectTrigger
-                className="h-7 w-[126px] text-[11px]"
+                className="h-7 w-[126px] text-xs"
                 title="The caption look the render burns when captions are on — the preview mirrors it"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {CAPTION_STYLES.map((s) => (
-                  <SelectItem key={s.id} value={s.id} className="text-[11px]">
+                  <SelectItem key={s.id} value={s.id} className="text-xs">
                     {s.label}
                   </SelectItem>
                 ))}
@@ -2695,37 +2695,37 @@ export function TimelineStudio({
               disabled={saving || loading || renderInFlight}
             >
               <SelectTrigger
-                className="h-7 w-[138px] text-[11px]"
+                className="h-7 w-[138px] text-xs"
                 title="The music bed the render lays under the voice — a studio pick outranks the plan and Settings; the audition button plays the resolved bed"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Bed</SelectLabel>
-                  <SelectItem value="follow" className="text-[11px]">
+                  <SelectLabel className="text-xs">Bed</SelectLabel>
+                  <SelectItem value="follow" className="text-xs">
                     Follow Settings
                   </SelectItem>
-                  <SelectItem value="auto" className="text-[11px]">
+                  <SelectItem value="auto" className="text-xs">
                     Auto match
                   </SelectItem>
-                  <SelectItem value="off" className="text-[11px]">
+                  <SelectItem value="off" className="text-xs">
                     Mute bed
                   </SelectItem>
                 </SelectGroup>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Story mood</SelectLabel>
+                  <SelectLabel className="text-xs">Story mood</SelectLabel>
                   {MUSIC_MOOD_PRESETS.filter((m) => m.id !== "auto").map((m) => (
-                    <SelectItem key={m.id} value={`mood:${m.id}`} className="text-[11px]">
+                    <SelectItem key={m.id} value={`mood:${m.id}`} className="text-xs">
                       {m.label}
                     </SelectItem>
                   ))}
                 </SelectGroup>
                 {musicTracks.length > 0 ? (
                   <SelectGroup>
-                    <SelectLabel className="text-[10px]">Library tracks</SelectLabel>
+                    <SelectLabel className="text-xs">Library tracks</SelectLabel>
                     {musicTracks.map((t) => (
-                      <SelectItem key={t.id} value={`track:${t.id}`} className="text-[11px]">
+                      <SelectItem key={t.id} value={`track:${t.id}`} className="text-xs">
                         {t.name}
                       </SelectItem>
                     ))}
@@ -2760,7 +2760,7 @@ export function TimelineStudio({
               disabled={saving || loading || renderInFlight || clipBusy != null || voiceBusy != null || paceBusy != null}
             >
               <SelectTrigger
-                className="h-7 w-[150px] text-[11px]"
+                className="h-7 w-[150px] text-xs"
                 title="Who narrates — pick to stage the swap, audition to hear it on your own opening line, Re-voice to re-read every scene"
               >
                 <SelectValue />
@@ -2769,17 +2769,17 @@ export function TimelineStudio({
                 {/* degraded mode: catalog fetch failed → still show the row's
                     narrator so the control never lies about the current state */}
                 {!voices.some((v) => v.id === video.voice) ? (
-                  <SelectItem value={video.voice} className="text-[11px]">
+                  <SelectItem value={video.voice} className="text-xs">
                     {video.voice} (current)
                   </SelectItem>
                 ) : null}
                 {voices.filter((v) => !v.clone).length > 0 ? (
                   <SelectGroup>
-                    <SelectLabel className="text-[10px]">Studio voices</SelectLabel>
+                    <SelectLabel className="text-xs">Studio voices</SelectLabel>
                     {voices
                       .filter((v) => !v.clone)
                       .map((v) => (
-                        <SelectItem key={v.id} value={v.id} className="text-[11px]">
+                        <SelectItem key={v.id} value={v.id} className="text-xs">
                           {v.label}
                         </SelectItem>
                       ))}
@@ -2787,11 +2787,11 @@ export function TimelineStudio({
                 ) : null}
                 {voices.some((v) => v.clone) ? (
                   <SelectGroup>
-                    <SelectLabel className="text-[10px]">Your clones</SelectLabel>
+                    <SelectLabel className="text-xs">Your clones</SelectLabel>
                     {voices
                       .filter((v) => v.clone)
                       .map((v) => (
-                        <SelectItem key={v.id} value={v.id} className="text-[11px]">
+                        <SelectItem key={v.id} value={v.id} className="text-xs">
                           {v.label}
                         </SelectItem>
                       ))}
@@ -2869,27 +2869,27 @@ export function TimelineStudio({
               disabled={saving || loading || renderInFlight || clipBusy != null || paceBusy != null || voiceBusy != null}
             >
               <SelectTrigger
-                className="h-7 w-[92px] text-[11px]"
+                className="h-7 w-[92px] text-xs"
                 title="How fast the narrator reads — pick to stage the tempo, audition to hear it on your own opening line, Re-read to commit (a real TTS pass; windows re-derive, creative edits survive)"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Narrator pace</SelectLabel>
+                  <SelectLabel className="text-xs">Narrator pace</SelectLabel>
                   {/* degraded mode: a standing speed off the ladder (the
                       create slider is continuous) still shows itself so the
                       control never lies about the current tempo */}
                   {PACE_LADDER.every((p) => Math.abs(p - (pacePick ?? video.ttsSpeed)) > 1e-9) ? (
                     <SelectItem
                       value={`pace:${pacePick ?? video.ttsSpeed}`}
-                      className="text-[11px]"
+                      className="text-xs"
                     >
                       {(pacePick ?? video.ttsSpeed).toFixed(2).replace(/\.?0+$/, "")}× (current)
                     </SelectItem>
                   ) : null}
                   {PACE_LADDER.map((p) => (
-                    <SelectItem key={p} value={`pace:${p}`} className="text-[11px]">
+                    <SelectItem key={p} value={`pace:${p}`} className="text-xs">
                       {p === 1 ? "1× — normal" : `${p.toString().replace(/\.0$/, "")}×`}
                     </SelectItem>
                   ))}
@@ -2965,19 +2965,19 @@ export function TimelineStudio({
               disabled={saving || loading || renderInFlight}
             >
               <SelectTrigger
-                className="h-7 w-[158px] text-[11px]"
+                className="h-7 w-[158px] text-xs"
                 title="Which scene the cover art depicts — the concept (and the CogView art) derives from the picked scene's visual + mood; Auto keeps the opening scene"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Poster subject</SelectLabel>
-                  <SelectItem value="auto" className="text-[11px]">
+                  <SelectLabel className="text-xs">Poster subject</SelectLabel>
+                  <SelectItem value="auto" className="text-xs">
                     Auto — opening scene
                   </SelectItem>
                   {timeline?.scenes.map((s) => (
-                    <SelectItem key={s.index} value={`scene:${s.index}`} className="text-[11px]">
+                    <SelectItem key={s.index} value={`scene:${s.index}`} className="text-xs">
                       Scene {s.index} — {s.title}
                     </SelectItem>
                   ))}
@@ -2994,7 +2994,7 @@ export function TimelineStudio({
               disabled={saving || loading || renderInFlight || styleSaving}
             >
               <SelectTrigger
-                className="h-7 w-[128px] text-[11px]"
+                className="h-7 w-[128px] text-xs"
                 title="What the cover art looks like — the picked style directs the next generation (the Regenerate arm paints it); the A/B variants set leads with it too"
               >
                 <Palette className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -3002,9 +3002,9 @@ export function TimelineStudio({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Cover style</SelectLabel>
+                  <SelectLabel className="text-xs">Cover style</SelectLabel>
                   {THUMB_STYLES.map((t) => (
-                    <SelectItem key={t.id} value={t.id} className="text-[11px]">
+                    <SelectItem key={t.id} value={t.id} className="text-xs">
                       {t.label}
                     </SelectItem>
                   ))}
@@ -3060,19 +3060,19 @@ export function TimelineStudio({
               disabled={saving || loading || renderInFlight}
             >
               <SelectTrigger
-                className="h-7 w-[150px] text-[11px]"
+                className="h-7 w-[150px] text-xs"
                 title="Which scene the vertical Short centers on — the cut frames the picked scene; Auto lets the retention-hook heuristic decide"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Short moment</SelectLabel>
-                  <SelectItem value="auto" className="text-[11px]">
+                  <SelectLabel className="text-xs">Short moment</SelectLabel>
+                  <SelectItem value="auto" className="text-xs">
                     Auto — best hook
                   </SelectItem>
                   {timeline?.scenes.map((s) => (
-                    <SelectItem key={s.index} value={`scene:${s.index}`} className="text-[11px]">
+                    <SelectItem key={s.index} value={`scene:${s.index}`} className="text-xs">
                       Scene {s.index} — {s.title}
                     </SelectItem>
                   ))}
@@ -3085,7 +3085,7 @@ export function TimelineStudio({
                 href={video.shortUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="shrink-0 rounded-[3px] border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-white/80 hover:bg-white/10"
+                className="shrink-0 rounded-[3px] border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-xs text-white/80 hover:bg-white/10"
                 title={`Open the current Short — scene ${video.shortScene}, ${(video.shortDuration ?? 0).toFixed(1)}s 9:16`}
               >
                 S{video.shortScene} · {(video.shortDuration ?? 0).toFixed(1)}s
@@ -3134,7 +3134,7 @@ export function TimelineStudio({
               }
             >
               <SelectTrigger
-                className="h-7 w-[132px] text-[11px]"
+                className="h-7 w-[132px] text-xs"
                 title={
                   video.renderMode === "slides"
                     ? "Slides are always 9:16 — the deck's designed PNG is the frame; the render never draws another shape for it"
@@ -3145,9 +3145,9 @@ export function TimelineStudio({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Frame</SelectLabel>
+                  <SelectLabel className="text-xs">Frame</SelectLabel>
                   {RENDER_ASPECTS.map((a) => (
-                    <SelectItem key={a.id} value={a.id} className="text-[11px]">
+                    <SelectItem key={a.id} value={a.id} className="text-xs">
                       {a.id} — {a.label}
                     </SelectItem>
                   ))}
@@ -3164,16 +3164,16 @@ export function TimelineStudio({
               disabled={saving || loading || renderInFlight || frameSaving}
             >
               <SelectTrigger
-                className="h-7 w-[104px] text-[11px]"
+                className="h-7 w-[104px] text-xs"
                 title="How smoothly motion plays — timecodes re-count immediately (the frames column); the next render runs at it"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Frame rate</SelectLabel>
+                  <SelectLabel className="text-xs">Frame rate</SelectLabel>
                   {RENDER_FRAME_RATES.map((r) => (
-                    <SelectItem key={r.fps} value={String(r.fps)} className="text-[11px]">
+                    <SelectItem key={r.fps} value={String(r.fps)} className="text-xs">
                       {r.label}
                     </SelectItem>
                   ))}
@@ -3199,21 +3199,21 @@ export function TimelineStudio({
               disabled={saving || loading || renderInFlight}
             >
               <SelectTrigger
-                className="h-7 w-[104px] text-[11px]"
+                className="h-7 w-[104px] text-xs"
                 title="The encode tier the next render masters at — a doc pick, saved with the timeline; the dialog's per-render preset still overrides for one render"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Export grade</SelectLabel>
-                  <SelectItem value="draft" className="text-[11px]">
+                  <SelectLabel className="text-xs">Export grade</SelectLabel>
+                  <SelectItem value="draft" className="text-xs">
                     Draft — fast
                   </SelectItem>
-                  <SelectItem value="standard" className="text-[11px]">
+                  <SelectItem value="standard" className="text-xs">
                     Standard
                   </SelectItem>
-                  <SelectItem value="high" className="text-[11px]">
+                  <SelectItem value="high" className="text-xs">
                     High — master
                   </SelectItem>
                 </SelectGroup>
@@ -3226,7 +3226,7 @@ export function TimelineStudio({
               className="scale-90"
               title="Where captions ship — burned into the frame (the style pick applies) or beside it as a sidecar SRT. The next render honors the pick; the dialog's per-render override still wins."
             />
-            <span className="w-[64px] shrink-0 text-[10px] leading-tight text-muted-foreground" title="The resolved truth the next render applies when no per-render override rides the body">
+            <span className="w-[64px] shrink-0 text-xs leading-tight text-muted-foreground" title="The resolved truth the next render applies when no per-render override rides the body">
               {burnSaving ? "saving…" : resolvedBurn ? "burned in" : "sidecar SRT"}
             </span>
           </div>
@@ -3252,16 +3252,16 @@ export function TimelineStudio({
               disabled={saving || loading || renderInFlight || motionSaving}
             >
               <SelectTrigger
-                className="h-7 w-[118px] text-[11px]"
+                className="h-7 w-[118px] text-xs"
                 title="How the camera treats still art — the preview's move re-derives now; the next render shoots it (curve + direction variation live on the dialog's card)"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Camera</SelectLabel>
+                  <SelectLabel className="text-xs">Camera</SelectLabel>
                   {MOTION_MODES.map((m) => (
-                    <SelectItem key={m.id} value={m.id} className="text-[11px]">
+                    <SelectItem key={m.id} value={m.id} className="text-xs">
                       {m.label}
                     </SelectItem>
                   ))}
@@ -3280,7 +3280,7 @@ export function TimelineStudio({
               }
             >
               <SelectTrigger
-                className="h-7 w-[108px] text-[11px]"
+                className="h-7 w-[108px] text-xs"
                 title={
                   resolvedMotion.mode === "off"
                     ? "The camera is off — scenes hold still, amplitude has nothing to say"
@@ -3291,14 +3291,14 @@ export function TimelineStudio({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Amplitude</SelectLabel>
+                  <SelectLabel className="text-xs">Amplitude</SelectLabel>
                   {![0, 6, 12, 18, 24, 30].includes(resolvedMotion.intensity) && (
-                    <SelectItem value={String(resolvedMotion.intensity)} className="text-[11px]">
+                    <SelectItem value={String(resolvedMotion.intensity)} className="text-xs">
                       {resolvedMotion.intensity}% — custom
                     </SelectItem>
                   )}
                   {[0, 6, 12, 18, 24, 30].map((n) => (
-                    <SelectItem key={n} value={String(n)} className="text-[11px]">
+                    <SelectItem key={n} value={String(n)} className="text-xs">
                       {n}% — {n === 0 ? "still" : n === 12 ? "standard" : n >= 18 ? "strong" : "subtle"}
                     </SelectItem>
                   ))}
@@ -3314,7 +3314,7 @@ export function TimelineStudio({
               disabled={saving || loading || renderInFlight || motionSaving}
             >
               <SelectTrigger
-                className="h-7 w-[124px] text-[11px]"
+                className="h-7 w-[124px] text-xs"
                 title={
                   video.renderMode === "slides"
                     ? "Slides default to hard cuts (the deck's designed beats land clean) — an explicit pick is honored"
@@ -3325,9 +3325,9 @@ export function TimelineStudio({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Seam</SelectLabel>
+                  <SelectLabel className="text-xs">Seam</SelectLabel>
                   {TRANSITIONS.map((t) => (
-                    <SelectItem key={t.id} value={t.id} className="text-[11px]">
+                    <SelectItem key={t.id} value={t.id} className="text-xs">
                       {t.label}
                     </SelectItem>
                   ))}
@@ -3346,7 +3346,7 @@ export function TimelineStudio({
               }
             >
               <SelectTrigger
-                className="h-7 w-[92px] text-[11px]"
+                className="h-7 w-[92px] text-xs"
                 title={
                   resolvedTransition.style === "cut"
                     ? "A hard cut is the absence of a blend — there is no length to pick"
@@ -3357,14 +3357,14 @@ export function TimelineStudio({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-[10px]">Blend</SelectLabel>
+                  <SelectLabel className="text-xs">Blend</SelectLabel>
                   {![0.2, 0.3, 0.5, 0.7, 1, 1.5].includes(resolvedTransition.durationSec) && (
-                    <SelectItem value={String(resolvedTransition.durationSec)} className="text-[11px]">
+                    <SelectItem value={String(resolvedTransition.durationSec)} className="text-xs">
                       {resolvedTransition.durationSec}s — custom
                     </SelectItem>
                   )}
                   {[0.2, 0.3, 0.5, 0.7, 1, 1.5].map((n) => (
-                    <SelectItem key={n} value={String(n)} className="text-[11px]">
+                    <SelectItem key={n} value={String(n)} className="text-xs">
                       {n}s — {n === 0.5 ? "standard" : n <= 0.3 ? "quick" : n >= 1 ? "slow" : "easy"}
                     </SelectItem>
                   ))}
@@ -3421,10 +3421,10 @@ export function TimelineStudio({
           <div className="flex items-center gap-2">
             <Wand2 className="h-3.5 w-3.5 text-primary/80" />
             <span className="text-xs font-medium">Editor suggestions</span>
-            <span className="text-[10px] text-muted-foreground">{assist.length} left</span>
+            <span className="text-xs text-muted-foreground">{assist.length} left</span>
             <button
               type="button"
-              className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+              className="ml-auto text-xs text-muted-foreground hover:text-foreground"
               onClick={() => setAssist(null)}
             >
               dismiss
@@ -3436,19 +3436,19 @@ export function TimelineStudio({
                 key={`${s.sceneIndex}-${s.kind}-${i}`}
                 className="flex items-start gap-2 rounded-md border border-white/10 bg-white/[0.03] px-2 py-1.5"
               >
-                <Badge variant="secondary" className="mt-px shrink-0 font-mono text-[9px]">
+                <Badge variant="secondary" className="mt-px shrink-0 font-mono text-xs">
                   #{s.sceneIndex}
                 </Badge>
                 <Badge
                   variant="outline"
-                  className="mt-px shrink-0 border-white/15 text-[9px] uppercase tracking-wide text-muted-foreground"
+                  className="mt-px shrink-0 border-white/15 text-xs uppercase tracking-wide text-muted-foreground"
                 >
                   {s.kind}
                 </Badge>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-xs">
                     {s.kind === "transition" || s.kind === "grade" ? (
-                      <span className="font-mono text-[11px] text-primary/90">{s.value}</span>
+                      <span className="font-mono text-xs text-primary/90">{s.value}</span>
                     ) : s.kind === "title" ? (
                       <span className="italic">“{s.value}”</span>
                     ) : (
@@ -3456,13 +3456,13 @@ export function TimelineStudio({
                     )}
                   </div>
                   {s.reason && (
-                    <div className="text-[10px] leading-snug text-muted-foreground">{s.reason}</div>
+                    <div className="text-xs leading-snug text-muted-foreground">{s.reason}</div>
                   )}
                 </div>
                 {s.kind !== "note" && (
                   <Button
                     size="sm"
-                    className="h-6 shrink-0 px-2 text-[10px]"
+                    className="h-6 shrink-0 px-2 text-xs"
                     disabled={saving || renderInFlight}
                     onClick={() => applySuggestion(s)}
                     title="Apply through the studio's own edit path — undo works as usual"
@@ -3473,7 +3473,7 @@ export function TimelineStudio({
               </div>
             ))}
           </div>
-          <p className="text-[10px] leading-snug text-muted-foreground">
+          <p className="text-xs leading-snug text-muted-foreground">
             Suggestions are validated against the studio's catalogs and applied through the
             same edits a human click makes — ⌘Z undoes any of them.
           </p>
@@ -3529,7 +3529,7 @@ export function TimelineStudio({
                       <p className="text-xs text-white/85 font-medium">
                         Render in progress — the live preview keeps working
                       </p>
-                      <p className="text-[10px] text-white/55">
+                      <p className="text-xs text-white/55">
                         The rendered MP4 replaces this approximation when it lands.
                       </p>
                     </div>
@@ -3645,7 +3645,7 @@ export function TimelineStudio({
                   </Button>
                 </div>
               </div>
-              <p className="text-[10px] leading-relaxed text-muted-foreground">
+              <p className="text-xs leading-relaxed text-muted-foreground">
                 Live preview — approximate camera &amp; blends; narration synced from the real per-scene
                 WAVs. The render (ffmpeg) stays the source of truth.
                 Split re-voices both halves with the video's own voice; duplicate/delete move the row,
@@ -3654,7 +3654,7 @@ export function TimelineStudio({
               </p>
               {/* R2 GUI pass — the keyboard layer exists (Space/S/D/⌫/←→/Home/End/⌘Z/⌘S
                   + ⌘-wheel zoom) but was invisible. One hint row, pro-timeline standard. */}
-              <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-muted-foreground">
+              <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
                 <span className="inline-flex items-center gap-1"><Kbd>Space</Kbd> play</span>
                 <span className="inline-flex items-center gap-1"><Kbd>S</Kbd> split</span>
                 <span className="inline-flex items-center gap-1"><Kbd>D</Kbd> duplicate</span>
@@ -3835,7 +3835,7 @@ function Ruler({
       {ticks.map((tk) => (
         <span
           key={tk.t}
-          className={clsx("absolute top-0", tk.major ? "text-[9px] text-muted-foreground" : "text-transparent")}
+          className={clsx("absolute top-0", tk.major ? "text-xs text-muted-foreground" : "text-transparent")}
           style={{ left: tk.t * density }}
         >
           <span
@@ -3860,7 +3860,7 @@ function Ruler({
 
 function LaneLabelRow() {
   return (
-    <div className="flex items-center gap-3 pt-1 pb-0.5 text-[9px] uppercase tracking-[0.14em] text-muted-foreground/80">
+    <div className="flex items-center gap-3 pt-1 pb-0.5 text-xs uppercase tracking-[0.14em] text-muted-foreground/80">
       <span className="flex items-center gap-1">
         <Scissors className="h-2.5 w-2.5" /> video
       </span>
@@ -3994,10 +3994,10 @@ function SceneClipRow({ scene, meta, density, selected, disabled, narration, vid
             <GripVertical className="h-3.5 w-3.5" />
           </button>
           <button type="button" className="flex-1 min-w-0 text-left" onClick={onSelect} disabled={disabled}>
-            <div className="truncate text-[11px] font-medium leading-tight text-white/95 drop-shadow">
+            <div className="truncate text-xs font-medium leading-tight text-white/95 drop-shadow">
               {scene.title || `Scene ${scene.index}`}
             </div>
-            <div className="mt-0.5 flex items-center gap-1.5 text-[9px] font-mono text-white/70">
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs font-mono text-white/70">
               <Clock className="h-2.5 w-2.5" />
               {scene.durationSec.toFixed(1)}s
               {scene.transitionIn && (
@@ -4034,7 +4034,7 @@ function SceneClipRow({ scene, meta, density, selected, disabled, narration, vid
       {/* voice clip */}
       <div
         className={clsx(
-          "absolute rounded border px-1.5 flex items-center gap-1 text-[9px] font-mono",
+          "absolute rounded border px-1.5 flex items-center gap-1 text-xs font-mono",
           scene.audio.voice.enabled && scene.audio.voice.level > 0
             ? "border-sky-400/30 bg-sky-400/10 text-sky-200"
             : "border-white/10 bg-white/[0.02] text-muted-foreground/60 line-through"
@@ -4136,7 +4136,7 @@ function SceneClipRow({ scene, meta, density, selected, disabled, narration, vid
       {/* caption clip */}
       {scene.caption?.text && (
         <div
-          className="absolute rounded border border-amber-400/25 bg-amber-400/10 px-1.5 flex items-center text-[9px] italic text-amber-100/90"
+          className="absolute rounded border border-amber-400/25 bg-amber-400/10 px-1.5 flex items-center text-xs italic text-amber-100/90"
           style={{ left: 0, top: LANE_H_VIDEO + 6 + LANE_H_AUDIO + 2, width: w, height: LANE_H_AUDIO - 4 }}
           onClick={onSelect}
         >
@@ -4296,7 +4296,7 @@ interface InspectorProps {
 const RENDER_HONORS = (
   <Badge
     variant="outline"
-    className="text-[9px] border-emerald-400/30 bg-emerald-400/10 text-emerald-200 shrink-0"
+    className="text-xs border-emerald-400/30 bg-emerald-400/10 text-emerald-200 shrink-0"
     title="Saved with the doc and consumed by the render — what you edit here is what the MP4 plays."
   >
     render honors
@@ -4577,7 +4577,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
   return (
     <div className="space-y-3 rounded-lg border border-white/10 bg-white/[0.02] p-3">
       <div className="flex items-center gap-2">
-        <Badge variant="secondary" className="text-[10px] font-mono">#{scene.index}</Badge>
+        <Badge variant="secondary" className="text-xs font-mono">#{scene.index}</Badge>
         <button
           type="button"
           className="truncate text-left text-sm font-medium hover:underline"
@@ -4586,14 +4586,14 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
         >
           {scene.title || `Scene ${scene.index}`}
         </button>
-        <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+        <span className="ml-auto font-mono text-xs text-muted-foreground">
           {scene.startSec.toFixed(1)}–{scene.endSec.toFixed(1)}s
         </span>
       </div>
 
       {/* script / transcript — S3 */}
       <section className="space-y-1.5">
-        <header className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <header className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
           <FileText className="h-3 w-3" /> Script {RENDER_HONORS}
         </header>
         <Textarea
@@ -4604,7 +4604,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
           aria-label="Scene narration"
         />
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {scriptDraft.trim().split(/\s+/).filter(Boolean).length} words
             {scriptChanged
               ? ` · was ${scene.narration.trim().split(/\s+/).filter(Boolean).length}`
@@ -4621,7 +4621,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
             <span className="ml-1.5 text-xs">Re-voice scene</span>
           </Button>
         </div>
-        <p className="text-[10px] leading-snug text-muted-foreground">
+        <p className="text-xs leading-snug text-muted-foreground">
           Editing the script re-reads the scene with the video's own voice — the
           row, the scene WAV, the timeline window and the merged voiceover update
           in one server step. Custom-audio videos re-attach per-scene audio first.
@@ -4633,9 +4633,9 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
           thumbnail busts its cache per repaint (the art URL is static). */}
       {!slidesMode && (
         <section className="space-y-1.5">
-          <header className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <header className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
             <ImagePlus className="h-3 w-3" /> Artwork
-            <span className="ml-auto rounded bg-amber-500/15 px-1.5 py-px text-[9px] normal-case tracking-normal text-amber-200">
+            <span className="ml-auto rounded bg-amber-500/15 px-1.5 py-px text-xs normal-case tracking-normal text-amber-200">
               row asset
             </span>
           </header>
@@ -4645,7 +4645,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                  
                 <img src={thumbUrl} alt={`Scene ${scene.index} artwork`} className="h-full w-full object-cover" />
               ) : (
-                <div className="grid h-full place-items-center text-[9px] text-muted-foreground">no art yet</div>
+                <div className="grid h-full place-items-center text-xs text-muted-foreground">no art yet</div>
               )}
               {(artBusy || scenesMeta?.generating) && (
                 <div className="absolute inset-0 grid place-items-center bg-black/55">
@@ -4726,7 +4726,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
               e.currentTarget.value = ""; // re-picking the same file re-fires
             }}
           />
-          <p className="text-[10px] leading-snug text-muted-foreground">
+          <p className="text-xs leading-snug text-muted-foreground">
             Art is a row asset (scene-{String(scene.index).padStart(2, "0")} on disk), not a doc
             field — these actions run the same pipelines as Scene Studio and
             keep the narration and window untouched. The render reads the art
@@ -4738,9 +4738,9 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
 
       {/* timing */}
       <section className="space-y-1.5">
-        <header className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <header className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
           <Clock className="h-3 w-3" /> Timing
-          <span className="ml-auto rounded bg-emerald-500/15 px-1.5 py-px text-[9px] normal-case tracking-normal text-emerald-200">
+          <span className="ml-auto rounded bg-emerald-500/15 px-1.5 py-px text-xs normal-case tracking-normal text-emerald-200">
             render honors
           </span>
         </header>
@@ -4773,7 +4773,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
 
       {/* transition */}
       <section className="space-y-1.5">
-        <header className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <header className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
           <Scissors className="h-3 w-3" /> Transition in {RENDER_HONORS}
         </header>
         <Select
@@ -4792,7 +4792,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
             ))}
           </SelectContent>
         </Select>
-        <p className="text-[10px] leading-snug text-muted-foreground">
+        <p className="text-xs leading-snug text-muted-foreground">
           The seam into this scene — the render blends it exactly; “Hard Cut” stitches with no blend.
           Video-level default lives in Render controls.
         </p>
@@ -4800,7 +4800,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
 
       {/* caption */}
       <section className="space-y-1.5">
-        <header className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <header className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
           <Subtitles className="h-3 w-3" /> Caption {RENDER_HONORS}
         </header>
         <Textarea
@@ -4814,14 +4814,14 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
           }}
           className="text-xs leading-snug"
         />
-        <p className="text-[10px] leading-snug text-muted-foreground">
+        <p className="text-xs leading-snug text-muted-foreground">
           Edited text replaces this scene's burned cues (smart captions too).
         </p>
       </section>
 
       {/* grade — S2 wave 2 */}
       <section className="space-y-2">
-        <header className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <header className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
           <span className="h-3 w-3 rounded-sm bg-gradient-to-br from-amber-300 to-rose-400" /> Grade {RENDER_HONORS}
         </header>
         <div className="flex flex-wrap gap-1">
@@ -4832,7 +4832,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
               variant="ghost"
               disabled={disabled}
               onClick={() => onGrade({ ...p })}
-              className="h-6 px-2 text-[10px] capitalize"
+              className="h-6 px-2 text-xs capitalize"
             >
               {id}
             </Button>
@@ -4842,7 +4842,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
             variant="ghost"
             disabled={disabled || !grade}
             onClick={() => onGrade(null)}
-            className="h-6 px-2 text-[10px]"
+            className="h-6 px-2 text-xs"
             title="Back to the classic look"
           >
             reset
@@ -4858,7 +4858,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
           ] as const
         ).map(([key, label, min, max, step]) => (
           <div key={key} className="flex items-center gap-2">
-            <span className="w-16 shrink-0 text-[10px] text-muted-foreground">{label}</span>
+            <span className="w-16 shrink-0 text-xs text-muted-foreground">{label}</span>
             <Slider
               className="h-1.5 flex-1"
               value={[grade ? Math.round((grade[key] as number) * 100) : key === "temperature" || key === "vignette" ? 0 : 100]}
@@ -4877,19 +4877,19 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                 })
               }
             />
-            <span className="w-9 text-right font-mono text-[10px] text-muted-foreground">
+            <span className="w-9 text-right font-mono text-xs text-muted-foreground">
               {grade ? Math.round((grade[key] as number) * 100) : 100}%
             </span>
           </div>
         ))}
-        <p className="text-[10px] leading-snug text-muted-foreground">
+        <p className="text-xs leading-snug text-muted-foreground">
           Per-scene color over the AI art (Ken Burns + stock). No pick = the classic look; slides keep their tuned deck.
         </p>
       </section>
 
       {/* title overlay — S2 wave 2 */}
       <section className="space-y-1.5">
-        <header className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <header className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
           <span className="font-black leading-none text-sm text-primary/80">T</span> Title {RENDER_HONORS}
         </header>
         <Input
@@ -4958,18 +4958,18 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                 disabled={disabled}
                 onValueChange={(v) => onTitle({ ...ti, size: (v[0] ?? 100) / 100 })}
               />
-              <span className="w-8 text-right font-mono text-[10px] text-muted-foreground">{Math.round(ti.size * 100)}%</span>
+              <span className="w-8 text-right font-mono text-xs text-muted-foreground">{Math.round(ti.size * 100)}%</span>
             </div>
           </div>
         )}
-        <p className="text-[10px] leading-snug text-muted-foreground">
+        <p className="text-xs leading-snug text-muted-foreground">
           Burned onto this scene's frames, animated in/out — under the caption track.
         </p>
       </section>
 
       {/* camera keyframes — S2 wave 2 */}
       <section className="space-y-2">
-        <header className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <header className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
           <span className="text-sm leading-none">◆</span> Camera keys {RENDER_HONORS}
         </header>
         {(
@@ -4981,7 +4981,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
           const k = cam?.[key] ?? { scale: 1, x: 0.5, y: 0.5 };
           return (
             <div key={key} className="space-y-1 rounded-md border border-white/10 p-2">
-              <div className="text-[10px] font-medium text-foreground/80">{label} framing</div>
+              <div className="text-xs font-medium text-foreground/80">{label} framing</div>
               {(
                 [
                   ["scale", "Zoom", 1, 2.2],
@@ -4990,7 +4990,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                 ] as const
               ).map(([field, label2, min, max]) => (
                 <div key={field} className="flex items-center gap-2">
-                  <span className="w-12 shrink-0 text-[10px] text-muted-foreground">{label2}</span>
+                  <span className="w-12 shrink-0 text-xs text-muted-foreground">{label2}</span>
                   <Slider
                     className="h-1 flex-1"
                     value={[Math.round(k[field] * 100)]}
@@ -5007,7 +5007,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                       })
                     }
                   />
-                  <span className="w-8 text-right font-mono text-[10px] text-muted-foreground">
+                  <span className="w-8 text-right font-mono text-xs text-muted-foreground">
                     {Math.round(k[field] * 100)}%
                   </span>
                 </div>
@@ -5032,14 +5032,14 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
             Auto
           </Button>
         </div>
-        <p className="text-[10px] leading-snug text-muted-foreground">
+        <p className="text-xs leading-snug text-muted-foreground">
           Two keyframes, start → end framing with easing — overrides the Director's auto camera for this AI-art scene.
         </p>
       </section>
 
       {/* speed — S2 wave 2 */}
       <section className="space-y-1.5">
-        <header className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <header className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
           <Clock className="h-3 w-3" /> Speed {RENDER_HONORS}
         </header>
         <div className="flex items-center gap-2">
@@ -5052,14 +5052,14 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
             disabled={disabled}
             onValueChange={(v) => onSpeed((v[0] ?? 100) / 100)}
           />
-          <span className="w-10 text-right font-mono text-[10px] text-muted-foreground">
+          <span className="w-10 text-right font-mono text-xs text-muted-foreground">
             {(scene.speed ?? 1).toFixed(2)}×
           </span>
           <Button size="sm" variant="ghost" disabled={disabled || !scene.speed} onClick={() => onSpeed(null)} className="h-7 px-2 text-xs">
             1×
           </Button>
         </div>
-        <p className="text-[10px] leading-snug text-muted-foreground">
+        <p className="text-xs leading-snug text-muted-foreground">
           The narration is time-stretched (no words lost) and footage plays at the rate;
           the scene's floor shrinks to match a faster read. AI-art stills pace by their read.
         </p>
@@ -5068,7 +5068,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
       {/* chroma key — S3 */}
       {!slidesMode && (
         <section className="space-y-1.5">
-          <header className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <header className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
             <Layers className="h-3 w-3" /> Chroma key {RENDER_HONORS}
           </header>
           <div className="flex items-center gap-2">
@@ -5105,7 +5105,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
           {chroma && (
             <>
               <div className="flex items-center gap-2">
-                <span className="w-16 shrink-0 text-[10px] text-muted-foreground">Similarity</span>
+                <span className="w-16 shrink-0 text-xs text-muted-foreground">Similarity</span>
                 <Slider
                   className="h-1.5 flex-1"
                   value={[Math.round(chroma.similarity * 100)]}
@@ -5115,12 +5115,12 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                   disabled={disabled}
                   onValueChange={(v) => onChroma({ ...chroma, similarity: (v[0] ?? 12) / 100 })}
                 />
-                <span className="w-8 text-right font-mono text-[10px] text-muted-foreground">
+                <span className="w-8 text-right font-mono text-xs text-muted-foreground">
                   {chroma.similarity.toFixed(2)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-16 shrink-0 text-[10px] text-muted-foreground">Edge soft</span>
+                <span className="w-16 shrink-0 text-xs text-muted-foreground">Edge soft</span>
                 <Slider
                   className="h-1.5 flex-1"
                   value={[Math.round(chroma.blend * 100)]}
@@ -5130,12 +5130,12 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                   disabled={disabled}
                   onValueChange={(v) => onChroma({ ...chroma, blend: (v[0] ?? 2) / 100 })}
                 />
-                <span className="w-8 text-right font-mono text-[10px] text-muted-foreground">
+                <span className="w-8 text-right font-mono text-xs text-muted-foreground">
                   {chroma.blend.toFixed(2)}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-16 shrink-0 text-[10px] text-muted-foreground">Backdrop</span>
+                <span className="w-16 shrink-0 text-xs text-muted-foreground">Backdrop</span>
                 <input
                   type="color"
                   disabled={disabled}
@@ -5144,11 +5144,11 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                   className="h-6 w-10 cursor-pointer rounded border border-white/15 bg-transparent p-0.5"
                   aria-label="Backdrop color"
                 />
-                <span className="font-mono text-[10px] text-muted-foreground">{chroma.background}</span>
+                <span className="font-mono text-xs text-muted-foreground">{chroma.background}</span>
               </div>
             </>
           )}
-          <p className="text-[10px] leading-snug text-muted-foreground">
+          <p className="text-xs leading-snug text-muted-foreground">
             Keys this scene's art off a green/blue/magenta screen onto the backdrop —
             the render keys before grading so the key color stays honest.
           </p>
@@ -5158,11 +5158,11 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
       {/* logo overlay / PIP — S3 */}
       {!slidesMode && (
         <section className="space-y-1.5">
-          <header className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <header className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
             <PictureInPicture2 className="h-3 w-3" /> Logo overlay {RENDER_HONORS}
           </header>
           {!hasLogo ? (
-            <p className="text-[10px] leading-snug text-muted-foreground">
+            <p className="text-xs leading-snug text-muted-foreground">
               Upload a brand logo (Brand kit) to pin it into a corner of this scene.
             </p>
           ) : (
@@ -5198,7 +5198,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                     ))}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="w-14 shrink-0 text-[10px] text-muted-foreground">Size</span>
+                    <span className="w-14 shrink-0 text-xs text-muted-foreground">Size</span>
                     <Slider
                       className="h-1.5 flex-1"
                       value={[Math.round(pip.size * 100)]}
@@ -5208,12 +5208,12 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                       disabled={disabled}
                       onValueChange={(v) => onPip({ ...pip, size: (v[0] ?? 18) / 100 })}
                     />
-                    <span className="w-8 text-right font-mono text-[10px] text-muted-foreground">
+                    <span className="w-8 text-right font-mono text-xs text-muted-foreground">
                       {Math.round(pip.size * 100)}%
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="w-14 shrink-0 text-[10px] text-muted-foreground">Opacity</span>
+                    <span className="w-14 shrink-0 text-xs text-muted-foreground">Opacity</span>
                     <Slider
                       className="h-1.5 flex-1"
                       value={[Math.round(pip.opacity * 100)]}
@@ -5223,7 +5223,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                       disabled={disabled}
                       onValueChange={(v) => onPip({ ...pip, opacity: (v[0] ?? 100) / 100 })}
                     />
-                    <span className="w-8 text-right font-mono text-[10px] text-muted-foreground">
+                    <span className="w-8 text-right font-mono text-xs text-muted-foreground">
                       {Math.round(pip.opacity * 100)}%
                     </span>
                   </div>
@@ -5245,12 +5245,12 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
 
       {/* audio */}
       <section className="space-y-2">
-        <header className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+        <header className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
           <AudioLines className="h-3 w-3" /> Mix {RENDER_HONORS}
         </header>
         {(["voice", "music"] as const).map((track) => (
           <div key={track} className="flex items-center gap-2">
-            <span className="w-24 shrink-0 text-[10px] text-muted-foreground">
+            <span className="w-24 shrink-0 text-xs text-muted-foreground">
               {track === "voice" ? "Voice" : "Music bed"}
             </span>
             <Slider
@@ -5262,7 +5262,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
               disabled={disabled}
               onValueChange={(v) => onAudio(track, (v[0] ?? 0) / 100)}
             />
-            <span className="w-9 text-right font-mono text-[10px] text-muted-foreground">
+            <span className="w-9 text-right font-mono text-xs text-muted-foreground">
               {Math.round((scene.audio[track].level ?? 0) * 100)}%
             </span>
           </div>
@@ -5292,17 +5292,17 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
           return (
             <div key={bank} className="space-y-1 rounded-md border border-white/10 bg-white/[0.03] p-2">
               <div className="flex items-center gap-1.5">
-                <span className="w-16 shrink-0 text-[10px] font-medium text-foreground/80">{label}</span>
+                <span className="w-16 shrink-0 text-xs font-medium text-foreground/80">{label}</span>
                 <Select
                   value={docKind ?? "auto"}
                   onValueChange={(v) => onSoundKind(bank, v === "auto" ? null : v)}
                   disabled={disabled}
                 >
-                  <SelectTrigger className="h-6 flex-1 text-[11px]">
+                  <SelectTrigger className="h-6 flex-1 text-xs">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="auto" className="text-[11px]">
+                    <SelectItem value="auto" className="text-xs">
                       {bank === "sfx"
                         ? planSfx
                           ? `Auto — plan: ${planSfx}`
@@ -5310,7 +5310,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                         : "Auto — the Director's bed"}
                     </SelectItem>
                     {catalog.map((c) => (
-                      <SelectItem key={c.id} value={c.id} className="text-[11px]">
+                      <SelectItem key={c.id} value={c.id} className="text-xs">
                         {c.label}
                       </SelectItem>
                     ))}
@@ -5336,7 +5336,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                 </Button>
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-16 shrink-0 text-[10px] text-muted-foreground">Level</span>
+                <span className="w-16 shrink-0 text-xs text-muted-foreground">Level</span>
                 <Slider
                   className="h-1.5 flex-1"
                   value={[Math.round(((bank === "sfx" ? scene.audio.sfx.level : scene.audio.ambient.level) ?? 0) * 100)]}
@@ -5346,15 +5346,15 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
                   disabled={disabled}
                   onValueChange={(v) => onAudio(bank, (v[0] ?? 0) / 100)}
                 />
-                <span className="w-9 text-right font-mono text-[10px] text-muted-foreground">
+                <span className="w-9 text-right font-mono text-xs text-muted-foreground">
                   {Math.round(((bank === "sfx" ? scene.audio.sfx.level : scene.audio.ambient.level) ?? 0) * 100)}%
                 </span>
               </div>
-              {note && <p className="text-[10px] leading-snug text-muted-foreground">{note}</p>}
+              {note && <p className="text-xs leading-snug text-muted-foreground">{note}</p>}
             </div>
           );
         })}
-        <p className="text-[10px] leading-snug text-muted-foreground">
+        <p className="text-xs leading-snug text-muted-foreground">
           Voice/music are the render's mix weights. The SFX cue and ambience bed are the
           studio's own picks — saved in the doc, honored by the render ahead of the plan;
           “Auto” follows the Director. The synthesized fallback bed keeps its fixed profile.
@@ -5363,7 +5363,7 @@ function Inspector({ scene, scenesMeta, disabled, onDuration, onTransition, onCa
 
       {/* meta */}
       {(shot || scenesMeta?.stockQuery || scene.stockQuery) && (
-        <section className="space-y-1 border-t border-white/10 pt-2 text-[10px] text-muted-foreground">
+        <section className="space-y-1 border-t border-white/10 pt-2 text-xs text-muted-foreground">
           {shot && (
             <p>
               <span className="text-foreground/70">Shot:</span> {shot.framing ?? "—"} · {shot.camera ?? "—"}

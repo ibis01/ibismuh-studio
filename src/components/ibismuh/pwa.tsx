@@ -106,7 +106,7 @@ export function ManualInstallHint() {
         <span className="text-primary font-semibold shrink-0">iOS</span>
         <span>
           Open Ibismuh Studio in Safari → tap <span className="text-foreground font-medium">Share</span>{" "}
-          <span className="inline-block align-middle text-[10px] border rounded px-1">↑</span> →{" "}
+          <span className="inline-block align-middle text-xs border rounded px-1">↑</span> →{" "}
           <span className="text-foreground font-medium">Add to Home Screen</span>.
         </span>
       </p>
