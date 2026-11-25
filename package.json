@@ -57,7 +57,9 @@
     "test:queue-reliability": "node --import tsx scripts/test-queue-reliability.mts",
     "migrate:release": "node scripts/migrate-release.mjs",
     "lint:budget": "node scripts/lint-budget.mjs",
-    "audit:api": "node --import tsx scripts/api-validation-audit.mts"
+    "audit:api": "node --import tsx scripts/api-validation-audit.mts",
+    "test:whiteboard-e2": "node --import tsx scripts/test-whiteboard-e2.mts",
+    "whiteboard:e2-sample": "node --import tsx scripts/render-sample-whiteboard-e2.mts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -95,6 +97,7 @@
     "@radix-ui/react-toggle-group": "^1.1.10",
     "@radix-ui/react-tooltip": "^1.2.7",
     "@reactuses/core": "^6.6.1",
+    "@resvg/resvg-js": "^2.6.2",
     "@tanstack/react-query": "^5.108.1",
     "@tanstack/react-table": "^9.3.1",
     "class-variance-authority": "^0.7.1",
