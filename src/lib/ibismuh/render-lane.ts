@@ -24,11 +24,13 @@ import { RENDER_MODES } from "./types";
  * S123 — the graphics engine seats its lane in the SAME contract (the
  * engine lanes are a set, not a special case): an explicit "graphics"
  * resolves to the graphics lane and pins symmetrically with whiteboard.
- * The lane SHIPS DARK (spec §10): RENDER_MODES gains the picker entry
- * only in the lockstep commit that also lands the compositor case + the
- * route branch (acceptance criterion 4) — a picker entry without its
- * route branch would degrade to the story gates, the exact S119 bug
- * class this resolver exists to kill. The unit suite pins the dark state.
+ * The lane LIT WITH THE LOCKSTEP COMMIT (spec §10, acceptance criterion 4):
+ * the P3 lockstep commit lands the compositor case (the routing wall + the
+ * PlanVisualKind mapping) + the route branch + the RENDER_MODES picker
+ * entry TOGETHER — a picker entry without its route branch would degrade to
+ * the story gates, the exact S119 bug class this resolver exists to kill.
+ * The unit suite pins the lit state and the lockstep law (every picker id
+ * still has a lane decision).
  *
  * Pure on purpose: the truth table below is unit-pinned, and the route
  * stays a thin persist-and-dispatch shell around it.
@@ -105,9 +107,9 @@ export function resolveRenderLane(
  * must have a lane decision here. RENDER_MODES minus the engine lanes
  * (whiteboard, graphics) must be exactly STORY_MODE_IDS — a new picker
  * mode that forgets its lane row fails this check (and the unit suite
- * that pins it). The graphics lane resolves HERE while shipping dark:
- * when its RENDER_MODES entry joins (the P3/P4 lockstep commit), this law
- * keeps covering it from the engine-lane side automatically.
+ * that pins it). The graphics entry joined the picker WITH the P3
+ * lockstep commit (route branch + compositor case); this law keeps
+ * covering both engine lanes from the engine-lane side automatically.
  */
 export function laneDecisionsComplete(): boolean {
   const pickerIds = RENDER_MODES.map((m) => m.id).filter((id) => !isEngineLaneId(id));
