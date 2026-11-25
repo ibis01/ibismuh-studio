@@ -275,7 +275,9 @@ function buildCloseCard(videoId: string, topic: string, lastNarration: string): 
 // through the concept set so a scene with no cue still gets a varied board.
 // ---------------------------------------------------------------------------
 
-const KEYWORD_PICKS: { re: RegExp; assetId: string }[] = [
+/** Exported for the catalog integrity suite: every pick must name a
+ *  registered library asset (the dead-end law). */
+export const KEYWORD_PICKS: { re: RegExp; assetId: string }[] = [
   { re: /\b(money|dollar|cost|price|revenue|budget|profit|paid|expensive|cheap)\b/i, assetId: "coin" },
   { re: /\b(grow|growth|increase|rise|trend|boost|scale|higher)\b/i, assetId: "arrow-growth" },
   { re: /\b(data|chart|stat|percent|metric|measure|number|graph)\b/i, assetId: "bar-chart" },
@@ -284,10 +286,76 @@ const KEYWORD_PICKS: { re: RegExp; assetId: string }[] = [
   { re: /\b(time|deadline|schedule|minute|hour|fast|slow|wait)\b/i, assetId: "clock" },
   { re: /\b(launch|start|begin|first|pilot|ship|release)\b/i, assetId: "rocket" },
   { re: /\b(check|verify|correct|right|proven|safe|quality|benefit|advantage)\b/i, assetId: "check-badge" },
+  // S-PAK — the production pack's concepts. Appended AFTER the starter
+  // rules: first-hit-wins keeps every existing pick identical, and the new
+  // rules use words the starter table does not claim (no overlap).
+  { re: /\b(doctor|medicine|medical|treatment|patient|pill|vaccine|clinic)\b/i, assetId: "medical-cross" },
+  { re: /\b(heartbeat|pulse|cardio|heart rate|vitals|fitness)\b/i, assetId: "heartbeat-line" },
+  { re: /\b(school|classroom|lesson|student|teach|learn|education)\b/i, assetId: "blackboard-wb" },
+  { re: /\b(graduat|diploma|certificate|degree|award|credential)\b/i, assetId: "certificate" },
+  { re: /\b(calendar|date|month|appointment|agenda)\b/i, assetId: "calendar-page" },
+  { re: /\b(abacus|math|arithmetic|sum|count|counting)\b/i, assetId: "abacus" },
+  { re: /\b(apple|fruit|healthy eating|orchard)\b/i, assetId: "apple" },
+  { re: /\b(backpack|rucksack|school bag|luggage)\b/i, assetId: "backpack-wb" },
+  { re: /\b(briefcase|business|office|career|job|profession)\b/i, assetId: "briefcase-wb" },
+  { re: /\b(presentation|pitch|report|meeting|seminar)\b/i, assetId: "presentation-board" },
+  { re: /\b(partnership|agreement|deal|handshake|collaboration|contract)\b/i, assetId: "handshake-arms" },
+  { re: /\b(piggy|savings|save money|thrift|nest egg)\b/i, assetId: "piggy-bank-wb" },
+  { re: /\b(funds|wealth|cash bag|capital|investment)\b/i, assetId: "money-bag" },
+  { re: /\b(computer|laptop|software|digital|technology|pc)\b/i, assetId: "computer-screen" },
+  { re: /\b(phone|smartphone|mobile|cellphone|call)\b/i, assetId: "smartphone-wb" },
+  { re: /\b(wifi|wireless|signal|bandwidth|network)\b/i, assetId: "wifi-waves" },
+  { re: /\b(robot|automation|artificial intelligence|machine|bot)\b/i, assetId: "robot-head" },
+  { re: /\b(cloud|hosting|server|backup|saas)\b/i, assetId: "cloud-server" },
+  { re: /\b(gear|cog|engine|motor|mechanism|machinery)\b/i, assetId: "gear-cog" },
+  { re: /\b(magnifier|magnifying|search|research|inspect|examine)\b/i, assetId: "magnifier" },
+  { re: /\b(key|access|unlock|password|secret)\b/i, assetId: "key-wb" },
+  { re: /\b(magnet|attract|pull|draw in|engagement)\b/i, assetId: "magnet" },
+  { re: /\b(compass|direction|navigate|guidance|orient)\b/i, assetId: "compass" },
+  { re: /\b(target|goal|aim|bullseye|objective|focus)\b/i, assetId: "target-wb" },
+  { re: /\b(tree|forest|oak|wood|park)\b/i, assetId: "tree-oak" },
+  { re: /\b(leaf|leaves|nature|eco|green|organic)\b/i, assetId: "leaf-single" },
+  { re: /\b(mountain|hill|peak|summit|climb)\b/i, assetId: "mountain-peaks" },
+  { re: /\b(water|droplet|rain|irrigation|liquid)\b/i, assetId: "droplet" },
+  { re: /\b(recycle|environment|sustainable|renewal|circular)\b/i, assetId: "recycle-arrows" },
+  { re: /\b(sun|sunlight|solar|daytime|shine)\b/i, assetId: "sun-nature" },
+  { re: /\b(barn|farm|ranch|granary)\b/i, assetId: "barn" },
+  { re: /\b(corn|maize|crop|grain|harvest)\b/i, assetId: "corn-cob" },
+  { re: /\b(tractor|plow|farm machine)\b/i, assetId: "tractor-wb" },
+  { re: /\b(egg|chicken|hen|poultry)\b/i, assetId: "chicken-egg" },
+  { re: /\b(watering can|watering|irrigate|garden care)\b/i, assetId: "water-can" },
+  { re: /\b(sprout|seedling|seed|sapling|germinate)\b/i, assetId: "sprout" },
+  { re: /\b(trophy|trophy win|award cup|champion|victory|success)\b/i, assetId: "cup-trophy" },
+  { re: /\b(email|mail|envelope|letter|message|contact)\b/i, assetId: "envelope-mail" },
+  { re: /\b(home|house|family|residence|living|property)\b/i, assetId: "home-house" },
+  { re: /\b(bell|alert|notification|reminder|ring|alarm)\b/i, assetId: "bell-ring" },
+  { re: /\b(cycle|loop|repeat|iterate|rotation)\b/i, assetId: "arrow-loop" },
+  { re: /\b(compare|comparison|versus|fair|balance|justice)\b/i, assetId: "balance-scale-wb" },
+  { re: /\b(bulb|lightbulb glow|bright idea)\b/i, assetId: "lightbulb-wb" },
 ];
 
-/** The no-cue fallback cycle (deterministic by scene position). */
-const FALLBACK_CYCLE = ["lightbulb", "bar-chart", "rocket", "globe", "clock", "coin", "check-badge", "arrow-growth"] as const;
+/** The no-cue fallback cycle (deterministic by scene position): the starter
+ *  eight first (legacy boards stay byte-shaped), then a diverse S-PAK
+ *  rotation so a long video's iconless scenes spread across domains. */
+/** Exported for the catalog integrity suite (the dead-end law). */
+export const FALLBACK_CYCLE = [
+  "lightbulb",
+  "bar-chart",
+  "rocket",
+  "globe",
+  "clock",
+  "coin",
+  "check-badge",
+  "arrow-growth",
+  "medical-cross",
+  "briefcase-wb",
+  "computer-screen",
+  "tree-oak",
+  "droplet",
+  "cup-trophy",
+  "wifi-waves",
+  "sprout",
+] as const;
 
 // S137 — the rich layout's scene-space slots (1920×1080 reference; remapped
 // by remapPlacement like every other constant). The primary concept reads

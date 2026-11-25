@@ -15,6 +15,7 @@ import { applyGlyphTextMode } from "./text-draw";
 import { withSketchPasses } from "./sketch";
 import { validWhiteboardId } from "./storyboard";
 import { validateAsset } from "./asset-validate";
+import { LIBRARY_PACK } from "./library-pack";
 
 /** W3 (reconciliation §5.3): the role an asset plays in the stroke
  *  grammar — advisory metadata the validator (and later the W4/W5/W7
@@ -470,6 +471,11 @@ export const HAND_TIPS: Record<string, { x: number; y: number }> = {
 
 export const ASSETS: WhiteboardAsset[] = [
   ...BASE_ASSETS,
+  // S-PAK — the production pack rides the SAME registration path (sanitize
+  // at construction, the W3 validator at load, the sketch pass, extraction):
+  // a pack asset failing the validator throws exactly like a benchmark
+  // asset — there is no second quality bar.
+  ...LIBRARY_PACK,
   leftHandVariant(ASSET_HAND_MARKER, "hand-marker-l"),
   leftHandVariant(ASSET_HAND_PENCIL, "hand-pencil-l"),
   leftHandVariant(ASSET_HAND_CHALK, "hand-chalk-l"),

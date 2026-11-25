@@ -305,6 +305,13 @@ jobs:
       - name: QC gates (lane-scoped static gates)
         run: npm run test:qc-gates
 
+      # The re-audit's Phase A: the shared catalog contract — identity,
+      # provenance, versioning, licensing, and deterministic search for BOTH
+      # visual lanes (whiteboard assets + graphics icons), fail-closed and
+      # tamper-evident, with the planner dead-end integrity laws.
+      - name: Catalog contracts (coverage + provenance + search laws)
+        run: npm run test:catalog
+
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes
       # → print the measured RTO. "A backup that has never been restored is
