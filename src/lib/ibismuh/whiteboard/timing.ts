@@ -175,6 +175,107 @@ export interface SceneScheduleOpts {
   remainder?: readonly string[];
 }
 
+// ---------------------------------------------------------------------------
+// P0-B (excellence) — the text lead-in bound. The fill law paces ALL work
+// to the window's right edge, and text items ride the sequential queue
+// after paths — so a container-plus-text window (the key-phrase shape)
+// spent its first half on the support and pushed the payload (the words)
+// to 66 % of the scene (the D2 receipt: w1-phrase's first word at 4613 ms
+// of 7000). The bound: the FIRST text starts no later than a fixed
+// fraction of the window; the pre-text paths compress proportionally to
+// their headroom above MIN_PATH_MS (the floors are load-bearing), and the
+// freed time RE-ENTERS the payload — the words write slower instead of
+// leaving dead air, and the draw span still ends at the window's right
+// edge (the fill law's QC contract is untouched).
+//
+// Byte-identity by construction: a window without text, a text that
+// already leads or already fits inside the bound, and a window whose
+// paths have no compression headroom ALL return the input unchanged —
+// the law is a no-op everywhere except the defect shape it fixes.
+// ---------------------------------------------------------------------------
+
+/** The text lead-in bound as a fraction of the draw window. 0.45 puts the
+ *  payload's first word inside the window's first half — the narration
+ *  names what the text says while the text is still arriving, not after
+ *  the container has eaten the window. */
+export const TEXT_LEAD_IN_MAX_FRAC = 0.45;
+
+/**
+ * Bound the first text item's start inside [winStart, winEnd]. PURE and
+ * deterministic; integer-exact (the running-round distributes each
+ * share without drift, so the total work time — and therefore the draw
+ * span's end — is preserved to the millisecond).
+ *
+ * @param kinds the work items' kinds in schedule order
+ * @param durs the scheduled durations (post fill factor, post floors)
+ * @param gapMs the pen-lift gap between items
+ * @param winStartMs the window's left edge (the fill law's winStart)
+ * @param winEndMs the window's right edge (the fill law's winEnd)
+ * @returns NEW durations (the input is never mutated)
+ */
+export function boundTextLeadIn(
+  kinds: readonly ("path" | "text")[],
+  durs: readonly number[],
+  gapMs: number,
+  winStartMs: number,
+  winEndMs: number
+): number[] {
+  const out = [...durs];
+  const firstText = kinds.indexOf("text");
+  if (firstText <= 0) return out; // no text, or the text already leads
+  const span = winEndMs - winStartMs;
+  if (!(span > 0)) return out;
+  let t = winStartMs;
+  for (let i = 0; i < firstText; i++) t += durs[i] + gapMs;
+  const deficit = t - (winStartMs + TEXT_LEAD_IN_MAX_FRAC * span);
+  if (deficit <= 0) return out; // already inside the bound
+  // Compression headroom: pre-text PATH durations above the house floor.
+  const headroom: number[] = [];
+  let total = 0;
+  for (let i = 0; i < firstText; i++) {
+    const h = kinds[i] === "path" ? Math.max(0, durs[i] - MIN_PATH_MS) : 0;
+    headroom.push(h);
+    total += h;
+  }
+  let freed = 0;
+  if (total > 0) {
+    const compress = Math.min(deficit, total);
+    let acc = 0;
+    let accR = 0;
+    for (let i = 0; i < firstText; i++) {
+      if (headroom[i] <= 0) continue;
+      acc += (headroom[i] * compress) / total;
+      const r = Math.round(acc) - accR;
+      accR += r;
+      const nr = Math.max(0, Math.min(r, out[i] - MIN_PATH_MS));
+      out[i] -= nr;
+      freed += nr;
+    }
+  }
+  if (freed <= 0) return out; // the floors are load-bearing: no compression
+  // The freed time re-enters the payload: the text items write slower,
+  // proportionally to their own durations, integer-exact.
+  const textIdx: number[] = [];
+  let textSum = 0;
+  for (let i = firstText; i < kinds.length; i++) {
+    if (kinds[i] === "text") {
+      textIdx.push(i);
+      textSum += out[i];
+    }
+  }
+  if (textSum > 0) {
+    let acc = 0;
+    let accR = 0;
+    for (const i of textIdx) {
+      acc += (out[i] * freed) / textSum;
+      const r = Math.round(acc) - accR;
+      accR += r;
+      out[i] += r;
+    }
+  }
+  return out;
+}
+
 export function scheduleScene(
   scene: WhiteboardScene,
   durationMs: number,
@@ -260,9 +361,19 @@ export function scheduleScene(
   // W4: the last spoken word's end) — capped raw schedules finished 3–6s
   // early, and the static tails failed frozen-frames/static-shots.
   const f = rawSum > 0 ? Math.min(2.8, Math.max(0.5, avail / rawSum)) : 1;
+  // P0-B — the text lead-in bound rides the scheduled durations: pre-text
+  // paths compress, the payload re-fills, the span end is preserved. A
+  // no-op without text (byte-for-byte today's schedule).
+  const durs = boundTextLeadIn(
+    work.map((w) => w.kind),
+    work.map((_, i) => Math.max(120, Math.round(raw[i] * f))),
+    gapMs,
+    winStart,
+    winEnd
+  );
   let t = winStart;
   work.forEach((w, i) => {
-    const durationMs = Math.max(120, Math.round(raw[i] * f));
+    const durationMs = durs[i];
     if (w.kind === "path") {
       events.push({ type: "draw_path", assetId: w.assetId, pathId: w.id, startMs: Math.round(t), durationMs });
     } else {
@@ -641,7 +752,8 @@ export function handAt(
   scene: WhiteboardScene,
   geometry: Map<string, AssetGeometry>,
   tMs: number,
-  roles?: Map<string, AssetRole>
+  roles?: Map<string, AssetRole>,
+  dims?: { width: number; height: number }
 ): FrameHandState {
   const hidden: FrameHandState = { visible: false, x: 0, y: 0, angle: 0, pose: "rest", scale: 1 };
   type PenEvent = Extract<AnimationEvent, { type: "draw_path" | "write_text" }>;
@@ -768,9 +880,31 @@ export function handAt(
     return rest;
   }
   const tail = strokePoint(last, 1);
-  // W7 — the tail holds the REST pose (the open hand, tool lowered): the
-  // hold's micro-motion keeps the lens fed while the grip visibly relaxes.
-  return tail ? { ...tail, pose: "rest" } : hidden;
+  if (!tail) return hidden;
+  // P0-A (excellence) — the tail GLIDES OFF the ink. The old law held the
+  // final stroke's endpoint: the video's longest-lived composition carried
+  // a hand parked ON the artwork (the S146 finding-2 tail half, D1's
+  // receipt). After the last stroke completes, the hand travels the W7
+  // way — an eased lerp with the sine pen-lift bump, zero at both joints
+  // (joint-continuous with the drawing, no teleport) — to a neutral park
+  // point offset below-right of the final stroke endpoint, clamped inside
+  // the board, and holds the REST pose THERE. Pose and visibility are
+  // preserved (the W7 tail pins keep their intent); only the position
+  // moves to the park law. The camera drift keeps the QC lenses fed; the
+  // glide is deterministic (pure function of the same inputs).
+  const lastEnd = last.startMs + last.durationMs;
+  const u = Math.max(0, Math.min(1, (tMs - lastEnd) / HAND_TAIL_GLIDE_MS));
+  const g = easeInOut(u);
+  const lift = Math.sin(Math.PI * u);
+  const park = handParkPoint(tail, dims?.width ?? 1920, dims?.height ?? 1080);
+  return {
+    visible: true,
+    x: tail.x + (park.x - tail.x) * g,
+    y: tail.y + (park.y - tail.y) * g - HAND_TRAVEL_LIFT * lift,
+    angle: tail.angle,
+    pose: "rest",
+    scale: 1 + HAND_TRAVEL_SCALE_BUMP * lift,
+  };
 }
 
 // W7 — the pen-lift bump during inter-stroke travel: the tip rises this
@@ -778,6 +912,31 @@ export function handAt(
 // continuity) and the hand grows by this scale fraction while lifted.
 export const HAND_TRAVEL_LIFT = 26;
 export const HAND_TRAVEL_SCALE_BUMP = 0.05;
+
+// P0-A (excellence) — the tail park's law. The glide runs this long after
+// the last stroke ends (the nominal hold is 900 ms, so the hand settles
+// parked before the scene cut); the park point sits this far below-right
+// of the last stroke endpoint, clamped this many units inside the board
+// (the tip is the anchor — the hand body extends up-left INTO the board,
+// so the clamp keeps the visible hand on the canvas for every house
+// aspect).
+export const HAND_TAIL_GLIDE_MS = 800;
+export const HAND_PARK_OFFSET = { dx: 190, dy: 120 } as const;
+export const HAND_PARK_MARGIN = 130;
+
+/** The neutral park point for a tail hand whose last stroke ended at
+ *  `end`: offset below-right, clamped inside the [width × height] board
+ *  with the hand's own margin. PURE + deterministic. */
+export function handParkPoint(
+  end: { x: number; y: number },
+  width: number,
+  height: number
+): { x: number; y: number } {
+  return {
+    x: Math.min(Math.max(end.x + HAND_PARK_OFFSET.dx, HAND_PARK_MARGIN), width - HAND_PARK_MARGIN),
+    y: Math.min(Math.max(end.y + HAND_PARK_OFFSET.dy, HAND_PARK_MARGIN), height - HAND_PARK_MARGIN),
+  };
+}
 
 // Text anchors (asset-space) — registered by assets.ts.
 export const TEXT_ANCHORS = new Map<string, { x: number; y: number; size: number }>();
@@ -842,7 +1001,7 @@ export function frameAt(
     colors,
     placements,
     carried: carriedLayer,
-    hand: handAt(events, scene, geometry, tMs, roles),
+    hand: handAt(events, scene, geometry, tMs, roles, { width: project.width, height: project.height }),
     camera: cameraAt(scene, project.width, project.height, tMs),
   };
 }

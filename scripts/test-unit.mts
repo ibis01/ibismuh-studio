@@ -7949,8 +7949,15 @@ await test("S64 timing: frameAt — progress ramp, camera drift, pen follows/res
   approx(mid.camera.cx, 960 + cameraDrift(1500).dx, 1e-9, "default camera + drift");
   const done = frameAt(project, WB_PLAIN, events, geo, 3000);
   eq(done.draws.get("a1::p1"), 1, "clamped to 1");
-  ok(done.hand.visible, "pen rests at the stroke end during the hold (no static tail)");
-  approx(done.hand.x, 100, 1e-6, "resting at the end point");
+  ok(done.hand.visible, "pen rests during the hold (no static tail)");
+  // Excellence P0-A — the tail no longer rests ON the ink endpoint: after
+  // the glide window (2000 + 800 ≤ 3000) the hand is PARKED at the park
+  // point below-right of the stroke end, clamped in-board (the W7 pose
+  // pin's intent — rest, visible — is preserved; the position moved to the
+  // park law, deliberately, per the gap analysis).
+  approx(done.hand.x, 290, 1e-6, "parked below-right of the stroke end (100+190, clamped in-board)");
+  approx(done.hand.y, 130, 1e-6, "parked at the board-margin clamp (0+120 → 130)");
+  eq(done.hand.pose, "rest", "the park keeps the rest pose");
 });
 
 await test("S64 timing: cameraAt — eased keyframes; W5: keys ride the DIRECTED breath, the fallback drift stays cameraless", async () => {
@@ -16000,6 +16007,263 @@ await test("W7 poses: role metadata selects the grip; text writes; the tail rest
   eq(entry.pose, "circle", "the entry carries the first stroke's pose");
   // No roles map: the defaults still hold (the tolerant-read law).
   eq(handAt(mk("lbl"), scene, geo, 500).pose, "draw", "without roles the default grip applies");
+});
+
+// ---------------------------------------------------------------------------
+// Excellence P0-A — the tail park (docs/whiteboard/excellence-gap-analysis.md
+// §1 P0-A): the tail rest must NOT hold on the finished ink. After the last
+// stroke ends, the hand GLIDES (eased, bounded, deterministic — the W7
+// travel family) to a neutral park point offset below-right of the last
+// stroke endpoint, clamped inside the board, and holds the rest pose THERE.
+// Failing-first: against the pre-law code the park assertions fail because
+// the hand stays at the stroke end forever.
+// ---------------------------------------------------------------------------
+
+await test("excellence P0-A: the tail hand glides to a park point OFF the ink — clear, joint-continuous, bounded, deterministic", async () => {
+  const {
+    handAt,
+    buildGeometry,
+    handParkPoint,
+    HAND_TAIL_GLIDE_MS,
+    HAND_PARK_OFFSET,
+    HAND_PARK_MARGIN,
+  } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const geo = buildGeometry([{ id: "a1", paths: [{ id: "p1", d: "M 700 500 L 1100 500" }] }]);
+  const scene: WhiteboardScene = {
+    id: "s",
+    narration: "one stroke ends on the artwork",
+    background: "#ffffff",
+    placements: [{ assetId: "a1", placement: { x: 0, y: 0, scale: 1, rotateDeg: 0 } }],
+    animations: [],
+    camera: [],
+  };
+  const events: AnimationEvent[] = [
+    { type: "draw_path", assetId: "a1", pathId: "p1", startMs: 0, durationMs: 2000 },
+  ];
+  const end = { x: 1100, y: 500 };
+  const park = handParkPoint(end, 1920, 1080);
+  ok(
+    Math.hypot(park.x - end.x, park.y - end.y) >= Math.hypot(HAND_PARK_OFFSET.dx, HAND_PARK_OFFSET.dy) - 0.5,
+    `the park point clears the last stroke endpoint by the park distance (got ${Math.hypot(park.x - end.x, park.y - end.y).toFixed(1)})`
+  );
+
+  // Joint continuity: at the last stroke's end the hand is EXACTLY at the
+  // endpoint (the glide starts there — no teleport into the park).
+  const joint = handAt(events, scene, geo, 2000, undefined, { width: 1920, height: 1080 });
+  ok(joint.visible, "the tail hand stays visible at the joint");
+  approx(joint.x, end.x, 1e-6, "the glide starts at the last stroke's end (x)");
+  approx(joint.y, end.y, 1e-6, "and (y)");
+
+  // THE DEFECT IS GONE: after the glide window the hand is parked OFF the
+  // ink — not holding the endpoint.
+  const parked = handAt(events, scene, geo, 2000 + HAND_TAIL_GLIDE_MS, undefined, { width: 1920, height: 1080 });
+  ok(parked.visible, "the parked hand stays visible (no static-tail regression)");
+  eq(parked.pose, "rest", "the park holds the REST pose (the W7 pin's intent)");
+  approx(parked.x, park.x, 1e-6, "parked at the park point (x)");
+  approx(parked.y, park.y, 1e-6, "and (y)");
+  approx(parked.scale, 1, 1e-6, "the lift bump settles to 1 at the park");
+  ok(
+    Math.hypot(parked.x - end.x, parked.y - end.y) > 150,
+    `the parked tip is CLEAR of the ink endpoint (got ${Math.hypot(parked.x - end.x, parked.y - end.y).toFixed(1)})`
+  );
+
+  // Mid-glide: strictly between the joint and the park (the glide moves).
+  const mid = handAt(events, scene, geo, 2000 + HAND_TAIL_GLIDE_MS / 2, undefined, { width: 1920, height: 1080 });
+  ok(mid.x > end.x + 20 && mid.x < park.x - 20, `mid-glide x strictly between (${mid.x.toFixed(1)})`);
+
+  // NO TELEPORT across the whole tail: per-ms deltas bounded by the eased
+  // geometry (the cubic ease's max slope 3 × the per-ms slide + the lift's
+  // per-ms rise π×LIFT + slack) — the same no-teleport law the W7 travel
+  // pin carries, at the glide's own geometry.
+  const dist = Math.hypot(park.x - end.x, park.y - end.y);
+  let worst = 0;
+  let prev = handAt(events, scene, geo, 2000, undefined, { width: 1920, height: 1080 });
+  for (let t = 2001; t <= 2000 + HAND_TAIL_GLIDE_MS; t++) {
+    const cur = handAt(events, scene, geo, t, undefined, { width: 1920, height: 1080 });
+    worst = Math.max(worst, Math.hypot(cur.x - prev.x, cur.y - prev.y));
+    prev = cur;
+  }
+  const bound = (3 * dist) / HAND_TAIL_GLIDE_MS + (Math.PI * 26) / HAND_TAIL_GLIDE_MS + 1;
+  ok(worst <= bound, `no tail glide jump exceeds the geometry bound (worst ${worst.toFixed(3)} ≤ ${bound.toFixed(3)})`);
+
+  // In-board per aspect: the park clamps inside EVERY house board — a
+  // stroke ending near the bottom-right corner of a 9:16 and a 1:1 board.
+  const cornerEnd = { x: 1000, y: 1800 };
+  for (const [w, h] of [[1920, 1080], [1080, 1920], [1080, 1080]] as const) {
+    const p = handParkPoint(cornerEnd, w, h);
+    ok(
+      p.x >= HAND_PARK_MARGIN && p.x <= w - HAND_PARK_MARGIN && p.y >= HAND_PARK_MARGIN && p.y <= h - HAND_PARK_MARGIN,
+      `the park stays in-board on ${w}×${h} (got ${p.x.toFixed(1)}, ${p.y.toFixed(1)})`
+    );
+  }
+
+  // Determinism: byte-identical double-run.
+  eq(
+    JSON.stringify(handAt(events, scene, geo, 2600, undefined, { width: 1920, height: 1080 })),
+    JSON.stringify(handAt(events, scene, geo, 2600, undefined, { width: 1920, height: 1080 })),
+    "double-run byte-identical"
+  );
+});
+
+await test("excellence P0-A: frameAt passes the project's real dimensions — the park clamps on a portrait board", async () => {
+  const { frameAt, buildGeometry } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const geo = buildGeometry([{ id: "a1", paths: [{ id: "p1", d: "M 900 1700 L 1010 1780" }] }]);
+  const project: WhiteboardProject = { title: "t", width: 1080, height: 1920, fps: 24, hand: { style: "marker", scale: 1 }, scenes: [WB_PLAIN] };
+  const events: AnimationEvent[] = [
+    { type: "draw_path", assetId: "a1", pathId: "p1", startMs: 0, durationMs: 2000 },
+  ];
+  // Deep in the tail: the hand must sit inside the 1080×1920 board.
+  const f = frameAt(project, WB_PLAIN, events, geo, 2000 + 5000);
+  ok(f.hand.visible, "the tail hand is visible on the portrait board");
+  ok(
+    f.hand.x >= 0 && f.hand.x <= 1080 && f.hand.y >= 0 && f.hand.y <= 1920,
+    `the parked hand is inside the portrait board (got ${f.hand.x.toFixed(1)}, ${f.hand.y.toFixed(1)})`
+  );
+  // A corner-ending stroke clamps: the park lands as far below-right as
+  // the board allows — below the stroke's ink line, and clear of the
+  // artwork's bulk (the stroke's start).
+  ok(
+    f.hand.y >= 1780,
+    `the parked tip sits below the stroke's ink line (${f.hand.y.toFixed(1)} ≥ 1780)`
+  );
+  ok(
+    Math.hypot(f.hand.x - 900, f.hand.y - 1700) >= 90,
+    `the parked hand cleared the artwork's bulk (got ${Math.hypot(f.hand.x - 900, f.hand.y - 1700).toFixed(1)})`
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Excellence P0-B — the text lead-in bound (docs/whiteboard/
+// excellence-gap-analysis.md §1 P0-B): key-phrase-class windows must START
+// the text no later than a fixed fraction of the window; pre-text paths
+// compress proportionally to their headroom above MIN_PATH_MS and the
+// freed time re-enters the payload. Paths-only schedules are byte-identical
+// by construction.
+// ---------------------------------------------------------------------------
+
+await test("excellence P0-B: text starts within the lead-in bound — paths compress, payload re-fills, the span end is preserved", async () => {
+  const {
+    scheduleScene,
+    buildGeometry,
+    TEXT_LEAD_IN_MAX_FRAC,
+    TEXT_IDS_BY_ASSET,
+    TEXT_CHARS_BY_ID,
+    MIN_PATH_MS,
+  } = await import("../src/lib/ibismuh/whiteboard/timing");
+  // A close-card-shaped fixture: two long container strokes, then one text.
+  // Registry entries are fixture-local (cleaned up at the end).
+  TEXT_IDS_BY_ASSET.set("wbx-card", ["t1"]);
+  TEXT_CHARS_BY_ID.set("wbx-card::t1", 20);
+  try {
+    const geo = buildGeometry([
+      { id: "wbx-card", paths: [{ id: "box", d: "M 0 0 L 600 0" }, { id: "box-od", d: "M 0 0 L 580 20" }] },
+    ]);
+    const scene: WhiteboardScene = {
+      id: "s",
+      narration: "if you remember one number, make it this one",
+      background: "#ffffff",
+      placements: [{ assetId: "wbx-card", placement: { x: 0, y: 0, scale: 1, rotateDeg: 0 } }],
+      animations: [],
+      camera: [],
+    };
+    const ev = scheduleScene(scene, 7000, geo);
+    const text = ev.find((e) => e.type === "write_text");
+    ok(text !== undefined, "the text is scheduled");
+    if (!text) return;
+    const winStart = 400;
+    const winEnd = 7000 - 900;
+    const bound = winStart + TEXT_LEAD_IN_MAX_FRAC * (winEnd - winStart);
+    // THE DEFECT IS GONE: the text no longer enters at 66% of the scene.
+    ok(
+      text.startMs <= bound,
+      `the text starts within the lead-in bound (${text.startMs} ≤ ${Math.round(bound)})`
+    );
+    // Per-item floors hold: every path keeps at least the house floor.
+    ok(
+      ev.every((e) => e.type !== "draw_path" || e.durationMs >= MIN_PATH_MS),
+      "compressed paths keep the per-item floor"
+    );
+    // The fill law's span contract survives: the last work still ends at
+    // the window's right edge (freed time re-entered the payload, it did
+    // not shorten the draw span), and nothing overruns the scene clock.
+    const lastEnd = Math.max(...ev.map((e) => e.startMs + e.durationMs));
+    approx(lastEnd, winEnd, 2, "the span still ends at the window edge (±2ms rounding)");
+    ok(ev.every((e) => e.startMs + e.durationMs <= 7000), "nothing overruns the scene clock");
+    // Determinism.
+    eq(JSON.stringify(scheduleScene(scene, 7000, geo)), JSON.stringify(ev), "double-run byte-identical");
+  } finally {
+    TEXT_IDS_BY_ASSET.delete("wbx-card");
+    TEXT_CHARS_BY_ID.delete("wbx-card::t1");
+  }
+});
+
+await test("excellence P0-B: paths-only schedules are byte-identical (the law is a no-op without text)", async () => {
+  const { scheduleScene, buildGeometry, LEAD_IN_MS, HOLD_END_MS } = await import("../src/lib/ibismuh/whiteboard/timing");
+  const geo = buildGeometry([{ id: "a1", paths: [{ id: "p1", d: "M 0 0 L 100 0" }, { id: "p2", d: "M 0 0 L 10 0" }] }]);
+  const ev = scheduleScene(WB_PLAIN, 10000, geo);
+  // The pre-law pinned numbers survive untouched (the S64 pin re-asserted
+  // at the new arithmetic — the fill law is load-bearing).
+  eq(ev.length, 2);
+  eq(ev[0].startMs, LEAD_IN_MS);
+  eq(ev[0].durationMs, 4240, "weight-shared fill duration unchanged");
+  eq(ev[1].startMs, LEAD_IN_MS + 4240 + 220);
+  eq(ev[ev.length - 1].startMs + ev[ev.length - 1].durationMs, 10000 - HOLD_END_MS);
+});
+
+await test("excellence P0-B: boundTextLeadIn — the helper's exact contract (no text, leading text, degenerate window)", async () => {
+  const { boundTextLeadIn, TEXT_LEAD_IN_MAX_FRAC } = await import("../src/lib/ibismuh/whiteboard/timing");
+  // No text: identity.
+  eq(JSON.stringify(boundTextLeadIn(["path", "path"], [1000, 1000], 130, 400, 6100)), JSON.stringify([1000, 1000]), "paths-only identity");
+  // Text already leads: identity.
+  eq(JSON.stringify(boundTextLeadIn(["text", "path"], [800, 1000], 130, 400, 6100)), JSON.stringify([800, 1000]), "leading text identity");
+  // Text within the bound: identity.
+  eq(JSON.stringify(boundTextLeadIn(["path", "text"], [1200, 800], 130, 400, 6100)), JSON.stringify([1200, 800]), "within-bound identity");
+  // Text past the bound WITH headroom: the text start lands on the bound;
+  // the total duration is preserved (the payload re-fills).
+  const winStart = 400;
+  const winEnd = 6100;
+  const bound = winStart + TEXT_LEAD_IN_MAX_FRAC * (winEnd - winStart);
+  const durs = [2600, 2600, 500]; // paths then text
+  const out = boundTextLeadIn(["path", "path", "text"], durs, 130, winStart, winEnd);
+  const t = (arr: number[]): number => winStart + arr[0] + 130 + arr[1] + 130;
+  approx(t(out), Math.round(bound), 1, "the text start lands on the bound (±1ms rounding)");
+  approx(out[0] + out[1] + out[2], durs[0] + durs[1] + durs[2], 1, "the total work time is preserved (±1ms rounding)");
+  ok(out[0] >= 260 && out[1] >= 260, "compressed paths keep the floor");
+  ok(out[2] >= 500, "the payload grew, never shrank");
+  // No headroom: identity (the floors are load-bearing).
+  eq(JSON.stringify(boundTextLeadIn(["path", "text"], [260, 800], 130, 400, 6100)), JSON.stringify([260, 800]), "floor-bound paths stay put");
+});
+
+await test("excellence P0-B: the beat compiler rides the same bound — the w1-phrase shape compiles with the text inside it", async () => {
+  const { beatSceneEvents, planBeats } = await import("../src/lib/ibismuh/whiteboard/beat-plan");
+  const { buildGeometry, TEXT_LEAD_IN_MAX_FRAC, TEXT_IDS_BY_ASSET, TEXT_CHARS_BY_ID } = await import("../src/lib/ibismuh/whiteboard/timing");
+  TEXT_IDS_BY_ASSET.set("wbx-card2", ["t1"]);
+  TEXT_CHARS_BY_ID.set("wbx-card2::t1", 30);
+  try {
+    const geo = buildGeometry([
+      { id: "wbx-card2", paths: [{ id: "box", d: "M 0 0 L 600 0" }, { id: "box-od", d: "M 0 0 L 580 20" }] },
+    ]);
+    const scene: WhiteboardScene = {
+      id: "s",
+      narration: "if you remember one number, make it this one: sixty to one hundred beats every minute.",
+      background: "#ffffff",
+      placements: [{ assetId: "wbx-card2", placement: { x: 0, y: 0, scale: 1, rotateDeg: 0 } }],
+      animations: [],
+      camera: [],
+    };
+    const beats = planBeats(scene, { durationMs: 7000, geometry: geo });
+    ok(beats.length === 1, "one sentence → one beat");
+    const ev = beatSceneEvents(scene, 7000, geo);
+    const text = ev.find((e) => e.type === "write_text");
+    ok(text !== undefined, "the text is compiled");
+    if (!text || beats.length !== 1) return;
+    const bound = beats[0].startMs + TEXT_LEAD_IN_MAX_FRAC * (beats[0].endMs - beats[0].startMs);
+    ok(text.startMs <= bound, `the compiled text starts within the beat-window bound (${text.startMs} ≤ ${Math.round(bound)})`);
+    ok(ev.every((e) => e.startMs + e.durationMs <= 7000), "nothing overruns the scene clock");
+  } finally {
+    TEXT_IDS_BY_ASSET.delete("wbx-card2");
+    TEXT_CHARS_BY_ID.delete("wbx-card2::t1");
+  }
 });
 
 await test("W7 board policy extras: hand.side and sfxOn round-trip (the editor's new fields survive)", async () => {
@@ -25749,6 +26013,108 @@ await test("2026-11 render admission — the storyboard gate falls back to stora
   ok(route.includes("storyboardComplete(id, scenes)"), "the route consults the SAME storage truth the storyboard board shows before refusing");
   ok(jobs.includes("storyboardComplete(videoId, scenes)"), "the job body (crash-resume replays) runs the same storage-truth fallback");
   ok(route.includes("hasStoryboard: true"), "a stale-false row flag self-heals at admission");
+});
+
+// ---------------------------------------------------------------------------
+// Excellence P1-F — the preview-vs-final parity metric + the ONE-setup law
+// (docs/whiteboard/excellence-gap-analysis.md step 4): the parity harness
+// proves the applier surface (what the editor preview rides) and the final
+// MP4 carry the same pixels within the codec band. The metric is PURE (the
+// determinism law: no fs, no chromium, no clock) and the page setup is ONE
+// shared helper — the harness must consume the renderer's setup, never a
+// mirrored copy (a mirrored copy could mask setup-drift: the exact class
+// the W1 baseline catch receipt warns about).
+// Failing-first: against the pre-law code, parity.ts does not exist and
+// render.ts exports no setupScenePage — both tests fail on the missing laws.
+// ---------------------------------------------------------------------------
+
+await test("excellence P1-F: the parity metric — identical frames report zero; codec-band deltas pass; structural divergence fails", async () => {
+  const { compareFrameRgb, parityVerdict, PIXEL_TOLERANCE } = await import(
+    "../src/lib/ibismuh/whiteboard/parity"
+  );
+  const W = 16;
+  const H = 9;
+  const px = W * H * 3;
+  const clean = Buffer.alloc(px, 200);
+
+  // Identical buffers: byte-identical, zero deltas, verdict PASS.
+  const same = compareFrameRgb(Buffer.from(clean), Buffer.from(clean));
+  eq(same.meanAbsDelta, 0, "identical frames: mean |Δ| is exactly 0");
+  eq(same.fracOverTolerance, 0, "identical frames: no pixel over tolerance");
+  ok(same.byteIdentical, "identical frames: byte-identical shortcut fires");
+  ok(parityVerdict(same).pass, "identical frames: verdict PASS");
+
+  // Codec-band noise: every pixel wobbles ±2 (JPEG/H.264 quantization
+  // shape) — the mean stays tiny, NOTHING crosses the tolerance, PASS.
+  const noisy = Buffer.alloc(px);
+  for (let i = 0; i < px; i++) noisy[i] = 200 + ((i % 5) - 2); // −2..+2
+  const noiseDiff = compareFrameRgb(Buffer.from(clean), noisy);
+  ok(noiseDiff.meanAbsDelta > 0 && noiseDiff.meanAbsDelta <= 2, `codec-band noise keeps the mean tiny (${noiseDiff.meanAbsDelta.toFixed(3)})`);
+  eq(noiseDiff.fracOverTolerance, 0, "codec-band noise: zero pixels beyond the tolerance");
+  ok(parityVerdict(noiseDiff).pass, "codec-band noise: verdict PASS (the codec band never fails parity)");
+
+  // The tile lens: with dims supplied, the codec-band noise carries ZERO
+  // tile concentration, and the identical-frame shortcut reports null.
+  const noiseDims = compareFrameRgb(Buffer.from(clean), noisy, { width: 16, height: 9 });
+  eq(noiseDims.tileOverFracMax, 0, "codec-band noise: zero tile concentration");
+  ok(parityVerdict(noiseDims).pass, "codec-band noise with dims: verdict PASS");
+
+  // Structural divergence: a 4×4 ink block lands 120 units away — the
+  // mean alone might hide it, but the over-tolerance fraction CANNOT.
+  const diverged = Buffer.from(clean);
+  for (let y = 2; y < 6; y++) {
+    for (let x = 2; x < 6; x++) {
+      const o = (y * W + x) * 3;
+      diverged[o] = Math.max(0, diverged[o] - 120);
+      diverged[o + 1] = Math.max(0, diverged[o + 1] - 120);
+      diverged[o + 2] = Math.max(0, diverged[o + 2] - 120);
+    }
+  }
+  const divDiff = compareFrameRgb(Buffer.from(clean), diverged);
+  const blockFrac = (4 * 4) / (W * H);
+  ok(divDiff.fracOverTolerance >= blockFrac - 1e-9, `the shifted ink block saturates the over-tolerance fraction (${divDiff.fracOverTolerance.toFixed(4)} ≥ ${blockFrac.toFixed(4)})`);
+  // With dims the block CONCENTRATES in its tiles — the lens that
+  // separates scattered codec edges from a missing element.
+  const divDims = compareFrameRgb(Buffer.from(clean), diverged, { width: 16, height: 9 });
+  ok(divDims.tileOverFracMax !== null && divDims.tileOverFracMax >= 0.5, `the shifted block saturates its tiles (${(divDims.tileOverFracMax ?? -1).toFixed(2)})`);
+  ok(divDims.worstTile !== null, "the worst tile is localized (col/row named)");
+  const verdict = parityVerdict(divDims);
+  ok(!verdict.pass, "structural divergence: verdict FAIL");
+  ok(verdict.reasons.some((r) => r.includes("CONCENTRATED")), "the FAIL names the tile concentration");
+  ok(PIXEL_TOLERANCE > 0 && PIXEL_TOLERANCE < 32, "the tolerance sits in the codec band, not the structural band");
+
+  // Length mismatch is a caller bug — reported, not thrown, not a fake pass.
+  const short = Buffer.alloc(px - 3, 200);
+  const bad = compareFrameRgb(Buffer.from(clean), short);
+  ok(!parityVerdict(bad).pass, "a buffer-length mismatch never reads as parity");
+});
+
+await test("excellence P1-F: ONE page setup — the renderer and the parity harness share it (source pins)", () => {
+  const renderSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/render.ts", "utf8");
+  const harnessSrc = fs.readFileSync("scripts/wb-preview-parity.mts", "utf8");
+  const wbPageSrc = fs.readFileSync("src/lib/ibismuh/whiteboard/wb-page.ts", "utf8");
+  const paritySrc = fs.readFileSync("src/lib/ibismuh/whiteboard/parity.ts", "utf8");
+
+  // The extracted helper exists ONCE, in render.ts, and BOTH callers ride it.
+  ok(renderSrc.includes("export async function setupScenePage"), "render.ts exports the shared setupScenePage");
+  ok(renderSrc.includes("setupScenePage(page, {"), "renderWhiteboard consumes the shared setup (inside the S165 compose gate)");
+  ok(harnessSrc.includes("setupScenePage("), "the parity harness consumes the SAME setup (no mirrored copy)");
+  // The duplicated-setup guard: the harness carries no dasharray/defs setup
+  // of its own — those strings live only in the shared helper + the applier.
+  ok(!harnessSrc.includes("stroke-dasharray"), "the harness never re-implements the dash setup");
+  ok(!harnessSrc.includes("defs-root"), "the harness never re-implements the defs root");
+
+  // The one-source applier law: the harness drives the SAME compose +
+  // payload + applier strings the editor preview rides.
+  ok(harnessSrc.includes('from "../src/lib/ibismuh/whiteboard/wb-page"'), "the harness imports the shared wb-page seam");
+  ok(harnessSrc.includes("APPLY_FRAME_FN") && harnessSrc.includes("framePayload") && harnessSrc.includes("composeScene"), "the harness rides composeScene + framePayload + APPLY_FRAME_FN");
+  ok(wbPageSrc.includes("export function composeScene") && wbPageSrc.includes("export const APPLY_FRAME_FN"), "wb-page keeps exporting the shared seam");
+
+  // The metric stays PURE: no fs, no child_process, no chromium, no clock.
+  // (The pins match import forms, never prose — comments may name the law.)
+  ok(!paritySrc.includes("from \"fs\"") && !paritySrc.includes("from \"node:fs\"") && !paritySrc.includes("require(\"fs\")"), "parity.ts does not touch fs (pure)");
+  ok(!paritySrc.includes("from \"child_process\"") && !paritySrc.includes("require(\"child_process\")") && !paritySrc.includes("from \"playwright\"") && !paritySrc.includes("import(\"playwright\")"), "parity.ts does not touch processes or browsers (pure)");
+  ok(!paritySrc.includes("Date.now") && !paritySrc.includes("performance.now"), "parity.ts does not read the clock (deterministic)");
 });
 
 console.log(`${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

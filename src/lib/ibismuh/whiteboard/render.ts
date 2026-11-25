@@ -48,6 +48,7 @@ import {
 // W2 — the semantic beat compiler: the render seam schedules through the
 // same beatSceneEvents the editor preview runs (the one-source law).
 import { beatSceneEvents } from "./beat-plan";
+import type { AssetGeometry } from "./timing";
 // S87 slice 3 — the engine EMITS the timeline contract: the frame plan maps
 // onto whiteboard-kind clips, and the render loop + assembly read the SAME
 // frame-quantized clock the tracks carry (one derivation, pinned equal —
@@ -373,6 +374,114 @@ export async function probeAssetRasterization(
   }
 }
 
+// ---------------------------------------------------------------------------
+// P1-F (excellence) — the ONE page-setup pass. Extracted from the render
+// loop verbatim so the preview-vs-final parity harness (scripts/
+// wb-preview-parity.mts) can drive THE SAME setup the final render drives
+// — a mirrored copy in the harness could mask setup-drift (the exact class
+// the W1 baseline catch receipt warns about). One setup, two callers, the
+// wb-page one-source law extended one seam outward.
+// ---------------------------------------------------------------------------
+
+export interface ScenePageSetupArgs {
+  composed: ReturnType<typeof composeScene>;
+  /** "assetId::pathId" keys that opacity-fade (the traced remainder). */
+  fadeKeys: ReadonlySet<string>;
+  geometry: Map<string, AssetGeometry>;
+  toolHand: WhiteboardAsset;
+  pointHand: WhiteboardAsset;
+  restHand: WhiteboardAsset;
+  handScale: number;
+}
+
+/** Set up one composed scene page: defs root + the hand pose groups +
+ *  dasharrays from OUR geometry (the pure module owns the truth about
+ *  every stroke length) + the index maps the applier resolves through.
+ *  Must finish before frame 0 applies. */
+export async function setupScenePage(
+  page: import("playwright").Page,
+  args: ScenePageSetupArgs
+): Promise<void> {
+  const { composed, fadeKeys, geometry, toolHand, pointHand, restHand, handScale } = args;
+  // Setup pass: defs root + the hand pose groups + dasharrays from OUR
+  // geometry (the pure module owns the truth about every stroke length).
+  await page.evaluate(
+    ({ hands, handScale }) => {
+      const board = document.getElementById("board");
+      const hand = document.getElementById("hand");
+      if (!board || !hand) return;
+      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      defs.id = "defs-root";
+      board.appendChild(defs);
+      for (const [pose, svg] of Object.entries(hands)) {
+        const el = hand.querySelector(`[data-pose="${pose}"]`);
+        if (el) el.innerHTML = svg;
+      }
+      hand.setAttribute("data-scale", String(handScale));
+    },
+    {
+      hands: {
+        write: toolHand.svg,
+        draw: toolHand.svg,
+        point: pointHand.svg,
+        circle: pointHand.svg,
+        rest: restHand.svg,
+      },
+      handScale,
+    }
+  );
+  // Register the frame-plan-key → element-id maps the applier resolves
+  // through (fresh per scene — setContent resets the JS context).
+  await page.evaluate(
+    ({ drawIndex, textIndex }) => {
+      const w = window as unknown as {
+        __wbDraw?: Map<string, string>;
+        __wbText?: Map<string, string>;
+      };
+      w.__wbDraw = new Map(drawIndex);
+      w.__wbText = new Map(textIndex);
+    },
+    { drawIndex: [...composed.pathEls], textIndex: [...composed.textEls] }
+  );
+  for (const [key, elId] of composed.pathEls) {
+    const [assetId, pathId] = key.split("::");
+    // P0 — the traced remainder: opacity-fade ONLY (no dash machinery —
+    // the colors applier drives these elements at the completion
+    // boundary). The fade keys come from the SAME tracedSplitForScene
+    // derivation the schedulers used for the events (one source).
+    if (fadeKeys.has(key)) {
+      await page.evaluate(({ elId }) => {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        el.style.opacity = "0";
+        el.dataset.fade = "1";
+      }, { elId });
+      continue;
+    }
+    const segs = geometry.get(assetId)?.paths.get(pathId);
+    if (!segs) continue;
+    let len = 0;
+    for (const g of segs) len += g.lengths[g.lengths.length - 1] ?? 0;
+    await page.evaluate(
+      ({ elId, len }) => {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        el.dataset.len = String(len);
+        el.setAttribute("stroke-dasharray", `${len} ${len}`);
+        el.setAttribute("stroke-dashoffset", String(len));
+        el.style.opacity = "0";
+      },
+      { elId, len }
+    );
+  }
+  for (const [, elId] of composed.textEls) {
+    await page.evaluate((elId) => {
+      const el = document.getElementById(elId);
+      if (el) el.style.opacity = "0";
+    }, elId);
+  }
+}
+
 /** Render one whiteboard project to <outDir>/final.mp4. */
 export async function renderWhiteboard(
   project: WhiteboardProject,
@@ -558,86 +667,21 @@ export async function renderWhiteboard(
       );
       // The compose gate: the setup pass (defs root + the hand pose groups
       // + dasharrays from OUR geometry + the index maps the applier
-      // resolves through) must finish before frame 0 applies.
-      await withRenderGate({ engine: "whiteboard", gate: "compose", detail: `${sceneTag} setup pass` }, async () => {
-      // Setup pass: defs root + the hand pose groups + dasharrays from OUR
-      // geometry (the pure module owns the truth about every stroke length).
-      await page.evaluate(
-        ({ hands, handScale }) => {
-          const board = document.getElementById("board");
-          const hand = document.getElementById("hand");
-          if (!board || !hand) return;
-          const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-          defs.id = "defs-root";
-          board.appendChild(defs);
-          for (const [pose, svg] of Object.entries(hands)) {
-            const el = hand.querySelector(`[data-pose="${pose}"]`);
-            if (el) el.innerHTML = svg;
-          }
-          hand.setAttribute("data-scale", String(handScale));
-        },
-        {
-          hands: {
-            write: toolHand.svg,
-            draw: toolHand.svg,
-            point: pointHand.svg,
-            circle: pointHand.svg,
-            rest: restHand.svg,
-          },
-          handScale: project.hand.scale,
-        }
-      );
-      // Register the frame-plan-key → element-id maps the applier resolves
-      // through (fresh per scene — setContent resets the JS context).
-      await page.evaluate(
-        ({ drawIndex, textIndex }) => {
-          const w = window as unknown as {
-            __wbDraw?: Map<string, string>;
-            __wbText?: Map<string, string>;
-          };
-          w.__wbDraw = new Map(drawIndex);
-          w.__wbText = new Map(textIndex);
-        },
-        { drawIndex: [...composed.pathEls], textIndex: [...composed.textEls] }
-      );
-      for (const [key, elId] of composed.pathEls) {
-        const [assetId, pathId] = key.split("::");
-        // P0 — the traced remainder: opacity-fade ONLY (no dash machinery —
-        // the colors applier drives these elements at the completion
-        // boundary). The fade keys come from the SAME tracedSplitForScene
-        // derivation the schedulers used for the events (one source).
-        if (fadeKeys.has(key)) {
-          await page.evaluate(({ elId }) => {
-            const el = document.getElementById(elId);
-            if (!el) return;
-            el.style.opacity = "0";
-            el.dataset.fade = "1";
-          }, { elId });
-          continue;
-        }
-        const segs = geometry.get(assetId)?.paths.get(pathId);
-        if (!segs) continue;
-        let len = 0;
-        for (const g of segs) len += g.lengths[g.lengths.length - 1] ?? 0;
-        await page.evaluate(
-          ({ elId, len }) => {
-            const el = document.getElementById(elId);
-            if (!el) return;
-            el.dataset.len = String(len);
-            el.setAttribute("stroke-dasharray", `${len} ${len}`);
-            el.setAttribute("stroke-dashoffset", String(len));
-            el.style.opacity = "0";
-          },
-          { elId, len }
-        );
-      }
-      for (const [, elId] of composed.textEls) {
-        await page.evaluate((elId) => {
-          const el = document.getElementById(elId);
-          if (el) el.style.opacity = "0";
-        }, elId);
-      }
-      }); // — the compose gate closes here
+      // resolves through) must finish before frame 0 applies — the ONE
+      // shared setup the P1-F parity harness also drives.
+      await withRenderGate(
+        { engine: "whiteboard", gate: "compose", detail: `${sceneTag} setup pass` },
+        () =>
+          setupScenePage(page, {
+            composed,
+            fadeKeys,
+            geometry,
+            toolHand,
+            pointHand,
+            restHand,
+            handScale: project.hand.scale,
+          }),
+      ); // — the compose gate closes here
 
       const framesDir = path.join(opts.outDir, `scene-${si + 1}-frames`);
       fs.mkdirSync(framesDir, { recursive: true });
