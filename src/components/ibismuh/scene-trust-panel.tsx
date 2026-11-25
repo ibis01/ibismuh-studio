@@ -38,8 +38,11 @@ import {
   ShieldCheck,
   Wrench,
   XCircle,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
+import { LaneTruthChips } from "@/components/ibismuh/lane-capability-badges";
+import type { VideoType } from "@/lib/ibismuh/video-lanes";
 
 // ---------- types (the routes' shapes) ----------
 
@@ -84,6 +87,23 @@ interface RecheckFeed {
     | { ok: false; reason: string; message: string }
     | { ok: true; already: boolean };
   seams: Array<{ afterScene: number; mediaStanding: boolean }>;
+  lane:
+    | {
+        status: "resolved";
+        videoType: string;
+        planVersion: number;
+        planner: string;
+        renderer: string;
+        fallbackPolicy: string;
+        qcProfile: string;
+        capabilities: string[];
+        modes: Array<{ id: string; label: string; when: string }>;
+        supportedAspects: string[];
+        supportedFps: number[];
+      }
+    | { status: "ambiguous"; candidates: string[]; message: string }
+    | { status: "unknown"; message: string }
+    | null;
 }
 
 interface RepairRow {
@@ -346,6 +366,40 @@ export function SceneTrustPanel({
         <p className="text-xs leading-relaxed text-amber-300/90">
           {feed.approval.message}
         </p>
+      )}
+
+      {/* --- the lane contract (honesty law: registry truth, fail-visible) --- */}
+      {feed.lane && (
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs font-medium text-zinc-200">
+            <Layers className="h-3.5 w-3.5 text-primary" />
+            Lane contract — declared by the registry, rendered verbatim
+          </div>
+          {feed.lane.status === "resolved" ? (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="rounded border border-primary/30 bg-primary/10 px-1.5 py-0 text-xs font-medium">
+                  {feed.lane.videoType}
+                </span>
+                <span className="rounded border border-border bg-muted/40 px-1.5 py-0 text-xs text-muted-foreground">
+                  plan v{feed.lane.planVersion}
+                </span>
+                <span className="rounded border border-border bg-muted/40 px-1.5 py-0 text-xs text-muted-foreground">
+                  QC {feed.lane.qcProfile}
+                </span>
+                <span className="rounded border border-border bg-muted/40 px-1.5 py-0 text-xs text-muted-foreground">
+                  {feed.lane.supportedAspects.join(" / ")} @ {feed.lane.supportedFps.join(", ")} fps
+                </span>
+              </div>
+              <LaneTruthChips lane={feed.lane.videoType as VideoType} />
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                <span className="font-medium text-zinc-300">Fallback policy:</span> {feed.lane.fallbackPolicy}
+              </p>
+            </div>
+          ) : (
+            <p className="text-xs leading-relaxed text-amber-300/90">{feed.lane.message}</p>
+          )}
+        </div>
       )}
 
       {/* --- the verdict --- */}

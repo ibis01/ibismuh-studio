@@ -34,6 +34,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/ibismuh/tenant-db";
 import { requireUser } from "@/lib/ibismuh/tenant";
 import { parseScenes } from "@/lib/ibismuh/story";
+import { resolveLaneFromRow } from "@/lib/ibismuh/video-lanes";
 import { headRevision } from "@/lib/ibismuh/scene-revisions";
 import {
   approvalBlocker,
@@ -62,6 +63,32 @@ async function loadScene(id: string, index: number) {
   return { error: null, status: 200 as const, video };
 }
 
+/** The registry-derived lane truth for the operator UI (the honesty law):
+ *  resolved lanes expose the declared contract; ambiguous/unknown rows
+ *  fail VISIBLE with the resolver's own message — never a silent default. */
+function laneTruth(format: string, renderMode: string) {
+  const row = resolveLaneFromRow(format, renderMode);
+  if (row.status === "resolved") {
+    const l = row.lane;
+    return {
+      status: "resolved" as const,
+      videoType: l.type,
+      planVersion: l.planVersion,
+      planner: l.planner,
+      renderer: l.renderer,
+      fallbackPolicy: l.fallbackPolicy,
+      qcProfile: l.qcProfile,
+      capabilities: [...l.capabilities],
+      modes: (l.modes ?? []).map((m) => ({ id: m.id, label: m.label, when: m.when })),
+      supportedAspects: [...l.supportedAspects],
+      supportedFps: [...l.supportedFps],
+    };
+  }
+  if (row.status === "ambiguous")
+    return { status: "ambiguous" as const, candidates: [...row.candidates], message: row.message };
+  return { status: "unknown" as const, message: row.message };
+}
+
 export async function GET(req: NextRequest, ctx: Ctx) {
   const auth = await requireUser(req);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
@@ -75,6 +102,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const loaded = await loadScene(id, index);
   if (!loaded.video) return NextResponse.json({ error: loaded.error }, { status: loaded.status });
   const video = loaded.video;
+  const lane = laneTruth(video.format, video.renderMode);
 
   const scene = parseScenes(video.scenes).find((s) => s.index === index);
   if (!scene?.id)
@@ -84,6 +112,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       verdict: null,
       approval: { ok: false, reason: "no-history", message: "Scene has no revision history — nothing to approve" },
       seams: [],
+      lane,
     });
 
   const head = await headRevision(id, scene.id);
@@ -110,6 +139,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     verdict,
     approval: block,
     seams,
+    lane,
   });
 }
 
