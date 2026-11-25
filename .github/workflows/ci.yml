@@ -298,6 +298,13 @@ jobs:
       - name: Typography scale (12px floor law)
         run: npm run test:typography-scale
 
+      # Roadmap item 9: the lane-scoped STATIC gates — slides display-type
+      # fit (12px floor + downscale-only), the compositor family's focal
+      # + tiling laws, and the acceptance-range pattern. Pure suite; the
+      # recheck route runs the same gates against live plans.
+      - name: QC gates (lane-scoped static gates)
+        run: npm run test:qc-gates
+
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes
       # → print the measured RTO. "A backup that has never been restored is

@@ -35,6 +35,12 @@ import { db } from "@/lib/ibismuh/tenant-db";
 import { requireUser } from "@/lib/ibismuh/tenant";
 import { parseScenes } from "@/lib/ibismuh/story";
 import { resolveLaneFromRow } from "@/lib/ibismuh/video-lanes";
+import { loadSlideDeck, headlineFontPx } from "@/lib/ibismuh/slides";
+import {
+  evaluateClassicFocalGate,
+  slideDeckGateReport,
+  type QCGateStatus,
+} from "@/lib/ibismuh/qc-gates";
 import { headRevision } from "@/lib/ibismuh/scene-revisions";
 import {
   approvalBlocker,
@@ -89,6 +95,52 @@ function laneTruth(format: string, renderMode: string) {
   return { status: "unknown" as const, message: row.message };
 }
 
+type LaneGateRow = { status: QCGateStatus; detail: string; findings?: string[] };
+
+/** The lane-scoped STATIC gates (qc-gates.ts) run against the live plan —
+ *  the honesty surface measures what can be measured without a render and
+ *  declares (unmeasured) what cannot. Returns null for lanes that declare
+ *  no static gate yet — absence is honest, an empty pass is not. */
+function laneStaticGates(
+  videoId: string,
+  lane: ReturnType<typeof laneTruth>,
+  scenesJson: string | null,
+): { fit?: LaneGateRow & { rows?: Array<{ index: number; layout: string; detail: string }> }; focal?: LaneGateRow; tiling?: LaneGateRow } | null {
+  const laneId = lane.status === "resolved" ? lane.videoType : null;
+  // the story/kenburns row is deliberately AMBIGUOUS (story + character share
+  // it) — the compositor-family gates apply to every candidate alike.
+  const compositorFamily =
+    laneId === "classic" || laneId === "story" || laneId === "character" ||
+    (lane.status === "ambiguous" && lane.candidates.some((c) => c === "classic" || c === "story" || c === "character"));
+
+  if (laneId === "slides") {
+    const deck = loadSlideDeck(videoId);
+    const report = slideDeckGateReport(deck ?? [], (h) => headlineFontPx(h.length));
+    return {
+      fit: {
+        status: report.status,
+        detail: report.detail,
+        rows: report.rows.map((r) => ({ index: r.index, layout: r.layout, detail: r.gate.detail })),
+      },
+    };
+  }
+
+  if (compositorFamily) {
+    const scenes = parseScenes(scenesJson);
+    const focal = evaluateClassicFocalGate(scenes.map((s) => ({ id: s.id ?? `scene-${s.index}`, focalPoint: s.focal })));
+    return {
+      focal: { status: focal.status, detail: focal.detail, findings: focal.findings },
+      tiling: {
+        status: "unmeasured" as const,
+        detail:
+          "scene durations are computed at render time — tiling is measured on the rendered timeline (scene-qc's seam lens), not on plan rows",
+      },
+    };
+  }
+
+  return null;
+}
+
 export async function GET(req: NextRequest, ctx: Ctx) {
   const auth = await requireUser(req);
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
@@ -103,6 +155,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   if (!loaded.video) return NextResponse.json({ error: loaded.error }, { status: loaded.status });
   const video = loaded.video;
   const lane = laneTruth(video.format, video.renderMode);
+  const laneGates = laneStaticGates(id, lane, video.scenes);
 
   const scene = parseScenes(video.scenes).find((s) => s.index === index);
   if (!scene?.id)
@@ -113,6 +166,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       approval: { ok: false, reason: "no-history", message: "Scene has no revision history — nothing to approve" },
       seams: [],
       lane,
+      laneGates,
     });
 
   const head = await headRevision(id, scene.id);
@@ -140,6 +194,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     approval: block,
     seams,
     lane,
+    laneGates,
   });
 }
 

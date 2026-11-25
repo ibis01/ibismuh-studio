@@ -104,6 +104,18 @@ interface RecheckFeed {
     | { status: "ambiguous"; candidates: string[]; message: string }
     | { status: "unknown"; message: string }
     | null;
+  laneGates:
+    | {
+        fit?: {
+          status: string;
+          detail: string;
+          findings?: string[];
+          rows?: Array<{ index: number; layout: string; detail: string }>;
+        };
+        focal?: { status: string; detail: string; findings?: string[] };
+        tiling?: { status: string; detail: string; findings?: string[] };
+      }
+    | null;
 }
 
 interface RepairRow {
@@ -399,6 +411,48 @@ export function SceneTrustPanel({
           ) : (
             <p className="text-xs leading-relaxed text-amber-300/90">{feed.lane.message}</p>
           )}
+        </div>
+      )}
+
+      {/* --- the static gates (plan facts measurable without a render) --- */}
+      {feed.laneGates && (
+        <div className="rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
+          <div className="flex items-center gap-2 text-xs font-medium text-zinc-200">
+            <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+            Static gates — measured, never assumed; unmeasured is not a pass
+          </div>
+          {(["fit", "focal", "tiling"] as const).map((k) => {
+            const g = feed.laneGates?.[k];
+            if (!g) return null;
+            const tone =
+              g.status === "pass"
+                ? "text-emerald-300"
+                : g.status === "fail"
+                  ? "text-red-300"
+                  : "text-muted-foreground";
+            return (
+              <div key={k} className="space-y-1">
+                <div className="flex flex-wrap items-baseline gap-1.5">
+                  <span className={clsx("text-xs font-medium uppercase tracking-wide", tone)}>{k}</span>
+                  <span className="text-xs text-muted-foreground">{g.detail}</span>
+                </div>
+                {g.findings?.slice(0, 5).map((f, i) => (
+                  <p key={i} className="text-xs leading-relaxed text-amber-300/90">
+                    {f}
+                  </p>
+                ))}
+                {g.status === "fail" && (g.findings?.length ?? 0) > 5 && (
+                  <p className="text-xs text-muted-foreground">… and {(g.findings?.length ?? 0) - 5} more finding(s)</p>
+                )}
+                {g === feed.laneGates?.fit &&
+                  feed.laneGates.fit?.rows?.slice(0, 6).map((r) => (
+                    <p key={r.index} className="text-xs leading-relaxed text-muted-foreground">
+                      slide {r.index} ({r.layout}) — {r.detail}
+                    </p>
+                  ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
