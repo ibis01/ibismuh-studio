@@ -258,7 +258,11 @@ export function resolveTimingSource(input: {
   }
   const receipt = input.audioReceipt;
   if (receipt && (receipt.wordSpans?.length ?? 0) > 0) {
-    return { source: "word-timestamps", declared: true, reason: `measured audio receipt carries ${receipt.wordSpans!.length} word spans` };
+    return {
+      source: "word-timestamps",
+      declared: true,
+      reason: `measured audio receipt carries ${receipt.wordSpans?.length ?? 0} word spans`,
+    };
   }
   if (receipt && receipt.sentenceSpans.length > 0) {
     return {

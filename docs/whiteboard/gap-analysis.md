@@ -54,15 +54,21 @@ The planner selects assets against narration, but the mapping chain
 **Target:** extend planner output with intent + confidence + reason; flag or
 reject narration without a defensible visual representation.
 
-## G6 — Current independent visual evidence does not exist
+## G6 — Current independent visual evidence (updated after the 2026-11-25 reproduction)
 
-`benchmark-scenarios.ts` implements the W1 harness (fixed scene types, three
-aspects, blind MP4s, sampled frames, rubric, determinism), but `validation/w1/`
-holds zero artifacts and the previously cited receipt was phantom. The renderer's
-visual quality is therefore currently unprovable from the checkout.
+The committed W1 receipt (`docs/baselines/w1-whiteboard-baseline-2026-11-13.json`) is REAL
+and green — the first verification pass's strike of this claim was itself an error (a
+truncated directory listing), corrected in `baseline.md`. On 2026-11-25 the full harness
+was re-run on the current build: all three aspects through the real engine
+(validate → chromium → ffmpeg), gate GREEN, the 16:9 two-run determinism pin identical,
+QC battery zero-fail, and a fresh blind kit generated under `validation/w1/` (gitignored
+by the 535c90e law — a local run must never shadow the frozen baseline).
 
-**Target:** re-run W1 for all fixed scene types at 16:9 / 9:16 / 1:1, archive
-MP4s + contact sheets + blind scores, and publish the report.
+What remains open:
+
+- **blind human scoring** of the fresh kit against the nine-dimension rubric
+  (`docs/audits/w1-blind-rubric.md`) — the one evidence dimension no machine can close;
+- a decision on binary archiving policy (MP4s live outside git by design).
 
 ## G7 — Text authoring and draw-speed calibration
 

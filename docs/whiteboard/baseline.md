@@ -1,18 +1,22 @@
 # Whiteboard Lane — Corrected Baseline
 
-**Status:** accepted working baseline (verification pass applied).
+**Status:** accepted working baseline (verification pass applied — one verdict corrected in round two).
 **Re-anchored to:** `main` @ `73d92ec` (CI run `45553810581`, GREEN) — branch `security/production-hardening` carries the implementation.
-**Supersedes:** the original read-only baseline draft, whose branch/SHA header and W1-receipt citation failed verification.
+**Supersedes:** the original read-only baseline draft, whose branch/SHA header (a branch and commit that do not exist in the repository) failed verification. Its W1-receipt citation SURVIVED verification (round-two correction below).
 
 ## Why this document exists
 
-The original baseline audit was delivered with a provenance defect: it cited branch
-`security/production-hardening` @ `75b4023` and a committed W1 receipt
-(`docs/baselines/w1-whiteboard-baseline-2026-11-13.json`), neither of which exists
-in the repository (branch list = `[main]`; commit API returns 422; no such file).
-Its verifiable claims were re-checked claim-by-claim against the real tree before
-acceptance, and the phantom items were struck. This document is the corrected,
-accepted baseline that the engineering master plan builds on.
+The original baseline audit was delivered with one provenance defect: it cited branch
+`security/production-hardening` @ `75b4023`, which does not exist in the repository
+(branch list = `[main]`; commit API returns 422). Its verifiable claims were re-checked
+claim-by-claim against the real tree before acceptance, and the phantom header was struck.
+
+**Round-two correction (recorded for honesty):** the first verification pass also struck the
+audit's W1-receipt citation (`docs/baselines/w1-whiteboard-baseline-2026-11-13.json`) —
+WRONGLY, on the strength of a truncated directory listing. The file EXISTS, is a green-gate
+W1 record, and its gate was reproduced in full on 2026-11-25 by a fresh harness run on the
+current build. The audit's receipt claim was true; the correction below supersedes the
+first pass's verdict.
 
 ## Verified state (as of `73d92ec`)
 
@@ -28,8 +32,8 @@ accepted baseline that the engineering master plan builds on.
 | Render receipts, cancellation, resume | PASS | `render.ts`, `video-jobs.ts` |
 | Upload gates + tenant-scoped storage | PASS | `upload.ts`, `asset-store.ts` |
 | W1 benchmark scenarios | PRESENT (code) | `benchmark-scenarios.ts` |
-| `validation/w1/` evidence | NOT VERIFIED | directory has zero files; MP4/contact sheets must be regenerated, not "restored" |
-| Historical W1 receipt | STRUCK | the cited JSON does not exist in this repository |
+| W1 baseline receipt | **PASS — VERIFIED + REPRODUCED** | `docs/baselines/w1-whiteboard-baseline-2026-11-13.json`: gate GREEN, 16:9 two-run hashes + frame counts identical; REPRODUCED 2026-11-25 on the current build — fresh full harness run (all three aspects through chromium+ffmpeg): gate GREEN, determinism identical, blind kit regenerated (`validation/w1/`, gitignored by the 535c90e law) |
+| Blind human rubric scores | NOT VERIFIED (current) | the nine-dimension rubric (`docs/audits/w1-blind-rubric.md`) carries baseline scores; a fresh blind scoring on the 2026-11-25 kit remains open human work |
 | Residual legacy event `tf-preview-change` | FIXED | renamed into the declared catalog (see `implementation-report.md`) |
 | CI on the real current commit | PASS | run `45553810581` on `73d92ec`, completed/success |
 
