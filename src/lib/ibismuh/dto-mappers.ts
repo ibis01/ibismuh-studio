@@ -450,6 +450,21 @@ export function mapPlanRevision(row: PlanRevision): PlanRevisionDTO {
       planner: doc.plannerMeta.planner,
       llmPass: doc.plannerMeta.llmPass,
       ...(doc.plannerMeta.note ? { note: doc.plannerMeta.note } : {}),
+      // WS7 — the beat receipts ride through additively (typed rows only;
+      // a malformed row never blocks the DTO — the receipt is observability,
+      // not load-bearing data).
+      ...(Array.isArray((doc.plannerMeta as { beats?: unknown }).beats)
+        ? {
+            beats: ((doc.plannerMeta as { beats: unknown[] }).beats).filter(
+              (row): row is NonNullable<PlannerOutput["plannerMeta"]["beats"]>[number] =>
+                typeof row === "object" &&
+                row !== null &&
+                typeof (row as { sceneId?: unknown }).sceneId === "string" &&
+                typeof (row as { concept?: unknown }).concept === "string" &&
+                typeof (row as { reason?: unknown }).reason === "string",
+            ),
+          }
+        : {}),
     },
   };
 }

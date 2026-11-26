@@ -6,9 +6,14 @@
 // narration (pseudo-stats never cite). Layout rects stack vertically and
 // never overlap. Image-free lane — no camera, no assets.
 
-import type { GraphicComponent, GraphicComponentKind, LaneScene, PlannerOutput } from "../planner-types";
+import type { GraphicComponent, GraphicComponentKind, LaneScene, PlannerOutput, PlannerBeatRow } from "../planner-types";
 import { LANE_REGISTRY } from "../studio-lanes";
 import { chatJson } from "../providers/llm";
+import {
+  classifyVisualIntent,
+  contentWords,
+  declareVisualBeatRow,
+} from "./visual-beats";
 import {
   asRecordArray,
   asString,
@@ -100,6 +105,27 @@ export async function planGraphics(input: PlannerInput): Promise<PlannerOutput> 
     components: buildComponents(`s${i + 1}`, d),
   }));
 
+  // WS7 — the beat receipts ride plannerMeta (additive; the doc bytes are
+  // untouched). The rotation IS the selection rule, so the receipt names
+  // it: index rotation over the main-component vocabulary, with the
+  // narration's classified intent and the data-realness confidence.
+  const beats: PlannerBeatRow[] = drafts.map((d, i) => {
+    const concept = contentWords(d.narration).slice(0, 2).join(" ") || d.headline.toLowerCase();
+    return declareVisualBeatRow({
+      sceneId: `s${i + 1}`,
+      concept,
+      visualIntent: classifyVisualIntent(d.narration, i === 0),
+      candidateIds: ["headline", ...MAIN_ROTATION, "lower-third"],
+      selectedIds:
+        d.main.kind === "statistic" || d.main.kind === "chart" || d.main.kind === "quote" || d.main.kind === "cta"
+          ? ["headline", d.main.kind]
+          : ["headline"],
+      confidence: d.hasRealNumbers ? 0.9 : 0.5,
+      reason: `rule: index rotation ${i} over [statistic, chart, quote, cta] chose ${d.main.kind}${d.hasRealNumbers ? " (real data cited)" : " (pseudo-data — no citation)"}`,
+      ...(d.main.kind === "statistic" && !d.hasRealNumbers ? { fallback: "pseudo-stat declared" } : {}),
+    });
+  });
+
   return {
     lane: "graphics2d",
     scenes,
@@ -107,7 +133,7 @@ export async function planGraphics(input: PlannerInput): Promise<PlannerOutput> 
       mode: "kinetic-doc",
       reason: "declarative component doc renders natively — image-free lane, no assets or camera involved",
     },
-    plannerMeta: { planner: LANE.planner, llmPass, note },
+    plannerMeta: { planner: LANE.planner, llmPass, note, beats },
   };
 }
 

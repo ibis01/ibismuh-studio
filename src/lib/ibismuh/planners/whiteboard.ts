@@ -7,9 +7,10 @@
 // draw order (frame 0, underline 1, shapes 2+, glyph last). The LLM pass
 // only seeds narration/title/concept; stroke IR is always deterministic.
 
-import type { DrawablePath, LaneScene, PlannerOutput } from "../planner-types";
+import type { DrawablePath, LaneScene, PlannerOutput, PlannerBeatRow } from "../planner-types";
 import { LANE_REGISTRY } from "../studio-lanes";
 import { chatJson } from "../providers/llm";
+import { classifyVisualIntent, declareVisualBeatRow } from "./visual-beats";
 import {
   asRecordArray,
   asString,
@@ -89,6 +90,29 @@ export async function planWhiteboard(input: PlannerInput): Promise<PlannerOutput
     paths: buildBoardPaths(`s${i + 1}`, d.narration, d.concept),
   }));
 
+  // WS7 — the beat receipts ride plannerMeta (additive; the stroke IR
+  // bytes are untouched). The board's cast IS the deterministic role
+  // vocabulary, so the receipt names the rule and lists the roles the
+  // hash actually drew.
+  const BOARD_CAST = ["frame", "underline", "shape", "arrow", "glyph"] as const;
+  const beats: PlannerBeatRow[] = scenes.map((scene, i) => {
+    const drawn: string[] = [];
+    for (const p of scene.paths ?? []) {
+      if (!drawn.includes(p.role)) drawn.push(p.role);
+    }
+    const draft = drafts[i];
+    return declareVisualBeatRow({
+      sceneId: scene.id,
+      concept: draft ? draft.concept : "scene",
+      visualIntent: classifyVisualIntent(scene.narration, i === 0),
+      candidateIds: [...BOARD_CAST],
+      selectedIds: drawn,
+      confidence: 0.6,
+      timingSource: "estimated",
+      reason: "rule: the deterministic board cast — frame + underline, hash-rotated shapes, parity glyph",
+    });
+  });
+
   return {
     lane: "whiteboard",
     scenes,
@@ -96,7 +120,7 @@ export async function planWhiteboard(input: PlannerInput): Promise<PlannerOutput
       mode: "hand-drawn",
       reason: "whiteboard renders as native hand-drawn strokes — image provider not involved",
     },
-    plannerMeta: { planner: LANE.planner, llmPass, note },
+    plannerMeta: { planner: LANE.planner, llmPass, note, beats },
   };
 }
 

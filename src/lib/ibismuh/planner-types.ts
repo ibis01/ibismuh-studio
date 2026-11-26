@@ -177,7 +177,29 @@ export interface PlannerOutput {
     planner: string;
     llmPass: "full" | "partial" | "skipped";
     note?: string;
+    /** WS7 — the additive visual-beat receipt rows (the WHY surface: which
+     *  concept each scene boarded, the classified intent, the selection
+     *  with its reasons, the declared fallback). A planning artifact that
+     *  rides plannerMeta — never the scene grammar. */
+    beats?: PlannerBeatRow[];
   };
+}
+
+/**
+ * The serialized visual-beat receipt row (the shape lives conceptually in
+ * planners/visual-beats.ts — redeclared here so the lane-plan vocabulary
+ * stays import-cycle-free). */
+export interface PlannerBeatRow {
+  sceneId: string;
+  concept: string;
+  visualIntent: string;
+  candidateIds: string[];
+  selectedIds: string[];
+  order: string[];
+  confidence: number;
+  timingSource: string;
+  fallback?: string;
+  reason: string;
 }
 
 // ---------- the brief ----------
