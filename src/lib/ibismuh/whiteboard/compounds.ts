@@ -19,7 +19,9 @@
 // Pure module: no fs, no clock, no network, no randomness. The registry
 // self-check (assertCompoundRegistry) is exported, never run at import —
 // the catalog build, the planners' consumers, and the battery call it.
-import { ASSETS } from "./assets";
+// CLIENT-SAFE: no value import of the asset library (the palette's browser
+// imports THIS module for placement; the library rides the engine bundle
+// separately) — the self-check takes the registered ids as a parameter.
 import { validWhiteboardId } from "./storyboard";
 
 /** One part of a composition: a registered primitive at a declared offset
@@ -127,10 +129,12 @@ export const WB_COMPOUND_INDEX: ReadonlyMap<string, WhiteboardCompoundSpec> = ne
 /** Every defect the registry can carry, refused with its name: duplicate
  *  compound ids, an id or a derived part id violating the charset law,
  *  empty/duplicate parts, non-finite offsets, a non-positive scale, and the
- *  dead-end law (every part names a REGISTERED library row). */
+ *  dead-end law (every part names a REGISTERED library row). The registered
+ *  ids are a REQUIRED parameter — this module stays client-safe (no value
+ *  import of the asset library); the catalog build passes ASSETS' ids. */
 export function assertCompoundRegistry(
   specs: readonly WhiteboardCompoundSpec[] = WB_COMPOUNDS,
-  assetIds: ReadonlySet<string> = new Set(ASSETS.map((a) => a.id))
+  assetIds: ReadonlySet<string>
 ): void {
   const seen = new Set<string>();
   for (const spec of specs) {
@@ -196,7 +200,7 @@ export interface ExpandedPart {
  * same placements.
  */
 export function expandCompound(
-  spec: WhiteboardCompoundSpec,
+  spec: Pick<WhiteboardCompoundSpec, "id" | "parts">,
   origin: CompoundOrigin,
   baseOrder: number
 ): ExpandedPart[] {

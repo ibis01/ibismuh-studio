@@ -18,6 +18,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { LoadingState } from "@/components/ibismuh/shared";
+import type { CatalogAssetMeta } from "@/lib/ibismuh/catalog/contracts";
+import { searchRows } from "@/lib/ibismuh/catalog/search";
+import { expandCompound } from "@/lib/ibismuh/whiteboard/compounds";
 import {
   derivePlacementId,
   placementKey,
@@ -53,6 +56,11 @@ interface WhiteboardGetResponse {
   project: WhiteboardProject | null;
   rev: number;
   library: LibraryEntry[];
+  /** Phase B slice 4 — the catalog browser's rows: the full catalog
+   *  metadata (the manifest's own rows for built-ins + compounds, the
+   *  mechanically derived rows for uploads) so the palette can run the
+   *  deterministic search engine CLIENT-SIDE (same query, same order). */
+  catalogRows: CatalogAssetMeta[];
   voMs: Record<string, number>;
   budgets: Record<string, number>;
 }
@@ -96,6 +104,12 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
   // (selAsset) rides along with the instance's asset.
   const [selKey, setSelKey] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ rev: number; project: WhiteboardProject } | null>(null);
+
+  // Phase B slice 4 — the catalog browser state: the free-text query and the
+  // category filter feed the deterministic engine (same query → same order,
+  // forever).
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const [catalogCategory, setCatalogCategory] = useState("");
 
   const [sceneIndex, setSceneIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -207,6 +221,46 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
     }));
     setSelAsset(assetId);
     setSelKey(pid ?? assetId);
+  };
+
+  // Phase B slice 3 + 4 — the palette can place a COMPOSITION: the row's
+  // graph expands at the editor seam (the same constructor the planners
+  // use), so the doc carries primitive placements only — each part a named
+  // instance (`<compoundId>-<partAssetId>`) the whole engine already
+  // speaks. The first part is selected (the inspector addresses it).
+  const addCompoundPlacement = (row: CatalogAssetMeta) => {
+    if (!project || !scene || !row.composition) return;
+    const n = scene.placements.length;
+    const parts = expandCompound(
+      { id: row.id, parts: row.composition.parts },
+      {
+        x: Math.round(project.width * 0.5),
+        y: Math.round(project.height * 0.45),
+        scale: 1,
+        rotateDeg: 0,
+      },
+      n
+    );
+    mutateScene((s) => ({
+      ...s,
+      placements: [
+        ...s.placements,
+        ...parts.map((p) => ({
+          assetId: p.assetId,
+          placementId: p.placementId,
+          placement: p.placement,
+          order: p.order,
+        })),
+      ],
+    }));
+    setSelAsset(parts[0]?.assetId ?? null);
+    setSelKey(parts[0]?.placementId ?? null);
+  };
+
+  /** One click, one row: compositions expand, primitives place directly. */
+  const placeFromRow = (row: CatalogAssetMeta) => {
+    if (row.composition) addCompoundPlacement(row);
+    else addPlacement(row.id);
   };
 
   const patchPlacement = useCallback(
@@ -576,6 +630,24 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
   const sceneCount = project.scenes.length;
   const placedAssets = scene.placements;
   const selEntry = selAsset ? libraryById.get(selAsset) : null;
+
+  // Phase B slice 4 — the catalog browser's derived view: the wire's rows
+  // through THE deterministic engine (same query, same filters → the same
+  // ranked results with the match reasons attached). Categories derive from
+  // the rows themselves — a filter can never offer a category with no rows.
+  // Plain derivations, NOT hooks: the component's early returns (loading /
+  // error) sit above, so hooks here would break the rules of hooks. The
+  // search over the ~250-row catalog is sub-millisecond per render.
+  const catalogRows = data?.catalogRows ?? [];
+  const catalogCategories = [
+    ...new Set(catalogRows.filter((r) => r.lane === "whiteboard").map((r) => r.category)),
+  ].sort();
+  const catalogHits = searchRows(catalogRows, {
+    lane: "whiteboard",
+    ...(catalogQuery.trim() !== "" ? { text: catalogQuery.trim() } : {}),
+    ...(catalogCategory !== "" ? { category: catalogCategory } : {}),
+  });
+  const catalogFiltering = catalogQuery.trim() !== "" || catalogCategory !== "";
   // W6/W7 — the board panel's derived view: the policy ONLY when it is a
   // continuous one (the narrows keep the JSX free of non-null assertions),
   // and the previous scene's placements (what a carry would inherit).
@@ -682,28 +754,68 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
             aria-label="Board editor panels"
             className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-3 lg:max-h-[calc(100vh-9.5rem)] lg:overflow-y-auto tf-scroll-bar"
           >
-          {/* library palette — built-ins (client bundle) + uploads (wire) */}
+          {/* library palette — Phase B slice 4, the catalog browser: the
+              Phase A search engine gets its palette surface. Same query,
+              same filters → the same ranked results, match reasons on
+              hover (the audit's observability ask); compositions carry a
+              badge and place their parts. */}
           <div>
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-white/40">
-              Library — click to place {selAsset ? "· selected: " + selAsset : ""}
+            <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+              <input
+                type="search"
+                value={catalogQuery}
+                onChange={(e) => setCatalogQuery(e.target.value)}
+                placeholder={`Search ${catalogRows.length} catalog rows — names, tags, concepts…`}
+                aria-label="Search the asset catalog"
+                className="h-8 min-w-36 flex-1 rounded-md border border-white/10 bg-black/20 px-2 text-xs text-white/85 placeholder:text-white/30"
+              />
+              <select
+                value={catalogCategory}
+                onChange={(e) => setCatalogCategory(e.target.value)}
+                aria-label="Filter the catalog by category"
+                className="h-8 rounded-md border border-white/10 bg-black/20 px-1.5 text-xs text-white/80"
+              >
+                <option value="">All categories</option>
+                {catalogCategories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="mb-1 text-xs text-white/35" role="status">
+              {catalogFiltering
+                ? `${catalogHits.length} match${catalogHits.length === 1 ? "" : "es"} — ranked by the catalog engine (same query, same order; hover a row for why it matched)`
+                : `Library — click to place${selAsset ? " · selected: " + selAsset : ""} (catalog order; compositions place their parts)`}
             </p>
-            <div className="flex flex-wrap gap-1.5">
-              {(data?.library ?? [])
-                .filter((a) => !a.uploaded)
-                .map((a) => (
+            <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto tf-scroll-bar">
+              {catalogHits.map(({ row, reasons }) => {
+                const entry = libraryById.get(row.id);
+                const compoundPlaced = row.composition
+                  ? placedAssets.some((pl) => (pl.placementId ?? "").startsWith(`${row.id}-`))
+                  : false;
+                return (
                   <button
-                    key={a.id}
-                    onClick={() => addPlacement(a.id)}
-                    title={a.tags.join(", ")}
+                    key={row.id}
+                    onClick={() => placeFromRow(row)}
+                    title={
+                      catalogFiltering && reasons.length > 0 && reasons[0] !== "no query — listed by catalog order"
+                        ? `why matched: ${reasons.join("; ")}`
+                        : `${row.a11y}${row.composition ? " · a composition — places its parts" : ""}`
+                    }
                     className={`rounded-md px-2 py-1 text-xs ${
-                      placedAssets.some((pl) => pl.assetId === a.id)
+                      placedAssets.some((pl) => pl.assetId === row.id) || compoundPlaced
                         ? "bg-white/15 text-white/70"
                         : "bg-white/5 text-white/80 hover:bg-white/15"
                     }`}
                   >
-                    {a.id}
+                    {row.composition ? "◫ " : ""}
+                    {row.id}
+                    {row.composition ? <span className="ml-1 text-white/40">{row.composition.parts.length} parts</span> : null}
+                    {entry?.uploaded ? <span className="ml-1 text-white/40">upload</span> : null}
                   </button>
-                ))}
+                );
+              })}
             </div>
           </div>
 

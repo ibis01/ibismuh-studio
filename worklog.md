@@ -7866,3 +7866,20 @@ Work Log:
 Stage Summary:
 - Deliverable: composition is catalog metadata over the existing engine syntax — a narration that NAMES a system ("the smart farm works as one system") boards its whole cast as named, individually-addressable instances, in both planner lanes, with the graph tamper-evident in the manifest and searchable for the browser UI that comes next.
 - Phase B queue: the catalog browser UI (the palette adopts the search engine), then the mass-production pass (250-400 rows on the contract). Follow-ups documented in docs/whiteboard/catalog-phase-b-slice-3.md.
+
+---
+Task ID: PhaseB-S4
+Agent: main (Z.ai)
+Task: Audit roadmap Phase B slice 4 — the catalog browser UI (the palette adopts the Phase A search engine), continuing the re-audit's improvement ladder after PR #22 (compound asset graphs) merged as main @ db5978d. The workspace reset mid-session (second time); re-cloned fresh, re-provisioned the sandbox .env (probe HEALTH 0 restored), confirmed PR #22 had merged before the reset.
+
+Work Log:
+- Extracted the search engine into catalog/search.ts — a CLIENT-SAFE module (no node:crypto; searchRows over bare rows is the browser's entry point, searchCatalog over a manifest is the unchanged server wrapper; contracts re-exports so every caller keeps one vocabulary). The laws ride along: AND semantics, the tiebreak IS the sort, match reasons on every hit.
+- The GET route's response gains catalogRows — the memoized builtin manifest's whiteboard rows (primitives + compositions, the CI laws' own hashed rows) + mechanically derived rows for the video's uploads + the compound rows. One list, one vocabulary; additive (the request-based e2e assertions hold).
+- The studio's palette became the browser: search input + category filter (categories derive from the rows — never an empty category) + the ranked grid, match reasons on hover ("why matched: …"), the status line names the engine's determinism; compositions carry a ◫ badge and place through expandCompound — THE planner-seam constructor, now the editor's too (the doc carries primitives only, in the editor's hands as well); uploads carry a badge and place directly.
+- Client-safety pinned, not remembered: compounds.ts lost its value import of the asset library (the self-check's registered ids are a REQUIRED parameter), expandCompound widened to Pick<spec, "id" | "parts"> so the editor expands from a wire row; the compound battery gained the BUNDLE SAFETY suite — a source scan asserting the browser-facing modules carry no node: imports and no asset-library value import.
+- Caught two of my own hazards before CI: a rules-of-hooks violation (the derived catalog view sat below the component's early returns — replaced the useMemo block with plain derivations, the ~250-row search is sub-millisecond) and a text-[11px] class (the typography floor battery's own law — paid with text-xs).
+- Local gates ALL green: typecheck, repo-wide eslint, compounds 15/15, catalog 24/24, typography floor 0 utilities, unit 1064/0, the full check chain, drill RTO 506ms, HEALTH 0.
+
+Stage Summary:
+- Deliverable: the Phase A engine has its surface — the palette browses 99 assets + 4 compositions + uploads through the deterministic engine, explains its matches, and places compositions that expand into named, individually-addressable instances.
+- Phase B's planner queue is now CLEAR (multi-pick, compounds, browser). Next per the audit: the mass-production pass (250-400 rows on the contract) → Phase C (MG design system: icons 100-200, semantic components, animation recipes).
