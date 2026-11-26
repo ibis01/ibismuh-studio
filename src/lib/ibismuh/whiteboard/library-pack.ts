@@ -26,7 +26,7 @@
 import { sanitizeSvg } from "./svg";
 import type { WhiteboardAsset } from "./assets";
 
-const P = (
+export const P = (
   id: string,
   viewBox: { w: number; h: number },
   tags: string[],
@@ -35,17 +35,17 @@ const P = (
 ): WhiteboardAsset => ({ id, viewBox, tags, svg: sanitizeSvg(svg), ...meta });
 
 // Circle on the 120 grid: two half-arcs, one continuous stroke.
-const circlePath = (cx: number, cy: number, r: number): string =>
+export const circlePath = (cx: number, cy: number, r: number): string =>
   `M ${cx - r} ${cy} A ${r} ${r} 0 1 0 ${cx + r} ${cy} A ${r} ${r} 0 1 0 ${cx - r} ${cy}`;
 
-const INK = "#1d3557";
-const BLUE = "#457b9d";
-const RED = "#e63946";
-const TEAL = "#2a9d8f";
-const GOLD = "#e9c46a";
-const GREEN = "#84a98c";
+export const INK = "#1d3557";
+export const BLUE = "#457b9d";
+export const RED = "#e63946";
+export const TEAL = "#2a9d8f";
+export const GOLD = "#e9c46a";
+export const GREEN = "#84a98c";
 
-const st = (color: string, width = 4): string =>
+export const st = (color: string, width = 4): string =>
   `fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"`;
 
 export const LIBRARY_PACK: WhiteboardAsset[] = [

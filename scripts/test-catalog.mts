@@ -120,8 +120,20 @@ await test("the counts receipt is honest", () => {
 });
 
 await test("the vocabulary grew — the library is no longer the starter set", () => {
-  ok(ASSETS.length >= 80, `whiteboard library expanded (${ASSETS.length} assets)`);
+  // S-PAK-2 (the mass-production wave) lifted the whiteboard library past
+  // the first pack's 95; the graphics vocabulary holds its 100+ floor.
+  ok(ASSETS.length >= 130, `whiteboard library expanded (${ASSETS.length} assets)`);
   ok(Object.keys(GRAPHICS_ICON_LIBRARY).length >= 100, `graphics vocabulary expanded (${Object.keys(GRAPHICS_ICON_LIBRARY).length} icons)`);
+});
+
+await test("the catalog rides the audit's 250-400 production band", () => {
+  // The re-audit's mass-production target: the WHOLE catalog (both lanes +
+  // the compound compositions) holds between 250 and 400 rows — enough to
+  // teach anything, never a wall the browser cannot browse.
+  const total = manifest.assets.length;
+  ok(total >= 250 && total <= 400, `catalog total ${total} rides the 250-400 band`);
+  const wbRows = manifest.assets.filter((a) => a.lane === "whiteboard").length;
+  ok(wbRows === ASSETS.length + WB_COMPOUNDS.length, `whiteboard rows derive mechanically (${wbRows})`);
 });
 
 // --- 2. COMPLETENESS --------------------------------------------------------------

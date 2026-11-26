@@ -7883,3 +7883,19 @@ Work Log:
 Stage Summary:
 - Deliverable: the Phase A engine has its surface — the palette browses 99 assets + 4 compositions + uploads through the deterministic engine, explains its matches, and places compositions that expand into named, individually-addressable instances.
 - Phase B's planner queue is now CLEAR (multi-pick, compounds, browser). Next per the audit: the mass-production pass (250-400 rows on the contract) → Phase C (MG design system: icons 100-200, semantic components, animation recipes).
+
+---
+Task ID: PhaseB-S5
+Agent: main (Z.ai)
+Task: Audit roadmap mass-production pass — S-PAK-2, the second production pack (the catalog rides the audit's 250-400 band), continuing after PR #23 (the catalog browser) merged as main @ 2bdfd17 with post-merge main CI all green.
+
+Work Log:
+- Inventoried the library first (95 ids — flask/atom/compass/target already existed; the 50 new ids collide with nothing), read the W3 validator's exact laws (teleport, self-intersection, caps wall, closed-direction winding, fill-after-outline), and exported the first pack's authoring helpers (P/circlePath/st + the house palette) so both packs share one toolset.
+- Authored library-pack-2.ts: 50 stroke assets across weather, travel, food, sports, music, science, finance tools, communication and everyday objects — the same seven authoring laws, each asset with a declared a11y line for the mechanical catalog derivation. Caught two of my own defects before running anything: the carrot's ORANGE palette const declared after use (TDZ) and the brush handle carrying a mid-path teleport (the validator's own law — split into two paths).
+- Merged S-PAK-2 into ASSETS (the SAME registration path: sanitize, the W3 validator at load, the sketch pass, extraction) and appended 50 KEYWORD_PICKS rules AFTER the existing tables — first-hit-wins keeps every existing pick identical; the new words were audited against every earlier rule (rain/ship/direction/creative already claimed — the new rules claim downpour/sail/route/spectacles instead). One narration scan hit (a benchmark's "wall street") resolves to the earlier piggy-bank rule on "savings" exactly as before.
+- Registration receipt: 145 primitives, 0 duplicates, 0 charset violations, loadLibrary warnings NONE. The catalog total is 299 rows (145 + 4 compositions + 150 icons) — the catalog suite now PINS the audit's 250-400 band as a law and the whiteboard vocabulary floor rose to >= 130.
+- Local gates ALL green: typecheck, eslint, catalog 25/25, unit 1064/0 (every pinned planner narration byte-stable), placement 27/0, multipick 16/0, compounds 15/0, trace 25/0, profiles 22/0, the full check chain, drill RTO 481ms, HEALTH 0.
+
+Stage Summary:
+- Deliverable: the audit's mass-production pass lands INSIDE the contract — 50 new teachable assets + 50 new mention rules with zero catalog debt and zero byte drift; the catalog now holds 299 rows, mid-band.
+- Phase B's queue is fully clear (placement identity, multi-pick, compounds, browser, mass production). Next: Phase C — the MG design system (semantic components, animation recipes), the icon vocabulary's own growth, and the deliberate follow-ups documented across the five slice docs.

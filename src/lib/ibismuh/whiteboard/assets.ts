@@ -16,6 +16,7 @@ import { withSketchPasses } from "./sketch";
 import { validWhiteboardId } from "./storyboard";
 import { validateAsset } from "./asset-validate";
 import { LIBRARY_PACK } from "./library-pack";
+import { LIBRARY_PACK_2 } from "./library-pack-2";
 
 /** W3 (reconciliation §5.3): the role an asset plays in the stroke
  *  grammar — advisory metadata the validator (and later the W4/W5/W7
@@ -476,6 +477,9 @@ export const ASSETS: WhiteboardAsset[] = [
   // a pack asset failing the validator throws exactly like a benchmark
   // asset — there is no second quality bar.
   ...LIBRARY_PACK,
+  // S-PAK-2 — the mass-production wave (Phase B): 50 more assets across the
+  // domains the first pack left open, SAME registration path, SAME bar.
+  ...LIBRARY_PACK_2,
   leftHandVariant(ASSET_HAND_MARKER, "hand-marker-l"),
   leftHandVariant(ASSET_HAND_PENCIL, "hand-pencil-l"),
   leftHandVariant(ASSET_HAND_CHALK, "hand-chalk-l"),
