@@ -312,6 +312,13 @@ jobs:
       - name: Catalog contracts (coverage + provenance + search laws)
         run: npm run test:catalog
 
+      # Phase B slice 1: the placement-identity laws — repeated placement
+      # through the validator, the scheduler, the page seam, the carry plan,
+      # the beat compiler + camera director, and the wire round-trip, with
+      # every legacy doc byte-identical (the derived-identity law).
+      - name: Placement identity (repeated placement laws)
+        run: npm run test:whiteboard-placement
+
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes
       # → print the measured RTO. "A backup that has never been restored is

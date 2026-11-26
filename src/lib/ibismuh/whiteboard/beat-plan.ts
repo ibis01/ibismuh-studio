@@ -52,7 +52,8 @@ import {
 } from "./timing";
 import { WB_TRACED_FADE_MS } from "./trace-budget";
 import { totalLength } from "./svg";
-import type { AnimationEvent, WhiteboardScene } from "./storyboard";
+import type { AnimationEvent, WhiteboardAssetPlacement, WhiteboardScene } from "./storyboard";
+import { eventPlacementKey, placementKey } from "./storyboard";
 
 // ---------------------------------------------------------------------------
 // The beat — the planning artifact (never persisted; compiles to events)
@@ -73,8 +74,14 @@ export interface WhiteboardBeat {
   sentence: number;
   /** The sentence itself (trimmed). */
   phrase: string;
-  /** Placements assigned to this beat, in placement order. */
+  /** Placements assigned to this beat, in placement order. `assetIds` are
+   *  the LIBRARY asset ids (an asset placed twice may appear twice — its
+   *  geometry/text lookups ride this list); `placementKeys` are the
+   *  matching PLACEMENT identities (Phase B) — same order, same length —
+   *  the addressing the camera director and the beat compiler ride. */
   assetIds: string[];
+  /** Phase B — the placements' identity keys, in the same order. */
+  placementKeys: string[];
   /** The beat's window inside the scene clock (ms). Windows are
    *  word-proportional slices of the draw span; for any clock the
    *  estimator can produce (≥ 4 s) the last window ends at
@@ -371,33 +378,36 @@ export interface PlanBeatsOptions {
   assetMeta?: ReadonlyMap<string, AssetBeatMeta>;
 }
 
-/** The exact claimed-key grammar the fill law uses (timing.ts:66-70). */
+/** The exact claimed-key grammar the fill law uses (timing.ts — Phase B:
+ *  placement-scoped, the legacy key IS the assetId). */
 function claimedKeys(scene: WhiteboardScene): Set<string> {
   const claimed = new Set<string>();
   for (const e of scene.animations) {
-    if (e.type === "draw_path") claimed.add(`${e.assetId}::${e.pathId}`);
-    else if (e.type === "write_text") claimed.add(`${e.assetId}::text:${e.textId}`);
+    const k = eventPlacementKey(e);
+    if (e.type === "draw_path") claimed.add(`${k}::${e.pathId}`);
+    else if (e.type === "write_text") claimed.add(`${k}::text:${e.textId}`);
   }
   return claimed;
 }
 
-/** Whether a placement still carries drawable work the beat layer may
- *  schedule (unclaimed paths or texts). */
+/** Whether a PLACEMENT still carries drawable work the beat layer may
+ *  schedule (unclaimed paths or texts) — Phase B: per placement INSTANCE,
+ *  so two placements of one asset claim their instances separately. */
 function hasUnclaimedWork(
-  assetId: string,
-  scene: WhiteboardScene,
+  pl: WhiteboardAssetPlacement,
   geometry: Map<string, AssetGeometry>,
   claimed: Set<string>
 ): boolean {
-  const geo = geometry.get(assetId);
+  const key = placementKey(pl);
+  const geo = geometry.get(pl.assetId);
   if (geo) {
     for (const pathId of geo.paths.keys()) {
-      if (!claimed.has(`${assetId}::${pathId}`)) return true;
+      if (!claimed.has(`${key}::${pathId}`)) return true;
     }
   }
-  const texts = TEXT_IDS_BY_ASSET.get(assetId) ?? [];
+  const texts = TEXT_IDS_BY_ASSET.get(pl.assetId) ?? [];
   for (const textId of texts) {
-    if (!claimed.has(`${assetId}::text:${textId}`)) return true;
+    if (!claimed.has(`${key}::text:${textId}`)) return true;
   }
   return false;
 }
@@ -427,14 +437,16 @@ export function planBeats(
   const claimed = claimedKeys(scene);
   const placements = [...scene.placements]
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-    .filter((pl) => hasUnclaimedWork(pl.assetId, scene, opts.geometry, claimed));
+    .filter((pl) => hasUnclaimedWork(pl, opts.geometry, claimed));
   if (placements.length === 0) return [];
 
   const sentenceTokens = sentences.map((s) => words(s));
 
   // Assign every work-carrying placement to a sentence (order-monotonic,
-  // best mention wins; ties → the earliest sentence).
-  const bySentence = new Map<number, string[]>();
+  // best mention wins; ties → the earliest sentence). Phase B — buckets
+  // hold the placement PAIRS (identity key + assetId), so two instances
+  // of one asset can join different beats.
+  const bySentence = new Map<number, { key: string; assetId: string }[]>();
   let cursor = 0;
   for (const pl of placements) {
     let target: number;
@@ -461,7 +473,7 @@ export function planBeats(
     }
     target = Math.min(Math.max(target, cursor), sentences.length - 1);
     const bucket = bySentence.get(target) ?? [];
-    bucket.push(pl.assetId);
+    bucket.push({ key: placementKey(pl), assetId: pl.assetId });
     bySentence.set(target, bucket);
     cursor = Math.max(cursor, target);
   }
@@ -520,9 +532,10 @@ export function planBeats(
   }
 
   const beats: WhiteboardBeat[] = [];
-  for (const [sentence, assetIds] of bySentence) {
+  for (const [sentence, pairs] of bySentence) {
     const window = windows[sentence];
     const purpose = classifySentence(sentences[sentence], sentence);
+    const assetIds = pairs.map((p2) => p2.assetId);
     // S147 — the additive fields. The mark: the FIRST fx-* asset assigned to
     // a HIGH-emphasis beat (deterministic; a mark on a normal beat draws in
     // order — the sprinkle law). The action rides the mark when one fires.
@@ -537,6 +550,7 @@ export function planBeats(
       sentence,
       phrase: sentences[sentence],
       assetIds,
+      placementKeys: pairs.map((p2) => p2.key),
       startMs: window.startMs,
       endMs: window.endMs,
       rhetorical: classifyRhetorical(sentences[sentence], sentence, sentences.length),
@@ -561,6 +575,7 @@ export function planBeats(
   const openingMax = anchored ? OPENING_STROKE_MAX_MS : OPENING_STROKE_ESTIMATOR_MAX_MS;
   if (firstBeat.sentence > 0 && firstBeat.startMs > openingMax && !closerOnly) {
     const moved = firstBeat.assetIds.shift();
+    const movedKey = firstBeat.placementKeys.shift();
     if (firstBeat.assetIds.length === 0) beats.shift();
     if (moved) {
       const purpose = classifySentence(sentences[0], 0);
@@ -573,6 +588,7 @@ export function planBeats(
         sentence: 0,
         phrase: sentences[0],
         assetIds: [moved],
+        placementKeys: movedKey ? [movedKey] : [moved],
         startMs: windows[0].startMs,
         endMs: windows[0].endMs,
         rhetorical: classifyRhetorical(sentences[0], 0, sentences.length),
@@ -611,29 +627,36 @@ export function compileBeats(
     interface Item {
       kind: "path" | "text";
       assetId: string;
+      /** Phase B — the placement instance the item belongs to. */
+      key: string;
       id: string;
       weight: number;
     }
     const items: Item[] = [];
-    for (const assetId of beat.assetIds) {
+    // Phase B — items are collected PER PLACEMENT INSTANCE (the beat's
+    // placementKeys): two instances of one asset each fill their own
+    // stroke set under their own keys; the legacy key IS the assetId.
+    for (const key of beat.placementKeys) {
+      const pl = scene.placements.find((p2) => placementKey(p2) === key);
+      const assetId = pl?.assetId ?? key;
+      const scale = pl?.placement.scale ?? 1;
       const geo = geometry.get(assetId);
       if (geo) {
-        const scale = scene.placements.find((pl) => pl.assetId === assetId)?.placement.scale ?? 1;
         // P0 — the traced cap: over-cap paths never enter any beat's fill
         // (they would schedule past the scene clock); they ride the
         // completion-boundary fade below instead.
-        const allowedSet = traced?.allowed?.get(assetId);
+        const allowedSet = traced?.allowed?.get(key) ?? traced?.allowed?.get(assetId);
         for (const [pathId, segs] of geo.paths) {
-          if (claimed.has(`${assetId}::${pathId}`)) continue;
+          if (claimed.has(`${key}::${pathId}`)) continue;
           if (allowedSet && !allowedSet.has(pathId)) continue;
-          items.push({ kind: "path", assetId, id: pathId, weight: Math.max(120, totalLength(segs) * scale) });
+          items.push({ kind: "path", assetId, key, id: pathId, weight: Math.max(120, totalLength(segs) * scale) });
         }
       }
       const texts = TEXT_IDS_BY_ASSET.get(assetId) ?? [];
       for (const textId of texts) {
-        if (claimed.has(`${assetId}::text:${textId}`)) continue;
+        if (claimed.has(`${key}::text:${textId}`)) continue;
         const chars = TEXT_CHARS_BY_ID.get(`${assetId}::${textId}`) ?? 12;
-        items.push({ kind: "text", assetId, id: textId, weight: 40 * chars });
+        items.push({ kind: "text", assetId, key, id: textId, weight: 40 * chars });
       }
     }
     if (items.length === 0) continue; // the every-beat-has-an-action law
@@ -682,12 +705,16 @@ export function compileBeats(
       const w = items[i];
       // Never outlast the scene clock (the hold is the window's own edge).
       const dur = Math.max(120, Math.min(durs[i], Math.max(120, durationMs - t)));
+      // Phase B — the emitted event carries the placement address ONLY
+      // when it differs from the assetId (every legacy compile stays
+      // byte-identical on the wire).
+      const addr = w.key === w.assetId ? {} : { placementId: w.key };
       if (w.kind === "path") {
-        events.push({ type: "draw_path", assetId: w.assetId, pathId: w.id, startMs: Math.round(t), durationMs: dur });
-        claimed.add(`${w.assetId}::${w.id}`);
+        events.push({ type: "draw_path", assetId: w.assetId, ...addr, pathId: w.id, startMs: Math.round(t), durationMs: dur });
+        claimed.add(`${w.key}::${w.id}`);
       } else {
-        events.push({ type: "write_text", assetId: w.assetId, textId: w.id, startMs: Math.round(t), durationMs: dur });
-        claimed.add(`${w.assetId}::text:${w.id}`);
+        events.push({ type: "write_text", assetId: w.assetId, ...addr, textId: w.id, startMs: Math.round(t), durationMs: dur });
+        claimed.add(`${w.key}::text:${w.id}`);
       }
       t += dur + PATH_GAP_MS;
     }
@@ -706,11 +733,18 @@ export function compileBeats(
       }
     }
     const fadeStart = Math.max(0, Math.min(maxEnd, durationMs - WB_TRACED_FADE_MS));
+    // Phase B — the remainder keys are placement-scoped; resolve each back
+    // to its asset through the scene's placements (the legacy key IS the
+    // assetId).
+    const keyToAsset = new Map(scene.placements.map((pl) => [placementKey(pl), pl.assetId]));
     for (const key of fadeKeys) {
       const sep = key.indexOf("::");
+      const instanceKey = key.slice(0, sep);
+      const assetId = keyToAsset.get(instanceKey) ?? instanceKey;
       events.push({
         type: "reveal_color",
-        assetId: key.slice(0, sep),
+        assetId,
+        ...(instanceKey === assetId ? {} : { placementId: instanceKey }),
         pathId: key.slice(sep + 2),
         startMs: Math.round(fadeStart),
         durationMs: WB_TRACED_FADE_MS,

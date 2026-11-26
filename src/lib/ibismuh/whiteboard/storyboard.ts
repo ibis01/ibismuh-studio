@@ -20,16 +20,69 @@ export type HandSide = "left" | "right";
 export interface WhiteboardAssetPlacement {
   /** The asset-library id. */
   assetId: string;
+  /** Phase B — the PLACEMENT-INSTANCE identity. Two placements of the SAME
+   *  asset in one scene are distinct instances only when they carry distinct
+   *  placementIds; every frame key, DOM id, and animation address is derived
+   *  from this identity (placementKey). ABSENT = the legacy shape: the
+   *  instance identity IS the assetId — byte-identical keys, wire format,
+   *  and rendered output for every stored doc (the additive-parse law).
+   *  Charset = validWhiteboardId (it becomes part of DOM ids and frame keys
+   *  through the same `${key}--${pathId}` / `${key}::${pathId}` seams). */
+  placementId?: string;
   placement: Placement;
   /** Draw order across placements (lower first). Defaults to array order. */
   order?: number;
 }
 
-/** One drawing/motion instruction. The engine's atomic unit. */
+/** THE one placement-identity derivation (Phase B): the explicit
+ *  placementId when authored, else the assetId (the legacy shape — and the
+ *  validator guarantees the derived set is unique per scene, so the key is
+ *  always a per-scene instance address). Every consumer — the scheduler's
+ *  claimed keys, the frame maps, the page applier's DOM ids, the editor's
+ *  drag addressing, the carry plan — reads identity THROUGH this function;
+ *  a second derivation would be a second implementation to drift. */
+export function placementKey(pl: { placementId?: string; assetId: string }): string {
+  return pl.placementId ?? pl.assetId;
+}
+
+/** The placement-identity an animation event addresses: its explicit
+ *  placementId when authored, else the assetId (the legacy address — every
+ *  stored doc's events keep byte-identical meaning). An event without an
+ *  explicit placementId in a scene that places its asset more than once is
+ *  AMBIGUOUS — the validator refuses it (fail-closed, never silently
+ *  first-instance). */
+export function eventPlacementKey(e: { placementId?: string; assetId: string }): string {
+  return e.placementId ?? e.assetId;
+}
+
+/** Derive the next free placementId for a fresh placement of `assetId`:
+ *  the bare assetId when no placement uses it yet (the legacy-compatible
+ *  single placement — JSON stays byte-identical), else `${assetId}-2`,
+ *  `-3`, … first free. Charset-safe: asset ids pass validWhiteboardId, and
+ *  the numeric suffix cannot introduce `--` or `::`. PURE + deterministic
+ *  (the studio's add-placement law). */
+export function derivePlacementId(
+  scene: { placements: { placementId?: string; assetId: string }[] },
+  assetId: string
+): string | undefined {
+  const used = new Set(scene.placements.map(placementKey));
+  if (!used.has(assetId)) return undefined; // legacy-compatible single placement
+  for (let n = 2; ; n++) {
+    const cand = `${assetId}-${n}`;
+    if (!used.has(cand)) return cand;
+  }
+}
+
+/** One drawing/motion instruction. The engine's atomic unit. Phase B: the
+ *  optional `placementId` addresses a SPECIFIC placement instance (required
+ *  by the validator whenever the scene places the same asset more than
+ *  once — the ambiguity law); absent = the legacy address (the assetId). */
 export type AnimationEvent =
   | {
       type: "draw_path";
       assetId: string;
+      /** Phase B — the addressed placement instance (absent = the assetId). */
+      placementId?: string;
       pathId: string;
       startMs: number;
       durationMs: number;
@@ -37,6 +90,8 @@ export type AnimationEvent =
   | {
       type: "write_text";
       assetId: string;
+      /** Phase B — the addressed placement instance (absent = the assetId). */
+      placementId?: string;
       /** The <text> element id inside the asset. */
       textId: string;
       startMs: number;
@@ -45,6 +100,8 @@ export type AnimationEvent =
   | {
       type: "reveal_color";
       assetId: string;
+      /** Phase B — the addressed placement instance (absent = the assetId). */
+      placementId?: string;
       /** Which path gains its fill (omit = the asset's colorable group). */
       pathId?: string;
       startMs: number;
@@ -53,6 +110,8 @@ export type AnimationEvent =
   | {
       type: "move_object";
       assetId: string;
+      /** Phase B — the addressed placement instance (absent = the assetId). */
+      placementId?: string;
       startMs: number;
       durationMs: number;
       /** The placement to animate TO (from wherever the scene placed it). */
@@ -104,8 +163,10 @@ export interface BoardPolicy {
   /** "clean" = the hard wipe (default); "continuous" = inherit the
    *  previous scene's ink at frame 0. */
   mode: BoardMode;
-  /** Which of the PREVIOUS scene's placements carry forward (assetIds).
-   *  Absent/empty = every placement carries. */
+  /** Which of the PREVIOUS scene's placements carry forward — named by
+   *  placement identity (Phase B: a placementId, or a legacy assetId; a
+   *  name matches a placement KEY first, else any placement of that
+   *  assetId). Absent/empty = every placement carries. */
   carryPlacements?: string[];
   /** How the carried ink leaves this scene's stage. Default "keep". */
   exit?: BoardExit;
@@ -213,6 +274,16 @@ function validEventTimes(e: { startMs?: unknown; durationMs?: unknown }): boolea
   );
 }
 
+/** Phase B — the raw-row identity pair: the derived placement KEY and the
+ *  assetId for one raw placement row (the carry-integrity reader works on
+ *  the raw JSON before placements parse). A row without a usable assetId
+ *  contributes nothing. */
+function rawPlacementIdentity(e: Record<string, unknown>): { key: string; assetId: string } | null {
+  if (typeof e.assetId !== "string" || !e.assetId) return null;
+  const key = typeof e.placementId === "string" && e.placementId ? e.placementId : e.assetId;
+  return { key, assetId: e.assetId };
+}
+
 /**
  * Validate a parsed project JSON. `assetIds`/`pathIdsByAsset`/`textIdsByAsset`
  * come from the loaded library — events may only reference what exists.
@@ -302,14 +373,19 @@ export function validateWhiteboardProject(
           continue;
         }
         // The carry's integrity against the PREVIOUS RAW scene: the named
-        // placements must exist there, and a carried asset may not be
+        // placements must exist there, and a carried placement may not be
         // re-placed here (duplicate ink + ambiguous ids at the page seam).
+        // Phase B — names are PLACEMENT IDENTITY: a name matches a derived
+        // placement KEY of the previous scene first, else any placement of
+        // that assetId (the legacy grammar — stored docs keep their meaning).
         const prevRaw = p.scenes[i - 1] as Record<string, unknown> | undefined;
-        const prevPlaced = new Set<string>(
-          (Array.isArray(prevRaw?.placements) ? (prevRaw.placements as Record<string, unknown>[]) : [])
-            .map((pl) => (typeof pl.assetId === "string" ? pl.assetId : ""))
-            .filter(Boolean)
-        );
+        const prevIdentities = (
+          Array.isArray(prevRaw?.placements) ? (prevRaw.placements as Record<string, unknown>[]) : []
+        )
+          .map(rawPlacementIdentity)
+          .filter((x): x is { key: string; assetId: string } => x !== null);
+        const prevKeys = new Set(prevIdentities.map((x) => x.key));
+        const prevAssetIds = new Set(prevIdentities.map((x) => x.assetId));
         const carryNames = Array.isArray(b.carryPlacements) ? (b.carryPlacements as string[]) : [];
         if (new Set(carryNames).size !== carryNames.length) {
           errors.push(`scene ${i + 1}: carryPlacements names an asset twice`);
@@ -317,7 +393,7 @@ export function validateWhiteboardProject(
         }
         let carryOk = true;
         for (const name of carryNames) {
-          if (!prevPlaced.has(name)) {
+          if (!prevKeys.has(name) && !prevAssetIds.has(name)) {
             errors.push(`scene ${i + 1}: carryPlacements names "${name.slice(0, 40)}", which the previous scene does not place`);
             carryOk = false;
           }
@@ -329,20 +405,30 @@ export function validateWhiteboardProject(
         board = { ...b };
       }
     }
-    const carriedAssets: Set<string> | null =
+    // W6/Phase B — the carried KEYS: the placement identities this scene
+    // inherits at frame 0. Named carryPlacements resolve through the
+    // previous scene's raw rows (key match first, assetId fallback); an
+    // empty list carries every placement.
+    const carriedKeys: Set<string> | null =
       board?.mode === "continuous"
-        ? new Set(
-            board.carryPlacements && board.carryPlacements.length > 0
-              ? board.carryPlacements
-              : (Array.isArray((p.scenes[i - 1] as Record<string, unknown> | undefined)?.placements)
-                  ? ((p.scenes[i - 1] as Record<string, unknown>).placements as Record<string, unknown>[])
-                      .map((pl) => (typeof pl.assetId === "string" ? pl.assetId : ""))
-                      .filter(Boolean)
-                  : [])
-          )
+        ? (() => {
+            const prevRaw = p.scenes[i - 1] as Record<string, unknown> | undefined;
+            const prevIdentities = (
+              Array.isArray(prevRaw?.placements) ? (prevRaw.placements as Record<string, unknown>[]) : []
+            )
+              .map(rawPlacementIdentity)
+              .filter((x): x is { key: string; assetId: string } => x !== null);
+            const names = board?.carryPlacements ?? [];
+            const wanted =
+              names.length > 0
+                ? prevIdentities.filter((x) => names.includes(x.key) || names.includes(x.assetId))
+                : prevIdentities;
+            return new Set(wanted.map((x) => x.key));
+          })()
         : null;
     const placements: WhiteboardAssetPlacement[] = [];
-    const seenAssets = new Set<string>();
+    const seenKeys = new Set<string>();
+    const assetPlacementCounts = new Map<string, number>();
     const rawPlacements = Array.isArray(s.placements) ? s.placements : [];
     if (rawPlacements.length > WB_BUDGETS.placementsPerScene) {
       errors.push(`scene ${i + 1}: ${rawPlacements.length} placements exceed the ${WB_BUDGETS.placementsPerScene}/scene budget`);
@@ -354,11 +440,30 @@ export function validateWhiteboardProject(
         errors.push(`scene ${i + 1}: unknown asset "${String(e.assetId)}"`);
         continue;
       }
-      if (seenAssets.has(e.assetId)) {
-        errors.push(`scene ${i + 1}: asset "${e.assetId}" placed twice (move_object instead)`);
+      // Phase B — the placement-identity law. An explicit placementId must
+      // pass the namespace charset (it becomes part of DOM ids and frame
+      // keys); the DERIVED key set must be unique per scene. The legacy
+      // shape (no placementId anywhere) derives key = assetId and the law
+      // reduces to the old one-placement-per-asset rule — same defect, same
+      // pinned message; the difference is that distinct placementIds now
+      // FORGIVE the repeat (two coins on one board are two instances).
+      if (e.placementId !== undefined) {
+        if (typeof e.placementId !== "string" || !validWhiteboardId(e.placementId)) {
+          errors.push(`scene ${i + 1}: placementId "${String(e.placementId).slice(0, 40)}" violates the id charset (namespace separators --/:: and exotic characters are forbidden)`);
+          continue;
+        }
+      }
+      const key = typeof e.placementId === "string" && e.placementId ? e.placementId : e.assetId;
+      if (seenKeys.has(key)) {
+        if (typeof e.placementId === "string" && e.placementId) {
+          errors.push(`scene ${i + 1}: placementId "${e.placementId}" is already used in this scene`);
+        } else {
+          errors.push(`scene ${i + 1}: asset "${e.assetId}" placed twice (distinct placementIds make them separate instances, or move_object instead)`);
+        }
         continue;
       }
-      seenAssets.add(e.assetId);
+      seenKeys.add(key);
+      assetPlacementCounts.set(e.assetId, (assetPlacementCounts.get(e.assetId) ?? 0) + 1);
       if (!isPlacement(e.placement)) {
         errors.push(`scene ${i + 1}: asset "${e.assetId}" has an invalid placement`);
         continue;
@@ -366,17 +471,19 @@ export function validateWhiteboardProject(
       placements.push({
         assetId: e.assetId,
         placement: e.placement,
+        ...(typeof e.placementId === "string" && e.placementId ? { placementId: e.placementId } : {}),
         order: typeof e.order === "number" ? e.order : undefined,
       });
     }
-    // W6 — a carried asset may not be re-placed in the scene that carries it
-    // (duplicate ink on the board, and the page's namespaced element ids
-    // would collide). The carried set is computed above from the carry
-    // names (or all of the previous scene's placements).
-    if (carriedAssets) {
-      for (const a of seenAssets) {
-        if (carriedAssets.has(a)) {
-          errors.push(`scene ${i + 1}: asset "${a}" is carried AND re-placed — carried ink must not be placed again (drop the placement or narrow carryPlacements)`);
+    // W6/Phase B — a carried KEY may not be re-placed in the scene that
+    // carries it (duplicate ink on the board, and the page's namespaced
+    // element ids would collide). Re-placing the same ASSET under a DIFFERENT
+    // placementId is fine — that is a fresh instance, the whole Phase B win.
+    if (carriedKeys) {
+      for (const pl of placements) {
+        const key = placementKey(pl);
+        if (carriedKeys.has(key)) {
+          errors.push(`scene ${i + 1}: asset "${pl.assetId}" (placement "${key}") is carried AND re-placed — carried ink must not be placed again (drop the placement or narrow carryPlacements)`);
         }
       }
     }
@@ -398,27 +505,43 @@ export function validateWhiteboardProject(
         errors.push(`scene ${i + 1}: ${type} needs startMs ≥ 0 and durationMs > 0`);
         continue;
       }
-      // W6 — animations may not target a carried asset: the carried layer
-      // owns those elements' transforms and reveal state for the whole
-      // scene, so a draw/write/reveal/move would fight the carry plan.
-      if (carriedAssets?.has(String(e.assetId))) {
-        errors.push(`scene ${i + 1}: animation targets carried asset "${String(e.assetId)}" — carried ink is fully drawn at frame 0 and owned by the carry plan`);
+      // Phase B — the addressed instance. An explicit placementId must name
+      // a placement in THIS scene; an event without one is AMBIGUOUS when
+      // its asset is placed more than once — the validator refuses it
+      // (fail-closed, never a silent first-instance pick).
+      const explicitPid = typeof e.placementId === "string" && e.placementId ? e.placementId : null;
+      if (explicitPid !== null && !seenKeys.has(explicitPid)) {
+        errors.push(`scene ${i + 1}: animation references unknown placement "${explicitPid.slice(0, 40)}"`);
         continue;
       }
+      const count = assetPlacementCounts.get(String(e.assetId)) ?? 0;
+      if (explicitPid === null && count > 1) {
+        errors.push(`scene ${i + 1}: animation targets asset "${String(e.assetId)}", which is placed ${count}× — name the placementId`);
+        continue;
+      }
+      // W6 — animations may not target a carried placement: the carried
+      // layer owns those elements' transforms and reveal state for the
+      // whole scene, so a draw/write/reveal/move would fight the carry
+      // plan. (Phase B: keyed — the legacy address reduces to the assetId.)
+      if (carriedKeys?.has(explicitPid ?? String(e.assetId))) {
+        errors.push(`scene ${i + 1}: animation targets carried asset "${String(explicitPid ?? e.assetId)}" — carried ink is fully drawn at frame 0 and owned by the carry plan`);
+        continue;
+      }
+      const pid = explicitPid === null ? {} : { placementId: explicitPid };
       if (type === "draw_path") {
         const paths = library.pathIdsByAsset.get(String(e.assetId)) ?? new Set<string>();
         if (typeof e.pathId !== "string" || !paths.has(e.pathId)) {
           errors.push(`scene ${i + 1}: draw_path references unknown path "${String(e.pathId)}"`);
           continue;
         }
-        animations.push({ type, assetId: String(e.assetId), pathId: String(e.pathId), startMs: e.startMs as number, durationMs: e.durationMs as number });
+        animations.push({ type, assetId: String(e.assetId), ...pid, pathId: String(e.pathId), startMs: e.startMs as number, durationMs: e.durationMs as number });
       } else if (type === "write_text") {
         const texts = library.textIdsByAsset.get(String(e.assetId)) ?? new Set<string>();
         if (typeof e.textId !== "string" || !texts.has(e.textId)) {
           errors.push(`scene ${i + 1}: write_text references unknown text "${String(e.textId)}"`);
           continue;
         }
-        animations.push({ type, assetId: String(e.assetId), textId: String(e.textId), startMs: e.startMs as number, durationMs: e.durationMs as number });
+        animations.push({ type, assetId: String(e.assetId), ...pid, textId: String(e.textId), startMs: e.startMs as number, durationMs: e.durationMs as number });
       } else if (type === "reveal_color") {
         if (e.pathId !== undefined) {
           const paths = library.pathIdsByAsset.get(String(e.assetId)) ?? new Set<string>();
@@ -427,13 +550,13 @@ export function validateWhiteboardProject(
             continue;
           }
         }
-        animations.push({ type, assetId: String(e.assetId), pathId: e.pathId as string | undefined, startMs: e.startMs as number, durationMs: e.durationMs as number });
+        animations.push({ type, assetId: String(e.assetId), ...pid, pathId: e.pathId as string | undefined, startMs: e.startMs as number, durationMs: e.durationMs as number });
       } else if (type === "move_object") {
         if (!isPlacement(e.to)) {
           errors.push(`scene ${i + 1}: move_object needs a valid target placement`);
           continue;
         }
-        animations.push({ type, assetId: String(e.assetId), startMs: e.startMs as number, durationMs: e.durationMs as number, to: e.to });
+        animations.push({ type, assetId: String(e.assetId), ...pid, startMs: e.startMs as number, durationMs: e.durationMs as number, to: e.to });
       } else {
         errors.push(`scene ${i + 1}: unknown animation type "${type}"`);
       }

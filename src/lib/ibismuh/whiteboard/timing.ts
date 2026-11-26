@@ -20,11 +20,14 @@ import {
 } from "./svg";
 import {
   BOARD_EXIT_DEFAULT_MS,
+  eventPlacementKey,
+  placementKey,
   type AnimationEvent,
   type BoardExit,
   type BoardPolicy,
   type WhiteboardProject,
   type WhiteboardScene,
+  type WhiteboardAssetPlacement,
 } from "./storyboard";
 // Type-only: erased at runtime, so the timing ← assets cycle cannot exist
 // (assets.ts imports this module's text registries at init).
@@ -175,6 +178,11 @@ export interface SceneScheduleOpts {
   remainder?: readonly string[];
 }
 
+// Phase B — the opts keys above are documented as assetId-keyed and STAY
+// so (the traced cap split builds them, keyed by placement key — see
+// tracedSplitForScene; the legacy key IS the assetId, so every stored doc
+// rides them unchanged).
+
 // ---------------------------------------------------------------------------
 // P0-B (excellence) — the text lead-in bound. The fill law paces ALL work
 // to the window's right edge, and text items ride the sequential queue
@@ -284,18 +292,26 @@ export function scheduleScene(
   opts?: SceneScheduleOpts
 ): AnimationEvent[] {
   const events: AnimationEvent[] = [];
-  const claimed = new Set<string>(); // "assetId::pathId" / "assetId::text:textId" / "assetId::color[:pathId]"
+  // Phase B — claimed keys are PLACEMENT-scoped: "key::pathId" where key is
+  // the placement identity (placementKey). For every legacy doc the key IS
+  // the assetId — byte-identical keys; with repeated placements each
+  // instance claims its own paths.
+  const claimed = new Set<string>(); // "key::pathId" / "key::text:textId" / "key::color[:pathId]"
   for (const e of scene.animations) {
-    if (e.type === "draw_path") claimed.add(`${e.assetId}::${e.pathId}`);
-    else if (e.type === "write_text") claimed.add(`${e.assetId}::text:${e.textId}`);
-    else if (e.type === "reveal_color") claimed.add(`${e.assetId}::color${e.pathId ? ":" + e.pathId : ""}`);
+    const k = eventPlacementKey(e);
+    if (e.type === "draw_path") claimed.add(`${k}::${e.pathId}`);
+    else if (e.type === "write_text") claimed.add(`${k}::text:${e.textId}`);
+    else if (e.type === "reveal_color") claimed.add(`${k}::color${e.pathId ? ":" + e.pathId : ""}`);
     events.push(e);
   }
 
   // Collect work items in (placement order × asset draw order).
   interface Work {
     kind: "path" | "text";
+    /** The library asset (geometry, text registries, roles). */
     assetId: string;
+    /** Phase B — the placement instance the work belongs to. */
+    key: string;
     id: string;
     weight: number; // relative cost
   }
@@ -311,20 +327,21 @@ export function scheduleScene(
   for (const pl of ordered) {
     const geo = geometry.get(pl.assetId);
     if (!geo) continue;
-    // P0 — the traced cap: over-cap paths are the fade remainder (they are
-    // EXCLUDED from the work list here, revealed by the boundary fade below).
-    const allowedSet = opts?.allowed?.get(pl.assetId);
+    // Phase B — the placement instance identity: allowed-set lookup and
+    // claim keys are keyed by it (the legacy key IS the assetId).
+    const key = placementKey(pl);
+    const allowedSet = opts?.allowed?.get(key) ?? opts?.allowed?.get(pl.assetId);
     for (const [pathId, segs] of geo.paths) {
-      if (claimed.has(`${pl.assetId}::${pathId}`)) continue;
+      if (claimed.has(`${key}::${pathId}`)) continue;
       if (allowedSet && !allowedSet.has(pathId)) continue;
       const len = totalLength(segs) * pl.placement.scale;
-      work.push({ kind: "path", assetId: pl.assetId, id: pathId, weight: Math.max(120, len) * derivedFactor(pathId) });
+      work.push({ kind: "path", assetId: pl.assetId, key, id: pathId, weight: Math.max(120, len) * derivedFactor(pathId) });
     }
     const texts = TEXT_IDS_BY_ASSET.get(pl.assetId) ?? [];
     for (const textId of texts) {
-      if (claimed.has(`${pl.assetId}::text:${textId}`)) continue;
+      if (claimed.has(`${key}::text:${textId}`)) continue;
       const chars = TEXT_CHARS_BY_ID.get(`${pl.assetId}::${textId}`) ?? 12;
-      work.push({ kind: "text", assetId: pl.assetId, id: textId, weight: 40 * chars });
+      work.push({ kind: "text", assetId: pl.assetId, key, id: textId, weight: 40 * chars });
     }
   }
   if (work.length === 0) return events;
@@ -374,10 +391,14 @@ export function scheduleScene(
   let t = winStart;
   work.forEach((w, i) => {
     const durationMs = durs[i];
+    // Phase B — the emitted event carries the placement address ONLY when
+    // it differs from the assetId: every legacy schedule stays
+    // byte-identical on the wire, and repeated instances are addressable.
+    const addr = w.key === w.assetId ? {} : { placementId: w.key };
     if (w.kind === "path") {
-      events.push({ type: "draw_path", assetId: w.assetId, pathId: w.id, startMs: Math.round(t), durationMs });
+      events.push({ type: "draw_path", assetId: w.assetId, ...addr, pathId: w.id, startMs: Math.round(t), durationMs });
     } else {
-      events.push({ type: "write_text", assetId: w.assetId, textId: w.id, startMs: Math.round(t), durationMs });
+      events.push({ type: "write_text", assetId: w.assetId, ...addr, textId: w.id, startMs: Math.round(t), durationMs });
     }
     t += durationMs + gapMs;
   });
@@ -391,11 +412,19 @@ export function scheduleScene(
   if (fadeKeys.length > 0) {
     const boundary = Math.min(t - gapMs, durationMs);
     const fadeStart = Math.max(0, Math.min(boundary, durationMs - WB_TRACED_FADE_MS));
+    // Phase B — the remainder keys are placement-scoped ("key::pathId");
+    // resolve each key back to its asset through the scene's placements so
+    // the emitted reveal_color event keeps the library address AND the
+    // instance address.
+    const keyToAsset = new Map(scene.placements.map((pl) => [placementKey(pl), pl.assetId]));
     for (const key of fadeKeys) {
       const sep = key.indexOf("::");
+      const instanceKey = key.slice(0, sep);
+      const assetId = keyToAsset.get(instanceKey) ?? instanceKey;
       events.push({
         type: "reveal_color",
-        assetId: key.slice(0, sep),
+        assetId,
+        ...(instanceKey === assetId ? {} : { placementId: instanceKey }),
         pathId: key.slice(sep + 2),
         startMs: Math.round(fadeStart),
         durationMs: WB_TRACED_FADE_MS,
@@ -422,17 +451,20 @@ export function drawWindow(durationMs: number, anchors?: WordAnchors): { startMs
 }
 
 export interface TracedPlacementSplit {
-  /** assetId → the path ids allowed to DRAW (first-cap, draw order). */
+  /** placement key → the path ids allowed to DRAW (first-cap, draw order);
+   *  the legacy key IS the assetId. */
   allowed: Map<string, Set<string>>;
-  /** "assetId::pathId" keys the boundary fade reveals. */
+  /** "key::pathId" keys the boundary fade reveals. */
   remainder: string[];
 }
 
 /** The cap split for one scene's traced placements: assets tagged
- * "traced" draw at most tracedCapForWindow(window) strokes per placement
- * (the fill law's honest arithmetic); the rest are the fade remainder.
- * Returns null when no traced placement overflows — every caller takes
- * the byte-for-byte legacy path (the fallback law). PURE + deterministic. */
+ * "traced" draw at most tracedCapForWindow(window) strokes PER PLACEMENT
+ * (Phase B: per placement INSTANCE — two placements of one traced asset
+ * each draw their own cap; the legacy single placement behaves
+ * identically). The rest are the fade remainder. Returns null when no
+ * traced placement overflows — every caller takes the byte-for-byte
+ * legacy path (the fallback law). PURE + deterministic. */
 export function tracedSplitForScene(
   scene: WhiteboardScene,
   geometry: Map<string, AssetGeometry>,
@@ -442,16 +474,15 @@ export function tracedSplitForScene(
 ): TracedPlacementSplit | null {
   const win = drawWindow(durationMs, anchors);
   const winMs = Math.max(1200, win.endMs - win.startMs);
-  const capped = new Set<string>();
-  for (const pl of scene.placements) {
-    const tags = assetTags?.get(pl.assetId);
-    if (tags && tags.includes("traced")) capped.add(pl.assetId);
-  }
-  if (capped.size === 0) return null;
+  const capped = scene.placements.filter(
+    (pl) => assetTags?.get(pl.assetId)?.includes("traced") ?? false
+  );
+  if (capped.length === 0) return null;
   const allowed = new Map<string, Set<string>>();
   const remainder: string[] = [];
-  for (const assetId of capped) {
-    const geo = geometry.get(assetId);
+  for (const pl of capped) {
+    const key = placementKey(pl);
+    const geo = geometry.get(pl.assetId);
     if (!geo) continue;
     const cap = tracedCapForWindow(winMs);
     const keep = new Set<string>();
@@ -461,10 +492,10 @@ export function tracedSplitForScene(
         keep.add(pathId);
         n++;
       } else {
-        remainder.push(`${assetId}::${pathId}`);
+        remainder.push(`${key}::${pathId}`);
       }
     }
-    allowed.set(assetId, keep);
+    allowed.set(key, keep);
   }
   if (remainder.length === 0) return null; // every traced asset fits the window
   return { allowed, remainder };
@@ -503,13 +534,14 @@ export interface FrameCameraState {
 export interface FrameState {
   /** Scene-relative time (ms). */
   tMs: number;
-  /** pathId → draw progress 0..1, keyed "assetId::pathId". */
+  /** pathId → draw progress 0..1, keyed "placementKey::pathId" (Phase B —
+   *  the legacy key IS the assetId; repeated instances own separate keys). */
   draws: Map<string, number>;
-  /** textId → write progress 0..1, keyed "assetId::text:textId". */
+  /** textId → write progress 0..1, keyed "placementKey::text:textId". */
   texts: Map<string, number>;
-  /** assetId (+"::"+pathId) → color reveal progress 0..1. */
+  /** placementKey (+'::'+pathId) → color reveal progress 0..1. */
   colors: Map<string, number>;
-  /** assetId → animated placement (move_object applied). */
+  /** placementKey → animated placement (move_object applied). */
   placements: Map<string, Placement>;
   /** W6 — the carried-ink layer (null = clean scene, no carry). The
    *  carried ink rides the SAME maps above (injected fully drawn), so the
@@ -611,10 +643,15 @@ export function cameraAt(
 
 /** The carried ink PLAN for one scene (fixed for the scene's duration). */
 export interface CarriedInkPlan {
-  /** Carried placements keyed by the REAL assetId (a carried asset cannot
-   *  be re-placed — the validator pins that), each resolved to its
+  /** Carried placements keyed by their PLACEMENT identity (Phase B — the
+   *  legacy key IS the assetId; a carried placement cannot be re-placed
+   *  under its own key — the validator pins that), each resolved to its
    *  END-OF-PREVIOUS-SCENE placement. */
   placements: Map<string, Placement>;
+  /** Phase B — the carried key → the library assetId (the geometry/text
+   *  lookups the frame injection rides; the legacy key IS the assetId, so
+   *  stored plans and the wire payload stay unchanged). */
+  assetIds: Map<string, string>;
   /** The previous scene's reveal_color state at ITS end clock (key →
    *  progress), so fills carry AS SEEN. */
   colors: Map<string, number>;
@@ -660,23 +697,31 @@ export function resolveCarriedInk(
     board.carryPlacements && board.carryPlacements.length > 0
       ? new Set(board.carryPlacements)
       : null; // null = every placement carries
+  // Phase B — the wanted set matches PLACEMENT IDENTITY first (a
+  // placementId), falling back to the assetId (the legacy grammar). The
+  // carried plan is keyed by each carried placement's identity.
+  const isWanted = (pl: WhiteboardAssetPlacement): boolean =>
+    wanted === null || wanted.has(placementKey(pl)) || wanted.has(pl.assetId);
   const placements = new Map<string, Placement>();
+  const assetIds = new Map<string, string>();
   for (const pl of prev.placements) {
-    if (wanted && !wanted.has(pl.assetId)) continue;
+    if (!isWanted(pl)) continue;
     // The END-OF-PREVIOUS-SCENE placement: move_object runs to completion
     // (placementAt clamps progress at the scene's own clock).
-    placements.set(pl.assetId, placementAt(prev, pl.assetId, pl.placement, prevDurationMs));
+    placements.set(placementKey(pl), placementAt(prev, pl, prevDurationMs));
+    assetIds.set(placementKey(pl), pl.assetId);
   }
   const colors = new Map<string, number>();
   for (const e of prev.animations) {
     if (e.type !== "reveal_color") continue;
     const p = Math.max(0, Math.min(1, (prevDurationMs - e.startMs) / e.durationMs));
     if (p <= 0) continue;
-    if (wanted && !wanted.has(e.assetId)) continue;
-    colors.set(`${e.assetId}${e.pathId ? "::" + e.pathId : ""}`, p);
+    if (wanted && !wanted.has(eventPlacementKey(e)) && !wanted.has(e.assetId)) continue;
+    colors.set(`${eventPlacementKey(e)}${e.pathId ? "::" + e.pathId : ""}`, p);
   }
   return {
     placements,
+    assetIds,
     colors,
     exit: board.exit ?? "keep",
     transitionMs: board.transitionMs ?? BOARD_EXIT_DEFAULT_MS,
@@ -712,27 +757,30 @@ export function carriedExitAt(
   }
 }
 
-/** Placement at time t with move_object animations applied. */
+/** Placement at time t with move_object animations applied. Phase B —
+ *  `pl` is the PLACEMENT INSTANCE (the move_object match is on the event's
+ *  placement address: explicit placementId, else the assetId — the legacy
+ *  match). */
 export function placementAt(
   scene: WhiteboardScene,
-  assetId: string,
-  base: Placement,
+  pl: WhiteboardAssetPlacement,
   tMs: number
 ): Placement {
-  let pl = { ...base };
+  const key = placementKey(pl);
+  let out = { ...pl.placement };
   for (const e of scene.animations) {
-    if (e.type !== "move_object" || e.assetId !== assetId) continue;
+    if (e.type !== "move_object" || eventPlacementKey(e) !== key) continue;
     const u = Math.max(0, Math.min(1, (tMs - e.startMs) / e.durationMs));
     if (u <= 0) continue;
     const w = easeInOut(u);
-    pl = {
-      x: pl.x + (e.to.x - pl.x) * w,
-      y: pl.y + (e.to.y - pl.y) * w,
-      scale: pl.scale + (e.to.scale - pl.scale) * w,
-      rotateDeg: pl.rotateDeg + (e.to.rotateDeg - pl.rotateDeg) * w,
+    out = {
+      x: out.x + (e.to.x - out.x) * w,
+      y: out.y + (e.to.y - out.y) * w,
+      scale: out.scale + (e.to.scale - out.scale) * w,
+      rotateDeg: out.rotateDeg + (e.to.rotateDeg - out.rotateDeg) * w,
     };
   }
-  return pl;
+  return out;
 }
 
 /** The pen state at time t: follow the ACTIVE stroke; glide in before the
@@ -783,8 +831,10 @@ export function handAt(
   // The pen-tip state on ONE stroke at progress p — the SAME evaluation the
   // active branch and the travel endpoints ride (one follow math).
   const strokePoint = (e: PenEvent, p: number): FrameHandState | null => {
-    const placement = scene.placements.find((pl) => pl.assetId === e.assetId)?.placement;
-    const base = placement ? placementAt(scene, e.assetId, placement, tMs) : { x: 0, y: 0, scale: 1, rotateDeg: 0 };
+    // Phase B — the event addresses its placement INSTANCE (explicit
+    // placementId, else the assetId — the legacy match).
+    const pl = scene.placements.find((p2) => placementKey(p2) === eventPlacementKey(e));
+    const base = pl ? placementAt(scene, pl, tMs) : { x: 0, y: 0, scale: 1, rotateDeg: 0 };
     if (e.type === "write_text") {
       // The pen rides the text baseline: measured bbox is a renderer concern;
       // the plan approximates with the character-count width model.
@@ -963,30 +1013,35 @@ export function frameAt(
     const p = Math.max(0, Math.min(1, (tMs - e.startMs) / e.durationMs));
     // S139 — every reveal rides the eased pen progress (one speed law for
     // ink, text wipes and the hand); carried ink pins p=1 which penProgress
-    // preserves exactly.
+    // preserves exactly. Phase B — the keys are placement-scoped (the
+    // legacy key IS the assetId; repeated instances own separate keys).
     const pe = penProgress(p);
-    if (e.type === "draw_path") draws.set(`${e.assetId}::${e.pathId}`, pe);
-    else if (e.type === "write_text") texts.set(`${e.assetId}::text:${e.textId}`, pe);
-    else if (e.type === "reveal_color") colors.set(`${e.assetId}${e.pathId ? "::" + e.pathId : ""}`, pe);
+    const k = eventPlacementKey(e);
+    if (e.type === "draw_path") draws.set(`${k}::${e.pathId}`, pe);
+    else if (e.type === "write_text") texts.set(`${k}::text:${e.textId}`, pe);
+    else if (e.type === "reveal_color") colors.set(`${k}${e.pathId ? "::" + e.pathId : ""}`, pe);
   }
   const placements = new Map<string, Placement>();
   for (const pl of scene.placements) {
-    placements.set(pl.assetId, placementAt(scene, pl.assetId, pl.placement, tMs));
+    placements.set(placementKey(pl), placementAt(scene, pl, tMs));
   }
   let carriedLayer: CarriedFrameLayer | null = null;
   if (carried && carried.placements.size > 0) {
-    for (const [assetId, pl] of carried.placements) {
-      placements.set(assetId, pl);
+    for (const [key, pl] of carried.placements) {
+      placements.set(key, pl);
       // The scheduler's fill law draws EVERY drawable path of a placed
       // asset by scene end (the W2/W4 schedules included), so carrying all
-      // of the asset's paths ≡ the previous scene's end visual.
+      // of the asset's paths ≡ the previous scene's end visual. Phase B —
+      // the carried key resolves to its library asset through the plan's
+      // assetIds map (the legacy key IS the assetId).
+      const assetId = carried.assetIds.get(key) ?? key;
       const geo = geometry.get(assetId);
-      if (geo) for (const pathId of geo.paths.keys()) draws.set(`${assetId}::${pathId}`, 1);
+      if (geo) for (const pathId of geo.paths.keys()) draws.set(`${key}::${pathId}`, 1);
       for (const textId of TEXT_IDS_BY_ASSET.get(assetId) ?? []) {
-        texts.set(`${assetId}::text:${textId}`, 1);
+        texts.set(`${key}::text:${textId}`, 1);
       }
       for (const [k, v] of carried.colors) {
-        if (k === assetId || k.startsWith(assetId + "::")) colors.set(k, v);
+        if (k === key || k.startsWith(key + "::")) colors.set(k, v);
       }
     }
     carriedLayer = {

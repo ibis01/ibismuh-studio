@@ -13,40 +13,52 @@
 // contentWindow.eval). One compose, one applier, two callers.
 import { HAND_TIP, type WhiteboardAsset } from "./assets";
 import type { CarriedInkPlan, FrameState } from "./timing";
-import type { WhiteboardProject, WhiteboardScene } from "./storyboard";
+import { placementKey, type WhiteboardProject, type WhiteboardScene } from "./storyboard";
 import type { Placement } from "./svg";
 
 export interface ComposedScene {
   html: string;
-  /** "assetId::pathId" → browser element id. */
+  /** "placementKey::pathId" → browser element id (Phase B — the legacy key
+   *  IS the assetId; repeated instances own separate keys and groups). */
   pathEls: Map<string, string>;
-  /** "assetId::text:textId" → browser element id. */
+  /** "placementKey::text:textId" → browser element id. */
   textEls: Map<string, string>;
+  /** Phase B — "placementKey::pathId" → the library assetId (the geometry
+   *  lookups the renderer's setup pass and the editor's dash pass ride; the
+   *  key itself no longer implies the asset when placements repeat). */
+  pathAssetIds: Map<string, string>;
 }
 
 /** Render one placed asset into the page body + register its element ids
  *  (the namespacing seam shared by the scene's placements and — W6 — the
- *  carried ink, which uses the carried asset's REAL id: the validator
- *  forbids re-placing a carried asset, so the ids stay unambiguous). */
+ *  carried ink). Phase B — the group id and the inner namespacing key off
+ *  the PLACEMENT identity (`key`), so two placements of one asset are two
+ *  distinct groups; for every legacy placement the key IS the assetId and
+ *  the DOM is byte-identical. The validator pins key uniqueness per scene,
+ *  so the ids stay unambiguous. */
 function renderPlacement(
   assetId: string,
+  key: string,
   placement: Placement,
   asset: WhiteboardAsset,
   body: string[],
   pathEls: Map<string, string>,
-  textEls: Map<string, string>
+  textEls: Map<string, string>,
+  pathAssetIds: Map<string, string>
 ): void {
-  const gid = `g-${assetId}`;
+  const gid = `g-${key}`;
   // Namespace inner ids so page-level lookups stay unambiguous.
   const namespaced = asset.svg
-    .replace(/id="([^"]+)"/g, (_m, id: string) => `id="${assetId}--${id}"`)
-    .replace(/url\(#([^)]+)\)/g, (_m, id: string) => `url(#${assetId}--${id})`);
+    .replace(/id="([^"]+)"/g, (_m, id: string) => `id="${key}--${id}"`)
+    .replace(/url\(#([^)]+)\)/g, (_m, id: string) => `url(#${key}--${id})`);
   body.push(`<g id="${gid}" transform="translate(${placement.x} ${placement.y}) rotate(${placement.rotateDeg}) scale(${placement.scale})">${namespaced}</g>`);
   for (const m of namespaced.matchAll(/<path\b[^>]*id="([^"]+)"/g)) {
-    pathEls.set(`${assetId}::${m[1].split("--")[1]}`, m[1]);
+    const frameKey = `${key}::${m[1].split("--")[1]}`;
+    pathEls.set(frameKey, m[1]);
+    pathAssetIds.set(frameKey, assetId);
   }
   for (const m of namespaced.matchAll(/<text\b[^>]*id="([^"]+)"/g)) {
-    textEls.set(`${assetId}::text:${m[1].split("--")[1]}`, m[1]);
+    textEls.set(`${key}::text:${m[1].split("--")[1]}`, m[1]);
   }
 }
 
@@ -58,21 +70,25 @@ export function composeScene(
 ): ComposedScene {
   const pathEls = new Map<string, string>();
   const textEls = new Map<string, string>();
+  const pathAssetIds = new Map<string, string>();
   const bodyParts: string[] = [];
   // W6 — carried ink renders FIRST (document order = z-order: the carried
   // layer sits UNDER the scene's own ink), through the same namespacing
-  // and the same registration the scene's placements ride.
+  // and the same registration the scene's placements ride. Phase B — the
+  // carried plan's keys are placement identities; the assetIds map carries
+  // the library address (the legacy key IS the assetId).
   if (carried) {
-    for (const [assetId, pl] of carried.placements) {
+    for (const [key, pl] of carried.placements) {
+      const assetId = carried.assetIds.get(key) ?? key;
       const asset = assets.get(assetId);
       if (!asset) continue;
-      renderPlacement(assetId, pl, asset, bodyParts, pathEls, textEls);
+      renderPlacement(assetId, key, pl, asset, bodyParts, pathEls, textEls, pathAssetIds);
     }
   }
   for (const pl of scene.placements) {
     const asset = assets.get(pl.assetId);
     if (!asset) continue;
-    renderPlacement(pl.assetId, pl.placement, asset, bodyParts, pathEls, textEls);
+    renderPlacement(pl.assetId, placementKey(pl), pl.placement, asset, bodyParts, pathEls, textEls, pathAssetIds);
   }
   const body = bodyParts.join("\n") + "\n";
   const bg = scene.background === "#f8f5ee" ? "#f8f5ee" : "#ffffff";
@@ -95,7 +111,7 @@ ${body}
     <g id="hand" style="display:none"><g id="hand-inner" transform="translate(${-HAND_TIP.x} ${-HAND_TIP.y})"><g data-pose="write" id="hp-write"></g><g data-pose="draw" id="hp-draw"></g><g data-pose="point" id="hp-point"></g><g data-pose="circle" id="hp-circle"></g><g data-pose="rest" id="hp-rest"></g></g></g>
     </g>
   </svg></body></html>`;
-  return { html, pathEls, textEls };
+  return { html, pathEls, textEls, pathAssetIds };
 }
 
 export function framePayload(frame: FrameState, width: number, height: number): string {
@@ -119,11 +135,12 @@ export const APPLY_FRAME_FN = `(payloadJson) => {
   const p = JSON.parse(payloadJson);
   const board = document.getElementById("board");
   const camera = document.getElementById("camera");
-  // Frame-plan keys are "assetId::pathId" / "assetId::text:textId", but the
-  // page's element ids are namespaced "assetId--pathId" — resolve through
-  // the maps the setup pass registered (window.__wbDraw / __wbText). A
-  // direct id lookup on the plan key would silently miss EVERY element
-  // (the seam the S64 unit contracts + benchmark pixel forensics pin shut).
+  // Frame-plan keys are "placementKey::pathId" / "placementKey::text:textId"
+  // (Phase B — the legacy key IS the assetId), but the page's element ids
+  // are namespaced "placementKey--pathId" — resolve through the maps the
+  // setup pass registered (window.__wbDraw / __wbText). A direct id lookup
+  // on the plan key would silently miss EVERY element (the seam the S64
+  // unit contracts + benchmark pixel forensics pin shut).
   const drawEl = (key) => {
     const id = window.__wbDraw && window.__wbDraw.get(key);
     return id ? document.getElementById(id) : null;
@@ -135,8 +152,10 @@ export const APPLY_FRAME_FN = `(payloadJson) => {
   const tx = board.clientWidth / 2 - p.camera.cx * p.camera.scale;
   const ty = board.clientHeight / 2 - p.camera.cy * p.camera.scale;
   camera.setAttribute("transform", "translate(" + tx + " " + ty + ") scale(" + p.camera.scale + ")");
-  for (const [assetId, pl] of p.placements) {
-    const g = document.getElementById("g-" + assetId);
+  // Phase B — the payload's placement keys are PLACEMENT identities (the
+  // legacy key IS the assetId); the composed groups are g-<key>.
+  for (const [key, pl] of p.placements) {
+    const g = document.getElementById("g-" + key);
     if (g) g.setAttribute("transform", "translate(" + pl.x + " " + pl.y + ") rotate(" + pl.rotateDeg + ") scale(" + pl.scale + ")");
   }
   for (const [key, prog] of p.draws) {
@@ -216,8 +235,8 @@ export const APPLY_FRAME_FN = `(payloadJson) => {
   // the draw loop above set them drawn — so the ink visibly retreats).
   if (p.carried) {
     const ex = p.carried.exit;
-    for (const [assetId, pl] of p.carried.placements) {
-      const g = document.getElementById("g-" + assetId);
+    for (const [key, pl] of p.carried.placements) {
+      const g = document.getElementById("g-" + key);
       if (!g) continue;
       g.setAttribute("transform",
         "translate(" + (pl.x + ex.dx) + " " + (pl.y + ex.dy) + ") rotate(" + pl.rotateDeg + ") scale(" + pl.scale + ")");

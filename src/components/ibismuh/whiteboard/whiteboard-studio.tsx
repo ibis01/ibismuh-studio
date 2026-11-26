@@ -18,7 +18,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { LoadingState } from "@/components/ibismuh/shared";
-import type { AnimationEvent, CameraEvent, WhiteboardProject } from "@/lib/ibismuh/whiteboard/storyboard";
+import {
+  derivePlacementId,
+  placementKey,
+  type AnimationEvent,
+  type CameraEvent,
+  type WhiteboardProject,
+} from "@/lib/ibismuh/whiteboard/storyboard";
 import type { Placement } from "@/lib/ibismuh/whiteboard/svg";
 import { sceneDurationMs } from "@/lib/ibismuh/whiteboard/timing";
 import { WHITEBOARD_PROFILES, WHITEBOARD_PROFILE_IDS, applyWhiteboardProfile } from "@/lib/ibismuh/whiteboard/profiles";
@@ -85,6 +91,10 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
   const [dirty, setDirty] = useState(false);
   const [editing, setEditing] = useState(false);
   const [selAsset, setSelAsset] = useState<string | null>(null);
+  // Phase B — the SELECTED placement INSTANCE (identity key). Two
+  // placements of one asset select separately; the library highlight
+  // (selAsset) rides along with the instance's asset.
+  const [selKey, setSelKey] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ rev: number; project: WhiteboardProject } | null>(null);
 
   const [sceneIndex, setSceneIndex] = useState(0);
@@ -175,10 +185,11 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
 
   const addPlacement = (assetId: string) => {
     if (!project || !scene) return;
-    if (scene.placements.some((pl) => pl.assetId === assetId)) {
-      setSelAsset(assetId);
-      return; // one placement per asset (move_object animates it)
-    }
+    // Phase B — REPEATABLE PLACEMENT: the engine supports multiple
+    // instances of one asset (distinct placementIds), so the old
+    // one-placement-per-asset guard is gone. The FIRST placement of an
+    // asset keeps the legacy-compatible key (the bare assetId — its JSON
+    // stays byte-identical); repeats derive `<assetId>-2`, `-3`, ….
     const n = scene.placements.length;
     const spot: Placement = {
       x: Math.round(project.width * 0.4 + (n % 5) * 44),
@@ -186,42 +197,53 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
       scale: 1,
       rotateDeg: 0,
     };
+    const pid = derivePlacementId(scene, assetId);
     mutateScene((s) => ({
       ...s,
-      placements: [...s.placements, { assetId, placement: spot, order: n }],
+      placements: [
+        ...s.placements,
+        { assetId, placement: spot, order: n, ...(pid ? { placementId: pid } : {}) },
+      ],
     }));
     setSelAsset(assetId);
+    setSelKey(pid ?? assetId);
   };
 
   const patchPlacement = useCallback(
-    (assetId: string, patch: Partial<Placement>) => {
+    (key: string, patch: Partial<Placement>) => {
       mutateScene((s) => ({
         ...s,
         placements: s.placements.map((pl) =>
-          pl.assetId === assetId ? { ...pl, placement: { ...pl.placement, ...patch } } : pl
+          placementKey(pl) === key ? { ...pl, placement: { ...pl.placement, ...patch } } : pl
         ),
       }));
     },
     [mutateScene]
   );
 
-  const removePlacement = (assetId: string) => {
+  const removePlacement = (key: string) => {
     // Dropping a placement drops its explicit events too — events for an
     // unplaced asset are invisible ink (composeScene only emits placed
-    // assets), so keeping them would be silent dead data.
+    // assets), so keeping them would be silent dead data. Phase B — events
+    // address their INSTANCE (eventPlacementKey), so removing one coin
+    // leaves the other coin's events alone.
     mutateScene((s) => ({
       ...s,
       placements: s.placements
-        .filter((pl) => pl.assetId !== assetId)
+        .filter((pl) => placementKey(pl) !== key)
         .map((pl, i) => ({ ...pl, order: i })), // z-order = array order, renumbered
-      animations: s.animations.filter((e) => e.assetId !== assetId),
+      animations: s.animations.filter((e) => (e.placementId ?? e.assetId) !== key),
     }));
-    setSelAsset(null);
+    setSelKey((k) => (k === key ? null : k));
+    const stillPlaced = (scene?.placements ?? []).some(
+      (pl) => placementKey(pl) !== key && pl.assetId === selAsset
+    );
+    if (!stillPlaced) setSelAsset(null);
   };
 
-  const reorderPlacement = (assetId: string, dir: -1 | 1) => {
+  const reorderPlacement = (key: string, dir: -1 | 1) => {
     if (!scene) return;
-    const idx = scene.placements.findIndex((pl) => pl.assetId === assetId);
+    const idx = scene.placements.findIndex((pl) => placementKey(pl) === key);
     const to = idx + dir;
     if (idx < 0 || to < 0 || to >= scene.placements.length) return;
     mutateScene((s) => {
@@ -276,24 +298,36 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
   };
 
   // ---- canvas editing callbacks (memoized: the canvas rebinds on identity)
-  const onPlacementDrag = useCallback((assetId: string, placement: Placement) => {
-    dragBufRef.current.set(assetId, placement);
+  // Phase B — the canvas addresses placements by their identity key.
+  const onPlacementDrag = useCallback((key: string, placement: Placement) => {
+    dragBufRef.current.set(key, placement);
   }, []);
   const onPlacementCommit = useCallback(
-    (assetId: string, placement: Placement) => {
-      dragBufRef.current.delete(assetId);
-      patchPlacement(assetId, placement);
+    (key: string, placement: Placement) => {
+      dragBufRef.current.delete(key);
+      patchPlacement(key, placement);
     },
     // patchPlacement closes over sceneIndex; keep the identity stable per scene
     [patchPlacement]
   );
-  const onSelect = useCallback((assetId: string | null) => setSelAsset(assetId), []);
+  const onSelect = useCallback(
+    (key: string | null) => {
+      setSelKey(key);
+      // The library highlight follows the selected instance's asset. The
+      // buffer is the doc the canvas plays, so look the instance up there.
+      const asset = key
+        ? buffer?.scenes.flatMap((s) => s.placements).find((pl) => placementKey(pl) === key)?.assetId ?? null
+        : null;
+      setSelAsset(asset);
+    },
+    [buffer]
+  );
   const editingProps: WbEditing | undefined = useMemo(
     () =>
       editing
-        ? { selectedAssetId: selAsset, onPlacementDrag, onPlacementCommit, onSelect }
+        ? { selectedAssetId: selKey, onPlacementDrag, onPlacementCommit, onSelect }
         : undefined,
-    [editing, selAsset, onPlacementDrag, onPlacementCommit, onSelect]
+    [editing, selKey, onPlacementDrag, onPlacementCommit, onSelect]
   );
 
   // ---- Phase C loop (upload / delete — the §7 gates live server-side) ----
@@ -745,73 +779,72 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
             )}
           </div>
 
-          {/* placement inspector */}
-          {selAsset && (
+          {/* placement inspector — Phase B: instance-addressed (selKey) */}
+          {selKey && (() => {
+            const pl = placedAssets.find((x) => placementKey(x) === selKey);
+            if (!pl) return null;
+            return (
             <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-2.5">
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-cyan-200/70">
-                {selAsset} — {selEntry ? `${selEntry.w}×${selEntry.h} asset` : "placed"}
+                {placementKey(pl)} — {selEntry ? `${selEntry.w}×${selEntry.h} asset` : "placed"}
+                {pl.placementId ? " · instance" : ""}
               </p>
-              {(() => {
-                const pl = placedAssets.find((x) => x.assetId === selAsset);
-                if (!pl) return null;
-                return (
-                  <div className="flex flex-wrap items-center gap-3 text-xs text-white/70">
-                    <label className="flex items-center gap-1.5">
-                      x
-                      <input
-                        type="number"
-                        value={pl.placement.x}
-                        step={10}
-                        onChange={(e) => patchPlacement(selAsset, { x: Number(e.target.value) })}
-                        className={inputCls}
-                      />
-                    </label>
-                    <label className="flex items-center gap-1.5">
-                      y
-                      <input
-                        type="number"
-                        value={pl.placement.y}
-                        step={10}
-                        onChange={(e) => patchPlacement(selAsset, { y: Number(e.target.value) })}
-                        className={inputCls}
-                      />
-                    </label>
-                    <label className="flex items-center gap-1.5">
-                      scale
-                      <input
-                        type="range"
-                        min={0.2}
-                        max={4}
-                        step={0.05}
-                        value={pl.placement.scale}
-                        onChange={(e) => patchPlacement(selAsset, { scale: Number(e.target.value) })}
-                        className="w-24 accent-white"
-                      />
-                      <span className="w-8 tabular-nums">{pl.placement.scale.toFixed(2)}</span>
-                    </label>
-                    <label className="flex items-center gap-1.5">
-                      rotate
-                      <input
-                        type="range"
-                        min={-180}
-                        max={180}
-                        step={5}
-                        value={pl.placement.rotateDeg}
-                        onChange={(e) => patchPlacement(selAsset, { rotateDeg: Number(e.target.value) })}
-                        className="w-24 accent-white"
-                      />
-                      <span className="w-10 tabular-nums">{Math.round(pl.placement.rotateDeg)}°</span>
-                    </label>
-                    <button onClick={() => reorderPlacement(selAsset, -1)} className={btnFaint} title="Send back">◀ z</button>
-                    <button onClick={() => reorderPlacement(selAsset, 1)} className={btnFaint} title="Bring forward">z ▶</button>
-                    <button onClick={() => removePlacement(selAsset)} className={`${btn} bg-red-500/15 text-red-200 hover:bg-red-500/25`}>
-                      Remove (+its events)
-                    </button>
-                  </div>
-                );
-              })()}
+              <div className="flex flex-wrap items-center gap-3 text-xs text-white/70">
+                <label className="flex items-center gap-1.5">
+                  x
+                  <input
+                    type="number"
+                    value={pl.placement.x}
+                    step={10}
+                    onChange={(e) => patchPlacement(selKey, { x: Number(e.target.value) })}
+                    className={inputCls}
+                  />
+                </label>
+                <label className="flex items-center gap-1.5">
+                  y
+                  <input
+                    type="number"
+                    value={pl.placement.y}
+                    step={10}
+                    onChange={(e) => patchPlacement(selKey, { y: Number(e.target.value) })}
+                    className={inputCls}
+                  />
+                </label>
+                <label className="flex items-center gap-1.5">
+                  scale
+                  <input
+                    type="range"
+                    min={0.2}
+                    max={4}
+                    step={0.05}
+                    value={pl.placement.scale}
+                    onChange={(e) => patchPlacement(selKey, { scale: Number(e.target.value) })}
+                    className="w-24 accent-white"
+                  />
+                  <span className="w-8 tabular-nums">{pl.placement.scale.toFixed(2)}</span>
+                </label>
+                <label className="flex items-center gap-1.5">
+                  rotate
+                  <input
+                    type="range"
+                    min={-180}
+                    max={180}
+                    step={5}
+                    value={pl.placement.rotateDeg}
+                    onChange={(e) => patchPlacement(selKey, { rotateDeg: Number(e.target.value) })}
+                    className="w-24 accent-white"
+                  />
+                  <span className="w-10 tabular-nums">{Math.round(pl.placement.rotateDeg)}°</span>
+                </label>
+                <button onClick={() => reorderPlacement(selKey, -1)} className={btnFaint} title="Send back">◀ z</button>
+                <button onClick={() => reorderPlacement(selKey, 1)} className={btnFaint} title="Bring forward">z ▶</button>
+                <button onClick={() => removePlacement(selKey)} className={`${btn} bg-red-500/15 text-red-200 hover:bg-red-500/25`}>
+                  Remove (+its events)
+                </button>
+              </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* events */}
           <div>
@@ -823,6 +856,9 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                 <div key={`${ev.type}-${i}`} className="flex flex-wrap items-center gap-2 rounded-md bg-black/20 px-2 py-1.5 text-xs">
                   <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-xs text-white/70">{ev.type}</span>
                   <span className="text-white/60">{ev.assetId}</span>
+                  {"placementId" in ev && ev.placementId && (
+                    <span className="font-mono text-cyan-200/70">→ {ev.placementId}</span>
+                  )}
                   {ev.type === "draw_path" && <span className="font-mono text-white/50">{ev.pathId}</span>}
                   {ev.type === "write_text" && <span className="font-mono text-white/50">{ev.textId}</span>}
                   {ev.type === "reveal_color" && ev.pathId && <span className="font-mono text-white/50">{ev.pathId}</span>}
@@ -879,7 +915,11 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                 <p className="text-xs text-white/40">No explicit events — every drawable rides the fill law.</p>
               )}
             </div>
-            <AddEventRow placed={placedAssets} library={libraryById} onAdd={addEvent} />
+            <AddEventRow
+              placed={placedAssets.map((pl) => ({ key: placementKey(pl), assetId: pl.assetId }))}
+              library={libraryById}
+              onAdd={addEvent}
+            />
           </div>
 
           {/* camera keys */}
@@ -1214,20 +1254,26 @@ function AddEventRow({
   library,
   onAdd,
 }: {
-  placed: { assetId: string; placement: Placement }[];
+  /** Phase B — the scene's placed INSTANCES: identity key + library asset. */
+  placed: { key: string; assetId: string }[];
   library: Map<string, LibraryEntry>;
   onAdd: (ev: AnimationEvent) => void;
 }) {
   const [type, setType] = useState<AnimationEvent["type"]>("draw_path");
-  const [assetId, setAssetId] = useState<string>("");
+  const [selKey, setSelKey] = useState<string>("");
   const [targetId, setTargetId] = useState<string>("");
   const [startMs, setStartMs] = useState(0);
   const [durationMs, setDurationMs] = useState(1200);
 
-  // DERIVED, not effect-synced: the effective asset/target fall back to the
-  // first valid choice whenever the raw state points at something that is
-  // no longer placed/available (scene switches, removals). No cascades.
-  const effAssetId = placed.some((p) => p.assetId === assetId) ? assetId : (placed[0]?.assetId ?? "");
+  // DERIVED, not effect-synced: the effective instance/target fall back to
+  // the first valid choice whenever the raw state points at something that
+  // is no longer placed/available (scene switches, removals). No cascades.
+  const eff = placed.some((p) => p.key === selKey) ? selKey : (placed[0]?.key ?? "");
+  const effAssetId = placed.find((p) => p.key === eff)?.assetId ?? "";
+  // Phase B — the event addresses the instance explicitly only when the
+  // key differs from the assetId (legacy-compatible single placements keep
+  // byte-identical events).
+  const addr = eff && eff !== effAssetId ? { placementId: eff } : {};
   const entry = library.get(effAssetId);
   const targets = type === "write_text" ? (entry?.texts ?? []) : (entry?.paths ?? []);
   const effTargetId = targets.includes(targetId) ? targetId : (targets[0] ?? "");
@@ -1237,17 +1283,18 @@ function AddEventRow({
   }
 
   const add = () => {
-    if (!effAssetId) return;
+    if (!effAssetId || !eff) return;
     if (type === "draw_path" && effTargetId)
-      onAdd({ type, assetId: effAssetId, pathId: effTargetId, startMs, durationMs });
+      onAdd({ type, assetId: effAssetId, ...addr, pathId: effTargetId, startMs, durationMs });
     else if (type === "write_text" && effTargetId)
-      onAdd({ type, assetId: effAssetId, textId: effTargetId, startMs, durationMs });
+      onAdd({ type, assetId: effAssetId, ...addr, textId: effTargetId, startMs, durationMs });
     else if (type === "reveal_color")
-      onAdd({ type, assetId: effAssetId, pathId: effTargetId || undefined, startMs, durationMs });
+      onAdd({ type, assetId: effAssetId, ...addr, pathId: effTargetId || undefined, startMs, durationMs });
     else if (type === "move_object")
       onAdd({
         type,
         assetId: effAssetId,
+        ...addr,
         startMs,
         durationMs,
         to: { x: 1200, y: 600, scale: 1, rotateDeg: 0 },
@@ -1267,13 +1314,13 @@ function AddEventRow({
         <option value="move_object">move_object</option>
       </select>
       <select
-        value={effAssetId}
-        onChange={(e) => setAssetId(e.target.value)}
+        value={eff}
+        onChange={(e) => setSelKey(e.target.value)}
         className="rounded-md border border-white/15 bg-black/40 px-1.5 py-0.5 text-xs text-white"
       >
         {placed.map((p) => (
-          <option key={p.assetId} value={p.assetId}>
-            {p.assetId}
+          <option key={p.key} value={p.key}>
+            {p.key === p.assetId ? p.assetId : `${p.assetId} → ${p.key}`}
           </option>
         ))}
       </select>

@@ -7812,3 +7812,21 @@ P2-E natural-speed pacing + motion floor) and the human blind gate
   push-trigger glob saga's "fix" was byte-verified against exactly this
   class). Display output lies; od/esbuild are the ground truth. All content
   written this session was verified byte-level (esbuild parse + battery run).
+
+---
+Task ID: PhaseB-S1
+Agent: main (Z.ai)
+Task: Audit roadmap Phase B slice 1 — placement identity (repeated placement end to end), continuing the re-audit's improvement ladder after Phase A (catalog contract) merged as PR #19.
+
+Work Log:
+- Verified remote state first: catalog/phase-a-library was still unmerged with no PR open; opened PR #19 (the create_pull_request tool kept dropping the title parameter — pushed the PR through the REST API with a JSON payload file instead), CI all green (8 checks), rebase-merged into main @ 042be89.
+- Cloned the repo fresh into the sandbox (the workspace had been reset) and cut catalog/phase-b-placement-ids.
+- Implemented the placement-identity refactor across the whole whiteboard lane: storyboard.ts (placementId + placementKey/eventPlacementKey/derivePlacementId + validator key-uniqueness/charset/ambiguity/carry-key laws), timing.ts (key-scoped claimed keys, per-instance work items, events carrying placementId ONLY when it differs from the assetId, traced cap per instance, carry plan + assetIds map, instance-addressed placementAt/handAt), wb-page.ts (one group per instance, key namespacing, pathAssetIds registration, applier loops), render.ts (geometry through the compose-registered map), beat-plan.ts (per-instance beat buckets + placementKeys on WhiteboardBeat + key-scoped compile), camera-director.ts (key-addressed bboxes/onsets), llm-planner.ts (honest drop reason), the editor (repeatable palette via derivePlacementId, key-addressed drag/select/patch/remove/reorder, instance-addressed event editor).
+- The byte-identity law held: no rendered-pixel golden re-pins were needed — legacy docs derive key = assetId everywhere; the only test churn was two fixtures riding the old placementAt signature and a hand-rolled carry plan without the new assetIds map (assertions unchanged).
+- New battery scripts/test-whiteboard-placement.mts — 27 laws across eight suites (validator, legacy identity, schedule + frames, page seam, carry × repeats, beats, traced cap, wire round-trip) — wired into npm run check + the CI check job after test:catalog.
+- Caught two of my own bugs before CI did: a dropped penProgress line during the frameAt edit (tsc would have flagged it) and the MultiEdit tool's partial-application quirk (an atomic-failure report after edits 1-2 had landed — the unit-suite failures pointed straight at it).
+- Local gates ALL green: typecheck, eslint, lint:budget 0/0, unit 1064/0, whiteboard-trace 25/0, whiteboard-profiles 22/0, catalog 24/0, placement 27/0, the remaining check-chain suites, drill RTO 501ms, alert probe HEALTH 0 (after provisioning the sandbox .env the fresh clone lacked — postinstall only augments an existing file; CI's clean-clone gate owns the from-scratch path).
+
+Stage Summary:
+- Deliverable: repeated placement is legal and safe end to end — validator, scheduler, renderer, editor, carry, beats, camera, wire — with every stored legacy doc byte-identical (the derived-identity law).
+- The engine layer of the re-audit's §3.5 defect is closed; planner-lane multi-pick layouts, compound asset graphs, and the catalog browser UI remain the Phase B queue (documented in docs/whiteboard/catalog-phase-b.md).

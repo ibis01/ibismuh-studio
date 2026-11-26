@@ -263,7 +263,7 @@ export function normalizeLlmScenePlans(
         dropped.push({
           scene: sceneNo,
           assetId,
-          reason: "asset placed twice in one scene (the validator forbids double placement)",
+          reason: "asset placed twice in one scene (the engine supports repeated instances via placementIds — the LLM lane plans one placement per concept for now)",
         });
         continue;
       }

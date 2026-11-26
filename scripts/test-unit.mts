@@ -8059,10 +8059,13 @@ await test("S64 timing: placementAt — move_object eases between base and targe
     ...WB_PLAIN,
     animations: [{ type: "move_object", assetId: "a1", startMs: 1000, durationMs: 1000, to: { x: 100, y: 0, scale: 1, rotateDeg: 0 } }],
   };
+  // Phase B — placementAt takes the PLACEMENT INSTANCE (the move_object
+  // match rides the event's placement address: explicit id, else assetId).
+  const pl = scene.placements[0];
   const base = { x: 0, y: 0, scale: 1, rotateDeg: 0 };
-  eq(placementAt(scene, "a1", base, 500), base, "before the move: base placement");
-  approx(placementAt(scene, "a1", base, 1500).x, 50, 1e-9, "halfway");
-  eq(placementAt(scene, "a1", base, 3000).x, 100, "at target");
+  eq(placementAt(scene, pl, 500), base, "before the move: base placement");
+  approx(placementAt(scene, pl, 1500).x, 50, 1e-9, "halfway");
+  eq(placementAt(scene, pl, 3000).x, 100, "at target");
 });
 
 await test("S64 timing: frameCount", async () => {
@@ -15831,6 +15834,9 @@ await test("W6 wb-page: the carried layer renders UNDER the scene ink through th
   };
   const carry = {
     placements: new Map([["heart-main", { x: 100, y: 100, scale: 1, rotateDeg: 0 }]]),
+    // Phase B — the carried plan carries key → assetId (the legacy key IS
+    // the assetId).
+    assetIds: new Map([["heart-main", "heart-main"]]),
     colors: new Map<string, number>(),
     exit: "keep" as const,
     transitionMs: 600,
