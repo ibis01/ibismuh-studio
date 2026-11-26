@@ -9,8 +9,8 @@
 
 ## 1. Current architecture (reconciled at S75, 2026-11-10 UTC — baseline §1.1–1.8 from the S47 reconciliation)
 
-**Source of truth:** `prisma/schema.prisma` (38 models), `prisma/migrations/`
-(22 migrations), `src/lib/ibismuh/` (117 modules), `src/app/api/` (116 route
+**Source of truth:** `prisma/schema.prisma` (45 models), `prisma/migrations/`
+(39 migrations), `src/lib/ibismuh/` (117+ modules), `src/app/api/` (144 route files)
 files). §1.1–1.8 were rewritten from those sources during S47 and stay
 accurate for what they describe; §1.9 is the S48→S74 delta that the S47
 reconciliation could not know about. The Stage-1-era snapshot that lived

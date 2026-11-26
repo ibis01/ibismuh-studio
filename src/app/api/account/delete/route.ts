@@ -12,10 +12,13 @@ import fs from "fs";
 import path from "path";
 import { db } from "@/lib/ibismuh/tenant-db";
 import { rawDatabase as rawDb } from "@/lib/ibismuh/raw-db/system";
-import { requireUser, sessionIdFromRequest, clearedSessionCookie } from "@/lib/ibismuh/tenant";
+import { requireRole, sessionIdFromRequest, clearedSessionCookie } from "@/lib/ibismuh/tenant";
 
 export async function POST(req: NextRequest) {
-  const auth = await requireUser(req);
+  // F-3 (the audit): account deletion cascades the WHOLE organization —
+  // owner-only. With no invite flow yet every user is an owner, so this is
+  // the latent RBAC seam placed before team members can exist.
+  const auth = await requireRole(req, "owner");
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   auth.enter(); // tenant scope: handler + spawned job closures
   const { userId, organizationId } = auth.ctx;

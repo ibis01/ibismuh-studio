@@ -499,3 +499,7 @@ export function mapTimingSource(
   });
   return { source: decision.source, reason: decision.reason };
 }
+
+// The audit's F-2 re-export: the projects/assets lane scopes by the caller's
+// organization (see tenant.ts orgId) instead of the constant below.
+export { orgId } from "./tenant";

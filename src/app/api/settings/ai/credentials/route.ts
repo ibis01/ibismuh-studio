@@ -10,14 +10,15 @@
 // Empty apiKey = keep existing key (caller is masked).
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/ibismuh/tenant";
+import { requireRole } from "@/lib/ibismuh/tenant";
 import { upsertProviderCredential } from "@/lib/ibismuh/settings";
 import { getProviderCredential } from "@/lib/ibismuh/providers/settings";
 import { PROVIDERS_BY_CAPABILITY, type CapabilityId } from "@/lib/ibismuh/providers/registry";
 import { errorText } from "@/lib/ibismuh/redact";
 
 export async function PUT(req: NextRequest) {
-  const auth = await requireUser(req);
+  // F-3 (the audit): provider credentials are org-level secrets — owner-only.
+  const auth = await requireRole(req, "owner");
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   auth.enter();
   const userId = auth.ctx.userId;

@@ -10,6 +10,7 @@
 // Every run persists a QcReportRecord — QC is evidence, not a vibe.
 
 import { db } from "@/lib/ibismuh/tenant-db";
+import { orgId } from "./tenant";
 import { canonicalStringify } from "./canonical";
 import { resolveLane, type VideoType } from "./studio-lanes";
 import { ASPECT_GEOMETRY } from "./studio-catalogs";
@@ -19,7 +20,6 @@ import type { AudioReceipt } from "./audio-receipt";
 import type { LaneScene, PlannerOutput } from "./planner-types";
 import type { QcCheck, QcDTO } from "./api-dto";
 import {
-  ORG,
   loadProjectRow,
   parseLaneDoc,
   requireCurrentRevisionRow,
@@ -448,7 +448,7 @@ async function persistQcReport(projectId: string, dto: QcDTO, qcProfile: string)
   await db.qcReportRecord.create({
     data: {
       projectId,
-      organizationId: ORG,
+      organizationId: orgId(),
       overall: dto.overall,
       qcProfile,
       planFingerprint: dto.planFingerprint,
@@ -460,7 +460,7 @@ async function persistQcReport(projectId: string, dto: QcDTO, qcProfile: string)
 
 export async function getLatestQc(projectId: string): Promise<QcDTO | null> {
   await loadProjectRow(projectId);
-  const row = await db.qcReportRecord.findFirst({ where: { projectId, organizationId: ORG }, orderBy: { ranAt: "desc" } });
+  const row = await db.qcReportRecord.findFirst({ where: { projectId, organizationId: orgId() }, orderBy: { ranAt: "desc" } });
   if (!row) return null;
   try {
     const checks = JSON.parse(row.checksJson) as unknown;
@@ -486,7 +486,7 @@ export async function runQcForProject(projectId: string): Promise<QcDTO> {
   const plan = parsePlanEnvelope(revRow.planJson); // corrupted plan → 500 (fail closed; the plan-fingerprint check manifests as this error path)
   const laneDoc = parseLaneDoc(revRow.laneDocJson);
   const receiptRow = await db.audioReceiptRecord.findFirst({
-    where: { projectId, organizationId: ORG },
+    where: { projectId, organizationId: orgId() },
     orderBy: { createdAt: "desc" },
   });
   const receipt = receiptRow ? tryParseAudioReceipt(receiptRow.receiptJson) : null;

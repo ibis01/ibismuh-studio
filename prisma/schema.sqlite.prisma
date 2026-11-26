@@ -24,7 +24,8 @@ datasource db {
 // src/lib/ibismuh/tenant-db.ts (a Prisma client extension that injects
 // organizationId into every query for these models from the request's tenant
 // context) — raw db access in routes is forbidden by the ESLint rule
-// tf/no-raw-db-in-api (deep libs may use it only outside request scopes).
+// enforced as no-restricted-imports walls in eslint.config.mjs (deep libs
+// may use the raw gateway only outside request scopes).
 // ---------------------------------------------------------------------------
 
 model User {

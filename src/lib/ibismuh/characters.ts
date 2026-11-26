@@ -14,6 +14,7 @@ import { imageEdit, imageGenerate, imageEditSupported } from "./providers/image"
 import { getCapability } from "./providers/settings";
 import { voiceCatalog } from "./providers/tts";
 import { parseReferenceKeys, CHARACTER_REFERENCE_CAP } from "./references";
+import { restrictedSubjectAdmission, RestrictedSubjectAdmissionError } from "./restricted-subjects";
 import * as storage from "./storage";
 import {
   RIG_MOUTH_LEGACY_SLOTS,
@@ -223,6 +224,22 @@ export function buildPortraitPrompt(opts: {
  *     imageEdit seed (the user's ground truth over the model's freehand) —
  *     the same likeness lock scene paints get. Fails back to text-to-image
  *     when there are no refs, edits are unsupported, or the edit errors. */
+/** A-1 admission — a restricted figure has NO legitimate recognizable face
+ * asset in this application, whatever the surrounding video's policy says.
+ * Shared by the portrait generator and both character jobs (the poses job
+ * carries no name, so the job level scans the full row). Throws the named
+ * error the routes surface verbatim. */
+export function assertCharacterPolicyAdmission(
+  character: { name?: string | null; appearance?: string | null; identityAnchor?: string | null },
+  what: string
+): void {
+  const text = [character.name, character.appearance, character.identityAnchor]
+    .filter((v) => typeof v === "string" && v.trim().length > 0)
+    .join("\n");
+  const matches = restrictedSubjectAdmission(text);
+  if (matches.length > 0) throw new RestrictedSubjectAdmissionError(matches, what);
+}
+
 export async function generateCharacterPortrait(opts: {
   characterId: string;
   name: string;
@@ -232,6 +249,11 @@ export async function generateCharacterPortrait(opts: {
   /** The character row's referenceImages JSON (user uploads), oldest first. */
   referenceImages?: string | null;
 }): Promise<{ fileBytes: number }> {
+  // A-1 (the audit's P1): scan BEFORE any generation or reference edit —
+  // both the freehand path and the reference-seeded edit would mint a
+  // recognizable face asset for a restricted figure otherwise.
+  assertCharacterPolicyAdmission(opts, "Character portrait");
+
   const anchor = opts.identityAnchor?.trim() || buildAnchorFallback(opts.appearance, opts.artStyle);
   const style =
     ART_STYLES.find((s) => s.id === opts.artStyle)?.prompt ?? ART_STYLES[0].prompt;

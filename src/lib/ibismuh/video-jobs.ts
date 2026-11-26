@@ -2016,6 +2016,7 @@ export async function runThumbnailJob(videoId: string): Promise<void> {
           style: video.thumbStyle,
           videoId: video.id,
           concept,
+          contentPolicy: video.contentPolicy,
           character: video.character ?? null,
         }),
     });
@@ -2096,6 +2097,7 @@ export async function runVariantsJob(videoId: string): Promise<void> {
         videoId: video.id,
         variant: true,
         concept,
+        contentPolicy: video.contentPolicy,
       });
       // Ensure a primary thumbnail exists — promote the first variant
       if (!(await readMedia(video.id, "thumbnail.png"))) {

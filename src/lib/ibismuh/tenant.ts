@@ -65,6 +65,16 @@ export function currentCtx(): TenantCtx | null {
   return storage.getStore() ?? null;
 }
 
+/** The tenant-scoping value the projects/assets lane filters by — the
+ * audit's F-2 fix. The sandbox lane used to pin a constant "local" org for
+ * every query, bypassing the ctx every content lane follows. Now the value
+ * follows the entered ctx (requireUser → auth.enter()); the constant
+ * fallback keeps worker/migration callers (no request scope) on the same
+ * sandbox org they always wrote to. */
+export function orgId(): string {
+  return currentCtx()?.organizationId ?? "local";
+}
+
 /** Current tenant or throw — for modules that REQUIRE a user (settings reads). */
 export function assertCtx(where: string): TenantCtx {
   const ctx = currentCtx();

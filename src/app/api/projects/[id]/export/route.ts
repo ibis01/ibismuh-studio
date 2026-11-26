@@ -6,13 +6,13 @@
 // QC report, and the lane registry contract summary — everything a renderer
 // or downstream tool needs, with provenance intact.
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/ibismuh/tenant-db";
 import { parsePlanEnvelope, type VideoPlanEnvelope } from "@/lib/ibismuh/plan-envelope";
 import { RENDERER_VERSION, type PlannerOutput } from "@/lib/ibismuh/planner-types";
 import { resolveLane } from "@/lib/ibismuh/studio-lanes";
 import {
-  ORG,
+  orgId,
   errorResponse,
   loadProjectRow,
   mapAsset,
@@ -22,6 +22,7 @@ import {
   requireCurrentRevisionRow,
   tryParseAudioReceipt,
 } from "@/lib/ibismuh/dto-mappers";
+import { requireUser } from "@/lib/ibismuh/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,15 @@ function buildSrt(plan: VideoPlanEnvelope, laneDoc: PlannerOutput): string {
   return blocks.length ? blocks.join("\n\n") + "\n" : "";
 }
 
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }): Promise<Response> {
+  // The audit's F-2: the projects/assets lane admits through the SAME gate
+  // every content lane uses — signature-only middleware checks never
+  // replace the route-level guard (revoked sessions, bearers of any org,
+  // and the shared rate limiter all live here).
+  const auth = await requireUser(req);
+  if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  auth.enter(); // tenant scope: orgId() + the tenant-db query guard
+
   try {
     const { id } = await params;
     const project = await loadProjectRow(id);
@@ -65,16 +74,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const laneDoc = parseLaneDoc(revRow.laneDocJson);
 
     const assetRows = await db.assetRecord.findMany({
-      where: { projectId: id, organizationId: ORG },
+      where: { projectId: id, organizationId: orgId() },
       orderBy: { createdAt: "asc" },
     });
     const receiptRow = await db.audioReceiptRecord.findFirst({
-      where: { projectId: id, organizationId: ORG },
+      where: { projectId: id, organizationId: orgId() },
       orderBy: { createdAt: "desc" },
     });
     const receipt = receiptRow ? tryParseAudioReceipt(receiptRow.receiptJson) : null;
     const qcRow = await db.qcReportRecord.findFirst({
-      where: { projectId: id, organizationId: ORG },
+      where: { projectId: id, organizationId: orgId() },
       orderBy: { ranAt: "desc" },
     });
     const timingSource = mapTimingSource(plan, receipt);

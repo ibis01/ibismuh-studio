@@ -66,5 +66,8 @@ primary_region = "iad"
 
 [[vm]]
   processes = ["worker"]
-  size = "shared-cpu-4x"
+  # NOTE (audit): the org plan pins worker CPUs at 2 cores (see fly.toml's
+  # 2026-11-22 billing-cap receipt); a 4x pin would silently deploy a shape
+  # the plan cannot honor. Staging mirrors production sizing.
+  size = "shared-cpu-2x"
   memory = "4gb"

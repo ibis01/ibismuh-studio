@@ -386,7 +386,7 @@ async function readShotLocks(
   continuityClauses: string[];
 }> {
   const host = scene.hostInScene;
-  const [characterId, styleClause, appearanceClause, worldClause] =
+  const [characterId, styleClause, appearanceClause, worldClause, contentPolicy] =
     await Promise.all([
       host
         ? db
@@ -403,10 +403,15 @@ async function readShotLocks(
         ? getApprovedAppearanceClause(videoId, scene.index).catch(() => "")
         : Promise.resolve(""),
       getApprovedWorldClause(videoId, scene.index).catch(() => ""),
+      getVideoContentPolicy(videoId).catch(() => "standard" as const),
     ]);
-  const portrait = characterId
-    ? await readPortrait(characterId).catch(() => null)
-    : null;
+  // A-2 (the audit's P1): under the islamic-history policy the cast portrait
+  // never seeds a shot edit — the same law scene art obeys (story.ts): the
+  // sanitized text path paints the shot instead.
+  const portrait =
+    characterId && contentPolicy !== "islamic-history"
+      ? await readPortrait(characterId).catch(() => null)
+      : null;
   // Cast likeness > set-piece likeness (the scene-art priority law): a host
   // scene with a portrait never spends its single edit seed on the backdrop.
   let editSeed: ShotEditSeed | null = null;

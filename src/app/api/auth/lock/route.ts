@@ -8,7 +8,7 @@ import {
   sessionCookie,
 } from "@/lib/ibismuh/auth";
 import { getAuthSecret } from "@/lib/ibismuh/auth-token";
-import { requireUser, sessionIdFromRequest } from "@/lib/ibismuh/tenant";
+import { requireRole, sessionIdFromRequest } from "@/lib/ibismuh/tenant";
 
 /**
  * POST — owner control for password protection (Settings → Studio access).
@@ -28,7 +28,9 @@ export async function POST(req: NextRequest) {
   // 90-day API bearer must never flip the studio's global lock — the same
   // session-only law the token registry enforces (a leaked bearer must not
   // be able to change who can get in).
-  const auth = await requireUser(req);
+  // F-3 (the audit): the GLOBAL studio lock is owner-level — any future
+  // team member must never toggle it or clear its password.
+  const auth = await requireRole(req, "owner");
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
   if (!(await sessionIdFromRequest(req)))
     return NextResponse.json(

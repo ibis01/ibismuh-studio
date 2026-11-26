@@ -200,9 +200,16 @@ export function assertCompoundRegistry(
     // compound id + `-<digits>` makes instance 2 of the first compound
     // indistinguishable from the first instance of the second — the
     // group resolver could never tell them apart. Refused by name.
+    // Bidirectional (the audit's F-3): the check runs BOTH directions, so
+    // `[cycle, cycle-2]` and `[cycle-2, cycle]` both refuse — registry
+    // order must never change which registries are legal.
     for (const prior of seen) {
       const rest = spec.id.startsWith(`${prior}-`) ? spec.id.slice(prior.length + 1) : null;
       if (rest !== null && /^\d+$/.test(rest)) {
+        throw new Error(`compound registry: id "${spec.id}" collides with the instance namespace of "${prior}" (an id must not be another id + "-<digits>")`);
+      }
+      const priorRest = prior.startsWith(`${spec.id}-`) ? prior.slice(spec.id.length + 1) : null;
+      if (priorRest !== null && /^\d+$/.test(priorRest)) {
         throw new Error(`compound registry: id "${spec.id}" collides with the instance namespace of "${prior}" (an id must not be another id + "-<digits>")`);
       }
     }

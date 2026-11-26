@@ -210,6 +210,42 @@ export function scanRestrictedSubjects(
 }
 
 // ---------------------------------------------------------------------------
+// A-1 — the asset-source admission law (the audit's P1).
+//
+// The L1-L5 layers guard the VIDEO pipeline, but a recognizable PORTRAIT of a
+// restricted figure minted in Character Studio is policy-agnostic: it sits in
+// storage forever and can seed ANY later production through the host-likeness
+// edit — the exact bypass the audit demonstrated. So the source of a face
+// asset itself is gated, unconditionally: a character whose name/appearance
+// text names a restricted figure has NO legitimate recognizable portrait in
+// this application, whatever the surrounding video's policy says. Same law at
+// the reference-photo admission seam: the uploads feed the same portraits.
+// Pure helper + a named error the jobs and routes surface verbatim.
+// ---------------------------------------------------------------------------
+
+export class RestrictedSubjectAdmissionError extends Error {
+  readonly matches: PolicyMatch[];
+  constructor(matches: PolicyMatch[], what: string) {
+    super(
+      `${what} names a figure this application never depicts with a recognizable ` +
+        `face (${matches.map((m) => m.entry).join(", ")}). Compose around them instead: ` +
+        `calligraphy, sacred architecture, artifacts, light and landscape — see the content-policy guidance.`
+    );
+    this.name = "RestrictedSubjectAdmissionError";
+    this.matches = matches;
+  }
+}
+
+/** Refuse face-asset creation for a restricted figure — the A-1 law.
+ * `what` names the asset in the error ("Character portrait", "Cast reference").
+ * Returns the matches when a refusal is warranted; callers throw the error. */
+export function restrictedSubjectAdmission(
+  text: string
+): PolicyMatch[] {
+  return scanRestrictedSubjects(text, "islamic-history");
+}
+
+// ---------------------------------------------------------------------------
 // The alternative-composition clause library (what replaces a restricted
 // sentence). Deterministic per-sentence pick (hash) so consecutive sentences
 // vary; every clause is person-free by construction.

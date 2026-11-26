@@ -16,6 +16,7 @@
 
 import { mkdir, writeFile } from "node:fs/promises";
 import { db } from "@/lib/ibismuh/tenant-db";
+import { orgId } from "./tenant";
 import { canonicalStringify, sha256Hex, sha256HexBytes } from "./canonical";
 import { resolveLane, type VideoType } from "./studio-lanes";
 import { ASPECT_GEOMETRY, isVoiceId } from "./studio-catalogs";
@@ -57,7 +58,6 @@ import { synthesizeWav } from "./providers/zai-tts";
 import {
   ACTIVE_JOB_STATES,
   HttpError,
-  ORG,
   asAspect,
   asJobState,
   errorMessage,
@@ -111,7 +111,7 @@ async function writeAssetFile(storageKey: string, bytes: Uint8Array): Promise<vo
 
 async function listAssets(projectId: string): Promise<AssetDTO[]> {
   const rows = await db.assetRecord.findMany({
-    where: { projectId, organizationId: ORG },
+    where: { projectId, organizationId: orgId() },
     orderBy: { createdAt: "asc" },
   });
   return rows.map(mapAsset);
@@ -307,7 +307,7 @@ export async function compilePlan(
 
   // audio-measure (latest receipt, if any)
   const receiptRow = await db.audioReceiptRecord.findFirst({
-    where: { projectId, organizationId: ORG },
+    where: { projectId, organizationId: orgId() },
     orderBy: { createdAt: "desc" },
   });
   const audioReceipt = receiptRow ? tryParseAudioReceipt(receiptRow.receiptJson) : null;
@@ -332,7 +332,7 @@ export async function compilePlan(
 
   // Asset manifest — honest: empty at plan time is legal (recompile after assets land).
   const assetRows = await db.assetRecord.findMany({
-    where: { projectId, organizationId: ORG, kind: "image" },
+    where: { projectId, organizationId: orgId(), kind: "image" },
     orderBy: { createdAt: "asc" },
   });
   const assets: AssetManifestEntry[] = assetRows.map((a) => toManifestEntry(a, project.organizationId));
@@ -345,12 +345,12 @@ export async function compilePlan(
   };
 
   const agg = await db.planRevision.aggregate({
-    where: { projectId, organizationId: ORG },
+    where: { projectId, organizationId: orgId() },
     _max: { revision: true },
   });
   const revision = (agg._max.revision ?? 0) + 1;
   const currentRow = project.currentPlanRevisionId
-    ? await db.planRevision.findFirst({ where: { id: project.currentPlanRevisionId, organizationId: ORG } })
+    ? await db.planRevision.findFirst({ where: { id: project.currentPlanRevisionId, organizationId: orgId() } })
     : null;
   const parentRevision = currentRow ? currentRow.revision : undefined;
 
@@ -383,7 +383,7 @@ export async function compilePlan(
   const revRow = await db.planRevision.create({
     data: {
       projectId,
-      organizationId: ORG,
+      organizationId: orgId(),
       revision,
       parentRevision: parentRevision ?? null,
       status: "draft",
@@ -397,7 +397,7 @@ export async function compilePlan(
   });
 
   await db.planRevision.updateMany({
-    where: { projectId, organizationId: ORG, id: { not: revRow.id }, status: { not: "superseded" } },
+    where: { projectId, organizationId: orgId(), id: { not: revRow.id }, status: { not: "superseded" } },
     data: { status: "superseded" },
   });
   await db.studioProject.update({
@@ -456,7 +456,7 @@ export async function generateAssetsForPlan(projectId: string): Promise<AssetDTO
     await db.assetRecord.create({
       data: {
         projectId,
-        organizationId: ORG,
+        organizationId: orgId(),
         assetId,
         kind: "image",
         sourceKind: "generated",
@@ -617,7 +617,7 @@ export async function repairProject(projectId: string, input: RepairInput): Prom
       await db.assetRecord.create({
         data: {
           projectId,
-          organizationId: ORG,
+          organizationId: orgId(),
           assetId,
           kind: "image",
           sourceKind: "generated",
@@ -735,7 +735,7 @@ export async function generateNarrationReceipt(
     where: { projectId_assetId: { projectId, assetId: "narration-audio" } },
     create: {
       projectId,
-      organizationId: ORG,
+      organizationId: orgId(),
       assetId: "narration-audio",
       kind: "audio",
       sourceKind: "generated",
@@ -772,7 +772,7 @@ export async function generateNarrationReceipt(
   await db.audioReceiptRecord.create({
     data: {
       projectId,
-      organizationId: ORG,
+      organizationId: orgId(),
       sourceHash: contentHash,
       durationMs: result.durationMs,
       sampleRate: result.sampleRate,
@@ -1103,7 +1103,7 @@ async function handleRenderFailure(
 async function runRenderJob(jobId: string): Promise<void> {
   let job = await db.renderJob.findUnique({ where: { id: jobId } });
   if (!job) return;
-  const project = await db.studioProject.findFirst({ where: { id: job.projectId, organizationId: ORG } });
+  const project = await db.studioProject.findFirst({ where: { id: job.projectId, organizationId: orgId() } });
   if (!project) return;
 
   const stageRuns: StageRunDTO[] = STAGE_ORDER.map((stage) => ({ stage, status: "pending", fingerprint: "", inputs: {} }));
@@ -1134,7 +1134,7 @@ async function runRenderJob(jobId: string): Promise<void> {
     const lane = resolveLane(project.lane);
     const imageLane = laneNeedsImages(lane.type);
     const revRow = project.currentPlanRevisionId
-      ? await db.planRevision.findFirst({ where: { id: project.currentPlanRevisionId, organizationId: ORG } })
+      ? await db.planRevision.findFirst({ where: { id: project.currentPlanRevisionId, organizationId: orgId() } })
       : null;
     if (!revRow) throw new RenderStageError("invalid-input", "the current plan revision vanished — recompile");
     let plan: VideoPlanEnvelope;
@@ -1145,12 +1145,12 @@ async function runRenderJob(jobId: string): Promise<void> {
     }
     const laneDoc = parseLaneDoc(revRow.laneDocJson);
     const receiptRow = await db.audioReceiptRecord.findFirst({
-      where: { projectId: project.id, organizationId: ORG },
+      where: { projectId: project.id, organizationId: orgId() },
       orderBy: { createdAt: "desc" },
     });
     const receipt = receiptRow ? tryParseAudioReceipt(receiptRow.receiptJson) : null;
     const assetRows = await db.assetRecord.findMany({
-      where: { projectId: project.id, organizationId: ORG, kind: "image" },
+      where: { projectId: project.id, organizationId: orgId(), kind: "image" },
       orderBy: { createdAt: "asc" },
     });
 
@@ -1168,7 +1168,7 @@ async function runRenderJob(jobId: string): Promise<void> {
     // Stage cache: only within the SAME plan fingerprint, from the latest ready job.
     const priorMap = new Map<string, string>();
     const prior = await db.renderJob.findFirst({
-      where: { projectId: project.id, organizationId: ORG, planFingerprint: plan.fingerprint, state: "ready", id: { not: jobId } },
+      where: { projectId: project.id, organizationId: orgId(), planFingerprint: plan.fingerprint, state: "ready", id: { not: jobId } },
       orderBy: { createdAt: "desc" },
     });
     if (prior) {
@@ -1262,7 +1262,7 @@ async function allocateJob(
   action: "render" | "resume",
 ): Promise<RenderJob> {
   const priorCount = await db.renderJob.count({
-    where: { projectId: project.id, organizationId: ORG, planFingerprint },
+    where: { projectId: project.id, organizationId: orgId(), planFingerprint },
   });
   for (let attempt = priorCount; attempt < priorCount + 8; attempt++) {
     const key = idempotencyKey({ projectId: project.id, action, planFingerprint, attempt });
@@ -1272,7 +1272,7 @@ async function allocateJob(
       return await db.renderJob.create({
         data: {
           projectId: project.id,
-          organizationId: ORG,
+          organizationId: orgId(),
           kind,
           state: "queued",
           planFingerprint,
@@ -1301,17 +1301,17 @@ export async function startRender(projectId: string): Promise<JobDTO> {
   const { plan } = await loadRenderPlan(project); // 409 "compile a plan first" when absent
 
   const active = await db.renderJob.findFirst({
-    where: { projectId, organizationId: ORG, state: { in: ACTIVE_JOB_STATES } },
+    where: { projectId, organizationId: orgId(), state: { in: ACTIVE_JOB_STATES } },
   });
   if (active) throw new HttpError(409, `a render job is already ${active.state} for this project`);
 
   const last = await db.renderJob.findFirst({
-    where: { projectId, organizationId: ORG },
+    where: { projectId, organizationId: orgId() },
     orderBy: { createdAt: "desc" },
   });
   if (last && last.state === "needs-repair") {
     const qc = await db.qcReportRecord.findFirst({
-      where: { projectId, organizationId: ORG },
+      where: { projectId, organizationId: orgId() },
       orderBy: { ranAt: "desc" },
     });
     const gate = (last.endedAt ?? last.createdAt).getTime();
@@ -1335,7 +1335,7 @@ export async function startRender(projectId: string): Promise<JobDTO> {
 
 export async function cancelRender(jobId: string): Promise<JobDTO> {
   const job = await db.renderJob.findUnique({ where: { id: jobId } });
-  if (!job || job.organizationId !== ORG) throw new HttpError(404, "render job not found");
+  if (!job || job.organizationId !== orgId()) throw new HttpError(404, "render job not found");
   if (isRestState(asJobState(job.state))) throw new HttpError(409, `render job is in rest state "${job.state}" — nothing to cancel`);
 
   if (job.state === "retryable-failure") {
@@ -1364,12 +1364,12 @@ export async function cancelRender(jobId: string): Promise<JobDTO> {
 export async function cancelActiveRender(projectId: string): Promise<JobDTO> {
   await loadProjectRow(projectId);
   const job = await db.renderJob.findFirst({
-    where: { projectId, organizationId: ORG, state: { in: ACTIVE_JOB_STATES } },
+    where: { projectId, organizationId: orgId(), state: { in: ACTIVE_JOB_STATES } },
     orderBy: { createdAt: "desc" },
   });
   if (!job) {
     const retryable = await db.renderJob.findFirst({
-      where: { projectId, organizationId: ORG, state: "retryable-failure" },
+      where: { projectId, organizationId: orgId(), state: "retryable-failure" },
       orderBy: { createdAt: "desc" },
     });
     if (!retryable) throw new HttpError(409, "no active render job to cancel");
@@ -1384,7 +1384,7 @@ export async function resumeRender(projectId: string): Promise<JobDTO> {
   const { plan } = await loadRenderPlan(project);
 
   const last = await db.renderJob.findFirst({
-    where: { projectId, organizationId: ORG },
+    where: { projectId, organizationId: orgId() },
     orderBy: { createdAt: "desc" },
   });
   const resumable: readonly JobState[] = ["cancelled", "needs-repair", "failed", "retryable-failure"];
@@ -1392,7 +1392,7 @@ export async function resumeRender(projectId: string): Promise<JobDTO> {
     throw new HttpError(409, last ? `nothing to resume — last job is "${last.state}"` : "nothing to resume — no prior render");
   }
   const active = await db.renderJob.findFirst({
-    where: { projectId, organizationId: ORG, state: { in: ACTIVE_JOB_STATES } },
+    where: { projectId, organizationId: orgId(), state: { in: ACTIVE_JOB_STATES } },
   });
   if (active) throw new HttpError(409, `a render job is already ${active.state} for this project`);
 
@@ -1409,7 +1409,7 @@ export async function retryRender(projectId: string): Promise<JobDTO> {
   const project = await loadProjectRow(projectId);
   await requireCurrentRevisionRow(project);
   const last = await db.renderJob.findFirst({
-    where: { projectId, organizationId: ORG },
+    where: { projectId, organizationId: orgId() },
     orderBy: { createdAt: "desc" },
   });
   if (!last || last.state !== "retryable-failure") {

@@ -3,9 +3,36 @@ import { db } from "@/lib/ibismuh/tenant-db";
 import { requireUser } from "@/lib/ibismuh/tenant";
 import { invalidateRenderedArtifacts } from "@/lib/ibismuh/render";
 import { brandLogoKey, sanitizeBrandAccent } from "@/lib/ibismuh/slides";
+import { sniffImageFormat } from "@/lib/ibismuh/image-upload";
+import { sanitizeSvg } from "@/lib/ibismuh/whiteboard/svg";
 import * as storage from "@/lib/ibismuh/storage";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+/** SVG candidate check for the brand lane: valid UTF-8 (fatal decode), no
+ * NUL bytes, exactly one root <svg> element. The sanitizer runs afterwards
+ * (in POST); this sniff only decides WHETHER the bytes are an SVG document. */
+function sniffBrandSvg(buffer: Buffer): { ok: true; text: string } | { ok: false } {
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  } catch {
+    return { ok: false };
+  }
+  if (text.includes("\u0000")) return { ok: false };
+  const body = text
+    .replace(/^\uFEFF/, "")
+    .replace(/<\?[\s\S]*?\?>/g, "")
+    .replace(/<!DOCTYPE[\s\S]*?>/gi, "")
+    .trim();
+  const open = body.search(/<svg[\s>]/i);
+  if (open === -1) return { ok: false };
+  if (body.slice(0, open).trim().length > 0) return { ok: false };
+  const close = body.toLowerCase().lastIndexOf("</svg>");
+  if (close === -1) return { ok: false };
+  if (body.slice(close + 6).trim().length > 0) return { ok: false };
+  return { ok: true, text: body };
+}
 
 const LOGO_MIME: Record<string, string> = {
   png: "image/png",
@@ -44,6 +71,10 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       "Content-Type": LOGO_MIME[ext] ?? "application/octet-stream",
       "Content-Length": String(body.length),
       "Cache-Control": "private, no-cache",
+      // The audit's F-1 hardening: the logo is a served file — pin the
+      // disposition so no agent ever treats it as an executable document.
+      "Content-Disposition": `inline; filename="brand-logo.${ext}"`,
+      "X-Content-Type-Options": "nosniff",
     },
   });
 }
@@ -75,18 +106,39 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   if (!(file instanceof File))
     return NextResponse.json({ error: "Attach the logo as the 'file' field" }, { status: 400 });
 
-  const ext =
-    file.type === "image/png" ? "png"
-    : file.type === "image/webp" ? "webp"
-    : file.type === "image/svg+xml" ? "svg"
-    : null;
-  if (!ext)
-    return NextResponse.json(
-      { error: "Logos must be PNG, WebP, or SVG (transparency-friendly formats)" },
-      { status: 400 }
-    );
   if (file.size > MAX_LOGO_BYTES)
     return NextResponse.json({ error: "Logo exceeds the 5 MB limit" }, { status: 413 });
+
+  // The audit's F-1: the browser-supplied MIME type is UNTRUSTED — the bytes
+  // decide. Raster formats are admitted by magic-byte sniff (sniffImageFormat);
+  // SVG must be valid UTF-8 with exactly one root <svg> AND passes the same
+  // sanitizer the whiteboard lane trusts before a single byte is stored (the
+  // GET route serves these bytes back as image/svg+xml from the app origin).
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const sniffed = sniffImageFormat(buffer);
+  let ext: "png" | "webp" | "svg";
+  let bytes: Buffer;
+  if (sniffed === "png") {
+    ext = "png";
+    bytes = buffer;
+  } else if (sniffed === "webp") {
+    ext = "webp";
+    bytes = buffer;
+  } else if (sniffed === "jpeg" || sniffed === "heic") {
+    return NextResponse.json(
+      { error: "That file's bytes are JPEG/HEIC — convert it to PNG or WebP (transparency-friendly formats)" },
+      { status: 415 }
+    );
+  } else {
+    const svg = sniffBrandSvg(buffer);
+    if (!svg.ok)
+      return NextResponse.json(
+        { error: "Logos must be PNG, WebP, or SVG (detected by file content, not by name)" },
+        { status: 415 }
+      );
+    ext = "svg";
+    bytes = Buffer.from(sanitizeSvg(svg.text), "utf8");
+  }
 
   // One logo per video — remove other variants first (ext may change).
   // Stage 4a (T-4.0): the logo is a storage object, so variant swaps go
@@ -94,7 +146,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   for (const e of Object.keys(LOGO_MIME)) {
     if (e !== ext) await storage.remove(`${id}/brand-logo.${e}`).catch(() => {});
   }
-  await storage.put(`${id}/brand-logo.${ext}`, Buffer.from(await file.arrayBuffer()));
+  await storage.put(`${id}/brand-logo.${ext}`, bytes);
 
   // The badge is baked into slide PNGs at screenshot time — stale now.
   await invalidateRenderedArtifacts(id, { slidePngs: true });

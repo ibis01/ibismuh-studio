@@ -14,12 +14,101 @@ import { applyQcPolicy, parseQcReport, qcEnforcementMode, qcOverrideValid } from
 // fs.existsSync probes silently lied under the s3 driver and cost one stat
 // per video row on every list request.
 
+/**
+ * VIDEO_LIST_SELECT — the slim projection GET /api/videos reads (the audit's
+ * F-8): the serializer's scalar fields WITHOUT the megabyte-class JSON doc
+ * columns (whiteboardProject, graphicsDoc, renderManifest, shotList, scene3d,
+ * verifyReport, referenceAnalysis, retentionReport, consistency,
+ * directorState — the dead graphicsProject included). The list endpoint used
+ * to return every doc column for up to 200 rows, so its payload scaled with
+ * document size, not DTO size. The select lives HERE, co-located with
+ * serializeVideo (single source of truth): if the serializer starts reading
+ * a doc column, move it back into this select in the same commit. The
+ * VideoGetPayload typing makes any serializer read of an omitted field a
+ * COMPILE error — drift cannot happen silently.
+ */
+export const VIDEO_LIST_SELECT = {
+    id: true,
+    organizationId: true,
+    title: true,
+    topic: true,
+    niche: true,
+    tone: true,
+    length: true,
+    script: true,
+    description: true,
+    tags: true,
+    status: true,
+    voice: true,
+    ttsSpeed: true,
+    thumbStyle: true,
+    voiceSource: true,
+    voiceLabel: true,
+    format: true,
+    renderMode: true,
+    scenes: true,
+    hasStoryboard: true,
+    hasVideo: true,
+    hasPreview: true,
+    videoDuration: true,
+    hasVoiceover: true,
+    hasThumbnail: true,
+    audioDuration: true,
+    wordCount: true,
+    error: true,
+    channelId: true,
+    characterId: true,
+    commentsKit: true,
+    youtubeUrl: true,
+    publishedAt: true,
+    hasShort: true,
+    shortScene: true,
+    shortDuration: true,
+    musicEnabled: true,
+    musicTrackId: true,
+    musicTrack: true,
+    musicVolume: true,
+    musicFadeIn: true,
+    musicFadeOut: true,
+    musicDucking: true,
+    musicDuckingIntensity: true,
+    musicMood: true,
+    motionMode: true,
+    motionIntensity: true,
+    motionCurve: true,
+    motionVary: true,
+    transitionStyle: true,
+    transitionDuration: true,
+    brandAccent: true,
+    brandLogoOn: true,
+    qcReport: true,
+    qcOverrideAt: true,
+    qcOverrideNote: true,
+    qcOverrideForCheckedAt: true,
+    researchSources: true,
+    timeline: true,
+    aspectRatio: true,
+    frameRate: true,
+    burnCaptions: true,
+    contentPolicy: true,
+    spendCeilingMicro: true,
+    createdAt: true,
+    updatedAt: true,
+    organization: true,
+    channel: { select: { name: true } },
+    character: { select: { name: true, hasPortrait: true } },
+} satisfies import("@prisma/client").Prisma.VideoSelect;
+
+/** A row as fetched with VIDEO_LIST_SELECT (the slim list projection). */
+export type VideoListRow = import("@prisma/client").Prisma.VideoGetPayload<{
+  select: typeof VIDEO_LIST_SELECT;
+}>;
 type VideoWithJoins = Video & {
   character?: { name: string; hasPortrait: boolean } | null;
 };
 
 export async function serializeVideo(
-  v: VideoWithJoins,
+  v: VideoWithJoins | VideoListRow,
   channelName?: string | null,
   opts: {
     includeScenes?: boolean;
@@ -131,10 +220,19 @@ function parseQc(raw: string | null): import("./types").QcReportDTO | null {
 /** S40 — the ship-gate verdict for one video row: the standing report through
  * the enforcement matrix, plus the override's standing (a human accepted
  * exactly this report, or nobody did). */
-function buildQcGate(v: Video): QcGateDTO {
+function buildQcGate(v: Video | VideoListRow): QcGateDTO {
   const report = parseQcReport(v.qcReport);
   const decision = applyQcPolicy(report, { mode: qcEnforcementMode() });
-  const overridden = qcOverrideValid(v, report);
+  // Narrowed pick — the gate needs only the override triple, so the slim
+  // list row (no doc columns) qualifies for the same verdict.
+  const overridden = qcOverrideValid(
+    {
+      qcOverrideAt: v.qcOverrideAt,
+      qcOverrideNote: v.qcOverrideNote,
+      qcOverrideForCheckedAt: v.qcOverrideForCheckedAt,
+    },
+    report
+  );
   return {
     mode: decision.mode,
     policyVersion: decision.policyVersion,
