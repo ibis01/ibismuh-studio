@@ -305,7 +305,7 @@ export const GRAPHICS_ICON_LIBRARY: Readonly<Record<string, GraphicsIcon>> = {
       "M 10.2 17 L 15.1 18",
       "M 3 16 L 3.8 17",
     ],
-    tags: ["tractor", "farm", "agriculture", "machinery", "field", "equipment", "rural"],
+    tags: ["tractor", "farm", "agriculture", "machinery", "field", "farmland", "equipment", "rural"],
   },
   cow: {
     paths: [
@@ -399,7 +399,7 @@ export const GRAPHICS_ICON_LIBRARY: Readonly<Record<string, GraphicsIcon>> = {
       "M 4.9 19.1 L 6.6 15.7 L 8.3 17.4 Z",
       "M 19.1 4.9 L 17.4 8.3 L 15.7 6.6 Z",
     ],
-    tags: ["gear", "settings", "machine", "process", "system", "configuration", "engine"],
+    tags: ["gear", "settings", "machine", "process", "system", "configuration", "engine", "control"],
   },
   robot: {
     paths: [
@@ -431,7 +431,7 @@ export const GRAPHICS_ICON_LIBRARY: Readonly<Record<string, GraphicsIcon>> = {
       "M 21 12 L 17 12",
       "M 21 15 L 17 15",
     ],
-    tags: ["chip", "processor", "computer", "hardware", "cpu", "technology", "semiconductor"],
+    tags: ["chip", "processor", "computer", "hardware", "cpu", "technology", "semiconductor", "sensor", "ai"],
   },
   laptop: {
     paths: ["M 4 5 L 20 5 L 20 16 L 4 16 Z", "M 2 19 L 22 19 L 20 16 L 4 16 Z"],
@@ -625,7 +625,7 @@ export const GRAPHICS_ICON_LIBRARY: Readonly<Record<string, GraphicsIcon>> = {
   },
   "balance-scale": {
     paths: ["M 12 3 L 12 21", "M 8 21 L 16 21", "M 4 7 L 20 7", "M 12 3 L 12 7", "M 4 7 L 2 12 C 2 13.7, 3.3 15, 5 15 C 6.7 15, 8 13.7, 8 12 L 6 7", "M 20 7 L 18 12 C 18 13.7, 19.3 15, 21 15 C 22.7 15, 24 13.7, 24 12 L 22 7"],
-    tags: ["balance", "compare", "fair", "justice", "equal", "weigh", "decision", "law"],
+    tags: ["balance", "compare", "comparison", "values", "fair", "justice", "equal", "weigh", "decision", "law"],
   },
   contract: {
     paths: ["M 6 2 L 18 2 C 19 2, 20 3, 20 4 L 20 16 L 15 21 L 4 21 C 3 21, 3 20, 3 19 L 3 4 C 3 3, 4 2, 5 2 Z", "M 20 16 L 15 16 L 15 21", "M 7 7 L 14 7", "M 7 11 L 12 11"],
@@ -668,7 +668,7 @@ export const GRAPHICS_ICON_LIBRARY: Readonly<Record<string, GraphicsIcon>> = {
   },
   pipeline: {
     paths: ["M 3 8 L 10 8 C 12 8, 12 6, 14 6 L 21 6", "M 3 16 L 10 16 C 12 16, 12 18, 14 18 L 21 18", "M 10 5 L 10 11", "M 17 6 L 17 3", "M 17 18 L 17 21", "M 21 4 L 21 8", "M 21 16 L 21 20"],
-    tags: ["pipeline", "flow", "process", "sequence", "steps", "transport", "engineering", "ci"],
+    tags: ["pipeline", "flow", "process", "sequence", "steps", "transport", "engineering", "ci", "supply", "logistics"],
   },
   "robot-arm": {
     paths: [
@@ -741,7 +741,7 @@ export const GRAPHICS_ICON_LIBRARY: Readonly<Record<string, GraphicsIcon>> = {
   // ------------------------------------------------------------------
   lock: {
     paths: ["M 5 11 L 19 11 C 20 11, 20.5 11.5, 20.5 12.5 L 20.5 19 C 20.5 20, 20 20.5, 19 20.5 L 5 20.5 C 4 20.5, 3.5 20, 3.5 19 L 3.5 12.5 C 3.5 11.5, 4 11, 5 11 Z", "M 8 11 L 8 7 C 8 4.8, 9.8 3, 12 3 C 14.2 3, 16 4.8, 16 7 L 16 11", "M 12 14.5 L 12 17"],
-    tags: ["lock", "secure", "security", "private", "protected", "encryption", "access"],
+    tags: ["lock", "secure", "security", "private", "protected", "encryption", "access", "cybersecurity", "password"],
   },
   unlock: {
     paths: ["M 5 11 L 19 11 C 20 11, 20.5 11.5, 20.5 12.5 L 20.5 19 C 20.5 20, 20 20.5, 19 20.5 L 5 20.5 C 4 20.5, 3.5 20, 3.5 19 L 3.5 12.5 C 3.5 11.5, 4 11, 5 11 Z", "M 8 11 L 8 7 C 8 4.8, 9.8 3, 12 3 C 14.2 3, 16 4.8, 16 7"],
@@ -749,7 +749,7 @@ export const GRAPHICS_ICON_LIBRARY: Readonly<Record<string, GraphicsIcon>> = {
   },
   shield: {
     paths: ["M 12 3 L 20 6 L 20 12 C 20 16.5, 16.5 20.3, 12 21.5 C 7.5 20.3, 4 16.5, 4 12 L 4 6 Z"],
-    tags: ["shield", "protect", "security", "defense", "safe", "guard", "firewall"],
+    tags: ["shield", "protect", "security", "defense", "safe", "guard", "firewall", "cybersecurity"],
   },
   "shield-check": {
     paths: ["M 12 3 L 20 6 L 20 12 C 20 16.5, 16.5 20.3, 12 21.5 C 7.5 20.3, 4 16.5, 4 12 L 4 6 Z", "M 8.5 12 L 11 14.5 L 15.5 9.5"],
