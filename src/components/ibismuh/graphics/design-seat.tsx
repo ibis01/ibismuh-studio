@@ -33,9 +33,14 @@ export interface DesignSeatProps {
   /** Place a semantic component through the ONE expansion seam. Returns
    *  a named refusal when the derived ids collide with the scene. */
   onPlaceComponent: (componentId: string, content: ComponentContent) => { ok: boolean; why?: string };
-  /** Re-apply a recipe's ENTER choreography to the scene's existing
-   *  elements (kind-order compiled through recipeEnterFor). */
+  /** Re-apply a recipe to the SCENE's existing elements — BOTH motion
+   *  slots recompile (recipeEnterFor/recipeExitFor) and scene.recipe
+   *  STAMPS the citation (the re-audit's step 4: persisted, validated,
+   *  inheriting from the doc when the scene names none). */
   onApplyRecipe: (recipeId: string) => { ok: boolean; why?: string };
+  /** The doc-wide apply: every scene recompiles, doc.recipe stamps, the
+   *  scene citations clear (one choice, no stale forks). */
+  onApplyRecipeDoc?: (recipeId: string) => { ok: boolean; why?: string };
 }
 
 function IconGlyph({ paths, className }: { paths: readonly string[]; className?: string }) {
@@ -56,7 +61,7 @@ function IconGlyph({ paths, className }: { paths: readonly string[]; className?:
   );
 }
 
-export function GraphicsDesignSeat({ disabled, onInsertIcon, onPlaceComponent, onApplyRecipe }: DesignSeatProps) {
+export function GraphicsDesignSeat({ disabled, onInsertIcon, onPlaceComponent, onApplyRecipe, onApplyRecipeDoc }: DesignSeatProps) {
   // The icon browser's memory: the free-text query filters id + tags —
   // deterministic order (id asc), the head of the vocabulary first.
   const [iconQuery, setIconQuery] = useState("");
@@ -186,16 +191,29 @@ export function GraphicsDesignSeat({ disabled, onInsertIcon, onPlaceComponent, o
             disabled={disabled}
             onClick={() => {
               const res = onApplyRecipe(recipeId);
-              setStatus(res.ok ? `applied the "${recipeId}" ENTER choreography to this scene's elements` : (res.why ?? "refused"));
+              setStatus(res.ok ? `applied the "${recipeId}" recipe to this scene — both motion slots recompiled, the scene cites it` : (res.why ?? "refused"));
             }}
             className={btnGhost}
           >
-            Apply enters
+            Apply to scene
           </button>
+          {onApplyRecipeDoc && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                const res = onApplyRecipeDoc(recipeId);
+                setStatus(res.ok ? `applied the "${recipeId}" recipe to the whole doc — the doc cites it, scene citations cleared` : (res.why ?? "refused"));
+              }}
+              className={btnGhost}
+            >
+              Apply to doc
+            </button>
+          )}
         </div>
         {recipe && <p className="mt-1.5 text-xs text-white/50">{recipe.intent}</p>}
         <p className="mt-1 text-xs text-white/30">
-          re-applies each element&apos;s ENTER per kind-order (recipeEnterFor) — the exits stay the planner&apos;s one law
+          persists the choice: both motion slots recompile (recipeEnterFor / recipeExitFor) and the doc/scene cites the recipe — the validator refuses a stale id
         </p>
       </div>
 

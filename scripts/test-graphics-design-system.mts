@@ -55,6 +55,8 @@ import {
   nativeExitFor,
 } from "../src/lib/ibismuh/graphics/native-defaults";
 import { scaffoldGraphicsDoc } from "../src/lib/ibismuh/graphics/planner";
+import { applyDocRecipe, applySceneRecipe } from "../src/lib/ibismuh/graphics/recipes";
+import { effectiveRecipe } from "../src/lib/ibismuh/graphics/recipe-ids";
 import {
   GRAPHICS_ELEMENT_KINDS,
   legalMotions,
@@ -782,6 +784,105 @@ await test("the check chain and CI carry the battery", () => {
   ok(pkg.scripts.check?.includes("test:graphics-design"), "the check chain carries the battery");
   const ci = fs.readFileSync(".github/workflows/ci.yml", "utf8");
   ok(ci.includes("npm run test:graphics-design"), "CI carries the battery step");
+});
+
+// ---------------------------------------------------------------------------
+// The RECIPE PERSISTENCE SEAM (the re-audit's step 4)
+// ---------------------------------------------------------------------------
+
+suiteStart("recipe persistence — validated fields, inheritance, baseline preserved");
+
+const PERSIST_STORY = [
+  { index: 1, title: "The opener", narration: "A quiet line." },
+  { index: 2, title: "The build", narration: "The list builds: one, two, three." },
+  { index: 3, title: "Growth", narration: "Revenue climbed 42% versus 30." },
+];
+
+await test("the validator judges the recipe fields: real ids ride, junk refuses, absent stays absent", () => {
+  const base = scaffoldGraphicsDoc({ scenes: PERSIST_STORY, topic: "Persistence" });
+  const noRecipe = JSON.parse(JSON.stringify(base)) as Record<string, unknown>;
+  eq((noRecipe as { recipe?: string }).recipe, undefined, "an absent recipe stays absent (byte-identical legacy)");
+  const rNone = validateGraphicsDoc(noRecipe);
+  ok(rNone.doc !== null, "the recipe-less doc validates");
+  const stamped = { ...noRecipe, recipe: "cascade-list" };
+  const rOk = validateGraphicsDoc(stamped);
+  ok(rOk.doc !== null && rOk.doc.recipe === "cascade-list", "a real recipe id rides the doc");
+  const junk = { ...noRecipe, recipe: "not-a-recipe" };
+  const rJunk = validateGraphicsDoc(junk);
+  ok(rJunk.doc === null && rJunk.errors.some((e) => /not one of the closed recipes/.test(e)), `a junk doc recipe refuses: ${rJunk.errors.join(" | ")}`);
+  const sceneJunk = JSON.parse(JSON.stringify(base)) as { scenes: Record<string, unknown>[] };
+  sceneJunk.scenes[1].recipe = "nope";
+  const rSceneJunk = validateGraphicsDoc(sceneJunk);
+  ok(rSceneJunk.doc === null && rSceneJunk.errors.some((e) => /not one of the closed recipes/.test(e)), `a junk scene recipe refuses: ${rSceneJunk.errors.join(" | ")}`);
+  const sceneOk = JSON.parse(JSON.stringify(base)) as { scenes: Record<string, unknown>[] };
+  sceneOk.scenes[1].recipe = "quiet-card";
+  const rSceneOk = validateGraphicsDoc(sceneOk);
+  ok(rSceneOk.doc !== null && rSceneOk.doc.scenes[1]?.recipe === "quiet-card", "a real scene recipe rides the scene");
+});
+
+await test("the inheritance law: scene override wins, then the doc, then the baseline", () => {
+  eq(effectiveRecipe({}, {}), "house-baseline", "absent everywhere → the identity recipe");
+  eq(effectiveRecipe({ recipe: "chart-grow" }, {}), "chart-grow", "the doc choice inherits");
+  eq(effectiveRecipe({ recipe: "chart-grow" }, { recipe: "quiet-card" }), "quiet-card", "the scene override wins");
+  // Junk never resolves (the validator refuses it upstream — this is the
+  // belt for in-memory states only).
+  eq(effectiveRecipe({ recipe: "junk" }, {}), "house-baseline", "junk falls back to the baseline, never a crash");
+});
+
+await test("the scaffold compiles and CITES: recipeId present stamps + recompiles; absent is byte-identical", () => {
+  const plain = scaffoldGraphicsDoc({ scenes: PERSIST_STORY, topic: "Persistence" });
+  const plainAgain = scaffoldGraphicsDoc({ scenes: PERSIST_STORY, topic: "Persistence" });
+  eq(JSON.stringify(plain), JSON.stringify(plainAgain), "the absent-recipe scaffold is deterministic");
+  eq((plain as { recipe?: string }).recipe, undefined, "no recipe → no citation");
+  const withRecipe = scaffoldGraphicsDoc({ scenes: PERSIST_STORY, topic: "Persistence", recipeId: "cascade-list" });
+  eq(withRecipe.recipe, "cascade-list", "the doc cites the recipe it compiled");
+  // The recipe's bullet override rides the list scene's bullets.
+  const listScene = withRecipe.scenes[1];
+  const bullets = listScene.elements.filter((e) => e.kind === "bullet");
+  ok(bullets.length > 0, "the list scene carries bullets");
+  for (const [i, b] of bullets.entries()) {
+    eq(b.enter, recipeEnterFor("bullet", i, "cascade-list"), `bullet ${i}: the enter compiled under the recipe`);
+    eq(b.enter, recipeEnterFor("bullet", i, "cascade-list"), `bullet ${i}: the citation and the bytes agree`);
+  }
+  const plainBullets = plain.scenes[1].elements.filter((e) => e.kind === "bullet");
+  ok(JSON.stringify(bullets[0]?.enter) !== JSON.stringify(plainBullets[0]?.enter), "the recipe's override differs from the native default (cascade-list's bullet rises)");
+  // The exit slot recompiles too (the recipe's tail anchors).
+  const r = validateGraphicsDoc(withRecipe);
+  ok(r.doc !== null, `the recipe scaffold validates clean: ${r.errors.join(" | ")}`);
+  throws(
+    () => scaffoldGraphicsDoc({ scenes: PERSIST_STORY, topic: "t", recipeId: "ghost-recipe" }),
+    /unknown recipe id/,
+    "an unknown recipe id throws named at the planner seam"
+  );
+});
+
+await test("the persistence helpers recompile + stamp; the doc apply owns the choice", () => {
+  const base = scaffoldGraphicsDoc({ scenes: PERSIST_STORY, topic: "Persistence" });
+  // The scene apply: recompile + stamp the scene.
+  const sceneApplied = applySceneRecipe(base.scenes[1], "quiet-card");
+  eq(sceneApplied.recipe, "quiet-card", "the scene cites its recipe");
+  const quietHeadline = sceneApplied.elements.find((e) => e.kind === "headline");
+  ok(quietHeadline !== undefined && quietHeadline.enter.kind === "fade", "the quiet-card headline fades (the recipe's override)");
+  const r1 = validateGraphicsDoc({ ...base, scenes: base.scenes.map((s, i) => (i === 1 ? sceneApplied : s)) });
+  ok(r1.doc !== null, "the scene-applied doc validates");
+  // The doc apply: stamp + recompile ALL + clear scene stamps.
+  const sceneStamped = JSON.parse(JSON.stringify(base)) as typeof base;
+  sceneStamped.scenes[0].recipe = "problem-solution";
+  const docApplied = applyDocRecipe(sceneStamped, "cascade-list");
+  eq(docApplied.recipe, "cascade-list", "the doc cites the recipe");
+  ok(docApplied.scenes.every((s) => s.recipe === undefined), "the stale scene citations cleared (one choice, no forks)");
+  const listBullets = docApplied.scenes[1].elements.filter((e) => e.kind === "bullet");
+  for (const [i, b] of listBullets.entries()) {
+    eq(b.enter, recipeEnterFor("bullet", i, "cascade-list"), `bullet ${i}: recompiled under the doc-wide recipe`);
+  }
+  const r2 = validateGraphicsDoc(docApplied);
+  ok(r2.doc !== null, "the doc-applied doc validates");
+  // Determinism.
+  eq(
+    JSON.stringify(applyDocRecipe(sceneStamped, "cascade-list")),
+    JSON.stringify(docApplied),
+    "deterministic: same input → the same bytes"
+  );
 });
 
 // --- summary ------------------------------------------------------------------

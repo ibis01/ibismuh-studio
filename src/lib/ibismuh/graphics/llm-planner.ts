@@ -57,6 +57,7 @@ import {
   type GraphicsSceneInput,
   scaffoldGraphicsDoc,
 } from "./planner";
+import { applyDocRecipe, resolveRecipe } from "./recipes";
 import {
   componentNames,
   expandComponent,
@@ -906,6 +907,11 @@ export async function scaffoldGraphicsDocLlm(
     width?: number;
     height?: number;
     fps?: number;
+    /** THE RECIPE FIELD (the re-audit's step 4): the doc-wide recipe — the
+     *  native base compiles and cites it, and the composed proposals'
+     *  motions recompile under it after the merge (the citation and the
+     *  bytes cannot drift apart). Unknown ids fail in scaffoldGraphicsDoc. */
+    recipeId?: string;
   },
   opts: { ask?: () => Promise<string>; call?: PlannerCall } = {},
 ): Promise<{ doc: GraphicsDoc; report: GraphicsLlmPlannerReport }> {
@@ -953,8 +959,12 @@ export async function scaffoldGraphicsDocLlm(
       return degrade("every element was dropped in normalization — no scene was servable");
     }
     const doc = composeGraphicsDoc(native, input.scenes, served);
+    // THE RECIPE PASS: when a recipe is named, the merged doc's motions
+    // (base AND composed elements) recompile under it — one citation, one
+    // compile law, no drift between the two element populations.
+    const resolved = input.recipeId !== undefined ? resolveRecipe(input.recipeId) : null;
     return {
-      doc,
+      doc: resolved !== null ? applyDocRecipe(doc, resolved.id) : doc,
       report: {
         planner: "llm",
         servedScenes: served.size,

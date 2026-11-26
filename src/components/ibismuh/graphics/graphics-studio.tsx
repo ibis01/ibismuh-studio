@@ -50,7 +50,9 @@ import { GraphicsMotionPanel, defaultElementFor } from "@/components/ibismuh/gra
 import { GraphicsDesignSeat } from "@/components/ibismuh/graphics/design-seat";
 import { GRAPHICS_ICON_LIBRARY } from "@/lib/ibismuh/graphics/icons";
 import { expandComponent, type ComponentContent } from "@/lib/ibismuh/graphics/components";
-import { recipeEnterFor, resolveRecipe } from "@/lib/ibismuh/graphics/recipes";
+import { applyDocRecipe, applySceneRecipe, resolveRecipe } from "@/lib/ibismuh/graphics/recipes";
+import { applyGraphicsRepairs, proposeGraphicsRepairs, type GraphicsRepair } from "@/lib/ibismuh/graphics/repair";
+import { solveGraphicsLayout } from "@/lib/ibismuh/graphics/layout";
 
 interface GraphicsBudgetReport {
   fps: 24 | 30;
@@ -536,20 +538,25 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
     (sceneIndex: number, recipeId: string): { ok: boolean; why?: string } => {
       const recipe = resolveRecipe(recipeId);
       if (!recipe) return { ok: false, why: `unknown recipe "${recipeId}"` };
-      patchSceneDoc(sceneIndex, (s) => {
-        const orders = new Map<GraphicsElementKind, number>();
-        return {
-          ...s,
-          elements: s.elements.map((el) => {
-            const order = orders.get(el.kind) ?? 0;
-            orders.set(el.kind, order + 1);
-            return { ...el, enter: recipeEnterFor(el.kind, order, recipe.id) };
-          }),
-        };
-      });
+      // THE PERSISTED APPLY (the re-audit's step 4): the scene recompiles
+      // BOTH motion slots under the recipe and STAMPS scene.recipe — the
+      // citation and the bytes cannot drift. The doc-wide apply clears the
+      // scene citations (one choice, no stale forks).
+      patchSceneDoc(sceneIndex, (s) => applySceneRecipe(s, recipe.id));
       return { ok: true };
     },
     [patchSceneDoc],
+  );
+
+  const applyRecipeEverywhere = useCallback(
+    (recipeId: string): { ok: boolean; why?: string } => {
+      const recipe = resolveRecipe(recipeId);
+      if (!recipe) return { ok: false, why: `unknown recipe "${recipeId}"` };
+      setBuffer((b) => (b ? applyDocRecipe(b, recipe.id) : b));
+      setDirty(true);
+      return { ok: true };
+    },
+    [],
   );
 
   if (loading) {
@@ -802,6 +809,7 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
               onInsertIcon={(iconId) => insertIconElement(activeSceneIndex, iconId)}
               onPlaceComponent={(componentId, content) => placeComponentElement(activeSceneIndex, componentId, content)}
               onApplyRecipe={(recipeId) => applyRecipeEnters(activeSceneIndex, recipeId)}
+              onApplyRecipeDoc={(recipeId) => applyRecipeEverywhere(recipeId)}
             />
           </div>
         );
@@ -842,6 +850,64 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
           </ul>
         </details>
       )}
+
+      {/* THE REPAIR PANEL (the re-audit's step 5): the layout solver's
+          findings through the deterministic repair seam — explicit user
+          repair actions, never an automatic mutation. Density and
+          label-fit are declared unrepairable (an authoring act / the
+          payload's own data) and say so. */}
+      {(() => {
+        if (!buffer) return null;
+        const solve = solveGraphicsLayout(buffer);
+        const findings = solve.scenes.flatMap((s) => s.findings);
+        if (findings.length === 0) return null;
+        const repairs = proposeGraphicsRepairs(buffer, solve);
+        const unrepairable = findings.filter((f) => !repairs.some((r) => r.sceneId === f.sceneId && r.elementId === f.elementId && r.gate === f.gate));
+        const applyRepairs = (list: GraphicsRepair[]) => {
+          setBuffer((b) => (b ? applyGraphicsRepairs(b, list).doc : b));
+          setDirty(true);
+        };
+        return (
+          <details className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs">
+            <summary className="cursor-pointer text-amber-200/80">
+              Layout repairs — {repairs.length} mechanical fix{repairs.length === 1 ? "" : "es"} proposed
+              {unrepairable.length > 0 ? `, ${unrepairable.length} need${unrepairable.length === 1 ? "s" : ""} an authoring act` : ""}
+            </summary>
+            <ul className="mt-2 space-y-1.5">
+              {repairs.map((r) => (
+                <li key={`${r.sceneId}/${r.elementId}/${r.kind}`} className="flex flex-wrap items-center gap-2">
+                  <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-white/60">{r.gate}</span>
+                  <span className="text-white/70">{r.detail}</span>
+                  <button
+                    type="button"
+                    onClick={() => applyRepairs([r])}
+                    className="ml-auto rounded-md bg-white/10 px-2 py-1 text-white/80 hover:bg-white/20"
+                  >
+                    Fix
+                  </button>
+                </li>
+              ))}
+              {repairs.length >= 2 && (
+                <li className="pt-1">
+                  <button
+                    type="button"
+                    onClick={() => applyRepairs(repairs)}
+                    className="rounded-md bg-white/10 px-2 py-1 text-white/80 hover:bg-white/20"
+                  >
+                    Apply all {repairs.length} fixes
+                  </button>
+                </li>
+              )}
+              {unrepairable.map((f) => (
+                <li key={`unrepairable-${f.sceneId}/${f.elementId}/${f.gate}`} className="flex flex-wrap items-center gap-2 text-white/40">
+                  <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono">{f.gate}</span>
+                  <span>{f.sceneId}/{f.elementId}: {f.detail}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        );
+      })()}
 
       {/* Scene editors */}
       <div className="space-y-2">

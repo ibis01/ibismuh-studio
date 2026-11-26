@@ -42,6 +42,7 @@ import { estimateNarrationMs } from "../whiteboard/timing";
 // never the reverse — no cycle).
 import { sanitizeNativeTransitionSpec } from "./transitions";
 import type { TransitionSpec } from "./transitions";
+import { GRAPHICS_RECIPE_IDS } from "./recipe-ids";
 
 // ---------------------------------------------------------------------------
 // Version + id law
@@ -442,6 +443,12 @@ export interface GraphicsScene {
    *  decoration-class parse, time-sanity error-class). Projected globally
    *  by graphicsEventList — never a track kind (cues are not clips). */
   events?: GraphicsEvent[];
+  /** THE RECIPE FIELD (the re-audit's step 4): this scene's recipe
+   *  citation — the scene override in the doc → scene inheritance (the
+   *  effective recipe is scene.recipe ?? doc.recipe ?? house-baseline).
+   *  The validator refuses anything outside the closed vocabulary.
+   *  ABSENT = inherit (byte-identical legacy shape). */
+  recipe?: string;
   elements: GraphicsElement[];
 }
 
@@ -463,6 +470,11 @@ export interface GraphicsDoc {
    *  spec through sanitizeNativeTransitionSpec (closed type set, the
    *  frames wall, junk decorations drop honestly). */
   nativeTransitions?: TransitionSpec[];
+  /** THE RECIPE FIELD (the re-audit's step 4): the doc-wide recipe
+   *  citation — the project-level choice every scene inherits unless it
+   *  names its own. The validator refuses anything outside the closed
+   *  vocabulary. ABSENT = the house baseline (byte-identical legacy). */
+  recipe?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -577,8 +589,25 @@ const ELEMENT_KEYS = new Set([
   "opacity",
 ]);
 
-const DOC_KEYS = new Set(["version", "title", "width", "height", "fps", "scenes", "nativeTransitions"]);
-const SCENE_KEYS = new Set(["id", "narration", "durationMs", "background", "routing", "camera", "events", "elements"]);
+const DOC_KEYS = new Set(["version", "title", "width", "height", "fps", "scenes", "nativeTransitions", "recipe"]);
+const SCENE_KEYS = new Set(["id", "narration", "durationMs", "background", "routing", "camera", "events", "elements", "recipe"]);
+
+/** THE RECIPE FIELD LAW (the re-audit's step 4): a persisted recipe choice
+ *  is INTEGRITY, not decoration — a saved doc cites the id its motions
+ *  were compiled from, so a typo must refuse, never silently render as
+ *  the baseline (the whiteboard profile-stamp law, one house voice).
+ *  Junk/absent-on-write handling: absent parses absent (byte-identical);
+ *  anything outside the closed vocabulary is an ERROR. */
+function parseRecipeField(raw: unknown, where: string, errors: string[]): string | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== "string" || !(GRAPHICS_RECIPE_IDS as readonly string[]).includes(raw)) {
+    errors.push(
+      `${where}: recipe "${String(raw).slice(0, 40)}" is not one of the closed recipes (${GRAPHICS_RECIPE_IDS.join(", ")})`,
+    );
+    return undefined;
+  }
+  return raw;
+}
 
 const ROUTING_KEYS = new Set(["suggestedEngine", "confidence", "reason"]);
 
@@ -1623,11 +1652,16 @@ function parseScene(
   // an error, never a default (absent stays absent). The scene parses
   // identically with, without, or with junk routing — the neutrality pin.
   const routing = parseRoutingHints(raw.routing, where, warnings);
+  // THE RECIPE FIELD (the re-audit's step 4): a persisted recipe citation —
+  // ERROR-class (integrity, not decoration); absent stays absent.
+  const sceneRecipe = parseRecipeField(raw.recipe, where, errors);
+  if (errors.length > 0) return null;
   const scene: GraphicsScene = { id, narration, background, elements };
   if (explicitMs !== null && explicitMs > 0) scene.durationMs = explicitMs;
   if (routing !== null) scene.routing = routing;
   if (camera !== null) scene.camera = camera;
   if (events !== null) scene.events = events;
+  if (sceneRecipe !== undefined) scene.recipe = sceneRecipe;
   return scene;
 }
 
@@ -1777,6 +1811,9 @@ function parseDoc(raw: unknown, warnings: string[], errors: string[]): GraphicsD
       else warnings.push("doc nativeTransitions carried no surviving specs — dropped (absent stays absent)");
     }
   }
+  // THE RECIPE FIELD at the doc level (the re-audit's step 4): the
+  // project-wide recipe citation — ERROR-class; absent stays absent.
+  const docRecipe = parseRecipeField(raw.recipe, "doc", errors);
   return {
     version: GRAPHICS_VERSION,
     title,
@@ -1784,6 +1821,7 @@ function parseDoc(raw: unknown, warnings: string[], errors: string[]): GraphicsD
     height,
     fps: fps as 24 | 30,
     scenes,
+    ...(docRecipe !== undefined ? { recipe: docRecipe } : {}),
     ...(nativeTransitions !== undefined ? { nativeTransitions } : {}),
   };
 }

@@ -38,6 +38,8 @@ import {
   textPayload,
 } from "./native-defaults";
 import { expandComponent } from "./components";
+import { recipeEnterFor, recipeExitFor, resolveRecipe } from "./recipes";
+import { GRAPHICS_RECIPE_IDS, type GraphicsRecipeId } from "./recipe-ids";
 
 // G1.5 — the icon vocabulary moved to ./icons.ts (the audit's Priority 1:
 // 4 starter icons → the production vocabulary). planner.ts RE-EXPORTS the
@@ -484,6 +486,13 @@ export function scaffoldGraphicsDoc(input: {
   width?: number;
   height?: number;
   fps?: number;
+  /** THE RECIPE FIELD (the re-audit's step 4): the doc-wide recipe the
+   *  scaffold compiles and CITES. Absent = the house baseline — every
+   *  existing scaffold is byte-identical (recipeEnterFor/recipeExitFor
+   *  fall through to the native table under house-baseline BY LAW).
+   *  An unknown id THROWS (the planner seam fails closed — a scaffold
+   *  citing a recipe it did not compile would be a lie). */
+  recipeId?: string;
 }): GraphicsDoc {
   if (input.scenes.length === 0) {
     throw new Error("graphics scaffold needs at least one story scene");
@@ -497,6 +506,17 @@ export function scaffoldGraphicsDoc(input: {
   const [width, height] = snapSurface(input.width, input.height);
   const fps = input.fps === 30 ? 30 : 24;
   const topic = capLine(input.topic, 120);
+  // The recipe resolution: fail-closed at the seam (an unknown id is a
+  // caller bug — the compile would otherwise silently drift from the
+  // citation). The resolved id rides the doc and every scene's motions.
+  let recipeId: GraphicsRecipeId | undefined;
+  if (input.recipeId !== undefined) {
+    const resolved = resolveRecipe(input.recipeId);
+    if (resolved === null) {
+      throw new Error(`graphics scaffold: unknown recipe id "${input.recipeId}" — a scaffold may only name the registry's recipes (${GRAPHICS_RECIPE_IDS.join(", ")})`);
+    }
+    recipeId = resolved.id;
+  }
 
   const draft: GraphicsScene[] = input.scenes.map((s, i) => {
     const isFirst = i === 0;
@@ -611,6 +631,12 @@ export function scaffoldGraphicsDoc(input: {
   // these fields renders byte-identically (the appliers no-op); THIS
   // scaffold now emits them, which is the deliberate visual change the
   // golden harness re-baselines on purpose.
+  //
+  // THE RECIPE PASS (the re-audit's step 4): when a recipe is named, BOTH
+  // slots recompile through recipeEnterFor/recipeExitFor — the citations
+  // and the motions cannot drift apart. house-baseline compiles to the
+  // native table BY LAW (the identity recipe), so the absent-recipe path
+  // below stays byte-identical to every pre-recipe scaffold.
   const staged: GraphicsScene[] = draft.map((scene) => {
     const sceneMs = estimateNarrationMs(scene.narration);
     const counts = new Map<string, number>();
@@ -620,6 +646,13 @@ export function scaffoldGraphicsDoc(input: {
       const order = seen.get(el.kind) ?? 0;
       seen.set(el.kind, order + 1);
       const count = counts.get(el.kind) ?? 1;
+      if (recipeId !== undefined) {
+        return {
+          ...el,
+          enter: recipeEnterFor(el.kind, order, recipeId),
+          exit: recipeExitFor(el.kind, order, sceneMs, count, recipeId),
+        };
+      }
       return { ...el, exit: nativeExitFor(el.kind, order, sceneMs, count) };
     });
     return { ...scene, elements, camera: nativeCameraFor(sceneMs) };
@@ -631,6 +664,7 @@ export function scaffoldGraphicsDoc(input: {
     width,
     height,
     fps,
+    ...(recipeId !== undefined ? { recipe: recipeId } : {}),
     scenes: staged,
   };
 }

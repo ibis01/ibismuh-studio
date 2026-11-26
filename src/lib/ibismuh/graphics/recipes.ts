@@ -27,6 +27,7 @@
 // Pure and deterministic: same (kind, order, recipe) → the same motion,
 // byte for byte. No fs, no clock, no randomness.
 import { isEaseName, type EaseName } from "../anim/easing";
+import { estimateNarrationMs } from "../whiteboard/timing";
 import {
   GRAPHICS_EXIT_STAGGER_MS,
   nativeEnterFor,
@@ -37,28 +38,18 @@ import {
   GRAPHICS_ELEMENT_KINDS,
   legalMotions,
   type ElementMotion,
+  type GraphicsDoc,
   type GraphicsElementKind,
   type GraphicsMotionKind,
+  type GraphicsScene,
 } from "./types";
+import { GRAPHICS_RECIPE_IDS, type GraphicsRecipeId } from "./recipe-ids";
 
-// ---------------------------------------------------------------------------
-// The closed recipe vocabulary
-// ---------------------------------------------------------------------------
-
-export const GRAPHICS_RECIPE_IDS = [
-  "house-baseline",
-  "count-up-spotlight",
-  "cascade-list",
-  "chart-grow",
-  "quiet-card",
-  "comparison-bars",
-  "timeline-steps",
-  "process-steps",
-  "icon-group-entrance",
-  "final-summary",
-  "problem-solution",
-] as const;
-export type GraphicsRecipeId = (typeof GRAPHICS_RECIPE_IDS)[number];
+// The closed vocabulary rides the leaf (recipe-ids.ts) so the doc
+// validator can judge ids without importing the bodies (no cycle).
+// Re-exported here: every existing import path keeps resolving.
+export { GRAPHICS_RECIPE_IDS };
+export type { GraphicsRecipeId };
 
 /** One recipe motion override: the motion shape (kind, durationMs, ease)
  *  plus the delay policy — a base delay and a per-order step (the stagger
@@ -426,3 +417,51 @@ assertRecipeRegistry();
 // (the recipes may name it in intents; the value stays ONE source in
 // native-defaults.ts — re-exported for the battery's pins).
 export { GRAPHICS_EXIT_STAGGER_MS };
+
+// ---------------------------------------------------------------------------
+// The PERSISTENCE SEAM (the re-audit's step 4: "validated recipe fields
+// and inheritance, preserving baseline behavior when absent")
+//
+// The doc CITES the recipe it was compiled from (doc.recipe / scene.recipe,
+// validated by the grammar) and these helpers recompile the motions so the
+// citation and the bytes cannot drift apart. The clock is the scene's own
+// law (explicit durationMs when authored, else the house estimate — the
+// same resolution the render reads). Pure and deterministic.
+// ---------------------------------------------------------------------------
+
+/** Recompile ONE scene's enter + exit motions under `recipeId` and stamp
+ *  the scene's citation. The element ids, kinds, payloads and placements
+ *  are untouched — only the two motion slots recompile. */
+export function applySceneRecipe(scene: GraphicsScene, recipeId: GraphicsRecipeId): GraphicsScene {
+  const sceneMs = scene.durationMs ?? estimateNarrationMs(scene.narration);
+  const counts = new Map<string, number>();
+  for (const el of scene.elements) counts.set(el.kind, (counts.get(el.kind) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  const elements = scene.elements.map((el) => {
+    const order = seen.get(el.kind) ?? 0;
+    seen.set(el.kind, order + 1);
+    const count = counts.get(el.kind) ?? 1;
+    return {
+      ...el,
+      enter: recipeEnterFor(el.kind, order, recipeId),
+      exit: recipeExitFor(el.kind, order, sceneMs, count, recipeId),
+    };
+  });
+  return { ...scene, elements, recipe: recipeId };
+}
+
+/** Recompile the WHOLE doc under `recipeId`: the doc-level citation stamps,
+ *  every scene recompiles, and every SCENE-LEVEL citation clears (a stale
+ *  override would silently fork the doc-wide choice the user just made). */
+export function applyDocRecipe(doc: GraphicsDoc, recipeId: GraphicsRecipeId): GraphicsDoc {
+  return {
+    ...doc,
+    recipe: recipeId,
+    scenes: doc.scenes.map((scene) => {
+      const next = applySceneRecipe(scene, recipeId);
+      // The doc-wide apply owns the choice — scene stamps clear.
+      const { recipe: _cleared, ...rest } = next;
+      return rest;
+    }),
+  };
+}
