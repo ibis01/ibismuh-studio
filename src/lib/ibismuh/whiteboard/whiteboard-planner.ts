@@ -14,7 +14,7 @@ import crypto from "node:crypto";
 import type { WhiteboardAsset } from "./assets";
 import { applyWhiteboardProfile } from "./profiles";
 import type { WhiteboardAssetPlacement, WhiteboardProject, WhiteboardScene } from "./storyboard";
-import { WB_BUDGETS } from "./storyboard";
+import { WB_BUDGETS, derivePlacementId } from "./storyboard";
 import type { Placement } from "./svg";
 import { measureGlyphWidth, wrapGlyphLines } from "./text-draw";
 
@@ -395,14 +395,74 @@ function remapPlacement(pl: Placement, width: number, height: number): Placement
 }
 
 function pickForScene(narration: string, position: number, exclude?: ReadonlySet<string>): string {
+  return resolvePick(narration, position, exclude).assetId;
+}
+
+/** A resolved pick PLUS the rule that fired: the count lane needs the
+ *  matched keyword's regex to scope its cue to the sentence that actually
+ *  introduced the concept (multiPickCue). rule = null for fallback-cycle
+ *  picks — a no-cue board has no narration evidence to repeat from. */
+export interface ResolvedPick {
+  assetId: string;
+  rule: RegExp | null;
+}
+
+function resolvePick(narration: string, position: number, exclude?: ReadonlySet<string>): ResolvedPick {
   for (const { re, assetId } of KEYWORD_PICKS) {
-    if (re.test(narration) && !exclude?.has(assetId)) return assetId;
+    if (re.test(narration) && !exclude?.has(assetId)) return { assetId, rule: re };
   }
   for (let k = 0; k < FALLBACK_CYCLE.length; k++) {
     const cand = FALLBACK_CYCLE[(position + k) % FALLBACK_CYCLE.length];
-    if (!exclude?.has(cand)) return cand;
+    if (!exclude?.has(cand)) return { assetId: cand, rule: null };
   }
-  return FALLBACK_CYCLE[position % FALLBACK_CYCLE.length];
+  return { assetId: FALLBACK_CYCLE[position % FALLBACK_CYCLE.length], rule: null };
+}
+
+// ---------------------------------------------------------------------------
+// Phase B slice 2 — the count lane (multi-pick layouts).
+//
+// The narration can NUMBER a concept ("two coins", "three doors", "both
+// sides", "revenue doubled") — and until now the planner still boarded ONE
+// instance. The engine has supported repeated placement since slice 1
+// (placement identity); the rich scaffold's middle scenes now read the count
+// and board the SAME asset twice under explicit placement ids (both named —
+// events in a multi-instance scene must address their instance, so a named
+// pair keeps the scaffold editable and the fail-closed law can never bite a
+// blind edit). The twin rides the scene's parity support slot and the
+// support pick steps aside: the count IS the scene's second concept — you
+// don't annotate "growth" onto a two-coin counting lesson.
+//
+// The laws that keep this additive:
+//   - the cue is SENTENCE-SCOPED to the rule hit (multiPickCue) — a stray
+//     "two months later" never duplicates a board;
+//   - fallback-cycle picks never repeat (no rule, no evidence);
+//   - opener/closer scenes never repeat (the cards own those boards);
+//   - the LEGACY path (no generated cards) never repeats — byte-identical
+//     to its pinned contract (the S137 additive law);
+//   - a cue-less rich scene emits NO placementId fields — byte-identical.
+// ---------------------------------------------------------------------------
+
+/** The count vocabulary: the small plural counts a whiteboard can teach
+ *  honestly, as WORDS. Deliberately absent: bare numerals ("Beat 2", "step
+ *  3" number anything — the sandbox receipt: a fixture title "Beat 2"
+ *  twin-boarded its concept), "one" (singular), "several"/"many" (vague —
+ *  no honest instance count). */
+const MULTI_PICK_CUE_RE = /\b(two|three|both|pair|couple|twin|double|doubled|twice)\b/i;
+
+/** The count law: TRUE when the narration names a small plural count IN THE
+ *  SAME SENTENCE that introduced the pick's concept (the rule regex's own
+ *  match position scopes the sentence). Deterministic and pure.
+ *  Exported for the multipick battery. */
+export function multiPickCue(narration: string, rule: RegExp): boolean {
+  const hit = rule.exec(narration);
+  if (!hit || typeof hit.index !== "number") return false;
+  let start = 0;
+  for (const sentence of narration.split(/(?<=[.!?])\s+/)) {
+    const end = start + sentence.length + 1; // + the sentence separator
+    if (hit.index < end) return MULTI_PICK_CUE_RE.test(sentence);
+    start = end;
+  }
+  return false;
 }
 
 /** The supporting pick: the NEXT distinct rule-table hit on the narration
@@ -494,8 +554,10 @@ export function scaffoldWhiteboardProject(input: {
       // supporting concept per scene, alternating paper tones. The
       // anti-repeat exclusion keeps the previous scene's primary off this
       // board (the bar-chart×3/rocket×3 repetition the receipt caught).
-      const primary = pickForScene(`${s.title} ${s.narration}`, i, prevPrimary ? new Set([prevPrimary]) : undefined);
-      const support = supportForScene(`${s.title} ${s.narration}`, i, new Set([primary, prevPrimary]));
+      const richText = `${s.title} ${s.narration}`;
+      const resolved = resolvePick(richText, i, prevPrimary ? new Set([prevPrimary]) : undefined);
+      const primary = resolved.assetId;
+      const support = supportForScene(richText, i, new Set([primary, prevPrimary]));
       prevPrimary = primary;
       if (isFirst) {
         placements.push({ assetId: genTitleId, placement: remap(GEN_TITLE_PLACEMENT), order: 0 });
@@ -505,6 +567,24 @@ export function scaffoldWhiteboardProject(input: {
         placements.push({ assetId: genCloseId, placement: remap(GEN_CLOSE_PLACEMENT), order: 0 });
         placements.push({ assetId: primary, placement: remap(RICH_CLOSER_PRIMARY), order: 1 });
         placements.push({ assetId: support, placement: remap(RICH_OPENER_SUPPORT), order: 2 });
+      } else if (resolved.rule !== null && multiPickCue(richText, resolved.rule)) {
+        // ---- Phase B slice 2, the count lane: the narration NUMBERS this
+        // concept — board it twice under explicit placement ids (both named;
+        // derivePlacementId mints the pair's second key off the first), the
+        // twin rides the parity support slot, and the support pick steps
+        // aside (the count is the scene's second concept).
+        placements.push({
+          assetId: primary,
+          placementId: primary,
+          placement: remap(RICH_PRIMARY),
+          order: 0,
+        });
+        placements.push({
+          assetId: primary,
+          placementId: derivePlacementId({ placements }, primary) ?? primary,
+          placement: remap(i % 2 === 1 ? RICH_SUPPORT_LEFT : RICH_SUPPORT_RIGHT),
+          order: 1,
+        });
       } else {
         placements.push({ assetId: primary, placement: remap(RICH_PRIMARY), order: 0 });
         placements.push({
@@ -634,11 +714,19 @@ export function repairWhiteboardSceneDoc(input: {
 
   const position = Math.max(0, input.sceneIndex - 1);
   const taken = new Set<string>();
+  // Phase B slice 2 — the count law in the repair lane: repeated instances
+  // (a count-lane twin pair) repair as ONE concept. The pair swaps to the
+  // same asset and KEEPS its placement ids (they are addresses, not labels —
+  // renaming would orphan every event that targets them), so a repair
+  // changes WHAT is drawn, never HOW MANY.
+  const swapFor = new Map<string, string>();
   let changed = false;
   let conceptSeen = 0;
 
   const placements = scene.placements.map((p) => {
     if (!WB_CONCEPT_IDS.has(p.assetId) || isWbCardAsset(p.assetId)) return p;
+    const memo = swapFor.get(p.assetId);
+    if (memo !== undefined) return { ...p, assetId: memo };
     const slot = conceptSeen++;
     const exclude = new Set(taken);
     exclude.add(p.assetId); // the repair must VISIBLY change the board
@@ -655,6 +743,7 @@ export function repairWhiteboardSceneDoc(input: {
       }
     }
     if (nextId === null) nextId = p.assetId; // degenerate single-concept cycle — keep
+    swapFor.set(p.assetId, nextId);
     taken.add(nextId);
     if (nextId !== p.assetId) changed = true;
     return { ...p, assetId: nextId };

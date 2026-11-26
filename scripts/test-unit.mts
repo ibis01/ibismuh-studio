@@ -9394,6 +9394,7 @@ await test("S73 normalize: unknown/reserved/dupes dropped with reasons; coordina
         assets: [
           { assetId: "heart-main", x: 800, y: 400, scale: 2 },
           { assetId: "heart-main", x: 900, y: 500, scale: 2 },
+          { assetId: "heart-main", x: 1000, y: 600, scale: 2 },
         ],
       },
       { scene: 7, assets: [{ assetId: "coin", x: 1, y: 1, scale: 1 }] },
@@ -9412,12 +9413,18 @@ await test("S73 normalize: unknown/reserved/dupes dropped with reasons; coordina
   eq(s1.picks[0].rotateDeg, 180, "rotation clamped to ±180");
   const reasons = out.dropped.map((d) => d.reason).join(" | ");
   ok(
-    /reserved/.test(reasons) && /not in the concept catalog/.test(reasons) && /twice/.test(reasons) && /outside the story/.test(reasons),
+    /reserved/.test(reasons) && /not in the concept catalog/.test(reasons) && /outside the story/.test(reasons),
     `every drop surfaces its reason: ${reasons}`
   );
   const s2 = out.served.get(2);
   ok(s2 !== undefined, "scene 2 served");
-  eq(s2.picks.length, 1, "the duplicate placement died, the original stands");
+  // Phase B slice 2 — the repeat law: a repeated pick SURVIVES as a named
+  // pair (the first repeat retroactively names BOTH instances); a third
+  // instance dies with the repeat cap named, never silently.
+  eq(s2.picks.length, 2, "the repeated pick survives as a pair");
+  eq(s2.picks.map((p) => p.placementId), ["heart-main", "heart-main-2"], "the pair is named (both instances)");
+  ok(/caps counted repeats at 2/.test(reasons), `the third instance names the repeat cap: ${reasons}`);
+  eq(s1.picks[0].placementId, undefined, "a single-instance pick carries no placementId (wire unchanged)");
 });
 
 await test("S73 normalize: the per-scene concept cap drops extras and names the cap", async () => {

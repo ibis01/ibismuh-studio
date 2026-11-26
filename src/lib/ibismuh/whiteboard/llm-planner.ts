@@ -36,6 +36,7 @@ import type {
   WhiteboardProject,
   WhiteboardScene,
 } from "./storyboard";
+import { derivePlacementId } from "./storyboard";
 
 // ---------------------------------------------------------------------------
 // The catalog — what the model is allowed to pick
@@ -67,6 +68,12 @@ export function isPlannerReservedAssetId(id: string): boolean {
  * purpose: a scaffold teaches with a few readable pieces, not a wall of
  * ink — the user edits from there. */
 export const WB_PLANNER_CONCEPTS_PER_SCENE = 3;
+
+/** Phase B slice 2 — the LLM lane's repeat cap: how many instances of ONE
+ * asset a scene may carry ("two coins" is the teachable count; a third
+ * instance is clutter the model is dropped with its reason). The engine's
+ * validator allows far more — this is a planner-level readability law. */
+export const WB_PLANNER_MAX_REPEATS_PER_ASSET = 2;
 
 /** Placement clamp bands (scene-space). The validator checks finiteness;
  * the planner additionally keeps the model's ink ON the board and inside
@@ -140,13 +147,20 @@ export interface LlmScenePlan {
   beats?: LlmBeatProposal[];
 }
 
-/** A pick that survived normalization: on-board, in-band, catalog-legal. */
+/** A pick that survived normalization: on-board, in-band, catalog-legal.
+ * Phase B slice 2: a REPEATED pick (the model proposing the same asset
+ * twice — a counted narration) also survives, and every instance of a
+ * repeated asset carries an explicit placementId (the pair is named —
+ * events in a multi-instance scene must address their instance). A
+ * single-instance pick carries NO placementId: the wire stays byte-shaped
+ * for every scene the model serves without a repeat. */
 export interface NormalizedConceptPick {
   assetId: string;
   x: number;
   y: number;
   scale: number;
   rotateDeg: number;
+  placementId?: string;
 }
 
 export interface NormalizedScenePlan {
@@ -240,7 +254,16 @@ export function normalizeLlmScenePlans(
   const served = new Map<number, NormalizedScenePlan>();
   for (const [sceneNo, rawPicks] of byScene) {
     const picks: NormalizedConceptPick[] = [];
-    const seen = new Set<string>();
+    // Phase B slice 2 — the repeat law: an asset may appear up to
+    // WB_PLANNER_MAX_REPEATS_PER_ASSET times; the FIRST repeat retroactively
+    // names the pair (first = the bare assetId, second = the derived -2
+    // key, via the editor's own derivation — one derivation, one law).
+    const counts = new Map<string, number>();
+    const firstRefs = new Map<string, NormalizedConceptPick>();
+    // The inline accounting law: EVERY raw pick gets exactly one verdict —
+    // accepted, or dropped with its MOST SPECIFIC reason (an over-cap
+    // repeat names the repeat cap, not the positional one). No early break,
+    // no silent tail.
     for (const p of rawPicks) {
       const assetId = String(p?.assetId ?? "").trim();
       if (!assetId) {
@@ -259,11 +282,20 @@ export function normalizeLlmScenePlans(
         dropped.push({ scene: sceneNo, assetId, reason: "not in the concept catalog" });
         continue;
       }
-      if (seen.has(assetId)) {
+      const prior = counts.get(assetId) ?? 0;
+      if (prior >= WB_PLANNER_MAX_REPEATS_PER_ASSET) {
         dropped.push({
           scene: sceneNo,
           assetId,
-          reason: "asset placed twice in one scene (the engine supports repeated instances via placementIds — the LLM lane plans one placement per concept for now)",
+          reason: `asset placed ${prior + 1}× in one scene — the planner caps counted repeats at ${WB_PLANNER_MAX_REPEATS_PER_ASSET} instances (the engine supports more; the scaffold teaches with a readable pair)`,
+        });
+        continue;
+      }
+      if (picks.length >= maxPicks) {
+        dropped.push({
+          scene: sceneNo,
+          assetId,
+          reason: `over the ${maxPicks}-concepts-per-scene cap`,
         });
         continue;
       }
@@ -275,26 +307,28 @@ export function normalizeLlmScenePlans(
         dropped.push({ scene: sceneNo, assetId, reason: "non-finite coordinate" });
         continue;
       }
-      seen.add(assetId);
-      picks.push({
+      const pick: NormalizedConceptPick = {
         assetId,
         x: Math.round(clampNum(x, 0, ctx.width)),
         y: Math.round(clampNum(y, 0, ctx.height)),
         scale: Math.round(clampNum(scale, PLANNER_SCALE_BAND.min, PLANNER_SCALE_BAND.max) * 100) / 100,
         rotateDeg: Math.round(clampNum(rotate, -PLANNER_ROTATE_MAX, PLANNER_ROTATE_MAX)),
-      });
-      if (picks.length >= maxPicks) break;
-    }
-    // Over-cap extras are dropped with the cap named (the loop above
-    // stopped early — account the rest honestly).
-    for (let i = maxPicks; i < rawPicks.length; i++) {
-      const assetId = String(rawPicks[i]?.assetId ?? "").trim() || "(blank)";
-      if (seen.has(assetId) || !ctx.catalogIds.has(assetId) || isPlannerReservedAssetId(assetId)) continue;
-      dropped.push({
-        scene: sceneNo,
-        assetId,
-        reason: `over the ${maxPicks}-concepts-per-scene cap`,
-      });
+      };
+      if (prior === 0) {
+        counts.set(assetId, 1);
+        firstRefs.set(assetId, pick);
+        picks.push(pick);
+      } else {
+        // The repeat: name BOTH instances (explicit ids — the engine's
+        // ambiguity law refuses unaddressed events in a multi-instance
+        // scene, so a named pair keeps the scaffold editable).
+        const first = firstRefs.get(assetId);
+        if (first && first.placementId === undefined) first.placementId = assetId;
+        pick.placementId =
+          derivePlacementId({ placements: picks }, assetId) ?? assetId;
+        counts.set(assetId, prior + 1);
+        picks.push(pick);
+      }
     }
     if (picks.length > 0) {
       const plan: NormalizedScenePlan = { sceneIndex: sceneNo, picks };
@@ -399,15 +433,21 @@ export function composeLlmScaffold(
           .sort((a, b) => {
             const ra = rankOf.get(a.pick.assetId);
             const rb = rankOf.get(b.pick.assetId);
+            // Phase B slice 2 — EQUAL ranks are now reachable (a repeated
+            // asset's pair shares one beat sentence; two distinct picks in
+            // one sentence too). The old comparator returned -1 whenever
+            // ra existed, contradicting itself on (pair, pair) — the repeat
+            // feature exposed it. The tiebreak is the model's own order.
             if (ra !== undefined && rb !== undefined && ra !== rb) return ra - rb;
-            if (ra !== undefined) return -1;
-            if (rb !== undefined) return 1;
+            if (ra !== undefined && rb === undefined) return -1;
+            if (rb !== undefined && ra === undefined) return 1;
             return a.j - b.j;
           })
           .map(({ pick }) => pick)
       : plan.picks;
     const picks: WhiteboardAssetPlacement[] = orderedPicks.map((pick, j) => ({
       assetId: pick.assetId,
+      ...(pick.placementId ? { placementId: pick.placementId } : {}),
       placement: {
         x: pick.x,
         y: pick.y,
@@ -433,7 +473,13 @@ const PLANNER_SYSTEM_PROMPT = `You are a whiteboard video storyboard planner. Yo
   ]
 }
 
-Rules: every id MUST come from the catalog. "scene" is the story scene number you were given. x and y are the asset's center in scene-space on the board you were told about — keep every asset fully on the board and clear of the title card (top) and close card areas. scale between 0.5 and 3, rotateDeg between -180 and 180. One to three assets per scene; prefer fewer, larger, readable pieces over clutter. Never repeat an asset within one scene. Serve EVERY scene. Assets marked "your upload" belong to this video's author — prefer them when they genuinely fit. The "beats" array is OPTIONAL but recommended: for each scene, split its narration into sentences and report which 1-based sentence introduces each asset you placed ("assetIds" = that asset's id, from the same scene's assets). Order beats by sentence; every asset appears in at most one beat; every beat lists at least one asset. Never wrap in markdown fences. Never add commentary.`;
+Rules: every id MUST come from the catalog. "scene" is the story scene number you were given. x and y are the asset's center in scene-space on the board you were told about — keep every asset fully on the board and clear of the title card (top) and close card areas. scale between 0.5 and 3, rotateDeg between -180 and 180. One to three assets per scene; prefer fewer, larger, readable pieces over clutter. Repeat an asset within one scene ONLY when the narration explicitly counts it ("two coins", "revenue doubled"): list each instance as its own asset entry with its own coordinates, at most two instances of any one asset; the engine names the repeated instances for you. Serve EVERY scene. Assets marked "your upload" belong to this video's author — prefer them when they genuinely fit. The "beats" array is OPTIONAL but recommended: for each scene, split its narration into sentences and report which 1-based sentence introduces each asset you placed ("assetIds" = that asset's id, from the same scene's assets). Order beats by sentence; every asset appears in at most one beat; every beat lists at least one asset. Never wrap in markdown fences. Never add commentary.`;
+
+/** Exported for the multipick battery: the prompt pins the counted-repeat
+ *  law (the model may propose a repeat ONLY on an explicit count, and the
+ *  engine names the instances) — the battery asserts the law's wording
+ *  stays put. */
+export { PLANNER_SYSTEM_PROMPT };
 
 function plannerUserPrompt(
   input: { topic: string; scenes: ScaffoldSceneInput[] },

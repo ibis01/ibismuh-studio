@@ -7830,3 +7830,20 @@ Work Log:
 Stage Summary:
 - Deliverable: repeated placement is legal and safe end to end — validator, scheduler, renderer, editor, carry, beats, camera, wire — with every stored legacy doc byte-identical (the derived-identity law).
 - The engine layer of the re-audit's §3.5 defect is closed; planner-lane multi-pick layouts, compound asset graphs, and the catalog browser UI remain the Phase B queue (documented in docs/whiteboard/catalog-phase-b.md).
+
+---
+Task ID: PhaseB-S2
+Agent: main (Z.ai)
+Task: Audit roadmap Phase B slice 2 — multi-pick layouts (the planner lanes emit the repeats slice 1 made safe), continuing the re-audit's improvement ladder after PR #20 (placement identity) merged as main @ 9858e27.
+
+Work Log:
+- Synced main, cut catalog/phase-b-multipick-layouts, and surveyed both planner lanes: the native rule table (one pick per concept, anti-repeat exclusions) and the LLM lane (hard dedupe drop — "the LLM lane plans one placement per concept for now").
+- Native count lane: resolvePick exposes the FIRED rule; multiPickCue tests the cue SENTENCE-SCOPED to the rule hit (words only — the sandbox receipt caught a fixture titled "Beat 2" twin-boarding via a bare-numeral cue, so 2/3 numerals are deliberately excluded); the rich middle scenes board a named twin pair (coin/coin-2 via derivePlacementId — both named because the engine's ambiguity law refuses unaddressed events in multi-instance scenes), the twin rides the parity support slot, the support steps aside; legacy path and cue-less scenes stay byte-identical; openers/closers never repeat; fallback picks never repeat; determinism pinned.
+- LLM lane: WB_PLANNER_MAX_REPEATS_PER_ASSET = 2; the first repeat retroactively names the pair via the editor's derivation; single picks stay field-free (wire byte-shape); the prompt's "Never repeat" became the counted-repeat law (prompt now exported and pinned); the normalize loop was rewritten to INLINE ACCOUNTING — every raw pick gets exactly one verdict with its most specific reason (the old positional tail accounting could double-account a dropped pick); composeLlmScaffold passes placementId through only when present.
+- Two latent bugs caught by the new laws: (1) composeLlmScaffold's beat-ordering comparator was self-contradictory on EQUAL ranks — unreachable pre-repeats, non-deterministic pair order once reachable (fixed: index tiebreak); (2) repairWhiteboardSceneDoc would have swapped a twin pair to two DIFFERENT assets (fixed: swapFor memo — a pair repairs as ONE concept, placement ids untouched, they are addresses not labels).
+- New battery scripts/test-whiteboard-multipick.mts — 16 laws across five suites (count lane, wire through the REAL library + the engine's fill law, LLM lane, repair, accounting) — wired into npm run check + the CI check job after the placement battery; the S73 normalize fixture updated to the new contract (repeat survives as a named pair, third instance names the cap, single stays field-free).
+- Local gates green: typecheck, lint, multipick 16/16, and the full check chain; the battery caught the comparator bug and the repair-pair semantics before CI could.
+
+Stage Summary:
+- Deliverable: a narration that NUMBERS its concept boards that concept twice — from the native rule table AND the LLM lane — under explicit placement identity, with every cue-less doc byte-identical and every raw model pick honestly accounted.
+- Phase B queue: compound asset graphs (next per the audit's order), the catalog browser UI, the deliberate follow-ups (cue-window tightening, per-instance sketch seeds) documented in docs/whiteboard/catalog-phase-b-slice-2.md.

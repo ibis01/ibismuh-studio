@@ -319,6 +319,14 @@ jobs:
       - name: Placement identity (repeated placement laws)
         run: npm run test:whiteboard-placement
 
+      # Phase B slice 2: the multi-pick laws — the planner lanes EMIT the
+      # repeats the engine now supports: the narration counts a concept
+      # ("two coins") and the scaffold boards a named twin pair; the LLM
+      # lane accepts counted repeats with the pair named; the repair lane
+      # treats a pair as one concept; every raw pick gets one verdict.
+      - name: Multi-pick layouts (planner count laws)
+        run: npm run test:whiteboard-multipick
+
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes
       # → print the measured RTO. "A backup that has never been restored is
