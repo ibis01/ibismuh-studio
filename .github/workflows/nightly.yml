@@ -3,7 +3,7 @@
 # What runs every night (02:30 UTC, ahead of Monday's Dependabot wave so a
 # bad bump's failure is visible the same day it lands) and on demand:
 #
-#   battery — the durable s-series route probes (19), driven by
+#   battery — the durable s-series route probes (17), driven by
 #             scripts/run-route-battery.mjs against the PRODUCTION build
 #             (it builds once, then boots `npm run start` in two phases:
 #             enforce-mode for 18 probes, report-mode for s29's pre-S40
@@ -13,7 +13,7 @@
 #   e2e     — the full Playwright suite, the same job CI runs on push.
 #
 # Why nightly at all: these probes were on-demand-only since the studio era;
-# drift in any of the 19 contracts (auth, lockout, account doors, publish
+# drift in any of the 17 contracts (auth, lockout, account doors, publish
 # gates, exports, QC doors, uploads, worlds, settings, billing surfaces)
 # used to surface only when a human happened to re-run them.
 #

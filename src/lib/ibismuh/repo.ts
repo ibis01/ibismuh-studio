@@ -11,6 +11,7 @@
 // revision (nothing is deleted — history is evidence).
 
 import { db } from "@/lib/ibismuh/tenant-db";
+import { orgId } from "./tenant";
 import { canonicalStringify, sha256Hex } from "./canonical";
 import { LANE_ORDER, isVideoType, resolveLane, resolveRenderAspect } from "./studio-lanes";
 import { VOICES, isVoiceId } from "./studio-catalogs";
@@ -18,7 +19,6 @@ import type { BriefSceneInput, StudioBrief } from "./planner-types";
 import {
   ACTIVE_JOB_STATES,
   HttpError,
-  ORG,
   buildCapabilityFlags,
   loadProjectRow,
   loadCurrentRevisionRow,
@@ -120,7 +120,7 @@ export async function createProject(body: unknown): Promise<ProjectState> {
 
   const row = await db.studioProject.create({
     data: {
-      organizationId: ORG,
+      organizationId: orgId(),
       title,
       lane: lane.type,
       format: lane.format,
@@ -142,7 +142,7 @@ export async function createProject(body: unknown): Promise<ProjectState> {
 
 export async function listProjects(): Promise<ProjectSummary[]> {
   const rows = await db.studioProject.findMany({
-    where: { organizationId: ORG },
+    where: { organizationId: orgId() },
     orderBy: { updatedAt: "desc" },
     include: {
       jobs: { orderBy: { createdAt: "desc" }, take: 1 },
@@ -177,12 +177,12 @@ export async function getProjectState(id: string): Promise<ProjectState> {
   }
 
   const assetRows = await db.assetRecord.findMany({
-    where: { projectId: id, organizationId: ORG },
+    where: { projectId: id, organizationId: orgId() },
     orderBy: { createdAt: "asc" },
   });
 
   const receiptRow = await db.audioReceiptRecord.findFirst({
-    where: { projectId: id, organizationId: ORG },
+    where: { projectId: id, organizationId: orgId() },
     orderBy: { createdAt: "desc" },
   });
   let audioReceipt: AudioReceipt | null = null;
@@ -194,10 +194,10 @@ export async function getProjectState(id: string): Promise<ProjectState> {
     }
   }
 
-  const jobRow = await db.renderJob.findFirst({ where: { projectId: id, organizationId: ORG }, orderBy: { createdAt: "desc" } });
-  const qcRow = await db.qcReportRecord.findFirst({ where: { projectId: id, organizationId: ORG }, orderBy: { ranAt: "desc" } });
+  const jobRow = await db.renderJob.findFirst({ where: { projectId: id, organizationId: orgId() }, orderBy: { createdAt: "desc" } });
+  const qcRow = await db.qcReportRecord.findFirst({ where: { projectId: id, organizationId: orgId() }, orderBy: { ranAt: "desc" } });
   const eventRows = await db.studioEvent.findMany({
-    where: { projectId: id, organizationId: ORG },
+    where: { projectId: id, organizationId: orgId() },
     orderBy: { createdAt: "desc" },
     take: 40,
   });
@@ -231,7 +231,7 @@ export async function updateProject(id: string, patch: unknown): Promise<Project
   const p = patch as Record<string, unknown>;
 
   const active = await db.renderJob.findFirst({
-    where: { projectId: id, organizationId: ORG, state: { in: ACTIVE_JOB_STATES } },
+    where: { projectId: id, organizationId: orgId(), state: { in: ACTIVE_JOB_STATES } },
   });
   if (active) throw new HttpError(409, "cannot edit the project while a render job is active");
 
@@ -316,7 +316,7 @@ export async function updateProject(id: string, patch: unknown): Promise<Project
 
   if (invalidated && hadRevision) {
     await db.planRevision.updateMany({
-      where: { projectId: id, organizationId: ORG, id: revisionToSupersede ?? "", status: { not: "superseded" } },
+      where: { projectId: id, organizationId: orgId(), id: revisionToSupersede ?? "", status: { not: "superseded" } },
       data: { status: "superseded" },
     });
     await writeStudioEvent(
@@ -366,7 +366,7 @@ export async function recordEvent(
   await loadProjectRow(projectId); // 404 on unknown project — events never write across tenants
   await writeStudioEvent(projectId, stage, message, level, sceneRef);
   const row = await db.studioEvent.findFirst({
-    where: { projectId, organizationId: ORG, stage, message },
+    where: { projectId, organizationId: orgId(), stage, message },
     orderBy: { createdAt: "desc" },
   });
   return row

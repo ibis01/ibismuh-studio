@@ -30,7 +30,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     // S68 — the suite is one IP making a studio-load of writes (register +
-    // create + PUT + render across 27 tests in under two minutes), which
+    // create + PUT + render across 39 tests in under two minutes), which
     // brushes the middleware's per-IP WRITE_LIMIT (90/min) — whichever spec
     // crosses a window boundary ate a 429 (the flake the first full-suite
     // runs showed, alternating victims by file order). The harness is a

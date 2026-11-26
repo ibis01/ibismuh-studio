@@ -18,6 +18,18 @@ type Ctx = { params: Promise<{ id: string }> };
  *  file dies there with a readable error). */
 const ALLOWED_EXT = new Set(["mp4", "mov", "webm", "mkv", "m4v"]);
 
+/** Admission-time container sniff (the audit's F-5): the extension stays the
+ * UX affordance, but the BYTES decide admissibility — a renamed text blob is
+ * refused here instead of consuming 200 MB of storage until the job probe.
+ * ISO-BMFF (mp4/mov/m4v): `ftyp` at offset 4. WebM/MKV (EBML): 0x1A45DFA3. */
+function sniffVideoContainer(buf: Buffer): boolean {
+  if (buf.length < 12) return false;
+  if (buf.toString("latin1", 4, 8) === "ftyp") return true;
+  return (
+    buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3
+  );
+}
+
 /**
  * POST — upload a reference video and enqueue its structural analysis.
  * Multipart/form-data, field "file".
@@ -72,6 +84,13 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     await storage.remove(key).catch(() => {});
   }
   const buf = Buffer.from(await file.arrayBuffer());
+  // F-5 — the bytes must smell like a video container BEFORE any storage
+  // byte is written (the job probe stays the deep gate).
+  if (!sniffVideoContainer(buf))
+    return NextResponse.json(
+      { error: `That file's bytes are not an MP4/MOV/WebM container — check the export and try again` },
+      { status: 415 }
+    );
   await storage.put(referenceSourceKey(id, ext), buf);
 
   await db.video.update({ where: { id }, data: { referenceAnalysis: null, error: null } });

@@ -950,8 +950,14 @@ export async function generateSceneImage(opts: {
   }
   const artPrompt = sanitized.prompt;
 
+  // A-2 (the audit's P1): under the islamic-history policy the cast portrait
+  // NEVER seeds the scene edit — the portrait's pixels are un-analyzable text
+  // (a reference photo for a benignly-named character could depict anything),
+  // and the "keep their face perfectly recognizable" edit is exactly the
+  // bridge the policy exists to refuse. The sanitized text-only path paints
+  // the scene instead. Standard policy keeps the likeness lock.
   const portrait =
-    scene.hostInScene && opts.character?.id
+    contentPolicy !== "islamic-history" && scene.hostInScene && opts.character?.id
       ? await readPortrait(opts.character.id)
       : null;
 

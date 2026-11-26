@@ -7,6 +7,14 @@
 //   smtp               — a REAL message goes out; the response then omits the
 //                       link (it lives in the inbox, not the API payload).
 //
+// E-1 law (the audit's P1): "never" above is now ENFORCED, not documented.
+// linkInResponse() is the single seam every link-returning route reads
+// (reset-password, register, verify-email resend). In production with console
+// mode the response link is refused — a public reset endpoint that answers a
+// knowledge-of-email request with a one-time takeover link is an account-
+// takeover primitive, and a config default must never be that. The warning
+// fires loud-once (same posture as getAuthSecret's weak-secret warning).
+//
 // The SMTP client is deliberately zero-dependency: net + tls only. It speaks
 // the small subset of ESMTP the big three (SES, Postmark, Gmail relay, and
 // any plain Postfix) need — EHLO, STARTTLS (opportunistic), AUTH LOGIN,
@@ -40,9 +48,26 @@ export type SendMailResult =
   | { delivered: "console" }
   | { delivered: "smtp"; messageId: string | null };
 
-/** Should the API response include the link? (console: yes, smtp: no) */
+/** Should the API response include the link? (console: yes, smtp: no)
+ *
+ * Production refuses: console mode in a public deployment hands a one-time
+ * reset/verify link to anyone who knows an email address. Dev/staging keep
+ * the convenience (single-owner installs need no relay). One loud warning
+ * per process — the operator must see WHY the links stopped coming back.
+ */
+let warnedConsoleInProduction = false;
 export function linkInResponse(): boolean {
-  return emailMode() === "console";
+  if (emailMode() !== "console") return false;
+  if (process.env.NODE_ENV === "production") {
+    if (!warnedConsoleInProduction) {
+      warnedConsoleInProduction = true;
+      mailLog.warn(
+        "E-1: console email mode is active in production — account links will NOT be returned in API responses. Set IBISMUH_STUDIO_EMAIL_MODE=smtp to deliver links for real."
+      );
+    }
+    return false;
+  }
+  return true;
 }
 
 export async function sendMail(input: SendMailInput): Promise<SendMailResult> {

@@ -5,6 +5,19 @@ import { exchangeCode, fetchChannelInfo, verifyOAuthState } from "@/lib/ibismuh/
 import { errorText } from "@/lib/ibismuh/redact";
 import { requestLog } from "@/lib/ibismuh/log";
 
+/** HTML-escape interpolated landing-page values — googleError and errorText
+ * arrive from the URL/exceptions (attacker-influenceable), and the callback
+ * body is text/html. CSP without a nonce for injected elements bounds the
+ * impact to markup injection; this makes even that impossible. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /**
  * GET — OAuth consent callback. Google redirects here with ?code & state.
  * Exchanges the code, fetches the channel identity, then bounces the user
@@ -35,7 +48,7 @@ export async function GET(req: NextRequest) {
 </style></head>
 <body><div class="card">
 <h1>${ok ? "Channel connected" : "Connection failed"}</h1>
-<p>${message}</p>
+<p>${escapeHtml(message)}</p>
 <a href="/?view=settings">Back to Ibismuh Studio</a>
 </div></body></html>`,
       { status: ok ? 200 : 400, headers: { "Content-Type": "text/html; charset=utf-8" } }

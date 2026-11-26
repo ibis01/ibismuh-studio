@@ -15,7 +15,7 @@ everything regenerates on demand once your own key is in.
 
 | Requirement | Why | Where to get it |
 |---|---|---|
-| **Node.js 20+ (LTS)** | runs the Next.js app AND the test suite | https://nodejs.org (npm comes with it) |
+| **Node.js 22.19+ (LTS; 24 is what CI and the Docker image run)** | runs the Next.js app AND the test suite (undici 8 declares engines >=22.19 — node 20 is OUTSIDE the dependency's declared support) | https://nodejs.org (npm comes with it) |
 | **ffmpeg + ffprobe** on your PATH | video render, Shorts, narration checks | Ubuntu/Debian: `sudo apt install ffmpeg` · macOS: `brew install ffmpeg` · Windows: `winget install ffmpeg` |
 | **A Z.ai API key** | every AI step (script, TTS, images, video) calls Z.ai services | https://z.ai/model-api — sign up, open API Keys, create a key (free) |
 | ~2 GB free disk | node_modules + generated media | — |

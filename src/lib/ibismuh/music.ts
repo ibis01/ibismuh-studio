@@ -39,7 +39,7 @@ async function getSetting(key: string): Promise<string | null> {
   return getUserSetting(key);
 }
 
-import { scratchDir, UPLOAD_ROOT } from "./storage";
+import { scratchDir, UPLOAD_ROOT, putFromPath } from "./storage";
 
 // Storage seam (T-3.7): the library ships as SYSTEM assets — local scratch
 // (_music layout unchanged), s3 driver uploads with system:true (no quota).
@@ -671,6 +671,16 @@ export async function ingestUploadedTrack(buffer: Buffer, meta: UploadTrackMeta)
 
     const durationSec = await probeDuration(outPath);
     if (durationSec <= 0) throw new Error("Could not read the track's duration — file may be corrupt");
+
+    // F-3 (the audit's P2): the normalized FLAC is published through the
+    // storage SEAM, not raw fs — the quota ledger (StorageUsage.bytes) now
+    // counts every uploaded track byte, the 10 GiB admission ceiling holds,
+    // and the s3 driver gets a real bucket object instead of a pod-local
+    // orphan. On the local driver the file already sits at the exact key
+    // path, so this is an account-only commit; on s3 it uploads and leaves
+    // the scratch copy for the mixer. A quota refusal (StorageQuotaError)
+    // fails the ingest before the DB row exists.
+    await putFromPath(`_music/${path.basename(outPath)}`, outPath);
 
     const ingestCtx = currentCtx();
     if (!ingestCtx) throw new Error("Uploading a track requires a signed-in user");

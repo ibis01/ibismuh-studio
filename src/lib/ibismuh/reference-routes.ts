@@ -38,6 +38,11 @@ export interface ReferenceHandlerDeps {
   saveKeys: (id: string, keys: string[]) => Promise<unknown>;
   /** Activity stage for the log rows. */
   stage: string;
+  /** A-1 admission gate (the audit's P1): return an error string to refuse
+   * the upload for this carrier (the cast factory refuses restricted
+   * figures — their reference photos feed recognizable portrait seeds).
+   * Locations/props (places/objects) have no face-asset concern → absent. */
+  admission?: (row: ReferenceCarrier) => string | null;
 }
 
 export function makeReferenceHandlers(deps: ReferenceHandlerDeps) {
@@ -73,6 +78,11 @@ export function makeReferenceHandlers(deps: ReferenceHandlerDeps) {
     const { id } = await ctx.params;
     const row = await deps.find(id);
     if (!row) return NextResponse.json({ error: `${deps.noun} not found` }, { status: 404 });
+
+    // A-1 — the admission gate runs BEFORE the bytes are read: a refused
+    // carrier costs no decode, no storage, no quota.
+    const refused = deps.admission?.(row) ?? null;
+    if (refused) return NextResponse.json({ error: refused }, { status: 422 });
 
     const keys = parseReferenceKeys(row.referenceImages);
     if (keys.length >= deps.cap)

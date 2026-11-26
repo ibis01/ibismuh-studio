@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/ibismuh/tenant-db";
 import { requireUser } from "@/lib/ibismuh/tenant";
 import { latestStatsMap } from "@/lib/ibismuh/analytics";
-import { serializeVideo } from "@/lib/ibismuh/serialize";
+import { serializeVideo, VIDEO_LIST_SELECT } from "@/lib/ibismuh/serialize";
 import { startJob } from "@/lib/ibismuh/jobs";
 import { runScriptJob } from "@/lib/ibismuh/script-job";
 import { FORMATS, RENDER_MODES, type VideoDTO } from "@/lib/ibismuh/types";
@@ -26,14 +26,15 @@ export async function GET(req: NextRequest) {
   const where = status && status !== "all" ? { status } : {};
   // tenant-db injects organizationId into every query below — the caller only
   // ever sees their own organization's videos.
+  // F-8 (the audit's P2): the list projects the slim VIDEO_LIST_SELECT — the
+  // megabyte-class doc columns (whiteboardProject, graphicsDoc, renderManifest,
+  // shotList, …) never ride the list payload again; payload now scales with
+  // DTO size, not document size. Detail endpoints keep their full reads.
   const videos = await db.video.findMany({
     where,
     orderBy: { createdAt: "desc" },
     take: limit,
-    include: {
-      channel: { select: { name: true } },
-      character: { select: { name: true, hasPortrait: true } },
-    },
+    select: VIDEO_LIST_SELECT,
   });
 
   // Latest synced YouTube performance per video (Phase 5) — one query.
