@@ -385,7 +385,8 @@ export async function probeAssetRasterization(
 
 export interface ScenePageSetupArgs {
   composed: ReturnType<typeof composeScene>;
-  /** "assetId::pathId" keys that opacity-fade (the traced remainder). */
+  /** "placementKey::pathId" keys that opacity-fade (the traced remainder;
+   *  Phase B — the legacy key IS the assetId). */
   fadeKeys: ReadonlySet<string>;
   geometry: Map<string, AssetGeometry>;
   toolHand: WhiteboardAsset;
@@ -444,7 +445,11 @@ export async function setupScenePage(
     { drawIndex: [...composed.pathEls], textIndex: [...composed.textEls] }
   );
   for (const [key, elId] of composed.pathEls) {
-    const [assetId, pathId] = key.split("::");
+    // Phase B — the frame key's first segment is the PLACEMENT identity,
+    // no longer the assetId when placements repeat; the compose pass
+    // registered key → assetId (one derivation, never a re-parse guess).
+    const pathId = key.slice(key.indexOf("::") + 2);
+    const assetId = composed.pathAssetIds.get(key) ?? "";
     // P0 — the traced remainder: opacity-fade ONLY (no dash machinery —
     // the colors applier drives these elements at the completion
     // boundary). The fade keys come from the SAME tracedSplitForScene

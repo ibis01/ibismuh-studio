@@ -43,15 +43,18 @@ import {
 // beatSceneEvents the renderer runs (the one-source law — preview ≡ final).
 import { beatSceneEvents } from "@/lib/ibismuh/whiteboard/beat-plan";
 import type { Placement } from "@/lib/ibismuh/whiteboard/svg";
-import type { WhiteboardProject } from "@/lib/ibismuh/whiteboard/storyboard";
+import { placementKey, type WhiteboardProject } from "@/lib/ibismuh/whiteboard/storyboard";
 
 export interface WbEditing {
+  /** The SELECTED placement's identity key (Phase B — the legacy key IS
+   *  the assetId; two placements of one asset select separately). */
   selectedAssetId: string | null;
-  /** Live-drag reporter (the studio mirrors it into its edit buffer). */
-  onPlacementDrag: (assetId: string, placement: Placement) => void;
+  /** Live-drag reporter (the studio mirrors it into its edit buffer).
+   *  Addresses the placement by its identity key. */
+  onPlacementDrag: (placementKey: string, placement: Placement) => void;
   /** Commit on pointer-up (the studio writes it into the project). */
-  onPlacementCommit: (assetId: string, placement: Placement) => void;
-  onSelect: (assetId: string | null) => void;
+  onPlacementCommit: (placementKey: string, placement: Placement) => void;
+  onSelect: (placementKey: string | null) => void;
 }
 
 export interface WbCanvasProps {
@@ -274,7 +277,10 @@ export default function WbCanvas({
       w.__wbDraw = new Map(composed.pathEls);
       w.__wbText = new Map(composed.textEls);
       for (const [key, elId] of composed.pathEls) {
-        const [assetId, pathId] = key.split("::");
+        // Phase B — the key's first segment is the PLACEMENT identity; the
+        // compose pass registered key → assetId for the geometry lookup.
+        const pathId = key.slice(key.indexOf("::") + 2);
+        const assetId = composed.pathAssetIds.get(key) ?? "";
         // P0 — the traced remainder: opacity-fade ONLY (no dash machinery —
         // the colors applier drives these elements at the completion
         // boundary). Same derivation the scheduler used (one source).
@@ -422,11 +428,12 @@ export default function WbCanvas({
     for (const pl of geom.rt.scene.placements) {
       const asset = geom.rt.lib.assets.get(pl.assetId);
       if (!asset) continue;
+      const selKey = placementKey(pl);
       // The live drag wins over the committed doc — the outline tracks the
       // pointer, not the last save.
-      const live = lastDragRef.current.get(pl.assetId);
+      const live = lastDragRef.current.get(selKey);
       const shown = live ?? pl.placement;
-      const selected = pl.assetId === editing.selectedAssetId;
+      const selected = selKey === editing.selectedAssetId;
       const pts = placementCorners(asset.viewBox.w, asset.viewBox.h, shown)
         .map(geom.toPx)
         .map((p) => `${p.x},${p.y}`)
@@ -448,7 +455,7 @@ export default function WbCanvas({
   useEffect(() => {
     const svg = overlayRef.current;
     if (!svg || !editing) return;
-    let drag: { assetId: string; grabDX: number; grabDY: number; orig: Placement } | null = null;
+    let drag: { key: string; grabDX: number; grabDY: number; orig: Placement } | null = null;
 
     const localPoint = (e: PointerEvent) => {
       const rect = svg.getBoundingClientRect();
@@ -477,10 +484,10 @@ export default function WbCanvas({
         editing.onSelect(null);
         return;
       }
-      editing.onSelect(hit.assetId);
+      editing.onSelect(placementKey(hit));
       const p = geom.fromPx(px, py);
       drag = {
-        assetId: hit.assetId,
+        key: placementKey(hit),
         grabDX: p.x - hit.placement.x,
         grabDY: p.y - hit.placement.y,
         orig: { ...hit.placement },
@@ -505,15 +512,16 @@ export default function WbCanvas({
         rotateDeg: drag.orig.rotateDeg,
       };
       // Live patch — the SAME attribute write the applier performs for
-      // placements (wb-page APPLY_FRAME_FN's placements loop).
-      const g = iframe.contentDocument?.getElementById(`g-${drag.assetId}`);
+      // placements (wb-page APPLY_FRAME_FN's placements loop). Phase B —
+      // groups are g-<placementKey>.
+      const g = iframe.contentDocument?.getElementById(`g-${drag.key}`);
       if (g)
         g.setAttribute(
           "transform",
           `translate(${next.x} ${next.y}) rotate(${next.rotateDeg}) scale(${next.scale})`
         );
-      lastDragRef.current.set(drag.assetId, next);
-      editing.onPlacementDrag(drag.assetId, next);
+      lastDragRef.current.set(drag.key, next);
+      editing.onPlacementDrag(drag.key, next);
       drawOverlay();
     };
     const onPointerUp = (e: PointerEvent) => {
@@ -523,9 +531,9 @@ export default function WbCanvas({
       } catch {
         /* already released */
       }
-      const last = lastDragRef.current.get(drag.assetId);
-      if (last) editing.onPlacementCommit(drag.assetId, last);
-      lastDragRef.current.delete(drag.assetId);
+      const last = lastDragRef.current.get(drag.key);
+      if (last) editing.onPlacementCommit(drag.key, last);
+      lastDragRef.current.delete(drag.key);
       drag = null;
     };
     svg.addEventListener("pointerdown", onPointerDown);

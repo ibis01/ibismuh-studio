@@ -21,6 +21,7 @@
 // keys out, byte-identical (the suite pins the double-run).
 import { planBeats, type PlanBeatsOptions } from "./beat-plan";
 import type { AnimationEvent, CameraEvent, WhiteboardScene } from "./storyboard";
+import { eventPlacementKey, placementKey } from "./storyboard";
 import type { AssetGeometry } from "./timing";
 
 /** Travel floor: a reframe shorter than this reads as a jump-cut. The
@@ -54,33 +55,39 @@ export interface CameraFocusRect {
   y1: number;
 }
 
-/** The beat plan's shape, narrowed to what the director reads. */
+/** The beat plan's shape, narrowed to what the director reads. Phase B —
+ *  `placementKeys` is the placement-identity addressing (the camera frames
+ *  INSTANCES; the legacy key IS the assetId). */
 interface DirectedBeat {
   assetIds: string[];
+  placementKeys: string[];
   startMs: number;
   endMs: number;
 }
 
-/** The transformed bounding box of one placed asset (sampled through the
- *  real flattened geometry — the same points the pen rides). */
+/** The transformed bounding box of one PLACED INSTANCE (sampled through the
+ *  real flattened geometry — the same points the pen rides). Phase B — the
+ *  instance is addressed by its placement key; the geometry rides the
+ *  placement's own assetId. */
 function assetBBox(
   scene: WhiteboardScene,
-  assetId: string,
+  placementKeyStr: string,
   geometry: Map<string, AssetGeometry>
 ): CameraFocusRect | null {
-  const pl = scene.placements.find((p) => p.assetId === assetId)?.placement;
-  const geo = geometry.get(assetId);
+  const pl = scene.placements.find((p) => placementKey(p) === placementKeyStr);
+  const geo = pl ? geometry.get(pl.assetId) : undefined;
   if (!pl || !geo) return null;
+  const base = pl.placement;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const segs of geo.paths.values()) {
     for (const seg of segs) {
       for (const pt of seg.points) {
-        const cos = Math.cos((pl.rotateDeg * Math.PI) / 180);
-        const sin = Math.sin((pl.rotateDeg * Math.PI) / 180);
-        const sx = pt.x * pl.scale;
-        const sy = pt.y * pl.scale;
-        const x = pl.x + sx * cos - sy * sin;
-        const y = pl.y + sx * sin + sy * cos;
+        const cos = Math.cos((base.rotateDeg * Math.PI) / 180);
+        const sin = Math.sin((base.rotateDeg * Math.PI) / 180);
+        const sx = pt.x * base.scale;
+        const sy = pt.y * base.scale;
+        const x = base.x + sx * cos - sy * sin;
+        const y = base.y + sx * sin + sy * cos;
         if (x < x0) x0 = x;
         if (y < y0) y0 = y;
         if (x > x1) x1 = x;
@@ -119,14 +126,16 @@ export function framingFor(rect: CameraFocusRect, width: number, height: number)
 /** Each beat's stroke ONSET: the earliest pen event whose asset the beat
  *  owns. The camera must rest by then (the stable writing window). */
 function beatOnsets(beats: DirectedBeat[], events: AnimationEvent[]): number[] {
+  // Phase B — the owner map is keyed by PLACEMENT identity (an event's
+  // address); the legacy key IS the assetId.
   const owner = new Map<string, number>();
   beats.forEach((b, i) => {
-    for (const id of b.assetIds) if (!owner.has(id)) owner.set(id, i);
+    for (const k of b.placementKeys) if (!owner.has(k)) owner.set(k, i);
   });
   const onsets = beats.map(() => Number.POSITIVE_INFINITY);
   for (const e of events) {
     if (e.type !== "draw_path" && e.type !== "write_text") continue;
-    const beat = owner.get(e.assetId);
+    const beat = owner.get(eventPlacementKey(e));
     if (beat === undefined) continue;
     if (e.startMs < onsets[beat]) onsets[beat] = e.startMs;
   }
@@ -162,7 +171,7 @@ export function directCamera(
 
   const rects: (CameraFocusRect | null)[] = beats.map((b) => {
     let u: CameraFocusRect | null = null;
-    for (const id of b.assetIds) u = unionRect(u, assetBBox(scene, id, geometry));
+    for (const k of b.placementKeys) u = unionRect(u, assetBBox(scene, k, geometry));
     return u; // RAW (unpadded) — the pad is applied once, at framing time
   });
   // A beat with no drawable geometry cannot frame — it inherits nothing
