@@ -57,6 +57,12 @@ import {
   type GraphicsSceneInput,
   scaffoldGraphicsDoc,
 } from "./planner";
+import {
+  componentNames,
+  expandComponent,
+  resolveComponent,
+  type ComponentContent,
+} from "./components";
 
 // ---------------------------------------------------------------------------
 // Tunables — the planner's own walls (all under the validator's named
@@ -91,6 +97,11 @@ const PLANNER_ROTATE_MAX = 180;
  *  string ("rise") or a partial motion object ({kind, durationMs,
  *  delayMs, ease}). */
 export interface LlmElementProposal {
+  /** Phase C — name a SEMANTIC COMPONENT instead of a kind: the registry
+   *  expansion runs first (the parts become element proposals, each
+   *  policed like every element). A proposal naming both a component and
+   *  a kind dies — ambiguous by construction. */
+  component?: unknown;
   kind?: unknown;
   id?: unknown;
   x?: unknown;
@@ -98,6 +109,8 @@ export interface LlmElementProposal {
   scale?: unknown;
   rotateDeg?: unknown;
   text?: unknown;
+  /** The component's secondary text slot (attribution / context line). */
+  sub?: unknown;
   sizePx?: unknown;
   weight?: unknown;
   color?: unknown;
@@ -499,6 +512,77 @@ function policePayload(
  * element is SERVED; everything else falls back to the native rule
  * table.
  */
+// ---------------------------------------------------------------------------
+// Phase C — the component channel: a proposal may name a SEMANTIC
+// COMPONENT; the registry expansion turns it into element proposals that
+// ride the EXISTING police (per-element degradation applies to component
+// parts verbatim — a dropped part never sinks its siblings).
+// ---------------------------------------------------------------------------
+
+/** Read the component's story-derived content off the proposal. The
+ *  fields are lenient like every proposal field — the expansion's own
+ *  content law (required slots refuse) does the policing. */
+function componentContentFromProposal(p: LlmElementProposal): ComponentContent {
+  const content: ComponentContent = {};
+  const text = str(p.text).trim();
+  if (text !== "") content.text = text;
+  const sub = str(p.sub).trim();
+  if (sub !== "") content.sub = sub;
+  const to = num(p.to);
+  if (Number.isFinite(to)) {
+    const from = num(p.from);
+    const cp: { from: number; to: number; unit?: string; decimals?: 0 | 1 | 2 } = {
+      from: Number.isFinite(from) ? from : 0,
+      to,
+    };
+    const unit = str(p.unit).trim();
+    if (unit !== "") cp.unit = unit.slice(0, 12);
+    const decimals = num(p.decimals);
+    if (decimals === 0 || decimals === 1 || decimals === 2) cp.decimals = decimals;
+    content.counter = cp;
+  }
+  const iconId = str(p.iconId).trim();
+  if (iconId !== "") content.iconId = iconId;
+  return content;
+}
+
+/** A registry-expanded element → the proposal shape the police consumes.
+ *  Placements ride verbatim (the expansion already remapped them — the
+ *  police's clamp pass is idempotent on in-board placements); the icon
+ *  part keeps its library id as provenance (the police re-resolves
+ *  through the ONE table). Motions are NOT carried: the police supplies
+ *  the native defaults with the element's true per-kind order — the same
+ *  values the expansion computed. */
+function proposalFromExpandedElement(el: GraphicsElement, content: ComponentContent): LlmElementProposal {
+  const out: LlmElementProposal = {
+    kind: el.kind,
+    id: el.id,
+    x: el.at.x,
+    y: el.at.y,
+    scale: el.at.scale,
+    rotateDeg: el.at.rotateDeg,
+  };
+  if (el.text !== undefined) {
+    out.text = el.text.text;
+    out.sizePx = el.text.sizePx;
+  }
+  if (el.counter !== undefined) {
+    out.from = el.counter.from;
+    out.to = el.counter.to;
+    out.unit = el.counter.unit;
+    out.decimals = el.counter.decimals;
+  }
+  if (el.icon !== undefined && typeof content.iconId === "string") {
+    out.iconId = content.iconId;
+  }
+  return out;
+}
+
+/**
+ * Normalize the model's scene proposals into grammar-legal elements:
+ * per-element policing (kind set, payload shape, motion compatibility,
+ * id law, per-scene cap, the scene clock) with every drop REPORTED.
+ */
 export function normalizeGraphicsProposals(
   raw: LlmGraphicsScenePlan[],
   ctx: {
@@ -545,6 +629,48 @@ export function normalizeGraphicsProposals(
 
     for (let pi = 0; pi < proposals.length; pi++) {
       const p = (proposals[pi] ?? {}) as LlmElementProposal;
+      // Phase C — the component channel (BEFORE the cap: a component's
+      // parts face the cap individually; the container itself is not an
+      // element). A proposal naming a component expands into its parts at
+      // this position — each part policed like every element (a dropped
+      // part never sinks its siblings, the per-element degradation law).
+      // A proposal naming BOTH a component and a kind dies (ambiguous by
+      // construction); an unknown component id dies with the registry's
+      // name in the reason.
+      const componentId = str(p.component).trim();
+      if (componentId !== "") {
+        if (str(p.kind).trim() !== "") {
+          dropped.push({
+            scene: sceneNo,
+            subject: componentId.slice(0, 40),
+            reason: "a proposal may name a component or a kind, not both",
+          });
+          continue;
+        }
+        if (resolveComponent(componentId) === null) {
+          dropped.push({
+            scene: sceneNo,
+            subject: componentId.slice(0, 40),
+            reason: `unknown component "${componentId.slice(0, 32)}" — the registry is closed (${componentNames().join(", ")})`,
+          });
+          continue;
+        }
+        const content = componentContentFromProposal(p);
+        let parts: GraphicsElement[];
+        try {
+          parts = expandComponent(componentId, content, { width: ctx.width, height: ctx.height });
+        } catch (err) {
+          dropped.push({
+            scene: sceneNo,
+            subject: componentId.slice(0, 40),
+            reason: err instanceof Error ? err.message.slice(0, 160) : "component expansion failed",
+          });
+          continue;
+        }
+        proposals.splice(pi, 1, ...parts.map((el) => proposalFromExpandedElement(el, content)));
+        pi -= 1; // the loop's pi++ lands on the first expanded part
+        continue;
+      }
       if (elements.length >= maxElements) {
         dropped.push({
           scene: sceneNo,
@@ -683,6 +809,7 @@ const PLANNER_SYSTEM_PROMPT = `You are a motion-graphics storyboard planner. You
 }
 
 Element kinds (closed set): headline, subhead, bullet, counter, barChart, icon, callout, shape, group.
+- SEMANTIC COMPONENTS (preferred for whole-card moments): instead of a kind, an element may name "component" — one of: ${componentNames().join(", ")}. A component expands into its professional layout automatically (stat-card: icon + counter + label; big-quote: quote + attribution; cta-banner: line + support; kicker-card: kicker + title; icon-caption: mark + caption). Give it "text" (required for big-quote/cta-banner/kicker-card), optional "sub" (the context/attribution/support line), and for stat-card/icon-caption finite "from"/"to" (+ optional "unit") or an "iconId" from the library. Do NOT also set "kind" on a component element.
 - headline/subhead/bullet/callout REQUIRE a non-empty "text" (bullet/callout ≤ 120 chars).
 - counter REQUIRES finite "from" and "to" with from < to (it counts up); optional "unit" (short) and "decimals" (0|1|2).
 - barChart REQUIRES "data": 1-5 rows of { "label", "value" } — value finite ≥ 0. Use ONLY numbers the scene's narration actually supports.

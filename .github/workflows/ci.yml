@@ -335,6 +335,13 @@ jobs:
       - name: Compound asset graphs (composition laws)
         run: npm run test:whiteboard-compounds
 
+      # Phase C slice 1 — the MG design system (semantic components +
+      # animation recipes): the registries fail closed, the baseline recipe
+      # IS the native table (byte-identity), the quote archetype and the
+      # LLM component channel ride the existing police.
+      - name: Graphics design-system battery (recipes + components)
+        run: npm run test:graphics-design
+
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes
       # → print the measured RTO. "A backup that has never been restored is
