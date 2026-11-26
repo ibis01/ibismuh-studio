@@ -20,7 +20,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LoadingState } from "@/components/ibismuh/shared";
 import type { CatalogAssetMeta } from "@/lib/ibismuh/catalog/contracts";
 import { searchRows } from "@/lib/ibismuh/catalog/search";
-import { expandCompound } from "@/lib/ibismuh/whiteboard/compounds";
+import { deriveCompoundInstanceId, expandCompound, WB_COMPOUND_INDEX } from "@/lib/ibismuh/whiteboard/compounds";
+import {
+  compoundGroups,
+  deleteCompoundGroup,
+  duplicateCompoundGroup,
+  groupCentroid,
+  groupMembers,
+  isGroupLocked,
+  nudgeCompoundGroup,
+  recomposeCompoundGroup,
+  setGroupLock,
+  ungroupCompoundGroup,
+} from "@/lib/ibismuh/whiteboard/groups";
+import { COMPOUND_CHOREOGRAPHY_IDS } from "@/lib/ibismuh/whiteboard/choreography";
 import {
   derivePlacementId,
   placementKey,
@@ -273,20 +286,27 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
   // Phase B slice 3 + 4 — the palette can place a COMPOSITION: the row's
   // graph expands at the editor seam (the same constructor the planners
   // use), so the doc carries primitive placements only — each part a named
-  // instance (`<compoundId>-<partAssetId>`) the whole engine already
-  // speaks. The first part is selected (the inspector addresses it).
+  // instance (`<instanceId>-<partAssetId>`) the whole engine already
+  // speaks. THE INSTANCE NAMESPACE (the re-audit's P0): the derive law
+  // mints the instance id (bare compoundId when free — legacy names —
+  // else `-2`, `-3`…), so the SAME compound places TWICE as two honest
+  // groups; every part carries its group mark. The first part is selected.
   const addCompoundPlacement = (row: CatalogAssetMeta) => {
     if (!project || !scene || !row.composition) return;
+    const spec = WB_COMPOUND_INDEX.get(row.id);
+    if (!spec) return;
     const n = scene.placements.length;
+    const instanceId = deriveCompoundInstanceId(scene, spec);
     const parts = expandCompound(
-      { id: row.id, parts: row.composition.parts },
+      spec,
       {
-        x: Math.round(project.width * 0.5),
-        y: Math.round(project.height * 0.45),
+        x: Math.round(project.width * 0.5 + (n % 5) * 44),
+        y: Math.round(project.height * 0.45 + (n % 5) * 36),
         scale: 1,
         rotateDeg: 0,
       },
-      n
+      n,
+      instanceId
     );
     mutateScene((s) => ({
       ...s,
@@ -295,6 +315,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
         ...parts.map((p) => ({
           assetId: p.assetId,
           placementId: p.placementId,
+          groupId: p.groupId,
           placement: p.placement,
           order: p.order,
         })),
@@ -302,6 +323,11 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
     }));
     setSelAsset(parts[0]?.assetId ?? null);
     setSelKey(parts[0]?.placementId ?? null);
+    setNotice(
+      instanceId === row.id
+        ? `Placed "${row.id}" — its parts are one group`
+        : `Placed "${row.id}" again as "${instanceId}" — a second independent group`
+    );
   };
 
   /** One click, one row: compositions expand, primitives place directly. */
@@ -313,17 +339,31 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
 
   const patchPlacement = useCallback(
     (key: string, patch: Partial<Placement>) => {
-      mutateScene((s) => ({
-        ...s,
-        placements: s.placements.map((pl) =>
-          placementKey(pl) === key ? { ...pl, placement: { ...pl.placement, ...patch } } : pl
-        ),
-      }));
+      mutateScene((s) => {
+        // The LOCK LAW: a locked group's members are inert — the patch is
+        // ignored (the inspector disables its controls; this gate keeps
+        // the data honest even if a UI slip lets one through).
+        const target = s.placements.find((pl) => placementKey(pl) === key);
+        if (target?.groupId !== undefined && isGroupLocked(s, target.groupId)) return s;
+        return {
+          ...s,
+          placements: s.placements.map((pl) =>
+            placementKey(pl) === key ? { ...pl, placement: { ...pl.placement, ...patch } } : pl
+          ),
+        };
+      });
     },
     [mutateScene]
   );
 
   const removePlacement = (key: string) => {
+    // The LOCK LAW: a locked group's member refuses the single-part delete
+    // (the compound moves as one body — delete the GROUP instead).
+    const target = scene?.placements.find((pl) => placementKey(pl) === key);
+    if (target?.groupId !== undefined && scene && isGroupLocked(scene, target.groupId)) {
+      setNotice(`"${key}" is part of locked group "${target.groupId}" — unlock it or delete the whole group`);
+      return;
+    }
     // Dropping a placement drops its explicit events too — events for an
     // unplaced asset are invisible ink (composeScene only emits placed
     // assets), so keeping them would be silent dead data. Phase B — events
@@ -341,6 +381,126 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
       (pl) => placementKey(pl) !== key && pl.assetId === selAsset
     );
     if (!stillPlaced) setSelAsset(null);
+  };
+
+  // ---- compound GROUP operations (the re-audit's step 2) ----------------
+  // The selected placement's group context: every op below acts on the
+  // WHOLE group (atomic — a compound is one body), never one part.
+  const selGroupId =
+    selKey && scene
+      ? scene.placements.find((pl) => placementKey(pl) === selKey)?.groupId ?? null
+      : null;
+
+  const duplicateGroup = () => {
+    if (!scene || !selGroupId || !project) return;
+    const centroid = groupCentroid(scene, selGroupId);
+    if (!centroid) return;
+    const res = duplicateCompoundGroup(scene, selGroupId, {
+      x: centroid.x + 80,
+      y: centroid.y + 64,
+      scale: 1,
+      rotateDeg: 0,
+    });
+    if (!res) {
+      setNotice(isGroupLocked(scene, selGroupId) ? `Group "${selGroupId}" is locked — unlock to duplicate` : "This group cannot be duplicated");
+      return;
+    }
+    mutateScene(() => res.scene);
+    setSelKey(res.firstKey);
+    setSelAsset(res.scene.placements.find((pl) => placementKey(pl) === res.firstKey)?.assetId ?? null);
+    setNotice(`Duplicated as "${res.instanceId}" — two independent groups now`);
+  };
+
+  const deleteGroup = () => {
+    if (!scene || !selGroupId) return;
+    const next = deleteCompoundGroup(scene, selGroupId);
+    if (!next) {
+      setNotice(isGroupLocked(scene, selGroupId) ? `Group "${selGroupId}" is locked — unlock to delete` : "This group cannot be deleted");
+      return;
+    }
+    mutateScene(() => next);
+    setSelKey(null);
+    setSelAsset(null);
+    setNotice(`Group "${selGroupId}" deleted — its events left with it`);
+  };
+
+  const ungroupGroup = () => {
+    if (!scene || !selGroupId) return;
+    const next = ungroupCompoundGroup(scene, selGroupId);
+    if (!next) {
+      setNotice("This group cannot be ungrouped");
+      return;
+    }
+    mutateScene(() => next);
+    setNotice(`Group "${selGroupId}" dissolved — the parts stay as independent instances`);
+  };
+
+  const recomposeGroup = () => {
+    if (!scene || !selGroupId) return;
+    const next = recomposeCompoundGroup(scene, selGroupId);
+    if (!next) {
+      setNotice(isGroupLocked(scene, selGroupId) ? `Group "${selGroupId}" is locked — unlock to recompose` : "This group cannot be recomposed");
+      return;
+    }
+    mutateScene(() => next);
+    setNotice(`Group "${selGroupId}" recomposed — the registry's declared layout, back at the centroid`);
+  };
+
+  const nudgeGroup = (dx: number, dy: number) => {
+    if (!scene || !selGroupId) return;
+    const next = nudgeCompoundGroup(scene, selGroupId, dx, dy);
+    if (!next) {
+      setNotice(isGroupLocked(scene, selGroupId) ? `Group "${selGroupId}" is locked — unlock to move it` : "This group cannot be moved");
+      return;
+    }
+    mutateScene(() => next);
+  };
+
+  const toggleGroupLock = () => {
+    if (!scene || !selGroupId) return;
+    const locked = isGroupLocked(scene, selGroupId);
+    mutateScene((s) => setGroupLock(s, selGroupId, !locked));
+    setNotice(locked ? `Group "${selGroupId}" unlocked` : `Group "${selGroupId}" locked — its parts are inert until unlocked`);
+  };
+
+  // The choreography compile runs SERVER-SIDE (the geometry and the
+  // measured narration clock live with the library): the route retimes
+  // the group's pen events into the preset's assembly order, writes them
+  // as explicit events, and stamps the scene's receipt.
+  const applyChoreography = async (preset: string) => {
+    if (!scene || !selGroupId || !data) return;
+    setBusy("choreography");
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch(`/api/videos/${videoId}/whiteboard/choreography`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sceneId: scene.id, groupId: selGroupId, preset, rev: data.rev }),
+      });
+      if (res.status === 409) {
+        const body = (await res.json()) as {
+          error?: string;
+          current?: { rev: number; project: WhiteboardProject };
+        };
+        if (body.current) setConflict({ rev: body.current.rev, project: body.current.project });
+        setError(body.error ?? "This whiteboard changed under you");
+        return;
+      }
+      const body = (await res.json()) as { rev?: number; project?: WhiteboardProject; error?: string; errors?: string[] };
+      if (!res.ok) {
+        setError(body.errors?.length ? body.errors.join(" · ") : (body.error ?? "Choreography failed"));
+        return;
+      }
+      setData((d) => (d ? { ...d, rev: body.rev ?? d.rev + 1, project: body.project ?? d.project } : d));
+      setBuffer(body.project ?? null);
+      setDirty(false);
+      setNotice(`Choreography "${preset}" compiled — the group's draw events are pinned, the scene carries the receipt`);
+    } catch {
+      setError("Choreography failed");
+    } finally {
+      setBusy(null);
+    }
   };
 
   const reorderPlacement = (key: string, dir: -1 | 1) => {
@@ -1075,6 +1235,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
           {selKey && (() => {
             const pl = placedAssets.find((x) => placementKey(x) === selKey);
             if (!pl) return null;
+            const partLocked = pl.groupId !== undefined && isGroupLocked(scene, pl.groupId);
             return (
             <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 p-2.5">
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-cyan-200/70">
@@ -1088,6 +1249,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                     type="number"
                     value={pl.placement.x}
                     step={10}
+                    disabled={partLocked}
                     onChange={(e) => patchPlacement(selKey, { x: Number(e.target.value) })}
                     className={inputCls}
                   />
@@ -1098,6 +1260,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                     type="number"
                     value={pl.placement.y}
                     step={10}
+                    disabled={partLocked}
                     onChange={(e) => patchPlacement(selKey, { y: Number(e.target.value) })}
                     className={inputCls}
                   />
@@ -1110,6 +1273,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                     max={4}
                     step={0.05}
                     value={pl.placement.scale}
+                    disabled={partLocked}
                     onChange={(e) => patchPlacement(selKey, { scale: Number(e.target.value) })}
                     className="w-24 accent-white"
                   />
@@ -1123,6 +1287,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                     max={180}
                     step={5}
                     value={pl.placement.rotateDeg}
+                    disabled={partLocked}
                     onChange={(e) => patchPlacement(selKey, { rotateDeg: Number(e.target.value) })}
                     className="w-24 accent-white"
                   />
@@ -1130,10 +1295,73 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                 </label>
                 <button onClick={() => reorderPlacement(selKey, -1)} className={btnFaint} title="Send back">◀ z</button>
                 <button onClick={() => reorderPlacement(selKey, 1)} className={btnFaint} title="Bring forward">z ▶</button>
-                <button onClick={() => removePlacement(selKey)} className={`${btn} bg-red-500/15 text-red-200 hover:bg-red-500/25`}>
+                <button
+                  onClick={() => removePlacement(selKey)}
+                  disabled={partLocked}
+                  title={partLocked ? `Part of locked group "${pl.groupId}" — unlock or delete the group` : "Remove this placement (+ its events)"}
+                  className={`${btn} bg-red-500/15 text-red-200 hover:bg-red-500/25 disabled:opacity-40`}
+                >
                   Remove (+its events)
                 </button>
               </div>
+
+              {/* THE GROUP PANEL (the re-audit's step 2): the compound
+                  instance this part belongs to — the group edits as one
+                  body (duplicate / move / recompose / lock / ungroup /
+                  delete), and the choreography presets compile onto its
+                  draw events. */}
+              {pl.groupId && (
+                <div className="mt-2.5 rounded-md border border-white/10 bg-black/25 p-2">
+                  <p className="mb-1.5 flex flex-wrap items-center gap-2 text-xs text-white/60">
+                    <span className="font-medium text-white/80">Group {pl.groupId}</span>
+                    <span className="text-white/35">
+                      {groupMembers(scene, pl.groupId).length} parts
+                      {compoundGroups(scene).size > 1 ? ` · ${compoundGroups(scene).size} groups on this board` : ""}
+                    </span>
+                    {partLocked && <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-200">locked</span>}
+                    {scene.choreography && <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-cyan-200/80">choreography: {scene.choreography}</span>}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button onClick={() => nudgeGroup(-20, 0)} disabled={partLocked} className={btnFaint} title="Move the group left">←</button>
+                    <button onClick={() => nudgeGroup(0, -20)} disabled={partLocked} className={btnFaint} title="Move the group up">↑</button>
+                    <button onClick={() => nudgeGroup(0, 20)} disabled={partLocked} className={btnFaint} title="Move the group down">↓</button>
+                    <button onClick={() => nudgeGroup(20, 0)} disabled={partLocked} className={btnFaint} title="Move the group right">→</button>
+                    <button onClick={duplicateGroup} disabled={partLocked} className={btnGhost} title="Place an independent copy of the whole compound">Duplicate</button>
+                    <button onClick={recomposeGroup} disabled={partLocked} className={btnGhost} title="Reset the parts to the registry's declared layout at the centroid">Recompose</button>
+                    <button onClick={toggleGroupLock} className={partLocked ? btnSolid : btnGhost} title="Lock the group: its parts become inert until unlocked">
+                      {partLocked ? "Unlock" : "Lock"}
+                    </button>
+                    <button onClick={ungroupGroup} className={btnGhost} title="Dissolve the group: the parts stay as independent instances">Ungroup</button>
+                    <button onClick={deleteGroup} disabled={partLocked} className={`${btn} bg-red-500/15 text-red-200 hover:bg-red-500/25 disabled:opacity-40`} title="Delete the whole group (+ its events)">
+                      Delete group
+                    </button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <select
+                      defaultValue=""
+                      disabled={partLocked || busy === "choreography"}
+                      onChange={(e) => {
+                        if (e.target.value) void applyChoreography(e.target.value);
+                        e.target.value = "";
+                      }}
+                      className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs disabled:opacity-50"
+                      aria-label="Apply compound choreography"
+                    >
+                      <option value="">Choreography…</option>
+                      {COMPOUND_CHOREOGRAPHY_IDS.map((id) => (
+                        <option key={id} value={id}>
+                          {id === "assembly-cascade"
+                            ? "Cascade — draw order, back-to-back"
+                            : id === "assembly-center-out"
+                              ? "Center out — grows from the core"
+                              : "Edge in — builds around the core"}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="text-white/35">compiles the assembly onto the group's draw events</span>
+                  </div>
+                </div>
+              )}
             </div>
             );
           })()}

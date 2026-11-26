@@ -11,6 +11,8 @@
 import type { Placement } from "./svg";
 import { cameraPolicies } from "./camera-director";
 import { WHITEBOARD_PROFILE_IDS, type WhiteboardProfileId } from "./profiles";
+import { resolveInCompoundIndex } from "./compounds";
+import { COMPOUND_CHOREOGRAPHY_IDS } from "./choreography";
 
 export type HandStyle = "marker" | "pencil" | "chalk";
 /** W7 — which hand holds the tool (additive; absent = right, today). */
@@ -29,6 +31,15 @@ export interface WhiteboardAssetPlacement {
    *  Charset = validWhiteboardId (it becomes part of DOM ids and frame keys
    *  through the same `${key}--${pathId}` / `${key}::${pathId}` seams). */
   placementId?: string;
+  /** The compound INSTANCE this placement belongs to (the re-audit's P0:
+   *  the group member mark). Present ONLY on compound-expanded parts — the
+   *  group id names the instance (the compound id, or the compound id +
+   *  `-<digits>` for repeats); the durable member list IS the placements
+   *  carrying the mark, so there is no registry to drift. The validator
+   *  judges a group against the compound registry: the members must be
+   *  EXACTLY the spec's parts in the spec's draw order (fail-closed).
+   *  ABSENT = a plain placement (byte-identical legacy shape). */
+  groupId?: string;
   placement: Placement;
   /** Draw order across placements (lower first). Defaults to array order. */
   order?: number;
@@ -145,6 +156,18 @@ export interface WhiteboardScene {
    *  the previous scene drew. ABSENT = a clean scene (today's hard wipe,
    *  byte-for-byte — the additive-parse law). */
   board?: BoardPolicy;
+  /** The compound choreography receipt (the re-audit's step 3): the named
+   *  preset whose compile produced this scene's group draw events. The
+   *  validator refuses anything outside the closed preset vocabulary, and
+   *  a scene with NO compound group may not carry one (a receipt without
+   *  its event set is a lie). ABSENT = the fill law's own schedule. */
+  choreography?: string;
+  /** The LOCKED compound groups (the group-editing slice): a locked group
+   *  refuses member mutations in the editor (drag, delete, duplicate,
+   *  recompose) until unlocked. Additive; absent = nothing locked. Every
+   *  name must pass the id charset AND name a group THIS scene actually
+   *  places (fail-closed — a lock on a ghost group is dead data). */
+  groupLocks?: string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -274,19 +297,57 @@ function validEventTimes(e: { startMs?: unknown; durationMs?: unknown }): boolea
   );
 }
 
-/** Phase B — the raw-row identity pair: the derived placement KEY and the
- *  assetId for one raw placement row (the carry-integrity reader works on
- *  the raw JSON before placements parse). A row without a usable assetId
- *  contributes nothing. */
-function rawPlacementIdentity(e: Record<string, unknown>): { key: string; assetId: string } | null {
+/** Phase B — the raw-row identity triple: the derived placement KEY, the
+ *  assetId, and the raw group mark for one raw placement row (the carry-
+ *  integrity reader works on the raw JSON before placements parse). A row
+ *  without a usable assetId contributes nothing. */
+function rawPlacementIdentity(
+  e: Record<string, unknown>
+): { key: string; assetId: string; groupId?: string } | null {
   if (typeof e.assetId !== "string" || !e.assetId) return null;
   const key = typeof e.placementId === "string" && e.placementId ? e.placementId : e.assetId;
-  return { key, assetId: e.assetId };
+  const groupId = typeof e.groupId === "string" && e.groupId ? e.groupId : undefined;
+  return { key, assetId: e.assetId, ...(groupId ? { groupId } : {}) };
+}
+
+/** The previous scene's carry context, read from the RAW rows: placement
+ *  identities, the key/assetId name sets, and the compound-group member
+ *  map (groupId → member keys, in row order). One reader for the name
+ *  checks and the carried-set derivation — never a second parse. */
+function carryContext(
+  prevRaw: Record<string, unknown> | undefined
+): {
+  identities: { key: string; assetId: string; groupId?: string }[];
+  keys: Set<string>;
+  assetIds: Set<string>;
+  groups: Map<string, string[]>;
+} {
+  const identities = (
+    Array.isArray(prevRaw?.placements) ? (prevRaw.placements as Record<string, unknown>[]) : []
+  )
+    .map(rawPlacementIdentity)
+    .filter((x): x is { key: string; assetId: string; groupId?: string } => x !== null);
+  const groups = new Map<string, string[]>();
+  for (const x of identities) {
+    if (x.groupId === undefined) continue;
+    const members = groups.get(x.groupId) ?? [];
+    members.push(x.key);
+    groups.set(x.groupId, members);
+  }
+  return {
+    identities,
+    keys: new Set(identities.map((x) => x.key)),
+    assetIds: new Set(identities.map((x) => x.assetId)),
+    groups,
+  };
 }
 
 /**
  * Validate a parsed project JSON. `assetIds`/`pathIdsByAsset`/`textIdsByAsset`
  * come from the loaded library — events may only reference what exists.
+ * `compoundIndex` (the library's compound registry) judges compound GROUPS:
+ * when a placement carries a groupId the registry is REQUIRED — the group
+ * law resolves the instance and demands the exact spec member set.
  */
 export function validateWhiteboardProject(
   raw: unknown,
@@ -294,6 +355,9 @@ export function validateWhiteboardProject(
     assetIds: Set<string>;
     pathIdsByAsset: Map<string, Set<string>>;
     textIdsByAsset: Map<string, Set<string>>;
+    /** The compound registry (compounds.ts WB_COMPOUNDS through loadLibrary).
+     *  REQUIRED once any placement carries a groupId — fail-closed. */
+    compoundIndex?: ReadonlyMap<string, { id: string; parts: readonly { assetId: string }[] }>;
   }
 ): ValidationResult {
   const errors: string[] = [];
@@ -378,14 +442,9 @@ export function validateWhiteboardProject(
         // Phase B — names are PLACEMENT IDENTITY: a name matches a derived
         // placement KEY of the previous scene first, else any placement of
         // that assetId (the legacy grammar — stored docs keep their meaning).
-        const prevRaw = p.scenes[i - 1] as Record<string, unknown> | undefined;
-        const prevIdentities = (
-          Array.isArray(prevRaw?.placements) ? (prevRaw.placements as Record<string, unknown>[]) : []
-        )
-          .map(rawPlacementIdentity)
-          .filter((x): x is { key: string; assetId: string } => x !== null);
-        const prevKeys = new Set(prevIdentities.map((x) => x.key));
-        const prevAssetIds = new Set(prevIdentities.map((x) => x.assetId));
+        // Group names ride too: naming a compound GROUP carries all its
+        // members (the atomic carry — one name, one compound).
+        const prevCtx = carryContext(p.scenes[i - 1] as Record<string, unknown> | undefined);
         const carryNames = Array.isArray(b.carryPlacements) ? (b.carryPlacements as string[]) : [];
         if (new Set(carryNames).size !== carryNames.length) {
           errors.push(`scene ${i + 1}: carryPlacements names an asset twice`);
@@ -393,7 +452,8 @@ export function validateWhiteboardProject(
         }
         let carryOk = true;
         for (const name of carryNames) {
-          if (!prevKeys.has(name) && !prevAssetIds.has(name)) {
+          if (prevCtx.groups.has(name)) continue; // the atomic group carry
+          if (!prevCtx.keys.has(name) && !prevCtx.assetIds.has(name)) {
             errors.push(`scene ${i + 1}: carryPlacements names "${name.slice(0, 40)}", which the previous scene does not place`);
             carryOk = false;
           }
@@ -412,18 +472,34 @@ export function validateWhiteboardProject(
     const carriedKeys: Set<string> | null =
       board?.mode === "continuous"
         ? (() => {
-            const prevRaw = p.scenes[i - 1] as Record<string, unknown> | undefined;
-            const prevIdentities = (
-              Array.isArray(prevRaw?.placements) ? (prevRaw.placements as Record<string, unknown>[]) : []
-            )
-              .map(rawPlacementIdentity)
-              .filter((x): x is { key: string; assetId: string } => x !== null);
+            const prevCtx = carryContext(p.scenes[i - 1] as Record<string, unknown> | undefined);
             const names = board?.carryPlacements ?? [];
             const wanted =
               names.length > 0
-                ? prevIdentities.filter((x) => names.includes(x.key) || names.includes(x.assetId))
-                : prevIdentities;
-            return new Set(wanted.map((x) => x.key));
+                ? prevCtx.identities
+                    .filter(
+                      (x) =>
+                        names.includes(x.key) ||
+                        names.includes(x.assetId) ||
+                        (x.groupId !== undefined && names.includes(x.groupId))
+                    )
+                    .map((x) => x.key)
+                : prevCtx.identities.map((x) => x.key);
+            // The ATOMIC-CARRY law (the group-editing slice): a compound
+            // group cannot split across a board — if some (but not all)
+            // members of a group are carried, the doc is refused. Name the
+            // GROUP (one name, all members) or carry none of it.
+            const carried = new Set(wanted);
+            for (const [gid, memberKeys] of prevCtx.groups) {
+              const carriedMembers = memberKeys.filter((k) => carried.has(k));
+              if (carriedMembers.length > 0 && carriedMembers.length < memberKeys.length) {
+                errors.push(
+                  `scene ${i + 1}: carryPlacements splits the compound group "${gid}" — carried ink moves as one compound (name the group "${gid}", or carry none of it)`
+                );
+                return null;
+              }
+            }
+            return carried;
           })()
         : null;
     const placements: WhiteboardAssetPlacement[] = [];
@@ -453,6 +529,16 @@ export function validateWhiteboardProject(
           continue;
         }
       }
+      // The group member mark (the re-audit's P0): an explicit groupId must
+      // pass the namespace charset — it rides the same DOM-id/frame-key
+      // seams through the group's member keys. Membership integrity is
+      // judged after the placements parse (the group law, below).
+      if (e.groupId !== undefined) {
+        if (typeof e.groupId !== "string" || !validWhiteboardId(e.groupId)) {
+          errors.push(`scene ${i + 1}: groupId "${String(e.groupId).slice(0, 40)}" violates the id charset (namespace separators --/:: and exotic characters are forbidden)`);
+          continue;
+        }
+      }
       const key = typeof e.placementId === "string" && e.placementId ? e.placementId : e.assetId;
       if (seenKeys.has(key)) {
         if (typeof e.placementId === "string" && e.placementId) {
@@ -472,6 +558,7 @@ export function validateWhiteboardProject(
         assetId: e.assetId,
         placement: e.placement,
         ...(typeof e.placementId === "string" && e.placementId ? { placementId: e.placementId } : {}),
+        ...(typeof e.groupId === "string" && e.groupId ? { groupId: e.groupId } : {}),
         order: typeof e.order === "number" ? e.order : undefined,
       });
     }
@@ -487,6 +574,79 @@ export function validateWhiteboardProject(
         }
       }
     }
+    // THE GROUP LAW (the re-audit's P0 closure): every compound GROUP in
+    // this scene must resolve to a registered compound and carry EXACTLY
+    // that spec's parts in the spec's draw order — the durable member list
+    // is the placements themselves, judged fail-closed:
+    //   · a group without the registry is unjudgeable (refused);
+    //   · a group id that strips to no compound is a ghost (refused);
+    //   · members must match the spec's assetId SEQUENCE (a missing,
+    //     extra, duplicated, or reordered part is refused);
+    //   · two instances of one compound coexist (distinct instance ids,
+    //     each judged alone) — the repeated-placement win.
+    const sceneGroups = new Map<string, string[]>();
+    for (const pl of placements) {
+      if (pl.groupId === undefined) continue;
+      const members = sceneGroups.get(pl.groupId) ?? [];
+      members.push(pl.assetId);
+      sceneGroups.set(pl.groupId, members);
+    }
+    let groupsOk = true;
+    for (const [gid, memberAssetIds] of sceneGroups) {
+      if (library.compoundIndex === undefined) {
+        errors.push(`scene ${i + 1}: group "${gid}" carries no compound registry — the library must load WB_COMPOUNDS to judge groups`);
+        groupsOk = false;
+        continue;
+      }
+      const spec = resolveInCompoundIndex(gid, library.compoundIndex);
+      if (spec === null) {
+        errors.push(`scene ${i + 1}: group "${gid}" does not name a registered compound instance (the group law)`);
+        groupsOk = false;
+        continue;
+      }
+      const specIds = spec.parts.map((p) => p.assetId);
+      if (memberAssetIds.length !== specIds.length || memberAssetIds.some((a, j) => a !== specIds[j])) {
+        errors.push(`scene ${i + 1}: group "${gid}" members [${memberAssetIds.join(", ")}] do not match the compound "${spec.id}" parts [${specIds.join(", ")}] in draw order (the group law: a compound carries exactly its spec)`);
+        groupsOk = false;
+      }
+    }
+    // The LOCKED groups: every name must pass the charset (a locked ghost
+    // is dead data) and name a group THIS scene actually places.
+    let groupLocks: string[] | undefined;
+    if (s.groupLocks !== undefined) {
+      if (!Array.isArray(s.groupLocks) || s.groupLocks.some((g) => typeof g !== "string")) {
+        errors.push(`scene ${i + 1}: groupLocks must be a list of group ids`);
+        continue;
+      }
+      let locksOk = true;
+      for (const g of s.groupLocks as string[]) {
+        if (!validWhiteboardId(g)) {
+          errors.push(`scene ${i + 1}: groupLocks name "${g.slice(0, 40)}" violates the id charset`);
+          locksOk = false;
+        } else if (!sceneGroups.has(g)) {
+          errors.push(`scene ${i + 1}: groupLocks name "${g}", which this scene does not place (a lock rides a real group)`);
+          locksOk = false;
+        }
+      }
+      if (!locksOk) continue;
+      if (s.groupLocks.length > 0) groupLocks = s.groupLocks as string[];
+    }
+    // The choreography receipt: the closed preset vocabulary, and a scene
+    // with no compound group may not claim one (a receipt without its
+    // event set is a lie).
+    let choreography: string | undefined;
+    if (s.choreography !== undefined) {
+      if (typeof s.choreography !== "string" || !(COMPOUND_CHOREOGRAPHY_IDS as readonly string[]).includes(s.choreography)) {
+        errors.push(`scene ${i + 1}: choreography "${String(s.choreography).slice(0, 40)}" is not one of the compound presets (${COMPOUND_CHOREOGRAPHY_IDS.join(", ")})`);
+        continue;
+      }
+      if (sceneGroups.size === 0) {
+        errors.push(`scene ${i + 1}: choreography "${s.choreography}" names a preset but the scene places no compound group (a receipt without its group is a lie)`);
+        continue;
+      }
+      choreography = s.choreography;
+    }
+    if (!groupsOk) continue;
     const animations: AnimationEvent[] = [];
     const rawAnimations = Array.isArray(s.animations) ? s.animations : [];
     if (rawAnimations.length > WB_BUDGETS.animationsPerScene) {
@@ -608,6 +768,8 @@ export function validateWhiteboardProject(
       animations,
       camera,
       board,
+      ...(choreography !== undefined ? { choreography } : {}),
+      ...(groupLocks !== undefined ? { groupLocks } : {}),
     });
   }
   if (errors.length > 0 || scenes.length === 0) return { project: null, errors };
