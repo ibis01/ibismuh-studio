@@ -20,6 +20,7 @@ import { frameCountOf } from "../anim/clock";
 import { expectedCutsForTimeline, type ExpectedCuts } from "../render-qc";
 import type { TransitionSettings } from "../transitions";
 import { frameAt, graphicsSceneDurationsMs, type GraphicsElementFrame, type GraphicsFrameState } from "./frame";
+import { ASPECT_POLICIES, solveGraphicsLayout } from "./layout";
 import { graphicsBudgetReport } from "./preflight";
 import { graphicsTracks } from "./tracks";
 import { GRAPHICS_BUDGETS, type GraphicsDoc, type GraphicsElement, type GraphicsElementKind } from "./types";
@@ -417,6 +418,33 @@ export function graphicsQcMatrix(
   } catch (err) {
     rows.push(row("G1-READ-1", "On-screen text readability (S133)", "unmeasured",
       "not measured", `the readcheck probe failed: ${err instanceof Error ? err.message.slice(0, 160) : String(err)}`));
+  }
+
+  // WS8 — G1-LAY-1 (the responsive layout lens): every scene solved
+  // against its aspect's deliberate policy — the safe-area and min-size
+  // GATES fail the row (the subject outside the safe band or unreadable
+  // type is content the viewer cannot get, the readcheck class);
+  // collision/density ESTIMATES ride the detail as notes (estimates never
+  // block a render). Preview and final judge the SAME pure solve — the
+  // parity ask by construction.
+  try {
+    const solve = solveGraphicsLayout(doc);
+    const gateCount = solve.violations.length;
+    const notesCount = solve.notes.length;
+    rows.push(row(
+      "G1-LAY-1",
+      `Responsive layout gates hold for ${solve.aspect} (${solve.variant}) (WS8)`,
+      gateCount === 0 ? "pass" : "fail",
+      gateCount === 0
+        ? `${doc.scenes.length} scenes, ${notesCount} note(s), variant ${solve.variant}`
+        : `${gateCount} gate violation(s), ${notesCount} note(s)`,
+      gateCount === 0
+        ? `safe-rect ${Math.round(doc.width * ASPECT_POLICIES[solve.aspect].safeMarginRatio)}px margins, type floor ${ASPECT_POLICIES[solve.aspect].typeFloorPx}px — ${solve.policyNote}`
+        : solve.violations.slice(0, 3).map((v) => `${v.sceneId}/${v.elementId}: ${v.detail}`).join("; ")
+    ));
+  } catch (err) {
+    rows.push(row("G1-LAY-1", "Responsive layout gates (WS8)", "unmeasured",
+      "not measured", `the layout probe failed: ${err instanceof Error ? err.message.slice(0, 160) : String(err)}`));
   }
 
   // S133 — G1-DET-1 (the determinism sweep elevation): the frame truth
