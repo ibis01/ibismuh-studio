@@ -25,12 +25,19 @@
 // Pure + deterministic: same libraries → the same manifest, byte for byte.
 
 import { ASSETS, type WhiteboardAsset } from "../whiteboard/assets";
+import {
+  assertCompoundRegistry,
+  WB_COMPOUNDS,
+  type WhiteboardCompoundSpec,
+} from "../whiteboard/compounds";
 import { GRAPHICS_ICON_LIBRARY } from "../graphics/planner";
 import {
   buildCatalogManifest,
+  compoundContentHash,
   graphicsContentHash,
   whiteboardContentHash,
   type CatalogAssetMeta,
+  type CatalogCompositionPart,
   type CatalogManifest,
 } from "./contracts";
 
@@ -152,17 +159,58 @@ export function graphicsCatalogRows(
 }
 
 // ---------------------------------------------------------------------------
+// Compound rows (Phase B slice 3 — the composition graph)
+// ---------------------------------------------------------------------------
+
+/** The catalog rows for the compound registry: a compound's content IS its
+ *  graph (no own svg — the expansion law lives at the planner seam), so the
+ *  row carries the composition spec and hashes it. Category "composition",
+ *  concepts from the spec's tags + aliases (the search vocabulary),
+ *  complexity from the part count (a composition is dense by definition). */
+export function compoundCatalogRows(specs: readonly WhiteboardCompoundSpec[]): CatalogAssetMeta[] {
+  return specs.map((spec) => {
+    const parts: CatalogCompositionPart[] = spec.parts.map((p) => ({
+      assetId: p.assetId,
+      dx: p.dx,
+      dy: p.dy,
+      ...(p.scale !== undefined ? { scale: p.scale } : {}),
+    }));
+    return {
+      id: spec.id,
+      lane: "whiteboard" as const,
+      version: BUILTIN_VERSION,
+      contentHash: compoundContentHash({ id: spec.id, tags: [...spec.tags], parts }),
+      category: "composition",
+      aliases: [...spec.aliases],
+      concepts: [...spec.tags, ...spec.aliases],
+      subjectPacks: [],
+      styleFamily: BUILTIN_STYLE_FAMILY,
+      complexity: spec.parts.length >= 5 ? 5 : spec.parts.length >= 3 ? 4 : 3,
+      a11y: spec.a11y,
+      license: { ...BUILTIN_LICENSE },
+      provenance: "hand-authored" as const,
+      publishState: "published" as const,
+      ownerTenantId: null,
+      composition: { parts },
+    };
+  });
+}
+
+// ---------------------------------------------------------------------------
 // The builtin manifest (memoized — the build is pure, the memo is safe)
 // ---------------------------------------------------------------------------
 
 let memo: CatalogManifest | null = null;
 
-/** The builtin manifest over BOTH lanes: every whiteboard asset + every
- *  graphics icon, canonically sorted, content-hashed, fingerprinted. */
+/** The builtin manifest over BOTH lanes: every whiteboard asset + the
+ *  compound composition rows + every graphics icon, canonically sorted,
+ *  content-hashed, fingerprinted. The registry self-check rides the build —
+ *  a defective graph refuses the manifest (fail-closed by construction). */
 export function builtinCatalogManifest(): CatalogManifest {
   if (memo === null) {
+    assertCompoundRegistry();
     memo = buildCatalogManifest({
-      assets: [...whiteboardCatalogRows(ASSETS), ...graphicsCatalogRows(GRAPHICS_ICON_LIBRARY)],
+      assets: [...whiteboardCatalogRows(ASSETS), ...compoundCatalogRows(WB_COMPOUNDS), ...graphicsCatalogRows(GRAPHICS_ICON_LIBRARY)],
     });
   }
   return memo;

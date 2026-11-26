@@ -7847,3 +7847,22 @@ Work Log:
 Stage Summary:
 - Deliverable: a narration that NUMBERS its concept boards that concept twice — from the native rule table AND the LLM lane — under explicit placement identity, with every cue-less doc byte-identical and every raw model pick honestly accounted.
 - Phase B queue: compound asset graphs (next per the audit's order), the catalog browser UI, the deliberate follow-ups (cue-window tightening, per-instance sketch seeds) documented in docs/whiteboard/catalog-phase-b-slice-2.md.
+
+---
+Task ID: PhaseB-S3
+Agent: main (Z.ai)
+Task: Audit roadmap Phase B slice 3 — compound asset graphs (the composition lane), continuing the re-audit's improvement ladder after PR #21 (multi-pick layouts) merged as main @ cd2ac3f (post-merge main CI all green, Docker smoke included).
+
+Work Log:
+- Confirmed main's CI verdict first (8/8 including the main-only Docker production smoke and E2E), then cut catalog/phase-b-compound-graphs.
+- Built the compound registry (whiteboard/compounds.ts): four seed compositions over registered primitives (smart-farm-system, money-growth-cycle, online-classroom, water-harvest-cycle), assertCompoundRegistry refusing every defect BY NAME (ghost part dead-end law, duplicate ids/parts, charset on the id AND derived part ids, non-finite offsets, non-positive scales, empty compositions), and expandCompound — the ONE planner-seam constructor (offsets ride the scale, every part named <compoundId>-<partAssetId>).
+- THE ONE-SYNTAX LAW held throughout: a compound never reaches the doc — the engine's syntax carries primitive placements only; expansion yields named instances the whole engine already speaks (per-instance scheduling, beats, the ambiguity law, the carry plan all apply for free). A doc naming a compound id was already refused by the validator's library-membership law.
+- Catalog: the composition graph lives ON the row (composition field, fail-closed parse law in contracts.ts), the row's contentHash covers the graph (compoundContentHash) so the manifest fingerprint is tamper-evident over compositions, the builtin manifest grew 95 → 99 whiteboard rows, and searchCatalog finds compositions by their phrases. The registry self-check rides the manifest build — a defective graph refuses the manifest.
+- Native lane: WB_COMPOUND_PICKS (multi-word phrases only — plain "farm" still picks the barn, pinned), the rich middle scenes expand the composition at the declared slot, the support steps aside, the anti-repeat carry excludes a compound AND its parts, openers/closers never expand, compound-less stories stay byte-identical.
+- LLM lane: compounds ride buildPlannerCatalog (declared footprints) + the prompt's composition note; normalize's compoundIds law caps a composition at ONE instance per scene (a second pick IS the parts repeated — refused with the law named); compose expands the pick at its own coordinates with the parts riding its beat rank; primitive sequences compose byte-identically (the order cursor reproduces structural.length + j).
+- New battery scripts/test-whiteboard-compounds.mts — 14 laws across six suites (registry, expansion, native lane, catalog tamper-evidence + search, LLM lane, engine receipt) — wired into npm run check + CI after the multipick battery; test-catalog's coverage laws extended over the graph.
+- Local gates ALL green: typecheck, eslint, compounds 14/14 (first run), catalog 24/24, multipick 16/16, placement 27/0, unit 1064/0, the full check chain, drill RTO 493ms, HEALTH 0.
+
+Stage Summary:
+- Deliverable: composition is catalog metadata over the existing engine syntax — a narration that NAMES a system ("the smart farm works as one system") boards its whole cast as named, individually-addressable instances, in both planner lanes, with the graph tamper-evident in the manifest and searchable for the browser UI that comes next.
+- Phase B queue: the catalog browser UI (the palette adopts the search engine), then the mass-production pass (250-400 rows on the contract). Follow-ups documented in docs/whiteboard/catalog-phase-b-slice-3.md.

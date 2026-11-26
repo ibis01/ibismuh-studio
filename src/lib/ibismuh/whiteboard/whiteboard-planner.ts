@@ -12,6 +12,7 @@
 // APIs (the design §1 laws 1 and 5: native scaffold is $0 work).
 import crypto from "node:crypto";
 import type { WhiteboardAsset } from "./assets";
+import { WB_COMPOUND_INDEX, expandCompound, type WhiteboardCompoundSpec } from "./compounds";
 import { applyWhiteboardProfile } from "./profiles";
 import type { WhiteboardAssetPlacement, WhiteboardProject, WhiteboardScene } from "./storyboard";
 import { WB_BUDGETS, derivePlacementId } from "./storyboard";
@@ -394,6 +395,54 @@ function remapPlacement(pl: Placement, width: number, height: number): Placement
   return { x: Math.round(pl.x * fx), y: Math.round(pl.y * fy), scale: pl.scale * fx, rotateDeg: pl.rotateDeg };
 }
 
+// ---------------------------------------------------------------------------
+// Phase B slice 3 — the composition lane (compound asset graphs).
+//
+// A compound is a NAMED COMPOSITION of registered primitives
+// (compounds.ts): "smart-farm-system" = barn + sun + tractor + corn +
+// sprout. The narration can NAME one; the planner expands it at the seam —
+// the doc carries primitive placements only (the one-syntax law), each part
+// a named instance the whole engine already speaks. The rules below are
+// consulted BEFORE the primitive table for the rich path's MIDDLE scenes
+// only, and every rule is a multi-word phrase the primitive table cannot
+// claim — so every existing pick is byte-identical in behavior (the battery
+// pins: plain "farm" still picks the barn).
+// ---------------------------------------------------------------------------
+
+export const WB_COMPOUND_PICKS: { re: RegExp; compoundId: string }[] = [
+  { re: /\bsmart[- ]?farm( system)?\b/i, compoundId: "smart-farm-system" },
+  { re: /\bmoney (flow|cycle|system)\b|\bgrowth (cycle|engine)\b/i, compoundId: "money-growth-cycle" },
+  { re: /\bonline (class|classroom|course|lesson|school)\b|\bvirtual classroom\b|\be-?learning\b/i, compoundId: "online-classroom" },
+  { re: /\bwater (cycle|harvest|system)\b|\brain harvest\b/i, compoundId: "water-harvest-cycle" },
+];
+
+/** The composition slot: parts spread ±400-ish scene-space units around it
+ *  at scale 1 (the specs' offsets are authored for this reference). */
+const RICH_COMPOUND: Placement = { x: 960, y: 500, scale: 1.0, rotateDeg: 0 };
+
+/** The scene's compound pick: the first compound phrase whose composition
+ *  isn't the previous scene's board (the anti-repeat carry). Deterministic.
+ *  Exported for the compound battery. */
+export function pickCompoundForScene(text: string, prevPrimary: string): WhiteboardCompoundSpec | null {
+  for (const { re, compoundId } of WB_COMPOUND_PICKS) {
+    if (re.test(text) && compoundId !== prevPrimary) {
+      const spec = WB_COMPOUND_INDEX.get(compoundId);
+      if (spec) return spec;
+    }
+  }
+  return null;
+}
+
+/** The anti-repeat carry set: the previous scene's primary (primitive or
+ *  compound id) PLUS a compound's parts (the board just showed them — the
+ *  next scene picks a genuinely different cast). */
+function carryExclude(prevPrimary: string, prevCompound: WhiteboardCompoundSpec | null): ReadonlySet<string> | undefined {
+  if (!prevPrimary) return undefined;
+  const s = new Set<string>([prevPrimary]);
+  if (prevCompound) for (const p of prevCompound.parts) s.add(p.assetId);
+  return s;
+}
+
 function pickForScene(narration: string, position: number, exclude?: ReadonlySet<string>): string {
   return resolvePick(narration, position, exclude).assetId;
 }
@@ -541,8 +590,10 @@ export function scaffoldWhiteboardProject(input: {
     (input.generatedAssets ?? []).find((a) => a.id.startsWith(WB_GENERATED_TITLE_PREFIX))?.id ?? null;
   const genCloseId =
     (input.generatedAssets ?? []).find((a) => a.id.startsWith(WB_GENERATED_CLOSE_PREFIX))?.id ?? null;
-  // The anti-repeat carry: the previous scene's primary pick (rich path).
+  // The anti-repeat carry: the previous scene's primary pick (rich path) —
+  // a primitive assetId OR a compound id (with its parts riding the carry).
   let prevPrimary = "";
+  let prevCompound: WhiteboardCompoundSpec | null = null;
 
   const scenes: WhiteboardScene[] = input.scenes.map((s, i) => {
     const isFirst = i === 0;
@@ -555,10 +606,12 @@ export function scaffoldWhiteboardProject(input: {
       // anti-repeat exclusion keeps the previous scene's primary off this
       // board (the bar-chart×3/rocket×3 repetition the receipt caught).
       const richText = `${s.title} ${s.narration}`;
-      const resolved = resolvePick(richText, i, prevPrimary ? new Set([prevPrimary]) : undefined);
+      const compoundSpec = pickCompoundForScene(richText, prevPrimary);
+      const carry = carryExclude(prevPrimary, prevCompound);
+      const resolved = resolvePick(richText, i, carry);
       const primary = resolved.assetId;
-      const support = supportForScene(richText, i, new Set([primary, prevPrimary]));
-      prevPrimary = primary;
+      const support = supportForScene(richText, i, new Set([primary, ...(carry ?? [])]));
+      let rodeCompound: WhiteboardCompoundSpec | null = null;
       if (isFirst) {
         placements.push({ assetId: genTitleId, placement: remap(GEN_TITLE_PLACEMENT), order: 0 });
         placements.push({ assetId: primary, placement: remap(RICH_OPENER_PRIMARY), order: 1 });
@@ -567,6 +620,14 @@ export function scaffoldWhiteboardProject(input: {
         placements.push({ assetId: genCloseId, placement: remap(GEN_CLOSE_PLACEMENT), order: 0 });
         placements.push({ assetId: primary, placement: remap(RICH_CLOSER_PRIMARY), order: 1 });
         placements.push({ assetId: support, placement: remap(RICH_OPENER_SUPPORT), order: 2 });
+      } else if (compoundSpec) {
+        // ---- Phase B slice 3, the composition lane: the narration names a
+        // COMPOUND — expand its parts at the planner seam (the doc carries
+        // primitives only; the parts are named placements the whole engine
+        // already speaks). The composition IS the scene's content — the
+        // support pick steps aside, exactly like the count lane's twin.
+        rodeCompound = compoundSpec;
+        placements.push(...expandCompound(compoundSpec, remap(RICH_COMPOUND), 0));
       } else if (resolved.rule !== null && multiPickCue(richText, resolved.rule)) {
         // ---- Phase B slice 2, the count lane: the narration NUMBERS this
         // concept — board it twice under explicit placement ids (both named;
@@ -593,6 +654,8 @@ export function scaffoldWhiteboardProject(input: {
           order: 1,
         });
       }
+      prevPrimary = rodeCompound ? rodeCompound.id : primary;
+      prevCompound = rodeCompound;
       return {
         id: `scene-${s.index}`,
         narration: s.narration,

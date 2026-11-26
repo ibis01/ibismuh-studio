@@ -327,6 +327,14 @@ jobs:
       - name: Multi-pick layouts (planner count laws)
         run: npm run test:whiteboard-multipick
 
+      # Phase B slice 3: the compound asset graphs — the registry's graph
+      # laws, the planner-seam expansion (named parts, primitives-only wire),
+      # the catalog rows (the graph hashed as content), the LLM lane's
+      # one-composition-per-scene law, and the engine receipt over the
+      # expanded parts.
+      - name: Compound asset graphs (composition laws)
+        run: npm run test:whiteboard-compounds
+
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes
       # → print the measured RTO. "A backup that has never been restored is

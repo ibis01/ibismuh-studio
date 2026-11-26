@@ -10,6 +10,7 @@ import {
   scaffoldWhiteboardProjectLlm,
   type WhiteboardLlmPlannerReport,
 } from "@/lib/ibismuh/whiteboard/llm-planner";
+import { WB_COMPOUNDS } from "@/lib/ibismuh/whiteboard/compounds";
 import { invalidateRenderedArtifacts } from "@/lib/ibismuh/render";
 import { loadVideoLibrary, replaceVideoUpload } from "@/lib/ibismuh/whiteboard/asset-store";
 import { buildGeneratedCards } from "@/lib/ibismuh/whiteboard/whiteboard-planner";
@@ -109,9 +110,10 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       width: typeof b.width === "number" ? b.width : undefined,
       height: typeof b.height === "number" ? b.height : undefined,
       fps: typeof b.fps === "number" ? b.fps : undefined,
-      catalog: buildPlannerCatalog(lib.assets.values()),
+      catalog: buildPlannerCatalog(lib.assets.values(), WB_COMPOUNDS),
       generatedAssets: generatedCards,
       profileId: typeof b.profileId === "string" ? b.profileId : undefined,
+      compounds: WB_COMPOUNDS,
     });
     project = llm.project;
     plannerReport = llm.report;
