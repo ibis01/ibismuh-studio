@@ -59,14 +59,32 @@ export const GRAPHICS_COMPONENT_IDS = [
   "big-quote",
   "cta-banner",
   "icon-caption",
+  "comparison",
+  "before-after",
+  "process-steps",
+  "timeline-card",
+  "checklist",
+  "ranking",
+  "title-opener",
+  "closing-summary",
 ] as const;
 export type GraphicsComponentId = (typeof GRAPHICS_COMPONENT_IDS)[number];
 
 /** The lane-plan component family each card expresses (planner-types'
  *  GraphicComponentKind vocabulary — the declarative seam's names; a
  *  string here keeps the graphics module leaf-clean of the lane-plan
- *  types, and the battery pins the correspondence). */
-export type ComponentPlanKind = "statistic" | "headline" | "quote" | "cta" | "icon-group";
+ *  types, and the battery pins the correspondence). WS8 growth: the
+ *  comparison and timeline families join the closed set — both names
+ *  ALREADY exist in planner-types' GraphicComponentKind (the declarative
+ *  lane renders them), so the vocabulary grows without grammar growth. */
+export type ComponentPlanKind =
+  | "statistic"
+  | "headline"
+  | "quote"
+  | "cta"
+  | "icon-group"
+  | "comparison"
+  | "timeline";
 
 /** One part of a component: the primitive element kind it expands to and
  *  its offset (16:9 scene units) from the component's anchor — the anchor
@@ -80,10 +98,15 @@ export interface ComponentPartSpec {
   dx: number;
   dy: number;
   scale?: number;
-  /** The slot this part reads: "text" | "sub" | "counter" | "icon".
+  /** The slot this part reads: "text" | "sub" | "counter" | "icon" | "items".
    *  `required` slots refuse the expansion without content; optional
-   *  slots omit the part. */
-  slot: "text" | "sub" | "counter" | "icon";
+   *  slots omit the part. An "items" part reads `content.items[
+   *  itemIndex]` and omits when that index is absent — the ids of
+   *  present parts stay stable (an absent item never shifts another's
+   *  derived id). */
+  slot: "text" | "sub" | "counter" | "icon" | "items";
+  /** For "items"-slotted parts: the index into the caller's items array. */
+  itemIndex?: number;
   /** For text-slotted parts: the payload size override (the validator's
    *  12..288 band); absent ⇒ the DEFAULT_SIZE_PX for the kind. */
   sizePx?: number;
@@ -176,6 +199,116 @@ export const GRAPHICS_COMPONENTS: Readonly<Record<GraphicsComponentId, Component
       { id: "caption", kind: "bullet", dx: 0, dy: 110, slot: "sub" },
     ],
   },
+
+  // WS8 growth — the comparison family. The slots stay the caller's
+  // extraction: the headline names the topic, the items carry the two
+  // compared sides (items[0] left, items[1] right). No invented literals.
+  comparison: {
+    id: "comparison",
+    label: "Comparison",
+    intent:
+      "The two-sides moment: the topic names the comparison, the two terms land left and right of center. For versus narrations.",
+    planKind: "comparison",
+    anchor: { x: 960, y: 500 },
+    parts: [
+      { id: "topic", kind: "headline", dx: 0, dy: -180, slot: "text" },
+      { id: "left", kind: "subhead", dx: -320, dy: 80, slot: "items", itemIndex: 0 },
+      { id: "right", kind: "subhead", dx: 320, dy: 80, slot: "items", itemIndex: 1 },
+    ],
+  },
+  "before-after": {
+    id: "before-after",
+    label: "Before / after",
+    intent:
+      "The transformation moment: the change names the card, the before state and the after state stack beneath it — before first, after last.",
+    planKind: "comparison",
+    anchor: { x: 960, y: 500 },
+    parts: [
+      { id: "change", kind: "headline", dx: 0, dy: -200, slot: "text" },
+      { id: "before", kind: "subhead", dx: 0, dy: -20, slot: "items", itemIndex: 0 },
+      { id: "after", kind: "subhead", dx: 0, dy: 150, slot: "items", itemIndex: 1 },
+    ],
+  },
+  "process-steps": {
+    id: "process-steps",
+    label: "Process steps",
+    intent:
+      "The how-it-works moment: the process names the card, up to three steps descend beneath it in reading order.",
+    planKind: "timeline",
+    anchor: { x: 960, y: 480 },
+    parts: [
+      { id: "name", kind: "headline", dx: 0, dy: -220, slot: "text" },
+      { id: "step-1", kind: "bullet", dx: 0, dy: -40, slot: "items", itemIndex: 0 },
+      { id: "step-2", kind: "bullet", dx: 0, dy: 110, slot: "items", itemIndex: 1 },
+      { id: "step-3", kind: "bullet", dx: 0, dy: 260, slot: "items", itemIndex: 2 },
+    ],
+  },
+  "timeline-card": {
+    id: "timeline-card",
+    label: "Timeline",
+    intent:
+      "The history moment: the era names the card, the milestones descend in order — earliest first.",
+    planKind: "timeline",
+    anchor: { x: 960, y: 480 },
+    parts: [
+      { id: "era", kind: "headline", dx: 0, dy: -220, slot: "text" },
+      { id: "milestone-1", kind: "bullet", dx: 0, dy: -40, slot: "items", itemIndex: 0 },
+      { id: "milestone-2", kind: "bullet", dx: 0, dy: 110, slot: "items", itemIndex: 1 },
+      { id: "milestone-3", kind: "bullet", dx: 0, dy: 260, slot: "items", itemIndex: 2 },
+    ],
+  },
+  checklist: {
+    id: "checklist",
+    label: "Checklist",
+    intent:
+      "The readiness moment: the goal names the card, the requirements descend beneath it — each one a line the viewer can tick.",
+    planKind: "icon-group",
+    anchor: { x: 960, y: 480 },
+    parts: [
+      { id: "goal", kind: "headline", dx: 0, dy: -220, slot: "text" },
+      { id: "req-1", kind: "bullet", dx: 0, dy: -40, slot: "items", itemIndex: 0 },
+      { id: "req-2", kind: "bullet", dx: 0, dy: 110, slot: "items", itemIndex: 1 },
+      { id: "req-3", kind: "bullet", dx: 0, dy: 260, slot: "items", itemIndex: 2 },
+    ],
+  },
+  ranking: {
+    id: "ranking",
+    label: "Ranking",
+    intent:
+      "The leaderboard moment: the category names the card, the ranked rows descend — best first.",
+    planKind: "timeline",
+    anchor: { x: 960, y: 480 },
+    parts: [
+      { id: "category", kind: "headline", dx: 0, dy: -220, slot: "text" },
+      { id: "first", kind: "bullet", dx: 0, dy: -40, slot: "items", itemIndex: 0 },
+      { id: "second", kind: "bullet", dx: 0, dy: 110, slot: "items", itemIndex: 1 },
+      { id: "third", kind: "bullet", dx: 0, dy: 260, slot: "items", itemIndex: 2 },
+    ],
+  },
+  "title-opener": {
+    id: "title-opener",
+    label: "Title opener",
+    intent:
+      "The opening moment: the title lands large with an optional supporting line — the card the video opens on.",
+    planKind: "headline",
+    anchor: { x: 960, y: 500 },
+    parts: [
+      { id: "title", kind: "headline", dx: 0, dy: -60, slot: "text", sizePx: 88 },
+      { id: "support", kind: "subhead", dx: 0, dy: 140, slot: "sub" },
+    ],
+  },
+  "closing-summary": {
+    id: "closing-summary",
+    label: "Closing summary",
+    intent:
+      "The take-home moment: the summary line large, an optional reinforcement line beneath — the card the video ends on.",
+    planKind: "headline",
+    anchor: { x: 960, y: 500 },
+    parts: [
+      { id: "summary", kind: "headline", dx: 0, dy: -60, slot: "text", sizePx: 72 },
+      { id: "reinforce", kind: "subhead", dx: 0, dy: 140, slot: "sub" },
+    ],
+  },
 };
 
 /** The registry's member list in declaration order — the seat picker's
@@ -209,6 +342,12 @@ export interface ComponentContent {
   /** A REGISTERED icon id (resolved through GRAPHICS_ICON_LIBRARY — an
    *  unregistered id is a named refusal, never free-form paths). */
   iconId?: string;
+  /** The list slot (WS8 growth): the compared sides, the steps, the
+   *  milestones, the ranked rows. Each item rides capLine at 60 chars;
+   *  an items part omits when its index is absent; a PRESENT-but-junk
+   *  item (empty/whitespace) refuses — the caller asked for something
+   *  that cannot read. */
+  items?: readonly string[];
 }
 
 export interface ExpandComponentOpts {
@@ -245,6 +384,17 @@ export function expandComponent(
   const sub = typeof content.sub === "string" ? capLine(content.sub, 160) : undefined;
   const counter = content.counter;
   const iconSpec = typeof content.iconId === "string" ? GRAPHICS_ICON_LIBRARY[content.iconId] : undefined;
+  // The items slot: each present item rides the ONE capLine law (60 — a
+  // list row is shorter than a supporting line). Present-but-junk refuses;
+  // absent indexes omit (the stable-id law).
+  const items = Array.isArray(content.items)
+    ? content.items.map((raw, i) => {
+        if (typeof raw !== "string" || raw.trim() === "") {
+          throw new Error(`components: ${id} carries a non-readable item at index ${i} — list items must be non-empty strings`);
+        }
+        return capLine(raw, 60);
+      })
+    : undefined;
 
   const orders = new Map<GraphicsElementKind, number>();
   const out: GraphicsElement[] = [];
@@ -263,6 +413,14 @@ export function expandComponent(
       case "sub":
         if (sub === undefined) continue; // optional by design
         break;
+      case "items": {
+        // An items part omits when its index is absent (the stable-id
+        // law); a junk item already refused above (present-but-non-
+        // readable is a named refusal, never a placeholder).
+        const idx = part.itemIndex;
+        if (idx === undefined || items === undefined || items[idx] === undefined) continue;
+        break;
+      }
       case "counter":
         if (counter === undefined) {
           throw new Error(`components: ${id} requires a positive counter for its "${part.id}" part`);
@@ -317,6 +475,11 @@ export function expandComponent(
       case "sub":
         el.text = { ...textPayload(part.kind, sub as string), ...(part.sizePx !== undefined ? { sizePx: part.sizePx } : {}) };
         break;
+      case "items": {
+        const idx = part.itemIndex as number;
+        el.text = { ...textPayload(part.kind, (items as string[])[idx]), ...(part.sizePx !== undefined ? { sizePx: part.sizePx } : {}) };
+        break;
+      }
       case "counter": {
         const c = counter as { from: number; to: number; unit?: string; decimals?: 0 | 1 | 2 };
         const payload: CounterPayload = { from: c.from, to: c.to };

@@ -11,6 +11,7 @@ import type { DrawablePath, LaneScene, PlannerOutput, PlannerBeatRow } from "../
 import { LANE_REGISTRY } from "../studio-lanes";
 import { chatJson } from "../providers/llm";
 import { classifyVisualIntent, declareVisualBeatRow } from "./visual-beats";
+import { classifyWhiteboardRecipe } from "../whiteboard/recipes";
 import {
   asRecordArray,
   asString,
@@ -101,6 +102,10 @@ export async function planWhiteboard(input: PlannerInput): Promise<PlannerOutput
       if (!drawn.includes(p.role)) drawn.push(p.role);
     }
     const draft = drafts[i];
+    // WS6 — the recipe NAME rides the receipt (the choreography classifier
+    // over the same narration; the compile stays the beat-plan's — one
+    // engine, named honestly).
+    const recipe = classifyWhiteboardRecipe(scene.narration, i);
     return declareVisualBeatRow({
       sceneId: scene.id,
       concept: draft ? draft.concept : "scene",
@@ -109,7 +114,7 @@ export async function planWhiteboard(input: PlannerInput): Promise<PlannerOutput
       selectedIds: drawn,
       confidence: 0.6,
       timingSource: "estimated",
-      reason: "rule: the deterministic board cast — frame + underline, hash-rotated shapes, parity glyph",
+      reason: `rule: the ${recipe} recipe boards the deterministic cast — frame + underline, hash-rotated shapes, parity glyph`,
     });
   });
 

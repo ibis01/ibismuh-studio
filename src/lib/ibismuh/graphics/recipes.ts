@@ -51,6 +51,12 @@ export const GRAPHICS_RECIPE_IDS = [
   "cascade-list",
   "chart-grow",
   "quiet-card",
+  "comparison-bars",
+  "timeline-steps",
+  "process-steps",
+  "icon-group-entrance",
+  "final-summary",
+  "problem-solution",
 ] as const;
 export type GraphicsRecipeId = (typeof GRAPHICS_RECIPE_IDS)[number];
 
@@ -181,6 +187,83 @@ export const GRAPHICS_RECIPES: Readonly<Record<GraphicsRecipeId, GraphicsRecipe>
     exit: {
       bullet: { kind: "fade", durationMs: 260, delayMs: 640, ease: "measured-in-out" },
     },
+  },
+
+  // WS8 growth — the six recipes the plan's §11 names. Every override
+  // rides its compatibility row + the closed ease table (the compile
+  // gate verifies at EVERY use; the self-check verifies at load).
+  "comparison-bars": {
+    id: "comparison-bars",
+    label: "Comparison bars",
+    intent:
+      "The versus moment: the two bars grow side by side on a wide stagger — each row starts as the previous lands — while the topic holds above.",
+    enter: {
+      bar: { kind: "grow", durationMs: 700, delayMs: 350, delayStepMs: 260, ease: "expo-out" },
+      barChart: { kind: "grow", durationMs: 900, delayMs: 350, delayStepMs: 260, ease: "expo-out" },
+      subhead: { kind: "slide", durationMs: 450, delayMs: 900, ease: "measured-out" },
+    },
+    exit: {},
+  },
+  "timeline-steps": {
+    id: "timeline-steps",
+    label: "Timeline steps",
+    intent:
+      "The history moment: the milestones rise on a WIDE stagger (260ms steps — each era gets its own breath) while the era line holds.",
+    enter: {
+      bullet: { kind: "rise", durationMs: 460, delayMs: 350, delayStepMs: 260, ease: "measured-out" },
+      icon: { kind: "pop", durationMs: 450, delayMs: 150, ease: "measured-out" },
+    },
+    exit: {},
+  },
+  "process-steps": {
+    id: "process-steps",
+    label: "Process steps",
+    intent:
+      "The how-it-works moment: the steps slide on an even 200ms cadence — the procedure reads as one motion, no single step starring.",
+    enter: {
+      bullet: { kind: "slide", durationMs: 420, delayMs: 400, delayStepMs: 200, ease: "measured-out" },
+      headline: { kind: "rise", durationMs: 500, delayMs: 0, ease: "measured-out" },
+    },
+    exit: {},
+  },
+  "icon-group-entrance": {
+    id: "icon-group-entrance",
+    label: "Icon group entrance",
+    intent:
+      "The ensemble moment: the icons pop on a tight cascade (140ms steps — the group assembles as one gesture), the captions follow on the same stagger.",
+    enter: {
+      icon: { kind: "pop", durationMs: 480, delayMs: 100, delayStepMs: 140, ease: "measured-out" },
+      callout: { kind: "fade", durationMs: 420, delayMs: 500, delayStepMs: 140, ease: "measured-out" },
+    },
+    exit: {},
+  },
+  "final-summary": {
+    id: "final-summary",
+    label: "Final summary",
+    intent:
+      "The take-home moment: the summary rises first, the reinforcement fades beneath, and EVERYTHING clears early on a tail-anchored fade — the board bows out, it never lingers.",
+    enter: {
+      headline: { kind: "rise", durationMs: 520, delayMs: 0, ease: "measured-out" },
+      subhead: { kind: "fade", durationMs: 450, delayMs: 320, ease: "measured-out" },
+      bullet: { kind: "fade", durationMs: 420, delayMs: 460, delayStepMs: 140, ease: "measured-out" },
+    },
+    exit: {
+      headline: { kind: "fade", durationMs: 340, delayMs: 700, ease: "measured-in-out" },
+      subhead: { kind: "fade", durationMs: 300, delayMs: 780, ease: "measured-in-out" },
+      bullet: { kind: "fade", durationMs: 280, delayMs: 860, ease: "measured-in-out" },
+    },
+  },
+  "problem-solution": {
+    id: "problem-solution",
+    label: "Problem / solution",
+    intent:
+      "The tension-and-release moment: the problem callout pops first, the solution line slides in beneath it, the headline rises over both.",
+    enter: {
+      callout: { kind: "pop", durationMs: 520, delayMs: 0, ease: "measured-out" },
+      subhead: { kind: "slide", durationMs: 480, delayMs: 650, ease: "measured-out" },
+      headline: { kind: "rise", durationMs: 500, delayMs: 300, ease: "measured-out" },
+    },
+    exit: {},
   },
 };
 

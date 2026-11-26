@@ -345,6 +345,8 @@ jobs:
         run: npm run test:visual-beats
       - name: Responsive layout gates (WS8 aspect policies)
         run: npm run test:responsive-layout
+      - name: Whiteboard recipes (WS6 choreography registry)
+        run: npm run test:whiteboard-recipes
 
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes
