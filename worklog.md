@@ -7998,3 +7998,16 @@ Work Log:
 Stage Summary:
 - Deliverable: the recipe choice is persisted, validated, and inherited (citation and bytes cannot drift); the layout gate grew teeth that FIX — deterministically, explicitly, and only where mechanics honestly can. Full local gates green (typecheck, lint, unit 1064/0, design 43/43, layout 18/18, plan-contracts, visual-beats, recipes, benchmark).
 - Deliberately not here: recipe inheritance into the LaneScene plan rows (the doc citation covers the authored surface; the declarative lane plan's adoption is a design-doc slice), measured (font-metric) text bounds (the estimator stays the declared char model; the panel says estimate everywhere).
+
+---
+Task ID: ReAudit-Hygiene-Verify
+Agent: main (Z.ai)
+Task: Close the current-review findings 6–7 (dependency hygiene, current-head release verification) on the same branch as the recipe/repair slice's follow-through (hygiene rides its own small PR: choreography of the review's step 7 — "resolve the three moderate audit findings and decide the ESLint 10 peer policy").
+
+Work Log:
+- AUDIT (finding 7): the three moderate findings were ONE chain — c8@12 → test-exclude@8 → glob 9.0.0–14.0.1 (GHSA-3g3m-2fjr-6pw4, AbortSignal cancellation bypass). The review's "npm audit fix --force" suggestion would DOWNGRADE c8 (breaking); instead the overrides table pins glob to the patched line (^14.0.6 — the advisory's fix range, latest stable). npm audit: 0 vulnerabilities; no dependency downgraded.
+- THE ESLINT DECISION (finding 7): ESLint 10 sat outside the peer ranges of eslint-plugin-import (^…|| ^9) and eslint-plugin-jsx-a11y (^…|| ^9) — install-time ERESOLVE overrides and three moderate audit "vulnerabilities" noise. DECISION: ALIGN with the supported plugin range (eslint ^9.39.5) rather than carry a legacy-peer-deps policy — the flat config is compatible, the lint is green, and the alignment removes the warnings instead of silencing them. Verified: lint exit 0 on the aligned range, the whole check chain green.
+- RELEASE VERIFICATION (finding 6): the full npm run check chain executed green locally (typecheck, lint, unit 1064/0, every whiteboard/graphics/QC battery, the stage-cache suite, the restore drill RTO 544ms, the alert probe HEALTH 0 with the sandbox's env provisioned). The production build compiles clean in compile mode; the FULL build's TypeScript phase OOMs in this 4GB sandbox (Killed) — the typecheck is the same tsc pass CI runs separately, and CI (8 checks including the Docker smoke on main) owns the full-build receipt.
+
+Stage Summary:
+- Deliverable: npm audit reports 0 vulnerabilities; the toolchain rides the supported peer range; the current-head receipts are as strong as this sandbox can produce (full check chain + drill + compile-mode build), with the honest note that Docker/PostgreSQL/Playwright/MP4 receipts remain CI's (main-only Docker smoke) and the blind human gate stays outside machine scope — as the review itself classifies them.
