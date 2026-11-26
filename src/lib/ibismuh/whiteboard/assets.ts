@@ -14,6 +14,7 @@ import { TEXT_CHARS_BY_ID, TEXT_IDS_BY_ASSET, TEXT_ANCHORS } from "./timing";
 import { applyGlyphTextMode } from "./text-draw";
 import { withSketchPasses } from "./sketch";
 import { validWhiteboardId } from "./storyboard";
+import { WB_COMPOUND_INDEX } from "./compounds";
 import { validateAsset } from "./asset-validate";
 import { LIBRARY_PACK } from "./library-pack";
 import { LIBRARY_PACK_2 } from "./library-pack-2";
@@ -592,6 +593,10 @@ export function loadLibrary(uploaded: WhiteboardAsset[] = []): {
     assetIds: Set<string>;
     pathIdsByAsset: Map<string, Set<string>>;
     textIdsByAsset: Map<string, Set<string>>;
+    /** The compound registry (WB_COMPOUNDS) — the validator's group law
+     *  judges compound groups against it (fail-closed once any placement
+     *  carries a groupId). */
+    compoundIndex: ReadonlyMap<string, { id: string; parts: readonly { assetId: string }[] }>;
   };
   /** W3: uploads the stroke-authored validator EXCLUDED (warn-and-
    *  exclude — the manifest row stays, the asset never registers, and no
@@ -694,7 +699,12 @@ export function loadLibrary(uploaded: WhiteboardAsset[] = []): {
   return {
     assets,
     extracted,
-    libraryIndex: { assetIds: new Set(assets.keys()), pathIdsByAsset, textIdsByAsset },
+    libraryIndex: {
+      assetIds: new Set(assets.keys()),
+      pathIdsByAsset,
+      textIdsByAsset,
+      compoundIndex: WB_COMPOUND_INDEX,
+    },
     warnings,
   };
 }

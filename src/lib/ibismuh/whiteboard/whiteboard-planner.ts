@@ -681,8 +681,11 @@ export function scaffoldWhiteboardProject(input: {
         // primitives only; the parts are named placements the whole engine
         // already speaks). The composition IS the scene's content — the
         // support pick steps aside, exactly like the count lane's twin.
+        // The re-audit's P0 closure: the expansion is INSTANCED (the first
+        // instance keeps the legacy part names) and every part carries its
+        // group mark — scaffolded compositions are group-aware for free.
         rodeCompound = compoundSpec;
-        placements.push(...expandCompound(compoundSpec, remap(RICH_COMPOUND), 0));
+        placements.push(...expandCompound(compoundSpec, remap(RICH_COMPOUND), 0, compoundSpec.id));
       } else if (resolved.rule !== null && multiPickCue(richText, resolved.rule)) {
         // ---- Phase B slice 2, the count lane: the narration NUMBERS this
         // concept — board it twice under explicit placement ids (both named;

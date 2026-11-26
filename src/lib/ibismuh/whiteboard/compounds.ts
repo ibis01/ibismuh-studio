@@ -57,6 +57,60 @@ export interface WhiteboardCompoundSpec {
 }
 
 // ---------------------------------------------------------------------------
+// The INSTANCE NAMESPACE (the re-audit's P0: repeated compound placement).
+//
+// The P0 defect: the expansion names every part `<compoundId>-<partAssetId>`,
+// so placing the SAME compound twice in one scene derived COLLIDING part
+// identities — the second copy was unreachable (ambiguous keys, colliding
+// DOM ids, events that could not address it). The fix is the instance
+// namespace, ONE naming law:
+//
+//   instance id    = <compoundId>            (the FIRST instance — legacy
+//                                             byte-identical) or
+//                  = <compoundId>-2, -3, …  (repeats — the derive law,
+//                                             deriveCompoundInstanceId)
+//   part placement = <instanceId>-<partAssetId>
+//   group identity = the instance id itself (every part carries
+//                                             `groupId: instanceId` — the
+//                                             durable member list IS the
+//                                             placements; no registry to
+//                                             drift)
+//
+// The charset law keeps this safe: compound ids forbid `--`/`::`, and the
+// registry self-check now REFUSES a compound id that equals another
+// compound id + `-<digits>` (the collision law — instance 2 of "a" must
+// never parse as the compound "a-2").
+// ---------------------------------------------------------------------------
+
+/** Resolve which compound a group id rides, against an INJECTED index —
+ *  the one strip-ordinal algorithm (the validator judges the LIBRARY's
+ *  registry; the editor/planner judge the shipped one). Exact id first,
+ *  else strip trailing `-<digits>` ordinals one at a time. Deterministic;
+ *  unknown → null (the caller refuses — the group law is fail-closed). */
+export function resolveInCompoundIndex(
+  groupId: string,
+  index: ReadonlyMap<string, { id: string; parts: readonly { assetId: string }[] }>
+): { id: string; parts: readonly { assetId: string }[] } | null {
+  let candidate: string = groupId;
+  for (;;) {
+    const spec = index.get(candidate);
+    if (spec !== undefined) return spec;
+    const stripped = candidate.replace(/-\d+$/, "");
+    if (stripped === candidate || stripped === "") return null;
+    candidate = stripped;
+  }
+}
+
+/** Resolve which compound a group id rides: the exact id first, else strip
+ *  trailing `-<digits>` ordinals one at a time. Deterministic; unknown →
+ *  null (the caller refuses — the group law is fail-closed). */
+export function resolveCompoundGroupId(
+  groupId: string
+): { id: string; parts: readonly { assetId: string }[] } | null {
+  return resolveInCompoundIndex(groupId, WB_COMPOUND_INDEX);
+}
+
+// ---------------------------------------------------------------------------
 // The registry — the seed compositions (parts are registered ASSETS ids)
 // ---------------------------------------------------------------------------
 
@@ -142,6 +196,16 @@ export function assertCompoundRegistry(
       throw new Error(`compound registry: id "${spec.id}" violates the id charset (namespace separators --/:: are forbidden)`);
     }
     if (seen.has(spec.id)) throw new Error(`compound registry: duplicate compound id "${spec.id}"`);
+    // The INSTANCE-NAMESPACE collision law: an id that equals another
+    // compound id + `-<digits>` makes instance 2 of the first compound
+    // indistinguishable from the first instance of the second — the
+    // group resolver could never tell them apart. Refused by name.
+    for (const prior of seen) {
+      const rest = spec.id.startsWith(`${prior}-`) ? spec.id.slice(prior.length + 1) : null;
+      if (rest !== null && /^\d+$/.test(rest)) {
+        throw new Error(`compound registry: id "${spec.id}" collides with the instance namespace of "${prior}" (an id must not be another id + "-<digits>")`);
+      }
+    }
     seen.add(spec.id);
     if (spec.parts.length === 0) {
       throw new Error(`compound registry: "${spec.id}" composes nothing (at least one part)`);
@@ -182,37 +246,88 @@ export interface CompoundOrigin {
   rotateDeg: number;
 }
 
-/** The expansion output: plain engine placements (the doc's own syntax). */
+/** The expansion output: plain engine placements (the doc's own syntax).
+ *  `groupId` rides ONLY instance expansions (the durable group member
+ *  mark); the legacy absent-instance shape omits it (byte-identical). */
 export interface ExpandedPart {
   assetId: string;
   placementId: string;
   placement: { x: number; y: number; scale: number; rotateDeg: number };
   order: number;
+  /** The compound INSTANCE this part belongs to (present only when the
+   *  expansion named an instance — the group law's member mark). */
+  groupId?: string;
 }
 
 /**
  * Expand a compound into its parts at `origin` — THE planner-seam
  * constructor. Each part lands at origin + offset × scale (the footprint
  * follows the compound's size), carries the compound's scale × its own
- * factor, and is NAMED: `${spec.id}-${part.assetId}` — the placement
+ * factor, and is NAMED: `${instanceId}-${part.assetId}` — the placement
  * identity the editor, the scheduler, and the ambiguity law all speak.
- * Deterministic and pure: same spec, same origin, same order base → the
- * same placements.
+ *
+ * THE INSTANCE NAMESPACE (the P0 fix): pass `instanceId` (the derive law's
+ * output) and the parts are named off THAT instance, each carrying
+ * `groupId: instanceId` — two instances of one compound derive distinct
+ * part identities and two honest groups. ABSENT instanceId = the legacy
+ * shape: parts named off the compound id itself, NO groupId — byte-
+ * identical to every stored expansion (the additive-parse law).
+ *
+ * Deterministic and pure: same spec, same origin, same order base, same
+ * instance → the same placements.
  */
 export function expandCompound(
-  spec: Pick<WhiteboardCompoundSpec, "id" | "parts">,
+  spec: { id: string; parts: readonly { assetId: string; dx?: number; dy?: number; scale?: number }[] },
   origin: CompoundOrigin,
-  baseOrder: number
+  baseOrder: number,
+  instanceId?: string
 ): ExpandedPart[] {
+  const stem = typeof instanceId === "string" && instanceId ? instanceId : spec.id;
+  const instanced = typeof instanceId === "string" && instanceId !== "";
   return spec.parts.map((part, i) => ({
     assetId: part.assetId,
-    placementId: `${spec.id}-${part.assetId}`,
+    placementId: `${stem}-${part.assetId}`,
     placement: {
-      x: Math.round(origin.x + part.dx * origin.scale),
-      y: Math.round(origin.y + part.dy * origin.scale),
+      x: Math.round(origin.x + (part.dx ?? 0) * origin.scale),
+      y: Math.round(origin.y + (part.dy ?? 0) * origin.scale),
       scale: Math.round(origin.scale * (part.scale ?? 1) * 100) / 100,
       rotateDeg: origin.rotateDeg,
     },
     order: baseOrder + i,
+    ...(instanced ? { groupId: stem } : {}),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// The derive law — repeated placement's one id mint
+// ---------------------------------------------------------------------------
+
+/**
+ * Derive the next free INSTANCE id for a fresh placement of `spec` in
+ * `scene` — the compound twin of derivePlacementId. The FIRST instance
+ * keeps the legacy-compatible id (the bare compoundId — its parts derive
+ * exactly the pre-instance names); repeats mint `<compoundId>-2`, `-3`, …
+ * first free. A candidate is free only when the id AND every derived part
+ * key (`<candidate>-<partAssetId>`) miss every placement key and group id
+ * already in the scene — a collision would silently fuse two compounds.
+ * PURE + deterministic (the studio's add-compound law). Charset-safe: the
+ * registry's ids pass validWhiteboardId and the numeric suffix cannot
+ * introduce `--`/`::`.
+ */
+export function deriveCompoundInstanceId(
+  scene: { placements: readonly { placementId?: string; assetId: string; groupId?: string }[] },
+  spec: { id: string; parts: readonly { assetId: string }[] }
+): string {
+  const used = new Set<string>();
+  for (const pl of scene.placements) {
+    used.add(pl.placementId ?? pl.assetId);
+    if (pl.groupId !== undefined) used.add(pl.groupId);
+  }
+  const collides = (candidate: string): boolean =>
+    used.has(candidate) || spec.parts.some((p) => used.has(`${candidate}-${p.assetId}`));
+  if (!collides(spec.id)) return spec.id;
+  for (let n = 2; ; n++) {
+    const cand = `${spec.id}-${n}`;
+    if (!collides(cand)) return cand;
+  }
 }

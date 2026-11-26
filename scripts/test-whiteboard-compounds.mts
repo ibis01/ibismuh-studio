@@ -40,11 +40,29 @@ import { fileURLToPath } from "node:url";
 import { ASSETS } from "../src/lib/ibismuh/whiteboard/assets";
 import {
   assertCompoundRegistry,
+  deriveCompoundInstanceId,
   expandCompound,
+  resolveCompoundGroupId,
+  resolveInCompoundIndex,
   WB_COMPOUNDS,
   WB_COMPOUND_INDEX,
   type WhiteboardCompoundSpec,
 } from "../src/lib/ibismuh/whiteboard/compounds";
+import {
+  compileCompoundChoreography,
+  COMPOUND_CHOREOGRAPHY_IDS,
+  resolveCompoundChoreography,
+} from "../src/lib/ibismuh/whiteboard/choreography";
+import {
+  deleteCompoundGroup,
+  duplicateCompoundGroup,
+  groupMembers,
+  isGroupLocked,
+  nudgeCompoundGroup,
+  recomposeCompoundGroup,
+  setGroupLock,
+  ungroupCompoundGroup,
+} from "../src/lib/ibismuh/whiteboard/groups";
 import {
   buildGeneratedCards,
   pickCompoundForScene,
@@ -414,21 +432,506 @@ await test("every expanded part claims its own stroke; the wire stays byte-shape
   );
 });
 
-// --- 7. BUNDLE SAFETY ---------------------------------------------------------
+// --- 8. INSTANCE NAMESPACE (the re-audit's P0) ---------------------------------
+
+suiteStart("instance namespace — repeated placement derives distinct, honest identities");
+
+await test("an instanced expansion names its parts off the instance and stamps the group", () => {
+  const instanced = expandCompound(FARM, { x: 500, y: 400, scale: 1, rotateDeg: 0 }, 0, "smart-farm-system-2");
+  instanced.forEach((part, i) => {
+    eq(part.placementId, `smart-farm-system-2-${FARM.parts[i].assetId}`, `part ${i}: named off the INSTANCE`);
+    eq(part.groupId, "smart-farm-system-2", `part ${i}: carries its group mark`);
+  });
+  const legacy = expandCompound(FARM, { x: 500, y: 400, scale: 1, rotateDeg: 0 }, 0);
+  legacy.forEach((part) => {
+    eq(part.groupId, undefined, "the legacy (absent-instance) shape carries NO group mark — byte-identical");
+    ok(part.placementId.startsWith(`${FARM.id}-`), "the legacy shape keeps the pre-instance part names");
+  });
+});
+
+await test("the derive law: bare id first, then -2, -3…, collision-free, deterministic", () => {
+  const empty = { placements: [] };
+  eq(deriveCompoundInstanceId(empty, FARM), FARM.id, "an empty scene mints the bare compound id");
+  const firstCopy = expandCompound(FARM, { x: 0, y: 0, scale: 1, rotateDeg: 0 }, 0, FARM.id).map((p) => ({
+    assetId: p.assetId,
+    placementId: p.placementId,
+    groupId: p.groupId,
+  }));
+  eq(deriveCompoundInstanceId({ placements: firstCopy }, FARM), `${FARM.id}-2`, "a scene holding the first instance mints -2");
+  const blocked = {
+    placements: [
+      ...firstCopy,
+      { assetId: "clock", placementId: `${FARM.id}-2-${FARM.parts[0].assetId}` }, // the -2 copy's part key is taken
+    ],
+  };
+  eq(deriveCompoundInstanceId(blocked, FARM), `${FARM.id}-3`, "a blocked -2 skips to -3 (part keys count)");
+  eq(deriveCompoundInstanceId({ placements: firstCopy }, FARM), `${FARM.id}-2`, "deterministic: same scene → same mint");
+});
+
+await test("the registry refuses an id inside another compound's instance namespace", () => {
+  const mk = (id: string): WhiteboardCompoundSpec => ({
+    id,
+    parts: [{ assetId: "coin", dx: 0, dy: 0 }],
+    tags: [],
+    aliases: [],
+    a11y: "x",
+    footprint: { w: 1, h: 1 },
+  });
+  throws(
+    () => assertCompoundRegistry([mk("cycle"), mk("cycle-2")], ASSET_IDS),
+    /collides with the instance namespace/,
+    "an id that is another id + '-2' is refused (instance 2 of the first must never parse as the second)"
+  );
+  assertCompoundRegistry([mk("cycle"), mk("cycle-pro")], ASSET_IDS); // a non-ordinal suffix is fine
+});
+
+await test("the group resolver: exact match first, ordinals strip, ghosts refuse", () => {
+  eq(resolveCompoundGroupId(FARM.id)?.id, FARM.id, "the bare compound id resolves exactly");
+  eq(resolveCompoundGroupId(`${FARM.id}-7`)?.id, FARM.id, "an instanced id strips to its compound");
+  eq(resolveCompoundGroupId("no-such-compound"), null, "a ghost refuses");
+  eq(resolveCompoundGroupId("barn"), null, "a plain asset id is not a group");
+  const synthetic = new Map([["mini", { id: "mini", parts: [{ assetId: "coin" }] }]]);
+  eq(resolveInCompoundIndex("mini-3", synthetic)?.id, "mini", "the injected-index resolver rides the same law");
+  eq(resolveInCompoundIndex("ghost", synthetic), null, "unknown in any index refuses");
+});
+
+// --- 9. GROUP LAWS (the validator) ---------------------------------------------
+
+suiteStart("group laws — the validator judges every compound group, fail-closed");
+
+const o1 = { x: 700, y: 420, scale: 1, rotateDeg: 0 };
+const o2 = { x: 1300, y: 560, scale: 1, rotateDeg: 0 };
+const copy1 = expandCompound(FARM, o1, 0, FARM.id);
+const copy2 = expandCompound(FARM, o2, FARM.parts.length, `${FARM.id}-2`);
+
+const twinScene = {
+  id: "scene-1",
+  narration: "Two smart farms work as one system.",
+  background: "#ffffff" as const,
+  placements: [...copy1, ...copy2].map((p) => ({
+    assetId: p.assetId,
+    placementId: p.placementId,
+    groupId: p.groupId,
+    placement: p.placement,
+    order: p.order,
+  })),
+  animations: [],
+  camera: [],
+};
+const mkProject = (scenes: unknown[]) => ({
+  title: "twin compounds",
+  width: 1920,
+  height: 1080,
+  fps: 24,
+  hand: { style: "marker" },
+  scenes,
+});
+
+await test("two copies of one compound coexist — the repeated-placement acceptance", () => {
+  const r = v(mkProject([twinScene]));
+  ok(r.project !== null, `two instances validate clean: ${r.errors.join(" · ")}`);
+  const scene = r.project?.scenes[0];
+  const groups = new Map<string, string[]>();
+  for (const pl of scene?.placements ?? []) {
+    if (pl.groupId === undefined) continue;
+    const arr = groups.get(pl.groupId) ?? [];
+    arr.push(pl.assetId);
+    groups.set(pl.groupId, arr);
+  }
+  eq(groups.size, 2, "two distinct groups on one board");
+  eq(groups.get(FARM.id), FARM.parts.map((p) => p.assetId), "group 1's member list IS the spec");
+  eq(groups.get(`${FARM.id}-2`), FARM.parts.map((p) => p.assetId), "group 2's member list IS the spec");
+});
+
+await test("events address each copy's parts; an unnamed event is ambiguous and refused", () => {
+  const p1 = LIB.extracted.get(copy1[0].assetId)?.paths[0]?.id;
+  ok(typeof p1 === "string", "the first part's real geometry exists");
+  const named = {
+    ...mkProject([
+      {
+        ...twinScene,
+        animations: [
+          { type: "draw_path", assetId: copy1[0].assetId, placementId: copy1[0].placementId, pathId: p1, startMs: 0, durationMs: 800 },
+          { type: "draw_path", assetId: copy2[0].assetId, placementId: copy2[0].placementId, pathId: p1, startMs: 900, durationMs: 800 },
+        ],
+      },
+    ]),
+  };
+  ok(v(named).project !== null, "explicitly addressed events validate with two copies");
+  const ambiguous = {
+    ...mkProject([
+      {
+        ...twinScene,
+        animations: [
+          { type: "draw_path", assetId: copy1[0].assetId, pathId: p1, startMs: 0, durationMs: 800 },
+        ],
+      },
+    ]),
+  };
+  const r = v(ambiguous);
+  ok(r.project === null && r.errors.some((e) => /name the placementId/.test(e)), `the ambiguity law covers compound copies: ${r.errors.join(" · ")}`);
+});
+
+await test("the group law refuses a ghost, a missing member, an extra member, and a reorder", () => {
+  const ghost = {
+    ...mkProject([
+      {
+        ...twinScene,
+        placements: twinScene.placements.map((pl) =>
+          pl.placementId === copy1[0].placementId ? { ...pl, groupId: "ghost-compound" } : pl
+        ),
+      },
+    ]),
+  };
+  const rGhost = v(ghost);
+  ok(
+    rGhost.project === null && rGhost.errors.some((e) => /does not name a registered compound instance/.test(e)),
+    `a ghost group refuses: ${rGhost.errors.join(" · ")}`
+  );
+  const missing = {
+    ...mkProject([
+      { ...twinScene, placements: twinScene.placements.filter((pl) => pl.groupId !== FARM.id || pl.assetId !== FARM.parts[0].assetId) },
+    ]),
+  };
+  const rMissing = v(missing);
+  ok(
+    rMissing.project === null && rMissing.errors.some((e) => /do not match the compound/.test(e)),
+    `a partial group refuses: ${rMissing.errors.join(" · ")}`
+  );
+  const extra = {
+    ...mkProject([
+      {
+        ...twinScene,
+        placements: [
+          ...twinScene.placements,
+          { assetId: "clock", placementId: "clock-9", groupId: `${FARM.id}-2`, placement: { x: 100, y: 100, scale: 1, rotateDeg: 0 }, order: 99 },
+        ],
+      },
+    ]),
+  };
+  const rExtra = v(extra);
+  ok(
+    rExtra.project === null && rExtra.errors.some((e) => /do not match the compound/.test(e)),
+    `an extra member refuses: ${rExtra.errors.join(" · ")}`
+  );
+  const reordered = {
+    ...mkProject([
+      {
+        ...twinScene,
+        placements: twinScene.placements.map((pl) =>
+          pl.groupId === FARM.id && pl.assetId === FARM.parts[0].assetId
+            ? { ...pl, assetId: FARM.parts[1].assetId, placementId: `${FARM.id}-${FARM.parts[1].assetId}` }
+            : pl
+        ),
+      },
+    ]),
+  };
+  const rReordered = v(reordered);
+  ok(
+    rReordered.project === null && rReordered.errors.some((e) => /do not match the compound/.test(e)),
+    `a member sequence that breaks the spec's draw order refuses: ${rReordered.errors.join(" · ")}`
+  );
+});
+
+await test("a group without the registry is unjudgeable (fail-closed)", () => {
+  const stripped = { ...LIB.libraryIndex, compoundIndex: undefined };
+  const r = validateWhiteboardProject(mkProject([twinScene]), stripped as unknown as typeof LIB.libraryIndex);
+  ok(
+    r.project === null && r.errors.some((e) => /carries no compound registry/.test(e)),
+    `the registry-less library refuses groups: ${r.errors.join(" · ")}`
+  );
+});
+
+await test("groupLocks and choreography are judged; a save/reload round-trip is stable", () => {
+  const locked = { ...mkProject([{ ...twinScene, groupLocks: [FARM.id] }]) };
+  ok(v(locked).project !== null, "a lock on a real group validates");
+  const ghostLock = { ...mkProject([{ ...twinScene, groupLocks: ["ghost-group"] }]) };
+  const rGhostLock = v(ghostLock);
+  ok(
+    rGhostLock.project === null && rGhostLock.errors.some((e) => /a lock rides a real group/.test(e)),
+    `a lock on a ghost refuses: ${rGhostLock.errors.join(" · ")}`
+  );
+  const junkChoreo = { ...mkProject([{ ...twinScene, choreography: "not-a-preset" }]) };
+  const rJunk = v(junkChoreo);
+  ok(
+    rJunk.project === null && rJunk.errors.some((e) => /not one of the compound presets/.test(e)),
+    `junk choreography refuses: ${rJunk.errors.join(" · ")}`
+  );
+  const choreoNoGroup = {
+    ...mkProject([{ ...twinScene, placements: twinScene.placements.map(({ groupId: _g, ...rest }) => rest), choreography: COMPOUND_CHOREOGRAPHY_IDS[0] }]),
+  };
+  const rNoGroup = v(choreoNoGroup);
+  ok(
+    rNoGroup.project === null && rNoGroup.errors.some((e) => /receipt without its group/.test(e)),
+    `choreography without a group refuses: ${rNoGroup.errors.join(" · ")}`
+  );
+  const staged = { ...mkProject([{ ...twinScene, choreography: COMPOUND_CHOREOGRAPHY_IDS[0] }]) };
+  const parsed = JSON.parse(JSON.stringify(v(staged).project)) as unknown;
+  const revalidated = v(parsed);
+  ok(revalidated.project !== null, `the save/reload round-trip revalidates clean: ${revalidated.errors.join(" · ")}`);
+  eq(
+    JSON.stringify((revalidated.project as { scenes: unknown[] }).scenes[0]),
+    JSON.stringify(v(staged).project?.scenes[0]),
+    "round-trip bytes are stable"
+  );
+});
+
+// --- 10. GROUP OPERATIONS -------------------------------------------------------
+
+suiteStart("group operations — duplicate, delete, ungroup, recompose, nudge, lock");
+
+await test("duplicate mints a fresh instance after the last member; the validator accepts it", () => {
+  const project = mkProject([twinScene]);
+  const scene = (v(project).project as { scenes: never[] }).scenes[0] as never as typeof twinScene;
+  const res = duplicateCompoundGroup(
+    scene as unknown as Parameters<typeof duplicateCompoundGroup>[0],
+    `${FARM.id}-2`,
+    { x: 1000, y: 300, scale: 1, rotateDeg: 0 }
+  );
+  ok(res !== null, "the duplicate succeeds");
+  if (!res) return;
+  eq(res.instanceId, `${FARM.id}-3`, "the derive law mints the next free instance");
+  eq(groupMembers(res.scene, `${FARM.id}-3`).length, FARM.parts.length, "the copy carries the full member set");
+  ok(groupMembers(res.scene, FARM.id).length === FARM.parts.length, "the original is untouched");
+  ok(groupMembers(res.scene, `${FARM.id}-2`).length === FARM.parts.length, "the second copy is untouched");
+  eq(
+    duplicateCompoundGroup(scene as unknown as Parameters<typeof duplicateCompoundGroup>[0], `${FARM.id}-2`, { x: 1000, y: 300, scale: 1, rotateDeg: 0 }),
+    res,
+    "deterministic: same scene + origin → the same result"
+  );
+  const r = v(mkProject([res.scene]));
+  ok(r.project !== null, `the tripled board validates clean: ${r.errors.join(" · ")}`);
+});
+
+await test("delete removes the members AND their events, atomically; a sibling survives", () => {
+  const scene = {
+    ...twinScene,
+    animations: [
+      { type: "draw_path", assetId: copy1[0].assetId, placementId: copy1[0].placementId, pathId: "p1", startMs: 0, durationMs: 500 },
+      { type: "move_object", assetId: "clock", startMs: 0, durationMs: 500, to: { x: 1, y: 1, scale: 1, rotateDeg: 0 } },
+    ] as never,
+  };
+  const next = deleteCompoundGroup(scene as never, FARM.id);
+  ok(next !== null, "the delete succeeds");
+  if (!next) return;
+  eq(next.placements.length, FARM.parts.length, "only group 1's members left (copy 2 survives)");
+  eq(next.animations.length, 1, "the group's event left with it; the sibling event stays");
+  ok(next.animations[0] && (next.animations[0] as { assetId?: string }).assetId === "clock", "the surviving event is the sibling's");
+  eq(deleteCompoundGroup({ ...scene, groupLocks: [FARM.id] } as never, FARM.id), null, "a locked group refuses the delete");
+});
+
+await test("ungroup keeps the identities; recompose re-applies the registry at the centroid; nudge moves the body", () => {
+  const scene = twinScene as never as Parameters<typeof ungroupCompoundGroup>[0];
+  const ungrouped = ungroupCompoundGroup(scene, FARM.id);
+  ok(ungrouped !== null, "the ungroup succeeds");
+  if (!ungrouped) return;
+  ok(groupMembers(ungrouped, FARM.id).length === 0, "the mark is gone");
+  const firstPart = ungrouped.placements.find((pl) => pl.placementId === copy1[0].placementId);
+  ok(firstPart !== undefined && firstPart.groupId === undefined, "the part's identity (placementId) SURVIVES the ungroup");
+  const recomposed = recomposeCompoundGroup(scene, FARM.id);
+  ok(recomposed !== null, "the recompose succeeds");
+  if (!recomposed) return;
+  const centroid = {
+    x: Math.round(groupMembers(scene, FARM.id).reduce((a, m) => a + m.placement.x, 0) / FARM.parts.length),
+    y: Math.round(groupMembers(scene, FARM.id).reduce((a, m) => a + m.placement.y, 0) / FARM.parts.length),
+  };
+  const declared = expandCompound(FARM, { x: centroid.x, y: centroid.y, scale: 1, rotateDeg: 0 }, 0, FARM.id);
+  for (let i = 0; i < FARM.parts.length; i++) {
+    const member = groupMembers(recomposed, FARM.id)[i];
+    ok(member !== undefined, `member ${i} exists`);
+    eq(member?.placement.x, declared[i]?.placement.x, `member ${i}: recomposed to the declared offset`);
+    eq(member?.placement.y, declared[i]?.placement.y, `member ${i}: recomposed to the declared offset`);
+    eq(member?.placementId, declared[i]?.placementId, `member ${i}: the identity is stable (events keep addressing it)`);
+  }
+  const nudged = nudgeCompoundGroup(scene, FARM.id, 40, -30);
+  ok(nudged !== null, "the nudge succeeds");
+  if (!nudged) return;
+  const base = groupMembers(scene, FARM.id);
+  for (const [i, member] of groupMembers(nudged, FARM.id).entries()) {
+    const from = base[i]?.placement;
+    ok(from !== undefined, `member ${i} has a base placement`);
+    eq(member.placement.x, (from?.x ?? 0) + 40, `member ${i}: +40 x`);
+    eq(member.placement.y, (from?.y ?? 0) - 30, `member ${i}: −30 y`);
+  }
+  ok(nudgeCompoundGroup(scene, "no-such-group", 1, 1) === null, "an unknown group refuses the nudge");
+});
+
+await test("the lock roster: lock, verify, unlock — and locked members are inert", () => {
+  const scene = twinScene as never as Parameters<typeof setGroupLock>[0];
+  const locked = setGroupLock(scene, FARM.id, true);
+  ok(isGroupLocked(locked, FARM.id), "the lock takes");
+  eq(locked.groupLocks, [FARM.id], "the roster names the group");
+  const unlocked = setGroupLock(locked, FARM.id, false);
+  ok(!isGroupLocked(unlocked, FARM.id), "the unlock takes");
+  eq(unlocked.groupLocks, undefined, "an empty roster drops the field (byte-honest)");
+});
+
+// --- 11. ATOMIC CARRY -----------------------------------------------------------
+
+suiteStart("atomic carry — a compound crosses a board whole or not at all");
+
+const carriedProject = (carryPlacements?: string[]) => ({
+  title: "carry",
+  width: 1920,
+  height: 1080,
+  fps: 24,
+  hand: { style: "marker" },
+  scenes: [
+    twinScene,
+    {
+      id: "scene-2",
+      narration: "The farm carries on.",
+      background: "#f8f5ee" as const,
+      placements: [],
+      animations: [],
+      camera: [],
+      board: { mode: "continuous" as const, ...(carryPlacements ? { carryPlacements } : {}) },
+    },
+  ],
+});
+
+await test("naming the GROUP carries all its members; the default carries everything", () => {
+  const whole = v(carriedProject([FARM.id]));
+  ok(whole.project !== null, `a group-name carry validates: ${whole.errors.join(" · ")}`);
+  const all = v(carriedProject());
+  ok(all.project !== null, `the unnamed carry (everything) validates: ${all.errors.join(" · ")}`);
+  const mixed = v(carriedProject([FARM.id, `${FARM.id}-2`]));
+  ok(mixed.project !== null, `both groups named together validates: ${mixed.errors.join(" · ")}`);
+});
+
+await test("a partial group carry is refused — the compound cannot split across a board", () => {
+  const split = v(carriedProject([copy1[0].placementId]));
+  ok(
+    split.project === null && split.errors.some((e) => /splits the compound group/.test(e)),
+    `one member alone refuses: ${split.errors.join(" · ")}`
+  );
+  const partial = v(carriedProject([copy1[0].placementId, copy1[1].placementId]));
+  ok(
+    partial.project === null && partial.errors.some((e) => /splits the compound group/.test(e)),
+    `two of five members refuse: ${partial.errors.join(" · ")}`
+  );
+});
+
+// --- 12. CHOREOGRAPHY -----------------------------------------------------------
+
+suiteStart("choreography — the named presets compile onto the placement events");
+
+await test("the vocabulary is closed and resolved honestly", () => {
+  ok(COMPOUND_CHOREOGRAPHY_IDS.length >= 3, "the preset set is seeded");
+  eq(resolveCompoundChoreography("assembly-cascade"), "assembly-cascade", "a real preset resolves");
+  eq(resolveCompoundChoreography("nope"), null, "junk refuses");
+});
+
+await test("cascade retimes the members sequentially in draw order, durations preserved", () => {
+  const p = rich();
+  const scene = p.scenes[1];
+  const schedule = scheduleScene(scene, 8000, compoundGeo());
+  const members = scene.placements.map((pl) => ({
+    key: pl.placementId ?? pl.assetId,
+    x: pl.placement.x,
+    y: pl.placement.y,
+  }));
+  const compiled = compileCompoundChoreography({ preset: "assembly-cascade", members, events: schedule });
+  eq(compiled.length, FARM.parts.length, "one event per member (each part carries one stroke)");
+  let t = compiled[0]?.startMs ?? 0;
+  compiled.forEach((ev, i) => {
+    eq(ev.startMs, t, `event ${i}: packed back-to-back`);
+    const src = schedule.find((s) => s.type === "draw_path" && (s as { placementId?: string }).placementId === (ev as { placementId?: string }).placementId);
+    eq(ev.durationMs, src?.durationMs, `event ${i}: the fill law's duration is preserved`);
+    eq((ev as { placementId?: string }).placementId, `${FARM.id}-${FARM.parts[i].assetId}`, `event ${i}: the member's identity rides the event`);
+    t += ev.durationMs + 130;
+  });
+  eq(
+    JSON.stringify(compileCompoundChoreography({ preset: "assembly-cascade", members, events: schedule })),
+    JSON.stringify(compiled),
+    "deterministic: same inputs → the same retiming"
+  );
+});
+
+await test("center-out and edge-in order the parts by distance; edge-in mirrors center-out", () => {
+  const p = rich();
+  const scene = p.scenes[1];
+  const schedule = scheduleScene(scene, 8000, compoundGeo());
+  const members = scene.placements.map((pl) => ({
+    key: pl.placementId ?? pl.assetId,
+    x: pl.placement.x,
+    y: pl.placement.y,
+  }));
+  const cascade = compileCompoundChoreography({ preset: "assembly-cascade", members, events: schedule });
+  const centerOut = compileCompoundChoreography({ preset: "assembly-center-out", members, events: schedule });
+  const edgeIn = compileCompoundChoreography({ preset: "assembly-edge-in", members, events: schedule });
+  const keys = (events: typeof cascade) => events.map((e) => (e as { placementId?: string }).placementId);
+  eq(keys(edgeIn), [...keys(centerOut)].reverse(), "edge-in is center-out mirrored (no distance ties on this layout)");
+  ok(
+    JSON.stringify(keys(centerOut)) !== JSON.stringify(keys(cascade)),
+    "this layout's center-out differs from the declared draw order (the preset is a real reorder)"
+  );
+  // Sequential packing holds in every preset (the pen follows ONE stroke).
+  for (const events of [cascade, centerOut, edgeIn]) {
+    for (let i = 1; i < events.length; i++) {
+      const prev = events[i - 1];
+      const cur = events[i];
+      ok(cur.startMs >= prev.startMs + prev.durationMs, `events ${i - 1}→${i} never overlap (the pen law)`);
+    }
+  }
+});
+
+/** The REAL library geometry (the same mapping the render seam rides) —
+ *  the choreography's staged doc must validate against the real paths. */
+function realGeo(): Map<string, AssetGeometry> {
+  return buildGeometry(
+    [...LIB.extracted.entries()].map(([id, ex]) => ({ id, paths: ex.paths }))
+  );
+}
+
+await test("the compiled events persist as explicit (senior) and the receipt rides the scene", () => {
+  const p = rich();
+  const scene = p.scenes[1];
+  const schedule = scheduleScene(scene, 8000, realGeo());
+  const members = scene.placements.map((pl) => ({
+    key: pl.placementId ?? pl.assetId,
+    x: pl.placement.x,
+    y: pl.placement.y,
+  }));
+  const compiled = compileCompoundChoreography({ preset: "assembly-cascade", members, events: schedule });
+  const staged = {
+    ...mkProject([{ ...scene, animations: compiled, choreography: "assembly-cascade" }]),
+  };
+  const r = v(staged);
+  ok(r.project !== null, `the choreographed scene validates clean: ${r.errors.join(" · ")}`);
+  if (!r.project) return;
+  const reSchedule = scheduleScene(r.project.scenes[0] as never, 8000, realGeo());
+  for (const ev of compiled) {
+    const src = ev as { placementId?: string; pathId?: string; startMs: number };
+    const kept = reSchedule.find(
+      (e) =>
+        e.type === "draw_path" &&
+        (e as { placementId?: string }).placementId === src.placementId &&
+        (e as { pathId?: string }).pathId === src.pathId
+    );
+    ok(kept !== undefined, `member stroke ${src.placementId} survived the re-schedule`);
+    eq(kept?.startMs, src.startMs, `member stroke ${src.placementId}: the compiled timing is senior (the fill law left it alone)`);
+  }
+});
+
+// --- 13. BUNDLE SAFETY ---------------------------------------------------------
 
 suiteStart("bundle safety — the browser-facing modules stay client-clean");
 
-await test("compounds.ts and catalog/search.ts carry no node-only imports (the palette imports them)", () => {
-  // The studio (a client component) imports compounds.ts (placement) and
-  // catalog/search.ts (the browser's engine). Either module gaining a
-  // node:crypto / node:fs import — or compounds.ts a VALUE import of the
-  // asset library (the engine chain) — breaks the browser bundle. The scan
-  // is the guard: the client-safety law stays pinned, not remembered.
+await test("compounds.ts, groups.ts and catalog/search.ts carry no node-only imports (the palette imports them)", () => {
+  // The studio (a client component) imports compounds.ts (placement),
+  // groups.ts (the group operations) and catalog/search.ts (the browser's
+  // engine). Any of them gaining a node:crypto / node:fs import — or
+  // compounds.ts a VALUE import of the asset library (the engine chain) —
+  // breaks the browser bundle. The scan is the guard: the client-safety
+  // law stays pinned, not remembered.
   const HERE = path.dirname(fileURLToPath(import.meta.url));
   const read = (p: string): string => fs.readFileSync(path.resolve(HERE, p), "utf8");
   const compoundsSrc = read("../src/lib/ibismuh/whiteboard/compounds.ts");
   ok(!/from "node:/.test(compoundsSrc), "compounds.ts: no node: imports");
   ok(!/import \{\s*ASSETS/.test(compoundsSrc) && !/import \{ ASSETS/.test(compoundsSrc), "compounds.ts: no value import of the asset library (type-only at most)");
+  const groupsSrc = read("../src/lib/ibismuh/whiteboard/groups.ts");
+  ok(!/from "node:/.test(groupsSrc), "groups.ts: no node: imports (the editor's group ops are client-side)");
   const searchSrc = read("../src/lib/ibismuh/catalog/search.ts");
   ok(!/from "node:/.test(searchSrc), "catalog/search.ts: no node: imports (the browser has no node:crypto)");
   ok(/export function searchRows/.test(searchSrc) && /export function searchCatalog/.test(searchSrc), "search.ts: both entry points exported");

@@ -481,11 +481,14 @@ export function composeLlmScaffold(
         // The composition lane: the pick's coordinates ARE the compound's
         // origin; its scale sizes the whole footprint. The parts ride the
         // pick's beat rank as ONE concept (ordering happened above, on the
-        // pre-expansion picks).
+        // pre-expansion picks). The re-audit's P0 closure: the expansion is
+        // INSTANCED (first instance keeps the legacy part names) and every
+        // part carries its group mark — the composition is group-aware.
         for (const part of expandCompound(
           spec,
           { x: pick.x, y: pick.y, scale: pick.scale, rotateDeg: pick.rotateDeg },
-          orderCursor
+          orderCursor,
+          spec.id
         )) {
           picks.push(part);
         }
