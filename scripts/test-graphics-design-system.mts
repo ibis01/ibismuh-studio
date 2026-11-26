@@ -126,6 +126,14 @@ const FULL_CONTENT = {
   "big-quote": { text: "The board saved us hours every week", sub: "a operations lead" },
   "cta-banner": { text: "Start your first workflow", sub: "free while in beta" },
   "icon-caption": { sub: "the setup takes minutes", iconId: "bolt" },
+  comparison: { text: "Solar versus diesel", items: ["solar pays back in four years", "diesel burns fuel every day"] },
+  "before-after": { text: "The workshop changed", items: ["paper ledgers everywhere", "one shared dashboard"] },
+  "process-steps": { text: "The compost cycle", items: ["collect the greens", "layer with the browns", "turn the pile weekly"] },
+  "timeline-card": { text: "The railway era", items: ["1890 the first line opens", "1922 the junction lands", "1965 the rails electrify"] },
+  checklist: { text: "Launch readiness", items: ["the narration measured", "the assets placed", "the QC matrix green"] },
+  ranking: { text: "The busiest lines", items: ["the red line", "the loop", "the coastal express"] },
+  "title-opener": { text: "How compound interest works", sub: "the eighth wonder, explained" },
+  "closing-summary": { text: "Start with one system", sub: "the rest compounds" },
 } as const;
 
 // --- 1. RECIPES ---------------------------------------------------------------
@@ -402,6 +410,82 @@ await test("the planKind vocabulary maps onto the lane-plan families", () => {
   eq(GRAPHICS_COMPONENTS["big-quote"].planKind, "quote");
   eq(GRAPHICS_COMPONENTS["cta-banner"].planKind, "cta");
   eq(GRAPHICS_COMPONENTS["icon-caption"].planKind, "icon-group");
+  eq(GRAPHICS_COMPONENTS["comparison"].planKind, "comparison");
+  eq(GRAPHICS_COMPONENTS["before-after"].planKind, "comparison");
+  eq(GRAPHICS_COMPONENTS["process-steps"].planKind, "timeline");
+  eq(GRAPHICS_COMPONENTS["timeline-card"].planKind, "timeline");
+  eq(GRAPHICS_COMPONENTS["ranking"].planKind, "timeline");
+  eq(GRAPHICS_COMPONENTS["checklist"].planKind, "icon-group");
+  eq(GRAPHICS_COMPONENTS["title-opener"].planKind, "headline");
+  eq(GRAPHICS_COMPONENTS["closing-summary"].planKind, "headline");
+});
+
+// --- WS8 growth pins ----------------------------------------------------------
+
+suiteStart("ws8 growth — the item slot, the band, the planKinds");
+
+await test("the registries ride the plan's band (13 components, 11 recipes)", () => {
+  ok(GRAPHICS_COMPONENT_IDS.length >= 13, `the component registry grew to the plan's menu band (${GRAPHICS_COMPONENT_IDS.length})`);
+  ok(GRAPHICS_RECIPE_IDS.length >= 11, `the recipe registry grew to the plan's menu band (${GRAPHICS_RECIPE_IDS.length})`);
+  for (const id of ["comparison", "before-after", "process-steps", "timeline-card", "checklist", "ranking", "title-opener", "closing-summary"]) {
+    ok(resolveComponent(id) !== null, `${id} resolves`);
+  }
+  for (const id of ["comparison-bars", "timeline-steps", "process-steps", "icon-group-entrance", "final-summary", "problem-solution"]) {
+    ok(resolveRecipe(id) !== null, `${id} resolves`);
+  }
+});
+
+await test("an items part omits when its index is absent (the stable-id law)", () => {
+  const partial = expandComponent("comparison", { text: "Solar versus diesel", items: ["solar wins"] }, { width: 1920, height: 1080 });
+  eq(partial.map((el) => el.id), ["comparison-topic", "comparison-left"], "the right side omits; the left keeps its id");
+  const none = expandComponent("comparison", { text: "Solar versus diesel" }, { width: 1920, height: 1080 });
+  eq(none.map((el) => el.id), ["comparison-topic"], "no items → headline only");
+});
+
+await test("a present-but-junk item refuses BY NAME (never a placeholder)", () => {
+  throws(() => expandComponent("checklist", { text: "Launch readiness", items: ["measured", "   "] }), /non-readable item at index 1/);
+});
+
+await test("list items ride the capLine law (60 chars)", () => {
+  const parts = expandComponent("ranking", {
+    text: "The busiest lines",
+    items: ["x".repeat(80), "the loop", "the coastal express"],
+  }, { width: 1920, height: 1080 });
+  const first = parts.find((el) => el.id === "ranking-first");
+  ok(first !== undefined && first.text !== undefined);
+  ok(first.text.text.length <= 61, `the long item was capped with the ellipsis law (${first.text.text.length} = capLine(60) + …)`);
+});
+
+await test("the new list cards validate at DOC level with their full content", () => {
+  for (const id of ["comparison", "before-after", "process-steps", "timeline-card", "checklist", "ranking", "title-opener", "closing-summary"]) {
+    const parts = expandComponent(id, FULL_CONTENT[id], { width: 1920, height: 1080 });
+    const doc = {
+      version: 1,
+      title: `ws8 — ${id}`,
+      width: 1920,
+      height: 1080,
+      fps: 24,
+      scenes: [{ id: "scene-1", narration: "the ws8 growth scene", background: "#ffffff", elements: parts }],
+    };
+    const r = validateGraphicsDoc(doc);
+    ok(r.doc !== null && r.errors.length === 0, `${id}: the doc-level gate passes clean — ${r.errors.join(" | ")}`);
+  }
+});
+
+await test("the new recipes compile legally across kinds and orders (the gate rides at EVERY use)", () => {
+  const sceneMss = [4000, 6500, 12_000];
+  for (const id of ["comparison-bars", "timeline-steps", "process-steps", "icon-group-entrance", "final-summary", "problem-solution"]) {
+    for (const kind of KINDS) {
+      for (let order = 0; order <= 4; order++) {
+        const enter = recipeEnterFor(kind, order, id);
+        ok(Number.isFinite(enter.delayMs) && enter.durationMs > 0, `${id}/${kind}#${order}: the enter compiles finite`);
+      }
+      for (const sceneMs of sceneMss) {
+        const exit = recipeExitFor(kind, 0, sceneMs, 2, id);
+        ok(Number.isFinite(exit.delayMs) && exit.durationMs > 0, `${id}/${kind}@${sceneMs}: the exit compiles finite`);
+      }
+    }
+  }
 });
 
 // --- 3. NATIVE LANE -----------------------------------------------------------

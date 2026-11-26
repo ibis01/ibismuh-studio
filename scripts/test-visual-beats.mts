@@ -520,7 +520,7 @@ await test("the whiteboard board cast emits honest beat rows with the rule named
   ok(Array.isArray(beats) && beats.length === 2, "one beat row per board");
   const cast = beats[0];
   ok(cast.selectedIds.includes("frame") && cast.selectedIds.includes("underline"), "the board cast is listed");
-  ok(cast.reason.includes("rule") && cast.reason.includes("board cast"), "the deterministic rule is named");
+  ok(cast.reason.includes("rule") && cast.reason.includes("recipe"), "the deterministic rule + recipe are named");
   ok(cast.selectedIds.every((id) => cast.candidateIds.includes(id)), "the dead-end law holds at the adoption seam");
   eq(beats[1].visualIntent, "conclude", "the conclude cue classifies the closing board");
 });
