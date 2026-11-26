@@ -1,6 +1,7 @@
-// G1.5 — the graphics ICON VOCABULARY (the audit's Priority 1, motion-graphics
-// half): the planner's whole concept vocabulary, expanded from the 4-icon
-// starter to ~100 tagged icons across the production domains (people,
+// G1.5 + Phase C — the graphics ICON VOCABULARY (the audit's Priority 1,
+// motion-graphics half): the planner's whole concept vocabulary, expanded
+// from the 4-icon starter through 150 to 200 tagged icons across the
+// production domains (people,
 // education, agriculture, tools, technology, healthcare, business, finance,
 // engineering, communication, cybersecurity, environment, transport,
 // buildings, devices, warning and status symbols).
@@ -1008,5 +1009,214 @@ export const GRAPHICS_ICON_LIBRARY: Readonly<Record<string, GraphicsIcon>> = {
   lightbulb: {
     paths: ["M 12 2.5 C 8.7 2.5, 6 5.2, 6 8.5 C 6 10.8, 7.2 12.4, 8.5 13.7 C 9.2 14.4, 9.5 15.1, 9.5 16 L 14.5 16 C 14.5 15.1, 14.8 14.4, 15.5 13.7 C 16.8 12.4, 18 10.8, 18 8.5 C 18 5.2, 15.3 2.5, 12 2.5 Z", "M 9.5 18.5 L 14.5 18.5", "M 10.5 21.5 L 13.5 21.5"],
     tags: ["lightbulb", "idea", "innovation", "insight", "creative", "think", "invent", "solution"],
+  },
+  // ------------------------------------------------------------------
+  // Phase C slice 2 — the vocabulary rides the audit's band top (the
+  // catalog route's icon-growth wave): 50 new teachable marks across
+  // weather, food, animals, sports, music, money, tools, time, nature,
+  // safety and the everyday room. The SAME authoring laws — every path
+  // ONE stroke (no mid-path M), 2-6 commands, the 24 grid, circles as
+  // two half-arcs — and every id disjoint from the 150 above (pinned by
+  // the design-system battery's registration law).
+  // ------------------------------------------------------------------
+  snowflake: {
+    paths: ["M 12 3 L 12 21", "M 5 6 L 19 18", "M 19 6 L 5 18"],
+    tags: ["snowflake", "snow", "winter", "freeze", "frost", "cold weather", "ice"],
+  },
+  fog: {
+    paths: ["M 5 10 C 5 7, 8 5, 11 6 C 12 4, 16 4, 17 6 C 19 6, 20 8, 20 10", "M 4 14 L 20 14", "M 6 17 L 18 17", "M 8 20 L 16 20"],
+    tags: ["fog", "mist", "haze", "unclear", "blur", "cloudy low"],
+  },
+  "storm-cloud": {
+    paths: ["M 5 15 A 3.5 3.5 0 0 1 6 8 A 4.5 4.5 0 0 1 15 7 A 4 4 0 0 1 19 15", "M 12 11 L 10 16 L 13 16 L 11 20"],
+    tags: ["storm", "thunder", "lightning", "thunderstorm", "tempest", "severe weather"],
+  },
+  moon: {
+    paths: ["M 15 3 A 9 9 0 1 0 21 14 A 7 7 0 0 1 15 3"],
+    tags: ["moon", "lunar", "night", "midnight", "overnight", "dark", "sleep"],
+  },
+  rainbow: {
+    paths: ["M 3 17 A 9 9 0 0 1 21 17", "M 7 17 A 5 5 0 0 1 17 17", "M 2 20 L 22 20"],
+    tags: ["rainbow", "arc", "sky", "hope", "after the rain"],
+  },
+  umbrella: {
+    paths: ["M 3 12 A 9 9 0 0 1 21 12 L 3 12", "M 12 12 L 12 19 A 1.5 1.5 0 0 1 9 19"],
+    tags: ["umbrella", "rainy", "shelter", "cover", "protection weather"],
+  },
+  bread: {
+    paths: ["M 4 11 C 4 8, 7 6, 12 6 C 17 6, 20 8, 20 11 L 20 18 L 4 18 Z", "M 9 10 L 11 13", "M 14 10 L 16 13"],
+    tags: ["bread", "bakery", "loaf", "toast", "food", "bake"],
+  },
+  apple: {
+    paths: ["M 12 8 C 8 6, 5 9, 5 13 C 5 17, 8 20, 12 20 C 16 20, 19 17, 19 13 C 19 9, 16 6, 12 8", "M 12 8 L 12 5", "M 12 5 C 14 3.5, 16.5 4, 16.5 4 C 16.5 4, 15 6.5, 12 5"],
+    tags: ["apple", "fruit", "orchard", "food", "healthy eating"],
+  },
+  cheese: {
+    paths: ["M 3 16 L 21 16 L 21 12 C 15 8, 9 8, 3 12 Z", circle(8, 13.5, 1.2), circle(14, 14, 1)],
+    tags: ["cheese", "cheddar", "dairy food", "food", "kitchen"],
+  },
+  cup: {
+    paths: ["M 5 8 L 5 17 C 5 19, 7 20, 9 20 L 13 20 C 15 20, 17 19, 17 17 L 17 8", "M 4 8 L 18 8", "M 17 10 L 18.5 10 A 2.5 2.5 0 0 1 18.5 15 L 17 15"],
+    tags: ["cup", "coffee", "tea", "mug", "drink", "break", "espresso"],
+  },
+  bowl: {
+    paths: ["M 4 11 A 8 8 0 0 0 20 11 Z", "M 12 19 L 12 21", "M 8 21 L 16 21"],
+    tags: ["bowl", "soup", "salad", "porridge", "meal", "food"],
+  },
+  bottle: {
+    paths: ["M 9 8 L 7 13 L 7 19 L 17 19 L 17 13 L 15 8", "M 9 8 L 9 4 L 15 4 L 15 8"],
+    tags: ["bottle", "drink", "water bottle", "container", "hydration"],
+  },
+  plate: {
+    paths: [circle(12, 12, 9), circle(12, 12, 5)],
+    tags: ["plate", "dish", "dinner", "meal", "food", "kitchen"],
+  },
+  cutlery: {
+    paths: ["M 4 3 L 4 7 A 2 2 0 0 0 8 7 L 8 3", "M 6 3 L 6 21", "M 17 3 C 19.5 6, 19.5 10, 17 13 L 17 21"],
+    tags: ["cutlery", "fork", "knife", "spoon", "restaurant", "dining", "food"],
+  },
+  cat: {
+    paths: [circle(12, 13, 7), "M 6 8 L 5 3.5 L 9.5 6", "M 18 8 L 19 3.5 L 14.5 6"],
+    tags: ["cat", "kitten", "feline", "pet", "animal"],
+  },
+  dog: {
+    paths: [circle(12, 13, 6.5), "M 6 10 C 3.5 9, 4 5, 7.5 7", "M 18 10 C 20.5 9, 20 5, 16.5 7", "M 11 14 A 1 1 0 0 0 13 14"],
+    tags: ["dog", "puppy", "canine", "pet", "animal", "loyal"],
+  },
+  bird: {
+    paths: ["M 5 17 C 5 11, 9 7, 14 7 C 17 7, 19 9, 19 12 L 19 17", "M 9 12 C 11 10, 14 10, 16 12", "M 19 8 L 22 9.5 L 19 11"],
+    tags: ["bird", "sparrow", "pigeon", "wing", "animal", "nature"],
+  },
+  fish: {
+    paths: ["M 3 12 C 6 8, 12 7, 16 10 C 12 17, 6 16, 3 12", "M 16 10 L 21 7 L 20 12 L 21 17 L 16 14", circle(8, 11, 0.9)],
+    tags: ["fish", "fishing", "goldfish", "sea", "animal", "swim"],
+  },
+  butterfly: {
+    paths: ["M 12 5 L 12 19", "M 12 8 C 8 4, 3 6, 4 10 C 5 13, 9 13, 12 12", "M 12 8 C 16 4, 21 6, 20 10 C 19 13, 15 13, 12 12"],
+    tags: ["butterfly", "insect", "caterpillar", "nature", "spring", "transform"],
+  },
+  "soccer-ball": {
+    paths: [circle(12, 12, 8), "M 12 8 L 16 11 L 14.5 16 L 9.5 16 L 8 11 Z", "M 12 4 L 12 8", "M 20 12 L 16 11", "M 4 12 L 8 11"],
+    tags: ["soccer", "football", "ball", "game", "sport", "match"],
+  },
+  basketball: {
+    paths: [circle(12, 12, 8), "M 12 4 L 12 20", "M 4 12 L 20 12", "M 6 6 C 9 9, 9 15, 6 18", "M 18 6 C 15 9, 15 15, 18 18"],
+    tags: ["basketball", "hoop", "dribble", "ball", "sport", "game"],
+  },
+  medal: {
+    paths: ["M 8 3 L 11 9", "M 16 3 L 13 9", circle(12, 15, 5), "M 10 15 L 12 13 L 14 15 L 12 17 Z"],
+    tags: ["medal", "winner", "award", "prize", "second place", "honor"],
+  },
+  trophy: {
+    paths: ["M 8 4 L 16 4 L 16 10 C 16 13, 14 15, 12 15 C 10 15, 8 13, 8 10 Z", "M 8 6 L 6 6 C 4.5 6, 4.5 9, 7 10", "M 16 6 L 18 6 C 19.5 6, 19.5 9, 17 10", "M 12 15 L 12 18", "M 8 21 L 16 21"],
+    tags: ["trophy", "champion", "victory", "first place", "win", "award", "success cup"],
+  },
+  "music-note": {
+    paths: ["M 15 4 L 15 16", "M 15 4 C 18 6, 19 9, 17 12", circle(12.2, 16, 2.8)],
+    tags: ["music note", "melody", "song", "tune", "hum", "singing"],
+  },
+  drum: {
+    paths: ["M 6 7 A 6 2.5 0 1 0 18 7 A 6 2.5 0 1 0 6 7", "M 6 7 L 6 17", "M 18 7 L 18 17", "M 6 17 A 6 2.5 0 0 0 18 17"],
+    tags: ["drum", "beat", "rhythm", "percussion", "music instrument"],
+  },
+  guitar: {
+    paths: [circle(9, 15, 5.5), "M 12 11.5 L 19 4.5", "M 19 4.5 L 21 3", circle(9, 15, 2)],
+    tags: ["guitar", "acoustic", "banjo", "instrument", "music instrument", "band"],
+  },
+  "credit-card": {
+    paths: ["M 3 7 L 21 7 L 21 17 L 3 17 Z", "M 3 10 L 21 10", "M 6 14 L 9 14"],
+    tags: ["credit card", "debit", "checkout", "payment card", "buy", "finance"],
+  },
+  "money-bag": {
+    paths: ["M 9 7 C 6 9, 4 13, 4 16 C 4 20, 7 21, 12 21 C 17 21, 20 20, 20 16 C 20 13, 18 9, 15 7", "M 9 7 L 9 5 L 15 5 L 15 7"],
+    tags: ["money bag", "fortune", "windfall", "jackpot", "wealth", "cash bag"],
+  },
+  "coins-stack": {
+    paths: ["M 6 9 A 6 2.2 0 1 0 18 9 A 6 2.2 0 1 0 6 9", "M 6 9 L 6 13 A 6 2.2 0 0 0 18 13 L 18 9", "M 6 13 L 6 17 A 6 2.2 0 0 0 18 17 L 18 13"],
+    tags: ["coins stack", "savings pile", "nest egg", "pile", "stacked", "wealth"],
+  },
+  saw: {
+    paths: ["M 3 12 L 21 12", "M 3 12 L 5 14 L 7 12 L 9 14 L 11 12 L 13 14", "M 13 14 L 15 12 L 17 14 L 19 12 L 21 12"],
+    tags: ["handsaw", "carpentry", "saw tool", "cut wood", "workshop"],
+  },
+  shovel: {
+    paths: ["M 12 3 L 12 12", "M 9 3 L 15 3", "M 12 12 C 9 12, 8 14, 8 16 C 8 19, 10 21, 12 21 C 14 21, 16 19, 16 16 C 16 14, 15 12, 12 12"],
+    tags: ["shovel", "dig", "excavate", "scoop", "garden tool", "spade"],
+  },
+  wheelbarrow: {
+    paths: ["M 3 8 L 17 8 L 14 14 L 6 14 Z", "M 17 8 L 21 6", circle(10, 18, 2.5), "M 14 14 L 16 19"],
+    tags: ["wheelbarrow", "barrow", "cart", "carry", "garden tool"],
+  },
+  ladder: {
+    paths: ["M 7 3 L 7 21", "M 17 3 L 17 21", "M 7 7 L 17 7", "M 7 12 L 17 12", "M 7 17 L 17 17"],
+    tags: ["ladder", "climb", "climbing", "height", "step ladder"],
+  },
+  stopwatch: {
+    paths: [circle(12, 13, 7.5), "M 12 13 L 12 8", "M 10 3 L 14 3", "M 12 3 L 12 5.5"],
+    tags: ["stopwatch", "countdown", "split time", "speed", "timing"],
+  },
+  "alarm-clock": {
+    paths: [circle(12, 13, 7.5), "M 6 5 L 8.5 2.5", "M 18 5 L 15.5 2.5", "M 12 13 L 12 9", "M 12 13 L 15 14.5"],
+    tags: ["alarm clock", "wake", "morning", "wake up", "bedside"],
+  },
+  flower: {
+    paths: ["M 8 4 L 8 9 C 8 12, 10 14, 12 14 C 14 14, 16 12, 16 9 L 16 4", "M 8 4 C 9 7, 11 7, 12 5 C 13 7, 15 7, 16 4", "M 12 14 L 12 21", "M 12 18 C 10 17, 8.5 18, 8 20 C 9.5 20.5, 11.5 20, 12 18"],
+    tags: ["tulip", "bloom", "blossom", "bouquet", "petal", "rose", "spring"],
+  },
+  mushroom: {
+    paths: ["M 4 12 C 4 7, 8 4, 12 4 C 16 4, 20 7, 20 12", "M 4 12 L 20 12", "M 10 12 C 10 16, 9 18, 9 19 C 9 21, 15 21, 15 19 C 15 18, 14 16, 14 12"],
+    tags: ["mushroom", "fungi", "toadstool", "nature", "forest food"],
+  },
+  cactus: {
+    paths: ["M 10 16 L 10 5 C 10 3.9, 14 3.9, 14 5 L 14 16", "M 10 11 L 7.5 11 C 6.5 11, 6.5 15, 7.5 15 L 10 15", "M 14 8 L 16.5 8 C 17.5 8, 17.5 12, 16.5 12 L 14 12", "M 8 16 L 16 16 L 15 21 L 9 21 Z"],
+    tags: ["cactus", "desert", "succulent", "plant", "dry"],
+  },
+  "paper-plane": {
+    paths: ["M 21 4 L 3 11 L 10 13.5 L 11 21 Z", "M 21 4 L 10 13.5"],
+    tags: ["paper plane", "origami", "send", "launch idea", "message out"],
+  },
+  "life-ring": {
+    paths: [circle(12, 12, 8), "M 6.3 6.3 L 9.2 9.2", "M 17.7 6.3 L 14.8 9.2", "M 6.3 17.7 L 9.2 14.8", "M 17.7 17.7 L 14.8 14.8"],
+    tags: ["life ring", "lifesaver", "rescue", "overboard", "safety buoy", "help at sea"],
+  },
+  helmet: {
+    paths: ["M 4 15 A 8 8 0 0 1 20 15 L 20 17 L 4 17 Z", "M 12 7 L 12 17"],
+    tags: ["helmet", "hard hat", "headgear", "safety gear", "protect head"],
+  },
+  chair: {
+    paths: ["M 7 3 L 13 3", "M 7 3 L 7 13", "M 7 13 L 17 13", "M 8 13 L 8 21", "M 16 13 L 16 21"],
+    tags: ["chair", "seat", "sit", "sitting", "furniture", "rest"],
+  },
+  bed: {
+    paths: ["M 3 6 L 3 18", "M 21 11 L 21 18", "M 3 14 L 21 14", "M 5 14 L 5 11.5 L 9 11.5 L 9 14"],
+    tags: ["bed", "sleep", "bedroom", "bedtime", "nap", "rest", "hotel"],
+  },
+  door: {
+    paths: ["M 4 21 L 4 4 L 20 4 L 20 21", "M 6 21 L 6 6 L 18 6 L 18 21", circle(15.5, 13, 0.9)],
+    tags: ["door", "doorway", "entrance", "gate", "open door", "opportunity"],
+  },
+  stairs: {
+    paths: ["M 4 21 L 4 16 L 10 16 L 10 11", "M 10 16 L 16 16 L 16 11 L 22 11 L 22 6"],
+    tags: ["stairs", "staircase", "escalator", "progress", "level up", "ascend"],
+  },
+  keyboard: {
+    paths: ["M 2 8 L 22 8 L 22 16 L 2 16 Z", "M 5 11 L 7 11", "M 10 11 L 12 11", "M 15 11 L 17 11", "M 8 14 L 16 14"],
+    tags: ["keyboard", "typing", "type", "input", "computer", "write digital"],
+  },
+  satellite: {
+    paths: ["M 8 10 L 16 10 L 16 14 L 8 14 Z", "M 2 10 L 6 10 L 6 14 L 2 14 Z", "M 18 10 L 22 10 L 22 14 L 18 14 Z", "M 12 10 L 12 6", "M 10.3 5.7 A 2 2 0 0 1 13.7 5.7"],
+    tags: ["satellite", "orbit", "spacecraft", "space", "signal space", "gps"],
+  },
+  antenna: {
+    paths: ["M 12 8 L 12 21", "M 9 6 A 4.5 4.5 0 0 0 9 10", "M 15 6 A 4.5 4.5 0 0 1 15 10", "M 6.5 3.5 A 7.5 7.5 0 0 0 6.5 12.5", "M 17.5 3.5 A 7.5 7.5 0 0 1 17.5 12.5"],
+    tags: ["transmitter", "radio", "mast", "aerial", "waves", "on air"],
+  },
+  "first-aid-kit": {
+    paths: ["M 4 8 L 20 8 L 20 19 L 4 19 Z", "M 9 8 L 9 5 L 15 5 L 15 8", "M 12 11 L 12 16", "M 9.5 13.5 L 14.5 13.5"],
+    tags: ["first aid kit", "aid kit", "medical kit", "safety kit", "prepared"],
+  },
+  windmill: {
+    paths: ["M 12 11 L 9 21 L 15 21 Z", "M 12 11 L 12 3", "M 12 11 L 18.9 7", "M 12 11 L 5.1 7", circle(12, 11, 1.2)],
+    tags: ["windmill", "mill", "grind", "farm", "wind energy", "rural"],
   },
 };

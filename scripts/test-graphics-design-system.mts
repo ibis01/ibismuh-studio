@@ -608,6 +608,90 @@ await test("the prompt teaches the component vocabulary (source pin, the S157 pa
   ok(src.includes("import {\n  componentNames,"), "the channel imports the registry");
 });
 
+// --- 6. VOCABULARY (Phase C slice 2) -------------------------------------------
+
+suiteStart("vocabulary — the icon wave rides the one-source law");
+
+await test("the library holds the audit band and every icon passes the path laws", async () => {
+  const { GRAPHICS_ICON_LIBRARY } = await import("../src/lib/ibismuh/graphics/planner");
+  const { countPathCommands } = await import("../src/lib/ibismuh/whiteboard/svg");
+  const ids = Object.keys(GRAPHICS_ICON_LIBRARY);
+  ok(ids.length >= 180 && ids.length <= 210, `the library holds the production band (${ids.length} icons)`);
+  for (const [id, icon] of Object.entries(GRAPHICS_ICON_LIBRARY)) {
+    ok(icon.paths.length >= 1 && icon.paths.length <= 16, `${id}: ${icon.paths.length} paths`);
+    ok(icon.tags.length >= 1, `${id}: tagged`);
+    for (const d of icon.paths) {
+      const mCount = (d.match(/M/g) ?? []).length;
+      ok(mCount === 1 && d.trimStart().startsWith("M"), `${id}: every path is ONE stroke (one M)`);
+      const cmds = countPathCommands(d);
+      ok(cmds >= 2, `${id}: a path parses to ${cmds} commands`);
+      ok(cmds <= 64, `${id}: path within the readable-command band (${cmds})`);
+      for (const n of d.match(/-?\d+(\.\d+)?/g) ?? []) {
+        const v = parseFloat(n);
+        ok(v >= -2 && v <= 26, `${id}: coordinate ${v} on the 24 grid`);
+      }
+    }
+  }
+});
+
+await test("the mention rules stay first-hit-wins: no later rule claims an earlier rule's word", async () => {
+  const { ICON_KEYWORD_PICKS } = await import("../src/lib/ibismuh/graphics/planner");
+  ok(ICON_KEYWORD_PICKS.length >= 180, `the rule table grew with the library (${ICON_KEYWORD_PICKS.length} rules)`);
+  const head = ICON_KEYWORD_PICKS.slice(0, 136);
+  const tail = ICON_KEYWORD_PICKS.slice(136);
+  ok(tail.length >= 45, `the wave appended its rules after the established table (${tail.length} tail rules)`);
+  for (let ti = 0; ti < tail.length; ti++) {
+    const rule = tail[ti];
+    const source = rule.re.source;
+    const words = source.replace(/\\b/g, "").split("|").map((w) => w.replace(/[()]/g, "").trim()).filter((w) => w.length >= 2);
+    for (const w of words) {
+      for (let hi = 0; hi < head.length + ti; hi++) {
+        const other = ICON_KEYWORD_PICKS[hi];
+        if (other === undefined) continue;
+        let hit = false;
+        try {
+          hit = other.re.test(w);
+        } catch {
+          hit = false;
+        }
+        ok(!hit, `tail rule ${ti + 1} (${rule.iconId}) word "${w}" already claimed by ${other.iconId} — the pick would never fire`);
+      }
+    }
+  }
+});
+
+await test("the wave's icons resolve and the dead-end law holds for every rule", async () => {
+  const { GRAPHICS_ICON_LIBRARY, ICON_KEYWORD_PICKS, FALLBACK_ICON_CYCLE } = await import("../src/lib/ibismuh/graphics/planner");
+  const NEW_IDS = ["snowflake", "fog", "storm-cloud", "moon", "rainbow", "umbrella", "bread", "apple", "cheese", "cup", "bowl", "bottle", "plate", "cutlery", "cat", "dog", "bird", "fish", "butterfly", "soccer-ball", "basketball", "medal", "trophy", "music-note", "drum", "guitar", "credit-card", "money-bag", "coins-stack", "saw", "shovel", "wheelbarrow", "ladder", "stopwatch", "alarm-clock", "flower", "mushroom", "cactus", "paper-plane", "life-ring", "helmet", "chair", "bed", "door", "stairs", "keyboard", "satellite", "antenna", "first-aid-kit", "windmill"];
+  for (const id of NEW_IDS) {
+    ok(GRAPHICS_ICON_LIBRARY[id] !== undefined, `the wave's icon "${id}" registered`);
+  }
+  const libIds = new Set(Object.keys(GRAPHICS_ICON_LIBRARY));
+  for (const rule of ICON_KEYWORD_PICKS) {
+    ok(libIds.has(rule.iconId), `rule → ${rule.iconId}: the dead-end law`);
+  }
+  for (const id of FALLBACK_ICON_CYCLE) {
+    ok(libIds.has(id), `fallback → ${id}: the dead-end law`);
+  }
+});
+
+await test("the icon picks stay honest: first-hit-wins keeps the established narrations' picks identical", async () => {
+  const { iconForScene } = await import("../src/lib/ibismuh/graphics/planner");
+  eq(iconForScene("Every product grows through three forces: reach, retention, and revenue.", 0), "chart-up", "the growth narration still rides its established pick (revenue → chart-up)");
+  eq(iconForScene("The smart farm works as one system.", 1), "farmer", "the farm narration still rides the farmer");
+  eq(iconForScene("Check your first workflow now and see the difference yourself.", 4), "check", "the check narration still rides the check");
+});
+
+await test("the catalog rides the wave: graphics rows match the library, the band holds", async () => {
+  const { GRAPHICS_ICON_LIBRARY } = await import("../src/lib/ibismuh/graphics/planner");
+  const { builtinCatalogManifest } = await import("../src/lib/ibismuh/catalog/manifest");
+  const manifest = builtinCatalogManifest();
+  const gRows = manifest.assets.filter((a) => a.lane === "graphics");
+  eq(gRows.length, Object.keys(GRAPHICS_ICON_LIBRARY).length, "every icon has a row, no extras");
+  const total = manifest.assets.length;
+  ok(total >= 250 && total <= 400, `the total rides the production band (${total})`);
+});
+
 await test("the check chain and CI carry the battery", () => {
   const pkg = JSON.parse(fs.readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
   ok(typeof pkg.scripts["test:graphics-design"] === "string", "package.json carries test:graphics-design");
