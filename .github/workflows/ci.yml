@@ -347,6 +347,8 @@ jobs:
         run: npm run test:responsive-layout
       - name: Whiteboard recipes (WS6 choreography registry)
         run: npm run test:whiteboard-recipes
+      - name: Query benchmark (WS10 fixed semantic suite)
+        run: npm run test:query-benchmark
 
       # S103 — the P1.1 measured restore drill: backup (VACUUM INTO) →
       # destroy a scratch casualty → restore → verify counts/integrity/probes
