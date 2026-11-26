@@ -15,6 +15,13 @@ import {
 } from "@/lib/ibismuh/whiteboard/whiteboard-planner";
 import { invalidateRenderedArtifacts } from "@/lib/ibismuh/render";
 import { loadVideoLibrary } from "@/lib/ibismuh/whiteboard/asset-store";
+import {
+  builtinCatalogManifest,
+  compoundCatalogRows,
+  whiteboardCatalogRows,
+} from "@/lib/ibismuh/catalog/manifest";
+import type { CatalogAssetMeta } from "@/lib/ibismuh/catalog/contracts";
+import { WB_COMPOUNDS } from "@/lib/ibismuh/whiteboard/compounds";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -118,10 +125,22 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     }
   }
 
+  // Phase B slice 4 — the catalog browser's rows: the deterministic search
+  // engine (catalog/search.ts) runs CLIENT-SIDE over these rows. Built-ins
+  // + compounds ride the memoized builtin manifest (the CI laws' own rows);
+  // uploads derive rows on the spot (the same mechanical derivation — the
+  // search matches on their tags). One list, one vocabulary.
+  const catalogRows: CatalogAssetMeta[] = [
+    ...builtinCatalogManifest().assets.filter((r) => r.lane === "whiteboard"),
+    ...whiteboardCatalogRows([...uploadedAssets.values()]),
+    ...compoundCatalogRows(WB_COMPOUNDS),
+  ];
+
   return NextResponse.json({
     project,
     rev: doc?.rev ?? 0,
     library,
+    catalogRows,
     voMs,
     budgets: {
       ...WB_BUDGETS,

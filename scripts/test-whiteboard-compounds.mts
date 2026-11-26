@@ -33,6 +33,10 @@
 //
 // Run: npm run test:whiteboard-compounds   (pure — no DB, no DOM; CI step)
 
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { ASSETS } from "../src/lib/ibismuh/whiteboard/assets";
 import {
   assertCompoundRegistry,
@@ -152,7 +156,7 @@ function compoundGeo(): Map<string, AssetGeometry> {
 suiteStart("registry — the graph refuses every defect by name");
 
 await test("the shipped registry validates clean against the real library", () => {
-  assertCompoundRegistry(); // throws on any defect
+  assertCompoundRegistry(WB_COMPOUNDS, ASSET_IDS); // throws on any defect
   ok(WB_COMPOUNDS.length >= 3, `the registry is seeded (${WB_COMPOUNDS.length} compositions)`);
   for (const spec of WB_COMPOUNDS) {
     ok(validWhiteboardId(spec.id), `${spec.id}: the compound id passes the charset law`);
@@ -166,7 +170,7 @@ await test("the dead-end law: a ghost part is refused", () => {
   const ghost: WhiteboardCompoundSpec[] = [
     { id: "ghost-compound", parts: [{ assetId: "no-such-asset", dx: 0, dy: 0 }], tags: ["x"], aliases: [], a11y: "x", footprint: { w: 100, h: 100 } },
   ];
-  throws(() => assertCompoundRegistry(ghost), /not a registered library asset \(the dead-end law\)/);
+  throws(() => assertCompoundRegistry(ghost, ASSET_IDS), /not a registered library asset \(the dead-end law\)/);
 });
 
 await test("duplicate compound ids, duplicate parts, and charset violations are refused", () => {
@@ -174,27 +178,27 @@ await test("duplicate compound ids, duplicate parts, and charset violations are 
     { id: "same", parts: [{ assetId: "coin", dx: 0, dy: 0 }], tags: [], aliases: [], a11y: "", footprint: { w: 1, h: 1 } },
     { id: "same", parts: [{ assetId: "clock", dx: 0, dy: 0 }], tags: [], aliases: [], a11y: "", footprint: { w: 1, h: 1 } },
   ];
-  throws(() => assertCompoundRegistry(dupe), /duplicate compound id/);
+  throws(() => assertCompoundRegistry(dupe, ASSET_IDS), /duplicate compound id/);
   const twinParts: WhiteboardCompoundSpec[] = [
     { id: "twin", parts: [{ assetId: "coin", dx: 0, dy: 0 }, { assetId: "coin", dx: 10, dy: 0 }], tags: [], aliases: [], a11y: "", footprint: { w: 1, h: 1 } },
   ];
-  throws(() => assertCompoundRegistry(twinParts), /places "coin" twice/);
+  throws(() => assertCompoundRegistry(twinParts, ASSET_IDS), /places "coin" twice/);
   const badCharset: WhiteboardCompoundSpec[] = [
     { id: "bad--id", parts: [{ assetId: "coin", dx: 0, dy: 0 }], tags: [], aliases: [], a11y: "", footprint: { w: 1, h: 1 } },
   ];
-  throws(() => assertCompoundRegistry(badCharset), /violates the id charset/);
+  throws(() => assertCompoundRegistry(badCharset, ASSET_IDS), /violates the id charset/);
   const empty: WhiteboardCompoundSpec[] = [
     { id: "empty", parts: [], tags: [], aliases: [], a11y: "", footprint: { w: 1, h: 1 } },
   ];
-  throws(() => assertCompoundRegistry(empty), /composes nothing/);
+  throws(() => assertCompoundRegistry(empty, ASSET_IDS), /composes nothing/);
   const nonFinite: WhiteboardCompoundSpec[] = [
     { id: "nan", parts: [{ assetId: "coin", dx: Number.NaN, dy: 0 }], tags: [], aliases: [], a11y: "", footprint: { w: 1, h: 1 } },
   ];
-  throws(() => assertCompoundRegistry(nonFinite), /non-finite offset/);
+  throws(() => assertCompoundRegistry(nonFinite, ASSET_IDS), /non-finite offset/);
   const zeroScale: WhiteboardCompoundSpec[] = [
     { id: "zero", parts: [{ assetId: "coin", dx: 0, dy: 0, scale: 0 }], tags: [], aliases: [], a11y: "", footprint: { w: 1, h: 1 } },
   ];
-  throws(() => assertCompoundRegistry(zeroScale), /non-positive scale/);
+  throws(() => assertCompoundRegistry(zeroScale, ASSET_IDS), /non-positive scale/);
 });
 
 // --- 2. EXPANSION -------------------------------------------------------------
@@ -410,7 +414,28 @@ await test("every expanded part claims its own stroke; the wire stays byte-shape
   );
 });
 
+// --- 7. BUNDLE SAFETY ---------------------------------------------------------
+
+suiteStart("bundle safety — the browser-facing modules stay client-clean");
+
+await test("compounds.ts and catalog/search.ts carry no node-only imports (the palette imports them)", () => {
+  // The studio (a client component) imports compounds.ts (placement) and
+  // catalog/search.ts (the browser's engine). Either module gaining a
+  // node:crypto / node:fs import — or compounds.ts a VALUE import of the
+  // asset library (the engine chain) — breaks the browser bundle. The scan
+  // is the guard: the client-safety law stays pinned, not remembered.
+  const HERE = path.dirname(fileURLToPath(import.meta.url));
+  const read = (p: string): string => fs.readFileSync(path.resolve(HERE, p), "utf8");
+  const compoundsSrc = read("../src/lib/ibismuh/whiteboard/compounds.ts");
+  ok(!/from "node:/.test(compoundsSrc), "compounds.ts: no node: imports");
+  ok(!/import \{\s*ASSETS/.test(compoundsSrc) && !/import \{ ASSETS/.test(compoundsSrc), "compounds.ts: no value import of the asset library (type-only at most)");
+  const searchSrc = read("../src/lib/ibismuh/catalog/search.ts");
+  ok(!/from "node:/.test(searchSrc), "catalog/search.ts: no node: imports (the browser has no node:crypto)");
+  ok(/export function searchRows/.test(searchSrc) && /export function searchCatalog/.test(searchSrc), "search.ts: both entry points exported");
+});
+
 // --- summary ------------------------------------------------------------------
+
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {

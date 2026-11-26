@@ -208,7 +208,7 @@ let memo: CatalogManifest | null = null;
  *  a defective graph refuses the manifest (fail-closed by construction). */
 export function builtinCatalogManifest(): CatalogManifest {
   if (memo === null) {
-    assertCompoundRegistry();
+    assertCompoundRegistry(WB_COMPOUNDS, new Set(ASSETS.map((a) => a.id)));
     memo = buildCatalogManifest({
       assets: [...whiteboardCatalogRows(ASSETS), ...compoundCatalogRows(WB_COMPOUNDS), ...graphicsCatalogRows(GRAPHICS_ICON_LIBRARY)],
     });
