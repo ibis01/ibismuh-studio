@@ -219,6 +219,64 @@ export const ICON_KEYWORD_PICKS: { re: RegExp; iconId: string }[] = [
   { re: /\b(backpack|bag|school bag|carry|travel pack)\b/i, iconId: "backpack" },
   { re: /\b(diploma|credential|qualification|award|certificate award)\b/i, iconId: "diploma" },
   { re: /\b(warehouse shelf|pallet|boxes)\b/i, iconId: "warehouse" },
+
+  // ------------------------------------------------------------------
+  // Phase C slice 2 — the icon wave's mention rules, APPENDED after the
+  // tables above: first-hit-wins keeps every existing pick identical,
+  // and every word here was mechanically audited against every earlier
+  // rule (nothing already claimed — "rain" belongs to the rain-cloud,
+  // "music" to the headphones, "first aid" to the hospital-cross, so the
+  // new rules claim thunder/lightning, melody/song, lifesaver/rescue).
+  // ------------------------------------------------------------------
+  { re: /\b(snow|snowy|winter|freeze|frost|blizzard|ice)\b/i, iconId: "snowflake" },
+  { re: /\b(fog|mist|haze|blur)\b/i, iconId: "fog" },
+  { re: /\b(thunder|lightning|thunderstorm|tempest)\b/i, iconId: "storm-cloud" },
+  { re: /\b(moon|lunar|night|midnight|overnight)\b/i, iconId: "moon" },
+  { re: /\b(rainbow)\b/i, iconId: "rainbow" },
+  { re: /\b(umbrella|brolly|canopy)\b/i, iconId: "umbrella" },
+  { re: /\b(bread|bakery|loaf|toast|bake)\b/i, iconId: "bread" },
+  { re: /\b(apple|fruit|orchard)\b/i, iconId: "apple" },
+  { re: /\b(cheese|cheddar|parmesan)\b/i, iconId: "cheese" },
+  { re: /\b(coffee|tea|mug|cup|espresso)\b/i, iconId: "cup" },
+  { re: /\b(bowl|soup|salad|porridge)\b/i, iconId: "bowl" },
+  { re: /\b(bottle|bottled)\b/i, iconId: "bottle" },
+  { re: /\b(plate|dish|dinner)\b/i, iconId: "plate" },
+  { re: /\b(cutlery|fork|knife|spoon|restaurant|dining)\b/i, iconId: "cutlery" },
+  { re: /\b(cat|kitten|feline)\b/i, iconId: "cat" },
+  { re: /\b(dog|puppy|canine)\b/i, iconId: "dog" },
+  { re: /\b(bird|sparrow|pigeon)\b/i, iconId: "bird" },
+  { re: /\b(fish|fishing|goldfish)\b/i, iconId: "fish" },
+  { re: /\b(butterfly|insect|caterpillar)\b/i, iconId: "butterfly" },
+  { re: /\b(soccer|football)\b/i, iconId: "soccer-ball" },
+  { re: /\b(basketball|hoop|dribble)\b/i, iconId: "basketball" },
+  { re: /\b(medal|winner|prize|honor)\b/i, iconId: "medal" },
+  { re: /\b(trophy|champion|victory)\b/i, iconId: "trophy" },
+  { re: /\b(melody|song|tune|hum)\b/i, iconId: "music-note" },
+  { re: /\b(drum|beat|rhythm|percussion)\b/i, iconId: "drum" },
+  { re: /\b(guitar|acoustic|banjo)\b/i, iconId: "guitar" },
+  { re: /\b(debit|checkout)\b/i, iconId: "credit-card" },
+  { re: /\b(fortune|windfall|jackpot)\b/i, iconId: "money-bag" },
+  { re: /\b(nest egg|pile|stacked)\b/i, iconId: "coins-stack" },
+  { re: /\b(handsaw|carpentry)\b/i, iconId: "saw" },
+  { re: /\b(shovel|spade|digging|excavate|excavating)\b/i, iconId: "shovel" },
+  { re: /\b(wheelbarrow|barrow|cart)\b/i, iconId: "wheelbarrow" },
+  { re: /\b(ladder|step ladder)\b/i, iconId: "ladder" },
+  { re: /\b(stopwatch|countdown)\b/i, iconId: "stopwatch" },
+  { re: /\b(wake|morning)\b/i, iconId: "alarm-clock" },
+  { re: /\b(bloom|blossom|tulip|bouquet|petal|rose)\b/i, iconId: "flower" },
+  { re: /\b(mushroom|fungi|toadstool)\b/i, iconId: "mushroom" },
+  { re: /\b(cactus|desert|succulent)\b/i, iconId: "cactus" },
+  { re: /\b(origami)\b/i, iconId: "paper-plane" },
+  { re: /\b(lifesaver|rescue|overboard)\b/i, iconId: "life-ring" },
+  { re: /\b(helmet|hard hat)\b/i, iconId: "helmet" },
+  { re: /\b(chair|seat|sit|sitting)\b/i, iconId: "chair" },
+  { re: /\b(bed|sleep|bedroom|bedtime|nap)\b/i, iconId: "bed" },
+  { re: /\b(door|doorway|entrance|gate)\b/i, iconId: "door" },
+  { re: /\b(stairs|staircase|escalator)\b/i, iconId: "stairs" },
+  { re: /\b(keyboard|typing)\b/i, iconId: "keyboard" },
+  { re: /\b(satellite|orbit|spacecraft)\b/i, iconId: "satellite" },
+  { re: /\b(transmitter|radio|mast|aerial)\b/i, iconId: "antenna" },
+  { re: /\b(windmill|mill|grind)\b/i, iconId: "windmill" },
 ];
 
 /** The no-cue fallback cycle (deterministic by scene position): a diverse
@@ -374,7 +432,10 @@ function element(
   return { id, kind, at, enter: nativeEnterFor(kind, order), ...extra };
 }
 
-function iconForScene(text: string, position: number): string {
+/** The deterministic selection: the ordered rule table, first hit wins,
+ *  then the no-cue fallback cycle by scene position. Exported for the
+ *  batteries (ONE selection law, testable where it lives). */
+export function iconForScene(text: string, position: number): string {
   for (const pick of ICON_KEYWORD_PICKS) {
     if (pick.re.test(text)) return pick.iconId;
   }

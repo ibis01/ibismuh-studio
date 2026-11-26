@@ -7918,3 +7918,21 @@ Work Log:
 Stage Summary:
 - Deliverable: the graphics lane has its design system — five named choreography recipes and five semantic components, both fail-closed registries compiling into the EXISTING grammar at planning time; the quote archetype and the LLM component channel are the first two adoption seams; every pinned narration byte-stable.
 - Next: Phase C slice 2 — the graphics icon vocabulary's own growth (150 → the audit's band), the same one-source law; then the slice docs' deliberate follow-ups (recipe adoption on the lane plan, the graphics palette).
+
+---
+Task ID: PhaseC-S2
+Agent: main (Z.ai)
+Task: Audit roadmap Phase C slice 2 — the graphics icon vocabulary's own growth (150 → 200, the audit's band top), closing Phase C after PR #25 (the MG design system) merged as main @ 45777cb with PR-run CI green.
+
+Work Log:
+- Branched off main BEFORE the merge, rebased onto 45777cb when #25 landed (the stash/rebase dance; slice 1's battery became the receipt surface for slice 2's vocabulary suite).
+- Authored 50 new icons into graphics/icons.ts (the ONE frozen literal) across weather, food, animals, sports, music, money, tools, time, nature, safety, the everyday room and tech — every path ONE stroke (one M, no mid-path teleports), coordinates on the 24 grid, teachable tags for the mechanical catalog derivation. A mechanical scan of all 200 icons confirmed the whole library passes the single-stroke law and my pack passes the stricter starter discipline (the shipped library's later growth runs up to 14 paths per icon — the battery now pins the shipped band, not my stricter draft).
+- Appended 49 mention rules AFTER the established 136 (first-hit-wins); every word mechanically audited against all earlier rules — rain/music/first-aid/flower/climb/award/payment/note collisions were caught BEFORE landing and the rules claim only unclaimed words (thunder, melody, lifesaver, bloom, sleep, typing...). Two icons ride without a rule (first-aid-kit: every natural phrase collides with the hospital-cross's established claims) — reachable through the catalog search and the LLM prompt; the dead-end law requires rules to name registered icons, never that every icon has a rule.
+- Exported iconForScene (the ONE selection function, testable where it lives) and pinned three established narrations' picks byte-identically in the battery.
+- The battery's VOCABULARY suite (5 new laws, 33 total) pins: the library band (180-210), the whole-library single-stroke + grid laws, the theft-scan (any future tail rule claiming an earlier rule's word fails BY NAME), the wave's 50 registrations, the dead-end law for every rule and the fallback cycle, the established-picks pin, and the catalog band (349 rows).
+- Bumped the catalog suite's graphics floor law (≥ 100 → ≥ 180) so a silent removal cannot pass.
+- Local gates ALL green: typecheck, eslint, design-system 33/33, catalog 25/25, unit 1064/0, placement 27/0, multipick 16/0, compounds 15/0, trace + profiles ALL CHECKS PASS, HEALTH 0.
+
+Stage Summary:
+- Deliverable: the graphics vocabulary rides the audit's band top — 200 icons, 349 catalog rows, zero rule theft, zero byte drift; Phase C is CLOSED (the design system core + the vocabulary growth, both inside the contract).
+- Next: the route's remaining work is the deliberate follow-ups documented in the slice docs (recipe adoption on the lane plan, the graphics palette seat, pack 3 if boards ask) — none are Phase C obligations.

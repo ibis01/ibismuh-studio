@@ -123,7 +123,7 @@ await test("the vocabulary grew — the library is no longer the starter set", (
   // S-PAK-2 (the mass-production wave) lifted the whiteboard library past
   // the first pack's 95; the graphics vocabulary holds its 100+ floor.
   ok(ASSETS.length >= 130, `whiteboard library expanded (${ASSETS.length} assets)`);
-  ok(Object.keys(GRAPHICS_ICON_LIBRARY).length >= 100, `graphics vocabulary expanded (${Object.keys(GRAPHICS_ICON_LIBRARY).length} icons)`);
+  ok(Object.keys(GRAPHICS_ICON_LIBRARY).length >= 180, `graphics vocabulary expanded (${Object.keys(GRAPHICS_ICON_LIBRARY).length} icons)`);
 });
 
 await test("the catalog rides the audit's 250-400 production band", () => {
