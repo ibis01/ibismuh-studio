@@ -31,6 +31,7 @@ import {
 // W2 — the beat layer: the model MAY propose beats in the same schema the
 // native compiler plans; the segmentation is THE engine's (one source).
 import { splitSentences } from "./beat-plan";
+import { expandCompound, type WhiteboardCompoundSpec } from "./compounds";
 import type {
   WhiteboardAssetPlacement,
   WhiteboardProject,
@@ -94,10 +95,13 @@ export interface PlannerCatalogEntry {
 
 /** Build the concept catalog from the merged library (built-ins + this
  * video's uploads). Reserved ids are excluded BY CONSTRUCTION — the model
- * never even sees them. Deterministic order: uploads first, then
- * built-ins alphabetically. */
+ * never even sees them. Phase B slice 3: the compound compositions ride the
+ * catalog too — the model may pick a composition, and the seam expands it
+ * into its parts. Deterministic order: uploads first, then built-ins
+ * alphabetically (compounds sort in among them by id). */
 export function buildPlannerCatalog(
-  assets: Iterable<{ id: string; tags: string[]; viewBox: { w: number; h: number } }>
+  assets: Iterable<{ id: string; tags: string[]; viewBox: { w: number; h: number } }>,
+  compounds: readonly WhiteboardCompoundSpec[] = []
 ): PlannerCatalogEntry[] {
   const out: PlannerCatalogEntry[] = [];
   for (const a of assets) {
@@ -108,6 +112,14 @@ export function buildPlannerCatalog(
       w: a.viewBox.w,
       h: a.viewBox.h,
       uploaded: a.tags.includes("upload"),
+    });
+  }
+  for (const spec of compounds) {
+    out.push({
+      id: spec.id,
+      tags: spec.tags.slice(0, 6),
+      w: spec.footprint.w,
+      h: spec.footprint.h,
     });
   }
   return out.sort((a, b) =>
@@ -217,6 +229,10 @@ export function normalizeLlmScenePlans(
     width: number;
     height: number;
     maxConceptsPerScene?: number;
+    /** Phase B slice 3 — the compound composition ids the catalog carries:
+     *  a compound pick expands at the compose seam, so a scene carries ONE
+     *  instance of any composition (its parts are the repetition). */
+    compoundIds?: ReadonlySet<string>;
   }
 ): {
   served: Map<number, NormalizedScenePlan>;
@@ -283,11 +299,18 @@ export function normalizeLlmScenePlans(
         continue;
       }
       const prior = counts.get(assetId) ?? 0;
-      if (prior >= WB_PLANNER_MAX_REPEATS_PER_ASSET) {
+      // Phase B slice 3 — a compound's instance cap is ONE: the composition
+      // places its parts itself, so a second composition pick is the parts
+      // repeated — refused with the law named, never a silent dedupe.
+      const isCompound = ctx.compoundIds?.has(assetId) ?? false;
+      const instanceCap = isCompound ? 1 : WB_PLANNER_MAX_REPEATS_PER_ASSET;
+      if (prior >= instanceCap) {
         dropped.push({
           scene: sceneNo,
           assetId,
-          reason: `asset placed ${prior + 1}× in one scene — the planner caps counted repeats at ${WB_PLANNER_MAX_REPEATS_PER_ASSET} instances (the engine supports more; the scaffold teaches with a readable pair)`,
+          reason: isCompound
+            ? `the compound "${assetId}" places its parts itself — one composition per scene`
+            : `asset placed ${prior + 1}× in one scene — the planner caps counted repeats at ${WB_PLANNER_MAX_REPEATS_PER_ASSET} instances (the engine supports more; the scaffold teaches with a readable pair)`,
         });
         continue;
       }
@@ -405,14 +428,19 @@ export function normalizeLlmScenePlans(
  * keep the structural placements (title/close cards — the grammar) and
  * replace the native concept pick(s) with the model's normalized picks;
  * unserved scenes pass through byte-identical (the native rule table's
- * work). Camera keys, backgrounds, narration and the EMPTY event lists
- * are never touched — the fill law stays the only scheduler. PURE.
+ * work). Phase B slice 3: a compound pick EXPANDS into its parts at the
+ * seam (the doc carries primitives only) — the parts ride the pick's rank
+ * and coordinates as one concept. Camera keys, backgrounds, narration and
+ * the EMPTY event lists are never touched — the fill law stays the only
+ * scheduler. PURE.
  */
 export function composeLlmScaffold(
   native: WhiteboardProject,
   scenes: ScaffoldSceneInput[],
-  served: Map<number, NormalizedScenePlan>
+  served: Map<number, NormalizedScenePlan>,
+  compounds: readonly WhiteboardCompoundSpec[] = []
 ): WhiteboardProject {
+  const compoundIndex = new Map(compounds.map((c) => [c.id, c]));
   const out: WhiteboardScene[] = native.scenes.map((scene, i) => {
     const plan = served.get(scenes[i]?.index);
     if (!plan) return scene; // untouched — the native fallback scene
@@ -445,17 +473,38 @@ export function composeLlmScaffold(
           })
           .map(({ pick }) => pick)
       : plan.picks;
-    const picks: WhiteboardAssetPlacement[] = orderedPicks.map((pick, j) => ({
-      assetId: pick.assetId,
-      ...(pick.placementId ? { placementId: pick.placementId } : {}),
-      placement: {
-        x: pick.x,
-        y: pick.y,
-        scale: pick.scale,
-        rotateDeg: pick.rotateDeg,
-      },
-      order: structural.length + j,
-    }));
+    const picks: WhiteboardAssetPlacement[] = [];
+    let orderCursor = structural.length;
+    for (const pick of orderedPicks) {
+      const spec = compoundIndex.get(pick.assetId);
+      if (spec) {
+        // The composition lane: the pick's coordinates ARE the compound's
+        // origin; its scale sizes the whole footprint. The parts ride the
+        // pick's beat rank as ONE concept (ordering happened above, on the
+        // pre-expansion picks).
+        for (const part of expandCompound(
+          spec,
+          { x: pick.x, y: pick.y, scale: pick.scale, rotateDeg: pick.rotateDeg },
+          orderCursor
+        )) {
+          picks.push(part);
+        }
+        orderCursor += spec.parts.length;
+      } else {
+        picks.push({
+          assetId: pick.assetId,
+          ...(pick.placementId ? { placementId: pick.placementId } : {}),
+          placement: {
+            x: pick.x,
+            y: pick.y,
+            scale: pick.scale,
+            rotateDeg: pick.rotateDeg,
+          },
+          order: orderCursor,
+        });
+        orderCursor += 1;
+      }
+    }
     return { ...scene, placements: [...structural, ...picks] };
   });
   return { ...native, scenes: out };
@@ -473,7 +522,7 @@ const PLANNER_SYSTEM_PROMPT = `You are a whiteboard video storyboard planner. Yo
   ]
 }
 
-Rules: every id MUST come from the catalog. "scene" is the story scene number you were given. x and y are the asset's center in scene-space on the board you were told about — keep every asset fully on the board and clear of the title card (top) and close card areas. scale between 0.5 and 3, rotateDeg between -180 and 180. One to three assets per scene; prefer fewer, larger, readable pieces over clutter. Repeat an asset within one scene ONLY when the narration explicitly counts it ("two coins", "revenue doubled"): list each instance as its own asset entry with its own coordinates, at most two instances of any one asset; the engine names the repeated instances for you. Serve EVERY scene. Assets marked "your upload" belong to this video's author — prefer them when they genuinely fit. The "beats" array is OPTIONAL but recommended: for each scene, split its narration into sentences and report which 1-based sentence introduces each asset you placed ("assetIds" = that asset's id, from the same scene's assets). Order beats by sentence; every asset appears in at most one beat; every beat lists at least one asset. Never wrap in markdown fences. Never add commentary.`;
+Rules: every id MUST come from the catalog. "scene" is the story scene number you were given. x and y are the asset's center in scene-space on the board you were told about — keep every asset fully on the board and clear of the title card (top) and close card areas. scale between 0.5 and 3, rotateDeg between -180 and 180. One to three assets per scene; prefer fewer, larger, readable pieces over clutter. Catalog entries whose tags include "composition" are whole-scene compositions of several primitives — place a composition alone, the engine expands it into its parts. Repeat an asset within one scene ONLY when the narration explicitly counts it ("two coins", "revenue doubled"): list each instance as its own asset entry with its own coordinates, at most two instances of any one asset; the engine names the repeated instances for you. Serve EVERY scene. Assets marked "your upload" belong to this video's author — prefer them when they genuinely fit. The "beats" array is OPTIONAL but recommended: for each scene, split its narration into sentences and report which 1-based sentence introduces each asset you placed ("assetIds" = that asset's id, from the same scene's assets). Order beats by sentence; every asset appears in at most one beat; every beat lists at least one asset. Never wrap in markdown fences. Never add commentary.`;
 
 /** Exported for the multipick battery: the prompt pins the counted-repeat
  *  law (the model may propose a repeat ONLY on an explicit count, and the
@@ -604,6 +653,10 @@ export async function scaffoldWhiteboardProjectLlm(
     /** P5 — flows through to the native scaffold (composeLlmScaffold
      *  spreads the native base, so the recipe survives the LLM pass). */
     profileId?: string;
+    /** Phase B slice 3 — the compound compositions the catalog carries;
+     *  their ids join the normalize law (one composition per scene) and
+     *  compose expands their picks into named parts. */
+    compounds?: readonly WhiteboardCompoundSpec[];
   },
   opts: { ask?: () => Promise<string>; call?: PlannerCall } = {}
 ): Promise<{ project: WhiteboardProject; report: WhiteboardLlmPlannerReport }> {
@@ -655,10 +708,11 @@ export async function scaffoldWhiteboardProjectLlm(
       catalogIds: new Set(input.catalog.map((c) => c.id)),
       width: native.width,
       height: native.height,
+      ...(input.compounds ? { compoundIds: new Set(input.compounds.map((c) => c.id)) } : {}),
     });
     if (served.size === 0)
       return degrade("every pick was dropped in normalization — no scene was servable");
-    const project = composeLlmScaffold(native, input.scenes, served);
+    const project = composeLlmScaffold(native, input.scenes, served, input.compounds ?? []);
     return {
       project,
       report: {

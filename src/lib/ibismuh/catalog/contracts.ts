@@ -57,6 +57,16 @@ export interface CatalogDeprecation {
   reason?: string;
 }
 
+/** One part of a compound composition (the whiteboard lane's compound asset
+ *  graph): a registered primitive at a declared offset. Lives ON the catalog
+ *  row so the manifest is tamper-evident over the composition itself. */
+export interface CatalogCompositionPart {
+  assetId: string;
+  dx: number;
+  dy: number;
+  scale?: number;
+}
+
 export interface CatalogAssetMeta {
   id: string;
   lane: CatalogLane;
@@ -83,6 +93,10 @@ export interface CatalogAssetMeta {
   publishState: CatalogPublishState;
   /** null = a GLOBAL row (every tenant sees it); otherwise the owning tenant. */
   ownerTenantId: string | null;
+  /** The composition spec for COMPOUND rows (a named graph of primitive
+   *  parts; absent for primitive rows). A compound row has no own drawable —
+   *  its content is its graph, and the hash covers the graph. */
+  composition?: { parts: CatalogCompositionPart[] };
   deprecation?: CatalogDeprecation;
 }
 
@@ -160,6 +174,18 @@ export function graphicsContentHash(content: GraphicsContentShape): string {
   return sha256Hex(canonicalStringify(content));
 }
 
+/** The drawable-content view of a COMPOUND row: its content IS its graph
+ *  (no own svg — the expansion law lives at the planner seam). */
+export interface CompoundContentShape {
+  id: string;
+  tags: string[];
+  parts: CatalogCompositionPart[];
+}
+
+export function compoundContentHash(content: CompoundContentShape): string {
+  return sha256Hex(canonicalStringify(content));
+}
+
 // ---------------------------------------------------------------------------
 // Row construction + manifest build/parse
 // ---------------------------------------------------------------------------
@@ -210,6 +236,39 @@ function validateRow(value: unknown, where: string): CatalogAssetMeta {
   if (r.ownerTenantId !== null && r.ownerTenantId !== undefined && !isStr(r.ownerTenantId)) {
     fail(`${where}.ownerTenantId must be a string or null`);
   }
+  // Phase B slice 3 — the composition graph (compound rows). Fail-closed:
+  // a present composition must be a well-formed graph over primitive parts.
+  let composition: { parts: CatalogCompositionPart[] } | undefined;
+  if (r.composition !== undefined) {
+    if (r.composition === null || typeof r.composition !== "object" || Array.isArray(r.composition)) {
+      fail(`${where}.composition must be an object`);
+    }
+    const comp = r.composition as Record<string, unknown>;
+    if (!Array.isArray(comp.parts) || comp.parts.length === 0) {
+      fail(`${where}.composition.parts must be a non-empty array`);
+    }
+    const parts: CatalogCompositionPart[] = comp.parts.map((raw, pi) => {
+      if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+        fail(`${where}.composition.parts[${pi}] must be an object`);
+      }
+      const p = raw as Record<string, unknown>;
+      if (!isStr(p.assetId) || p.assetId.trim() === "") {
+        fail(`${where}.composition.parts[${pi}].assetId must be a non-empty string`);
+      }
+      if (!isNum(p.dx) || !isNum(p.dy)) {
+        fail(`${where}.composition.parts[${pi}] offsets must be finite numbers`);
+      }
+      const part: CatalogCompositionPart = { assetId: p.assetId, dx: p.dx, dy: p.dy };
+      if (p.scale !== undefined) {
+        if (!isNum(p.scale) || p.scale <= 0) {
+          fail(`${where}.composition.parts[${pi}].scale must be a positive finite number`);
+        }
+        part.scale = p.scale;
+      }
+      return part;
+    });
+    composition = { parts };
+  }
   const row: CatalogAssetMeta = {
     id,
     lane: r.lane as CatalogLane,
@@ -229,6 +288,7 @@ function validateRow(value: unknown, where: string): CatalogAssetMeta {
     ownerTenantId: (r.ownerTenantId as string | null) ?? null,
   };
   if (deprecation) row.deprecation = deprecation;
+  if (composition) row.composition = composition;
   return row;
 }
 

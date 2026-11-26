@@ -41,6 +41,7 @@ import {
 } from "../src/lib/ibismuh/catalog/contracts";
 import { builtinCatalogManifest } from "../src/lib/ibismuh/catalog/manifest";
 import { ASSETS } from "../src/lib/ibismuh/whiteboard/assets";
+import { WB_COMPOUNDS } from "../src/lib/ibismuh/whiteboard/compounds";
 import {
   FALLBACK_CYCLE,
   KEYWORD_PICKS,
@@ -87,13 +88,18 @@ suiteStart("coverage");
 
 const manifest: CatalogManifest = builtinCatalogManifest();
 
-await test("the builtin manifest covers every whiteboard asset", () => {
+await test("the builtin manifest covers every whiteboard asset AND every compound composition", () => {
   const wbIds = manifest.assets.filter((a) => a.lane === "whiteboard").map((a) => a.id);
   eq(new Set(wbIds).size, wbIds.length, "no duplicate whiteboard rows");
   for (const a of ASSETS) {
     ok(wbIds.includes(a.id), `whiteboard asset "${a.id}" has a catalog row`);
   }
-  eq(wbIds.length, ASSETS.length, `whiteboard row count ${wbIds.length} matches ASSETS ${ASSETS.length}`);
+  // Phase B slice 3: the compound composition rows ride the same manifest —
+  // every registry row registered (the coverage law over the graph).
+  for (const spec of WB_COMPOUNDS) {
+    ok(wbIds.includes(spec.id), `compound "${spec.id}" has a catalog row`);
+  }
+  eq(wbIds.length, ASSETS.length + WB_COMPOUNDS.length, `whiteboard row count ${wbIds.length} matches ASSETS ${ASSETS.length} + compounds ${WB_COMPOUNDS.length}`);
 });
 
 await test("the builtin manifest covers every graphics icon", () => {
@@ -107,7 +113,7 @@ await test("the builtin manifest covers every graphics icon", () => {
 });
 
 await test("the counts receipt is honest", () => {
-  eq(manifest.counts.whiteboard, ASSETS.length);
+  eq(manifest.counts.whiteboard, ASSETS.length + WB_COMPOUNDS.length);
   eq(manifest.counts.graphics, Object.keys(GRAPHICS_ICON_LIBRARY).length);
   ok(manifest.lanes.includes("whiteboard") && manifest.lanes.includes("graphics"), "both lanes declared");
   eq(manifest.catalogVersion, CATALOG_VERSION);
