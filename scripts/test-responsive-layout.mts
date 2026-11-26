@@ -38,6 +38,7 @@ import {
 import { GRAPHICS_VERSION, validateGraphicsDoc, type GraphicsDoc } from "../src/lib/ibismuh/graphics/types";
 import { graphicsQcMatrix } from "../src/lib/ibismuh/graphics/qc";
 import { scaffoldGraphicsDoc } from "../src/lib/ibismuh/graphics/planner";
+import { applyGraphicsRepairs, proposeGraphicsRepairs } from "../src/lib/ibismuh/graphics/repair";
 
 let passed = 0;
 let failed = 0;
@@ -290,6 +291,107 @@ await test("the graphics scaffold's own docs pass the gates on ALL THREE surface
     eq(solve.violations, [], `the scaffold is deliberate on ${surface.join("x")}`);
     eq(solve.variant, ASPECT_POLICIES[solve.aspect].variant, "the variant is the aspect's named policy");
   }
+});
+
+// ---------------------------------------------------------------------------
+// 6. THE REPAIR SEAM (the re-audit's step 5)
+// ---------------------------------------------------------------------------
+
+suiteStart("REPAIR — proposeGraphicsRepairs: deterministic proposals, honest gates");
+
+await test("SAFE-AREA proposes a recenter into the safe rect; MIN-SIZE proposes the floor scale", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h", "headline", { at: { x: 40, y: 480 }, text: "Parked" }),
+    // The validator clamps sizePx to the 12px floor — the layout gate
+    // bites through SCALE (drawn = size × at.scale), the same seam the
+    // 9:16 floor's own law rides.
+    gEl("s", "subhead", { at: { x: 960, y: 700, scale: 0.5 }, sizePx: 12, text: "tiny" }),
+  ])]), "repair fixture");
+  const solve = solveGraphicsLayout(doc);
+  eq(solve.violations.length, 2, "the fixture violates both gates");
+  const repairs = proposeGraphicsRepairs(doc, solve);
+  eq(repairs.length, 2, "one proposal per violation");
+  const recenter = repairs.find((r) => r.kind === "recenter");
+  ok(recenter !== undefined, "the parked headline re-centers");
+  ok(
+    recenter !== undefined && recenter.to !== undefined &&
+      recenter.to.x >= doc.width * ASPECT_POLICIES["16:9"].safeMarginRatio,
+    "the recentered center sits inside the safe rect"
+  );
+  const bump = repairs.find((r) => r.kind === "bump-size");
+  ok(bump !== undefined && bump.scale !== undefined && bump.scale > 1, "the tiny subhead bumps up");
+  const a = JSON.stringify(proposeGraphicsRepairs(doc, solve));
+  const b = JSON.stringify(proposeGraphicsRepairs(doc, solve));
+  eq(a, b, "deterministic: same doc + report → the same proposals");
+});
+
+await test("COLLISION proposes the least-penetration repair; long lines wrap first", () => {
+  // Two stacked headline-sized texts overlapping: the later element
+  // repositions (not text-friendly) — and a two-collision fixture where
+  // the overlap is horizontal-dominant wraps.
+  const wide = gDoc([gScene("s1", [
+    gEl("a", "subhead", { at: { x: 960, y: 480 }, text: "the anchor line holds its ground", sizePx: 48 }),
+    gEl("b", "subhead", { at: { x: 1000, y: 520 }, text: "the drifter collides horizontally across the whole stage with a very long single line of text", sizePx: 48 }),
+  ])]);
+  const doc = mustValidate(wide, "collision fixture");
+  const solve = solveGraphicsLayout(doc);
+  ok(solve.notes.some((n) => n.gate === "COLLISION"), "the fixture collides");
+  const repairs = proposeGraphicsRepairs(doc, solve);
+  ok(repairs.length >= 1, "at least one collision repair proposes");
+  for (const r of repairs) {
+    ok(r.kind === "reposition" || r.kind === "wrap-text", `the collision repair is mechanical (${r.kind})`);
+  }
+  const wrap = repairs.find((r) => r.kind === "wrap-text");
+  if (wrap !== undefined && wrap.text !== undefined) {
+    ok(!wrap.text.includes("\n\n"), "the wrap reflows on words");
+    const longest = Math.max(...wrap.text.split("\n").map((l) => l.length));
+    const originalEl = doc.scenes[0].elements[1];
+    const original = Math.max(...String((originalEl.text as { text: string }).text).split("\n").map((l) => l.length));
+    ok(longest < original, "the wrapped longest line is strictly shorter (the box narrows)");
+  }
+});
+
+await test("DENSITY and LABEL-FIT are declared unrepairable — no fake fixes", () => {
+  const dense = mustValidate(gDoc([gScene("s1", [
+    ...Array.from({ length: 7 }, (_, i) => gEl(`b${i}`, "bullet", { at: { x: 960, y: 200 + 90 * i }, text: `line ${i}`, sizePx: 16 })),
+  ])]), "dense");
+  const denseSolve = solveGraphicsLayout(dense);
+  ok(denseSolve.notes.some((n) => n.gate === "DENSITY"), "the dense fixture notes density");
+  eq(denseSolve.notes.filter((n) => n.gate === "DENSITY").flatMap(() => proposeGraphicsRepairs(dense, denseSolve).filter((r) => r.gate === "DENSITY")), [], "density proposes nothing");
+  const chartDoc = mustValidate(gDoc([gScene("s1", [
+    gEl("chart", "barChart", { at: { x: 960, y: 540 } }),
+  ])]), "chart");
+  // Widen the labels past the slot: 6 bars × ~115px slots; a 40-char label.
+  chartDoc.scenes[0].elements[0].bar = {
+    data: Array.from({ length: 6 }, (_, i) => ({ label: `metric number ${i} with a very long name`, value: 10 + i })),
+  };
+  const chartSolve = solveGraphicsLayout(chartDoc);
+  ok(chartSolve.notes.some((n) => n.gate === "LABEL-FIT"), "the long-label chart notes the fit");
+  eq(chartSolve.notes.filter((n) => n.gate === "LABEL-FIT").flatMap(() => proposeGraphicsRepairs(chartDoc, chartSolve).filter((r) => r.gate === "LABEL-FIT")), [], "label-fit proposes nothing (the labels are the payload's data)");
+});
+
+await test("applyGraphicsRepairs: pure, ids stable, the re-solved report drops the fixed violations", () => {
+  const doc = mustValidate(gDoc([gScene("s1", [
+    gEl("h", "headline", { at: { x: 40, y: 480 }, text: "Parked" }),
+    gEl("s", "subhead", { at: { x: 960, y: 700, scale: 0.5 }, sizePx: 12, text: "tiny" }),
+  ])]), "apply fixture");
+  const solve = solveGraphicsLayout(doc);
+  const repairs = proposeGraphicsRepairs(doc, solve);
+  const out = applyGraphicsRepairs(doc, repairs);
+  eq(out.skipped, [], "every repair lands on its element");
+  const els = Object.fromEntries(out.doc.scenes[0].elements.map((e) => [e.id, e]));
+  eq(els.h?.id, "h", "ids are stable");
+  const after = solveGraphicsLayout(out.doc);
+  eq(after.violations, [], `the repaired doc passes both gates: ${JSON.stringify(after.violations)}`);
+  ok(els.h?.at.x !== doc.scenes[0].elements[0].at.x, "the parked headline moved");
+  ok((els.s?.at.scale ?? 0) > (doc.scenes[0].elements[1].at.scale), "the tiny subhead scaled up");
+  const a = JSON.stringify(applyGraphicsRepairs(doc, repairs).doc);
+  const b = JSON.stringify(applyGraphicsRepairs(doc, repairs).doc);
+  eq(a, b, "deterministic: same doc + repairs → the same bytes");
+  const ghost = applyGraphicsRepairs(doc, [{ kind: "recenter", sceneId: "ghost", elementId: "h", gate: "SAFE-AREA", detail: "x", to: { x: 960, y: 540 } }]);
+  ok(ghost.skipped.length === 1, "a ghost scene skips by name");
+  const r = validateGraphicsDoc(out.doc);
+  ok(r.doc !== null, "the repaired doc revalidates clean");
 });
 
 // ---------------------------------------------------------------------------

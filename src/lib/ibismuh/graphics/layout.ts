@@ -111,12 +111,18 @@ export const ASPECT_POLICIES: Readonly<Record<GraphicsAspect, AspectPolicy>> = {
 
 const CHAR_W_RATIO = 0.55;
 const LINE_H_RATIO = 1.4;
+/** The compose chart box fraction + the chart label size — the estimator
+ *  rides the SAME constants the renderer draws with (one estimate model,
+ *  restated from compose.ts's DrawDefaults; the repair math needs them
+ *  too, so they are exported with the box estimator). */
+export const GRAPHICS_CHART_BOX_FRACTION = 0.5;
+export const GRAPHICS_CHART_LABEL_SIZE_PX = 20;
 /** Estimated text-box overlap past which the collision note fires (a
  *  fraction of the smaller box) — loose enough that tight-but-legal
  *  stacking never notes, tight enough that a real overlap always does. */
 const COLLISION_NOTE_AT = 0.4;
 
-interface EstimatedBox {
+export interface EstimatedBox {
   x0: number;
   y0: number;
   x1: number;
@@ -147,12 +153,14 @@ function formatCounterEstimate(to: number, unit?: string): string {
 /** The conservative drawn box for an element (surface px, center-anchored
  *  like compose). Icons estimate 24 grid-units × scale square; text
  *  estimates chars × size × 0.55 wide × lines × size × 1.4 tall; charts
- *  estimate the compose chart box (50% of the surface, centered). */
-function estimateBox(el: GraphicsElement, doc: GraphicsDoc): EstimatedBox {
+ *  estimate the compose chart box (50% of the surface, centered).
+ *  EXPORTED — the repair seam (repair.ts) solves against the same boxes
+ *  the gates judge; a second estimator would drift. */
+export function estimateBox(el: GraphicsElement, doc: GraphicsDoc): EstimatedBox {
   const { x, y, scale } = el.at;
   if (el.kind === "barChart" || el.kind === "bar") {
-    const w = doc.width * 0.5;
-    const h = doc.height * 0.5;
+    const w = doc.width * GRAPHICS_CHART_BOX_FRACTION;
+    const h = doc.height * GRAPHICS_CHART_BOX_FRACTION;
     return { x0: x - w / 2, y0: y - h / 2, x1: x + w / 2, y1: y + h / 2 };
   }
   if (el.icon !== undefined) {
@@ -187,7 +195,7 @@ function overlapFraction(a: EstimatedBox, b: EstimatedBox): number {
 // ---------------------------------------------------------------------------
 
 export type LayoutGateId = "SAFE-AREA" | "MIN-SIZE";
-export type LayoutNoteId = "COLLISION" | "DENSITY";
+export type LayoutNoteId = "COLLISION" | "DENSITY" | "LABEL-FIT";
 
 export interface LayoutFinding {
   sceneId: string;
@@ -288,6 +296,31 @@ export function solveGraphicsLayout(doc: GraphicsDoc): LayoutSolveReport {
         gate: "DENSITY",
         detail: `${visible.length} simultaneous elements past the ${aspect} cap ${policy.maxSimultaneous} (${policy.variant})`,
       });
+    }
+
+    // NOTE — LABEL-FIT (the re-audit's step 5: chart-label fitting): a
+    // chart's bar labels render at the compose label size (fixed, unscaled)
+    // inside per-bar slots; a label wider than its slot overlaps its
+    // neighbor's label — an ESTIMATE (the same char-width model against
+    // the SAME constants compose draws with), never a fail. The labels are
+    // the payload's own data, so the fix is an authoring act (shorten or
+    // split the labels) — repair.ts declares this note unrepairable.
+    for (const el of visible) {
+      if (el.kind !== "barChart" && el.kind !== "bar") continue;
+      const data = el.bar?.data ?? [];
+      if (data.length < 2) continue;
+      const box = boxes.get(el.id);
+      if (box === undefined) continue;
+      const slotW = (box.x1 - box.x0) / data.length;
+      const widest = Math.max(...data.map((r) => r.label.length), 1) * GRAPHICS_CHART_LABEL_SIZE_PX * CHAR_W_RATIO;
+      if (widest > slotW) {
+        findings.push({
+          sceneId: scene.id,
+          elementId: el.id,
+          gate: "LABEL-FIT",
+          detail: `bar labels ≈${Math.round(widest)}px wide against the ${Math.round(slotW)}px slot (estimate, never a fail) — shorten or split the labels`,
+        });
+      }
     }
 
     for (const f of findings) {

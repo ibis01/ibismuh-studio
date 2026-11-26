@@ -10,6 +10,7 @@ import {
   writeGraphicsDoc,
 } from "@/lib/ibismuh/graphics/types";
 import { scaffoldGraphicsDoc } from "@/lib/ibismuh/graphics/planner";
+import { resolveRecipe } from "@/lib/ibismuh/graphics/recipes";
 import {
   scaffoldGraphicsDocLlm,
   type GraphicsLlmPlannerReport,
@@ -64,6 +65,15 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const force = body.force === true;
   const planner = body.planner === "llm" ? "llm" : "native";
+  // THE RECIPE FIELD (the re-audit's step 4): an optional doc-wide recipe
+  // the scaffold compiles and CITES. An unknown id fails the scaffold with
+  // a named error (the planner seam's own law) — 400 with the message.
+  const recipeId = typeof body.recipeId === "string" ? body.recipeId : undefined;
+  if (recipeId !== undefined && resolveRecipe(recipeId) === null)
+    return NextResponse.json(
+      { error: `Unknown recipe id "${recipeId}" — a scaffold may only name the registry's recipes` },
+      { status: 400 }
+    );
   if (parseGraphicsDoc(video.graphicsDoc) && !force)
     return NextResponse.json(
       { error: "This video already has a graphics doc — pass force: true to regenerate from the story" },
@@ -85,6 +95,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       width: typeof body.width === "number" ? body.width : undefined,
       height: typeof body.height === "number" ? body.height : undefined,
       fps: typeof body.fps === "number" ? body.fps : undefined,
+      ...(recipeId !== undefined ? { recipeId } : {}),
     });
     doc = llm.doc;
     plannerReport = llm.report;
@@ -95,6 +106,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       width: typeof body.width === "number" ? body.width : undefined,
       height: typeof body.height === "number" ? body.height : undefined,
       fps: typeof body.fps === "number" ? body.fps : undefined,
+      ...(recipeId !== undefined ? { recipeId } : {}),
     });
   }
 
