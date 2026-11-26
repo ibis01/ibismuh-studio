@@ -47,6 +47,10 @@ import {
 import type { Placement } from "@/lib/ibismuh/whiteboard/svg";
 import type { GraphicsDoc, GraphicsElement, GraphicsElementKind, GraphicsScene } from "@/lib/ibismuh/graphics/types";
 import { GraphicsMotionPanel, defaultElementFor } from "@/components/ibismuh/graphics/motion-panel";
+import { GraphicsDesignSeat } from "@/components/ibismuh/graphics/design-seat";
+import { GRAPHICS_ICON_LIBRARY } from "@/lib/ibismuh/graphics/icons";
+import { expandComponent, type ComponentContent } from "@/lib/ibismuh/graphics/components";
+import { recipeEnterFor, resolveRecipe } from "@/lib/ibismuh/graphics/recipes";
 
 interface GraphicsBudgetReport {
   fps: 24 | 30;
@@ -483,6 +487,71 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
     setDirty(true);
   }, []);
 
+  // WS9 — the design seat's three seams (the registries compile the same
+  // motions the planner would; the doc carries primitives only).
+  const insertIconElement = useCallback((sceneIndex: number, iconId: string): void => {
+    const icon = GRAPHICS_ICON_LIBRARY[iconId];
+    if (!icon) return; // the seat only offers registered ids — a ghost here is a seat bug
+    setBuffer((b) => {
+      if (!b) return b;
+      const scenes = b.scenes.map((s, i) => {
+        if (i !== sceneIndex) return s;
+        let n = s.elements.length + 1;
+        let id = `icon-${n}`;
+        while (s.elements.some((e) => e.id === id)) id = `icon-${++n}`;
+        const el = defaultElementFor("icon", id, b.width, b.height, s.elements.length);
+        return { ...s, elements: [...s.elements, { ...el, icon: { paths: [...icon.paths] } }] };
+      });
+      return { ...b, scenes };
+    });
+    setDirty(true);
+  }, []);
+
+  const placeComponentElement = useCallback(
+    (sceneIndex: number, componentId: string, content: ComponentContent): { ok: boolean; why?: string } => {
+      if (!buffer) return { ok: false, why: "the doc is still loading" };
+      const scene = buffer.scenes[sceneIndex];
+      if (!scene) return { ok: false, why: "no such scene" };
+      let parts: GraphicsElement[];
+      try {
+        parts = expandComponent(componentId, content, { width: buffer.width, height: buffer.height });
+      } catch (err) {
+        return { ok: false, why: err instanceof Error ? err.message : "the expansion refused" };
+      }
+      const existing = new Set(scene.elements.map((e) => e.id));
+      const collide = parts.find((p) => existing.has(p.id));
+      if (collide) {
+        return {
+          ok: false,
+          why: `${componentId}'s derived id "${collide.id}" already exists in this scene — the derived ids ARE the addresses (the seam law); remove the earlier placement first`,
+        };
+      }
+      patchSceneDoc(sceneIndex, (s) => ({ ...s, elements: [...s.elements, ...parts] }));
+      return { ok: true };
+    },
+    [buffer, patchSceneDoc],
+  );
+
+  const applyRecipeEnters = useCallback(
+    (sceneIndex: number, recipeId: string): { ok: boolean; why?: string } => {
+      const recipe = resolveRecipe(recipeId);
+      if (!recipe) return { ok: false, why: `unknown recipe "${recipeId}"` };
+      patchSceneDoc(sceneIndex, (s) => {
+        const orders = new Map<GraphicsElementKind, number>();
+        return {
+          ...s,
+          elements: s.elements.map((el) => {
+            const order = orders.get(el.kind) ?? 0;
+            orders.set(el.kind, order + 1);
+            return { ...el, enter: recipeEnterFor(el.kind, order, recipe.id) };
+          }),
+        };
+      });
+      return { ok: true };
+    },
+    [patchSceneDoc],
+  );
+
   if (loading) {
     return (
       <LoadingState
@@ -723,6 +792,16 @@ export default function GraphicsStudio({ videoId, hasVideo, onRenderQueued }: Gr
               onPatchElement={(elId, fn) => patchElement(activeSceneIndex, elId, fn)}
               onPatchScene={(fn) => patchSceneDoc(activeSceneIndex, fn)}
               onInsertElement={(kind) => insertElement(activeSceneIndex, kind)}
+            />
+
+            {/* WS9 — the design seat: the icon catalog browser, the semantic
+                component seat, and the recipe picker (the plan's editor UX
+                for the Motion Graphics lane). */}
+            <GraphicsDesignSeat
+              disabled={busy !== null}
+              onInsertIcon={(iconId) => insertIconElement(activeSceneIndex, iconId)}
+              onPlaceComponent={(componentId, content) => placeComponentElement(activeSceneIndex, componentId, content)}
+              onApplyRecipe={(recipeId) => applyRecipeEnters(activeSceneIndex, recipeId)}
             />
           </div>
         );

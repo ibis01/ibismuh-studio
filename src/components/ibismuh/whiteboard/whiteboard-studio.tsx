@@ -110,6 +110,53 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
   // forever).
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogCategory, setCatalogCategory] = useState("");
+  // WS9 — the browser's memory + the metadata lens: favorites and recents
+  // ride localStorage (per-browser, honest — the plan's "favorites and
+  // recent assets"), the scope narrows the ranked hits, and the metadata
+  // panel shows the selected row's full catalog record (license,
+  // provenance, a11y, complexity — the plan's "metadata and license
+  // panel"). The reads are LAZY + WINDOW-GUARDED: the palette renders
+  // only after the client-side fetch lands (never on the server), so the
+  // first client render reads storage directly — no effect, no cascade.
+  const readStoredIds = (key: string): string[] => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = JSON.parse(window.localStorage.getItem(key) ?? "[]") as unknown;
+      return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === "string").slice(0, 12) : [];
+    } catch {
+      return []; // private mode / blocked storage — the memory is a nicety
+    }
+  };
+  const [catalogFavorites, setCatalogFavorites] = useState<ReadonlySet<string>>(
+    () => new Set(readStoredIds("wb-catalog-favorites")),
+  );
+  const [catalogRecents, setCatalogRecents] = useState<string[]>(() => readStoredIds("wb-catalog-recents"));
+  const [catalogScope, setCatalogScope] = useState<"all" | "favorites" | "recent">("all");
+  const [catalogMetaId, setCatalogMetaId] = useState<string | null>(null);
+  const toggleCatalogFavorite = (id: string): void => {
+    setCatalogFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        window.localStorage.setItem("wb-catalog-favorites", JSON.stringify([...next]));
+      } catch {
+        // storage blocked — the toggle still works for this session
+      }
+      return next;
+    });
+  };
+  const rememberCatalogRecent = (id: string): void => {
+    setCatalogRecents((prev) => {
+      const next = [id, ...prev.filter((x) => x !== id)].slice(0, 12);
+      try {
+        window.localStorage.setItem("wb-catalog-recents", JSON.stringify(next));
+      } catch {
+        // storage blocked — the recency still works for this session
+      }
+      return next;
+    });
+  };
 
   const [sceneIndex, setSceneIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -259,6 +306,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
 
   /** One click, one row: compositions expand, primitives place directly. */
   const placeFromRow = (row: CatalogAssetMeta) => {
+    rememberCatalogRecent(row.id);
     if (row.composition) addCompoundPlacement(row);
     else addPlacement(row.id);
   };
@@ -642,11 +690,28 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
   const catalogCategories = [
     ...new Set(catalogRows.filter((r) => r.lane === "whiteboard").map((r) => r.category)),
   ].sort();
-  const catalogHits = searchRows(catalogRows, {
+  const catalogHitsRaw = searchRows(catalogRows, {
     lane: "whiteboard",
     ...(catalogQuery.trim() !== "" ? { text: catalogQuery.trim() } : {}),
     ...(catalogCategory !== "" ? { category: catalogCategory } : {}),
   });
+  // WS9 — the scope narrows the ranked hits (favorites/recents) without
+  // touching the engine's order; the recent scope without a query lists
+  // the memory in RECENCY order (the search rank is not the memory's).
+  const rowsById = new Map(catalogRows.map((r) => [r.id, r]));
+  const catalogHits =
+    catalogScope === "recent" && catalogQuery.trim() === "" && catalogCategory === ""
+      ? catalogRecents.flatMap((id) => {
+          const row = rowsById.get(id);
+          return row && row.lane === "whiteboard" ? [{ row, reasons: [] as string[] }] : [];
+        })
+      : catalogScope === "favorites"
+        ? catalogHitsRaw.filter(({ row }) => catalogFavorites.has(row.id))
+        : catalogScope === "recent"
+          ? catalogHitsRaw.filter(({ row }) => catalogRecents.includes(row.id))
+          : catalogHitsRaw;
+  const catalogMetaRow = catalogMetaId ? (rowsById.get(catalogMetaId) ?? null) : null;
+  const catalogMetaEntry = catalogMetaId ? (libraryById.get(catalogMetaId) ?? null) : null;
   const catalogFiltering = catalogQuery.trim() !== "" || catalogCategory !== "";
   // W6/W7 — the board panel's derived view: the policy ONLY when it is a
   // continuous one (the narrows keep the JSX free of non-null assertions),
@@ -758,7 +823,9 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
               Phase A search engine gets its palette surface. Same query,
               same filters → the same ranked results, match reasons on
               hover (the audit's observability ask); compositions carry a
-              badge and place their parts. */}
+              badge and place their parts. WS9: the browser gains its
+              memory (favorites + recents, localStorage), the scope
+              narrowing, and the metadata/license lens. */}
           <div>
             <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
               <input
@@ -782,11 +849,44 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                   </option>
                 ))}
               </select>
+              <div
+                role="group"
+                aria-label="Scope the catalog"
+                className="flex overflow-hidden rounded-md border border-white/10"
+              >
+                {([
+                  ["all", "All"],
+                  ["favorites", "★"],
+                  ["recent", "Recent"],
+                ] as const).map(([scope, label]) => (
+                  <button
+                    key={scope}
+                    onClick={() => setCatalogScope(scope)}
+                    aria-pressed={catalogScope === scope}
+                    title={
+                      scope === "favorites"
+                        ? "Show only your starred assets (per-browser)"
+                        : scope === "recent"
+                          ? "Show your recently placed assets (per-browser)"
+                          : "Show the whole catalog"
+                    }
+                    className={`px-2 py-1 text-xs ${
+                      catalogScope === scope ? "bg-white/20 text-white" : "bg-white/5 text-white/60 hover:bg-white/10"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
             <p className="mb-1 text-xs text-white/35" role="status">
-              {catalogFiltering
-                ? `${catalogHits.length} match${catalogHits.length === 1 ? "" : "es"} — ranked by the catalog engine (same query, same order; hover a row for why it matched)`
-                : `Library — click to place${selAsset ? " · selected: " + selAsset : ""} (catalog order; compositions place their parts)`}
+              {catalogScope === "recent" && !catalogFiltering
+                ? `${catalogHits.length} recent — most recent first (click to place again)`
+                : catalogScope === "favorites"
+                  ? `${catalogHits.length} starred — the engine's order (hover a row for why it matched)`
+                  : catalogFiltering
+                    ? `${catalogHits.length} match${catalogHits.length === 1 ? "" : "es"} — ranked by the catalog engine (same query, same order; hover a row for why it matched)`
+                    : `Library — click to place${selAsset ? " · selected: " + selAsset : ""} (catalog order; compositions place their parts)`}
             </p>
             <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto tf-scroll-bar">
               {catalogHits.map(({ row, reasons }) => {
@@ -795,28 +895,108 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                   ? placedAssets.some((pl) => (pl.placementId ?? "").startsWith(`${row.id}-`))
                   : false;
                 return (
-                  <button
+                  <div
                     key={row.id}
-                    onClick={() => placeFromRow(row)}
-                    title={
-                      catalogFiltering && reasons.length > 0 && reasons[0] !== "no query — listed by catalog order"
-                        ? `why matched: ${reasons.join("; ")}`
-                        : `${row.a11y}${row.composition ? " · a composition — places its parts" : ""}`
-                    }
-                    className={`rounded-md px-2 py-1 text-xs ${
+                    className={`inline-flex items-stretch overflow-hidden rounded-md ${
                       placedAssets.some((pl) => pl.assetId === row.id) || compoundPlaced
-                        ? "bg-white/15 text-white/70"
-                        : "bg-white/5 text-white/80 hover:bg-white/15"
+                        ? "bg-white/15"
+                        : "bg-white/5"
                     }`}
                   >
-                    {row.composition ? "◫ " : ""}
-                    {row.id}
-                    {row.composition ? <span className="ml-1 text-white/40">{row.composition.parts.length} parts</span> : null}
-                    {entry?.uploaded ? <span className="ml-1 text-white/40">upload</span> : null}
-                  </button>
+                    <button
+                      onClick={() => placeFromRow(row)}
+                      title={
+                        catalogFiltering && reasons.length > 0 && reasons[0] !== "no query — listed by catalog order"
+                          ? `why matched: ${reasons.join("; ")}`
+                          : `${row.a11y}${row.composition ? " · a composition — places its parts" : ""}`
+                      }
+                      className="px-2 py-1 text-xs text-white/80 hover:bg-white/10"
+                    >
+                      {row.composition ? "◫ " : ""}
+                      {row.id}
+                      {row.composition ? <span className="ml-1 text-white/40">{row.composition.parts.length} parts</span> : null}
+                      {entry?.uploaded ? <span className="ml-1 text-white/40">upload</span> : null}
+                    </button>
+                    <button
+                      onClick={() => setCatalogMetaId((v) => (v === row.id ? null : row.id))}
+                      aria-label={`Inspect ${row.id} metadata`}
+                      aria-pressed={catalogMetaId === row.id}
+                      title={`Inspect ${row.id} — license, provenance, a11y`}
+                      className={`px-1 text-xs ${
+                        catalogMetaId === row.id ? "text-cyan-300" : "text-white/35 hover:text-white/70"
+                      }`}
+                    >
+                      i
+                    </button>
+                    <button
+                      onClick={() => toggleCatalogFavorite(row.id)}
+                      aria-label={catalogFavorites.has(row.id) ? `Unstar ${row.id}` : `Star ${row.id}`}
+                      aria-pressed={catalogFavorites.has(row.id)}
+                      title={catalogFavorites.has(row.id) ? "Unstar this asset" : "Star this asset"}
+                      className={`px-1 text-xs ${
+                        catalogFavorites.has(row.id) ? "text-amber-300" : "text-white/35 hover:text-white/70"
+                      }`}
+                    >
+                      {catalogFavorites.has(row.id) ? "★" : "☆"}
+                    </button>
+                  </div>
                 );
               })}
             </div>
+            {catalogMetaRow && (
+              <div
+                className="mt-2 space-y-1.5 rounded-lg border border-white/10 bg-black/20 p-2.5"
+                aria-label={`${catalogMetaRow.id} metadata`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-white/85">
+                    {catalogMetaRow.id}
+                    <span className="ml-1.5 text-white/35">
+                      v{catalogMetaRow.version} · {catalogMetaRow.publishState}
+                    </span>
+                  </p>
+                  {catalogMetaEntry?.svg && (
+                    <svg
+                      viewBox={`0 0 ${catalogMetaEntry.w} ${catalogMetaEntry.h}`}
+                      className="h-8 w-8 shrink-0 text-white/80"
+                      aria-hidden
+                      dangerouslySetInnerHTML={{ __html: catalogMetaEntry.svg }}
+                    />
+                  )}
+                </div>
+                <p className="text-xs text-white/55">{catalogMetaRow.a11y}</p>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs text-white/50">
+                  <dt className="text-white/35">category</dt>
+                  <dd>
+                    {catalogMetaRow.category}
+                    {catalogMetaRow.subcategory ? ` / ${catalogMetaRow.subcategory}` : ""}
+                  </dd>
+                  <dt className="text-white/35">style</dt>
+                  <dd>{catalogMetaRow.styleFamily} · complexity {catalogMetaRow.complexity}/5</dd>
+                  <dt className="text-white/35">license</dt>
+                  <dd>
+                    {catalogMetaRow.license.spdx}
+                    {catalogMetaRow.license.approved === true ? " · approved" : ""}
+                    {catalogMetaRow.license.attribution ? ` — ${catalogMetaRow.license.attribution}` : ""}
+                  </dd>
+                  <dt className="text-white/35">provenance</dt>
+                  <dd>{catalogMetaRow.provenance}{catalogMetaRow.ownerTenantId ? " · tenant-owned" : " · global"}</dd>
+                  {catalogMetaRow.concepts.length > 0 && (
+                    <>
+                      <dt className="text-white/35">concepts</dt>
+                      <dd className="truncate" title={catalogMetaRow.concepts.join(", ")}>{catalogMetaRow.concepts.join(", ")}</dd>
+                    </>
+                  )}
+                </dl>
+                <button
+                  onClick={() => placeFromRow(catalogMetaRow)}
+                  disabled={busy !== null}
+                  className={btnGhost}
+                >
+                  Place {catalogMetaRow.id}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* S69 Phase C — uploads: the §7 gates' palette surface */}
