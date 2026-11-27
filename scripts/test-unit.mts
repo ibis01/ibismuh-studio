@@ -22459,9 +22459,9 @@ await test("S135 pollScript watches the ARTIFACT — a flag-cleared unscripted r
   ok(createSrc.includes("startEngineDoc"), "the chain knows the engine-doc scaffold leg");
   ok(createSrc.includes("whiteboard/scaffold") && createSrc.includes("graphics/scaffold"), "both engine scaffold routes are wired");
   ok(createSrc.includes("LANE_REGISTRY") && createSrc.includes("LANE_ORDER"), "the wizard derives its presets from the canonical lane registry (P1)");
-  const lanesSrc = await fsp.readFile("src/lib/ibismuh/video-lanes.ts", "utf8");
-  ok(lanesSrc.includes("Motion graphics (2D)"), "the 2D engine lane is a pickable type (registry-declared)");
-  ok(lanesSrc.includes("Character animation"), "the rig channel is a pickable type (registry-declared)");
+  const lanesSrc = await fsp.readFile("src/lib/ibismuh/lane-contracts.ts", "utf8");
+  ok(lanesSrc.includes("Motion graphics (2D)"), "the 2D engine lane is a pickable type (registry-declared — Phase 1 single source)");
+  ok(lanesSrc.includes("Character animation"), "the rig channel is a pickable type (registry-declared — Phase 1 single source)");
 });
 
 await test("S136 the receipt guard rides every money lane — the S135 ordering law is repo-wide (source pins)", async () => {

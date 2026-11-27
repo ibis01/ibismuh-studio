@@ -26,6 +26,7 @@
 // Run: npm run test:plan-envelope   (pure — CI step)
 
 import { canonicalStringify, sha256Hex } from "./canonical";
+import { currentLaneContractStamp, type LaneContractStamp } from "./lane-contracts";
 import type { AudioReceipt } from "./audio-receipt";
 import { isTimingSource } from "./audio-receipt";
 import { resolveLane, type VideoType } from "./video-lanes";
@@ -107,6 +108,13 @@ export interface VideoPlanEnvelope {
   qcProfile: string;
   rendererVersion: string;
   createdFrom?: string;
+  /** Phase 1.3 — the lane-contract surface this plan was compiled under
+   *  (version + fingerprint from lane-contracts.ts). Plans compiled before
+   *  the stamp existed carry no field and stay parseable (legacy, the
+   *  fingerprint still verifies); a PRESENT stamp that disagrees with the
+   *  live registry refuses the parse with a named recompile error — an
+   *  incompatible plan is never silently rendered. */
+  laneContract?: LaneContractStamp;
   /** sha256 over the canonical serialization sans fingerprint. */
   fingerprint: string;
 }
@@ -238,6 +246,10 @@ export function compilePlanEnvelope(input: PlanEnvelopeCompileInput): VideoPlanE
     qcProfile: lane.qcProfile,
     rendererVersion: input.rendererVersion,
     createdFrom: input.createdFrom,
+    // Phase 1.3: the plan identifies the contract surface that produced it.
+    // Stamped BEFORE the fingerprint so the fingerprint covers it — editing
+    // the stamp is tamper-evident like every other field.
+    laneContract: currentLaneContractStamp(),
     fingerprint: "",
   };
   envelope.fingerprint = computePlanFingerprint(envelope);
@@ -349,6 +361,28 @@ export function validatePlanEnvelopeShape(parsed: unknown): VideoPlanEnvelope {
   if (typeof fb.mode !== "string" || fb.mode.length === 0) fail("fallback.mode must be a non-empty string");
   if (typeof fb.reason !== "string" || fb.reason.length === 0) fail("fallback.reason must be a non-empty string");
   if (!isHex64(d.fingerprint)) fail("fingerprint must be a 64-char sha256 hex string");
+
+  // Phase 1.3 — the registry stamp. ABSENT = legacy plan (pre-stamp): it
+  // stays parseable and its fingerprint still verifies. PRESENT = the plan
+  // declares which contract surface produced it, and the surface must still
+  // be the live one — a mismatch refuses the parse with the recompile law
+  // instead of rendering an incompatible plan.
+  if (d.laneContract !== undefined) {
+    if (typeof d.laneContract !== "object" || d.laneContract === null) {
+      fail("laneContract must be an object when present");
+    }
+    const lc = d.laneContract as Record<string, unknown>;
+    if (!Number.isInteger(lc.version) || (lc.version as number) < 1) {
+      fail("laneContract.version must be a positive integer");
+    }
+    if (!isHex64(lc.fingerprint)) fail("laneContract.fingerprint must be sha256 hex");
+    const live = currentLaneContractStamp();
+    if (lc.version !== live.version || lc.fingerprint !== live.fingerprint) {
+      fail(
+        `plan was compiled under lane-contract v${String(lc.version)} (${String(lc.fingerprint).slice(0, 12)}…) but the live registry is v${live.version} (${live.fingerprint.slice(0, 12)}…) — the contract changed after compile; recompile the plan`,
+      );
+    }
+  }
 
   const envelope = parsed as unknown as VideoPlanEnvelope;
 

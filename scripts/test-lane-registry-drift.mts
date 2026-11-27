@@ -1,15 +1,19 @@
 #!/usr/bin/env node
-// lane-registry drift law — the two canonical registries may not diverge.
+// lane-registry drift law — the two surface adapters may not diverge.
 //
-// The lane contract lives TWICE, deliberately: src/lib/ibismuh/video-lanes.ts
-// (the /videos surface — imports ./types) and src/lib/ibismuh/studio-lanes.ts
-// (the /studio pipeline — imports ./studio-catalogs). Both declare the six
-// create presets and both self-describe as canonical; 12 + 23 consumers read
-// them. A preset change that lands in one registry only would make the two
-// surfaces disagree SILENTLY — the exact drift the registries were built to
-// kill. This battery is the law that keeps them in lockstep:
+// Phase 1.1 (post-f53b8c7) retired the copy: the six contract objects, the
+// order, the closed vocabularies, and the registry-pure laws live ONCE in
+// src/lib/ibismuh/lane-contracts.ts. video-lanes.ts (/videos — types.ts
+// catalogs, theme-class accents, preview art) and studio-lanes.ts
+// (/studio — studio-catalogs, canvas hex accents) are now THIN DERIVATIONS
+// with 12 + 23 consumers reading them. This battery is still the law:
 //
-//   1. SELF-CLEAN   — each registry's own validateLaneRegistry() passes.
+//   0. DERIVATION  — both adapters' LANE_REGISTRY IS lane-contracts'
+//                    LANE_CONTRACTS (object identity, not a re-copy), and
+//                    each UI-meta view equals the shared base plus exactly
+//                    its declared surface vocabulary.
+//   1. SELF-CLEAN   — each adapter's own validateLaneRegistry() passes
+//                    against its own surface catalogs.
 //   2. ORDER        — LANE_ORDER is identical (same six ids, same sequence).
 //   3. CONTRACT     — every VideoLaneContract field agrees per lane
 //                     (capabilities/repairOperations compared as sets, order
@@ -20,8 +24,11 @@
 //   5. DECLARED UI  — the ONE allowed divergence is UI metadata shape
 //                     (video `accent` vs studio `accentHex`); the key sets
 //                     are pinned so no third field can appear silently.
-//   6. DOCUMENTED   — both files must cross-reference their sibling and
-//                     this battery, so the next editor meets the law first.
+//   6. VERSIONING   — the contract stamp (LANE_CONTRACT_VERSION + the
+//                     canonical fingerprint) exists and is stable across a
+//                     double read (Phase 1.3: plan envelopes carry it).
+//   7. DOCUMENTED   — both adapters cross-reference their sibling and this
+//                     battery, so the next editor meets the law first.
 //
 // Run: npm run test:lane-drift   (pure — no DB, no DOM; CI step)
 
@@ -29,8 +36,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { LANE_CAPABILITY_IDS as V_CAPS, LANE_ORDER as V_ORDER, LANE_REGISTRY as V_REG, LANE_REPAIR_OPERATIONS as V_REPAIRS, HEAVY_JOB_KINDS as V_HEAVY, ENGINE_LANE_RENDER_MODES as V_ENGINE, validateLaneRegistry as vValidate } from "../src/lib/ibismuh/video-lanes";
-import { LANE_CAPABILITY_IDS as S_CAPS, LANE_ORDER as S_ORDER, LANE_REGISTRY as S_REG, LANE_REPAIR_OPERATIONS as S_REPAIRS, HEAVY_JOB_KINDS as S_HEAVY, ENGINE_LANE_RENDER_MODES as S_ENGINE, validateLaneRegistry as sValidate } from "../src/lib/ibismuh/studio-lanes";
+import { LANE_CAPABILITY_IDS as V_CAPS, LANE_ORDER as V_ORDER, LANE_REGISTRY as V_REG, LANE_REPAIR_OPERATIONS as V_REPAIRS, HEAVY_JOB_KINDS as V_HEAVY, ENGINE_LANE_RENDER_MODES as V_ENGINE, LANE_UI_META as V_META, validateLaneRegistry as vValidate } from "../src/lib/ibismuh/video-lanes";
+import { LANE_CAPABILITY_IDS as S_CAPS, LANE_ORDER as S_ORDER, LANE_REGISTRY as S_REG, LANE_REPAIR_OPERATIONS as S_REPAIRS, HEAVY_JOB_KINDS as S_HEAVY, ENGINE_LANE_RENDER_MODES as S_ENGINE, LANE_UI_META as S_META, validateLaneRegistry as sValidate } from "../src/lib/ibismuh/studio-lanes";
+import { LANE_CONTRACTS, LANE_UI_META_BASE, LANE_CONTRACT_VERSION, computeLaneContractFingerprint, currentLaneContractStamp } from "../src/lib/ibismuh/lane-contracts";
 
 let passed = 0;
 let failed = 0;
@@ -69,6 +77,27 @@ const CONTRACT_FIELDS = [
 
 const asSet = (xs: readonly string[]) => JSON.stringify([...xs].sort());
 
+await test("both adapters DERIVE from the single contract source (identity, not copy)", () => {
+  ok(V_REG === LANE_CONTRACTS, "video-lanes LANE_REGISTRY must BE lane-contracts LANE_CONTRACTS (same object)");
+  ok(S_REG === LANE_CONTRACTS, "studio-lanes LANE_REGISTRY must BE lane-contracts LANE_CONTRACTS (same object)");
+});
+
+await test("each UI-meta view is the shared base plus exactly its surface vocabulary", () => {
+  for (const id of V_ORDER) {
+    const base = LANE_UI_META_BASE[id];
+    eq(
+      { title: V_META[id].title, desc: V_META[id].desc, icon: V_META[id].icon },
+      base,
+      `video ${id} UI meta must equal the shared base on title/desc/icon`,
+    );
+    eq(
+      { title: S_META[id].title, desc: S_META[id].desc, icon: S_META[id].icon },
+      base,
+      `studio ${id} UI meta must equal the shared base on title/desc/icon`,
+    );
+  }
+});
+
 await test("each registry self-validates clean", () => {
   eq(vValidate(), [], "video-lanes.ts must validate clean");
   eq(sValidate(), [], "studio-lanes.ts must validate clean");
@@ -103,6 +132,15 @@ await test("the shared vocabularies agree", () => {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const registrySource = (file: string) =>
   fs.readFileSync(path.resolve(here, "..", "src/lib/ibismuh", file), "utf8");
+
+await test("the contract stamp exists and is stable (Phase 1.3 versioning)", () => {
+  ok(Number.isInteger(LANE_CONTRACT_VERSION) && LANE_CONTRACT_VERSION >= 1, "LANE_CONTRACT_VERSION must be a positive integer");
+  const s1 = currentLaneContractStamp();
+  const s2 = currentLaneContractStamp();
+  eq(s1, s2, "the stamp must be deterministic across reads");
+  eq(s1.fingerprint, computeLaneContractFingerprint(), "the stamp's fingerprint must equal the canonical contract fingerprint");
+  ok(/^[0-9a-f]{64}$/.test(s1.fingerprint), "the contract fingerprint must be sha256 hex");
+});
 
 await test("the UI-metadata divergence stays declared-only", () => {
   // The one sanctioned divergence: LaneUiMeta accent shape (video `accent`,

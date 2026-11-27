@@ -31,6 +31,7 @@ import {
   serializePlanEnvelope,
   type VideoPlanEnvelope,
 } from "../src/lib/ibismuh/plan-envelope";
+import { currentLaneContractStamp } from "../src/lib/ibismuh/lane-contracts";
 
 let passed = 0;
 let failed = 0;
@@ -291,8 +292,44 @@ await test("a whiteboard envelope compiles, fingerprints, and round-trips", () =
   eq(plan.format, "story");
   eq(plan.qcProfile, "whiteboard-engine-v1");
   ok(plan.fingerprint.length === 64);
+  // Phase 1.3: every freshly compiled plan carries the contract stamp
+  const stamp = currentLaneContractStamp();
+  eq(plan.laneContract, stamp, "the envelope stamps the LIVE contract surface");
   const back = parsePlanEnvelope(serializePlanEnvelope(plan));
   eq(back.fingerprint, plan.fingerprint);
+  // field-wise: the canonical round-trip reorders keys, so JSON-string
+  // equality of the whole object would false-fail
+  eq(back.laneContract?.version, stamp.version, "the stamp version survives the round-trip");
+  eq(back.laneContract?.fingerprint, stamp.fingerprint, "the stamp fingerprint survives the round-trip");
+});
+
+await test("Phase 1.3 versioning: a stamp from another contract surface refuses the parse; legacy plans still parse", () => {
+  const plan = compilePlanEnvelope(envelopeInput());
+  // a plan compiled under a DIFFERENT (older/newer) contract surface:
+  const foreign = JSON.parse(serializePlanEnvelope(plan)) as Record<string, unknown>;
+  foreign.laneContract = { version: (plan.laneContract?.version ?? 1) + 1, fingerprint: "a".repeat(64) };
+  foreign.fingerprint = computePlanFingerprint(foreign as unknown as VideoPlanEnvelope);
+  throwsWith(() => parsePlanEnvelope(JSON.stringify(foreign)), /recompile the plan/, "stale contract stamp refuses");
+
+  // tampered stamp WITH a recomputed fingerprint still refuses (the
+  // registry-agreement law fires after the shape check)
+  const forged = JSON.parse(serializePlanEnvelope(plan)) as Record<string, unknown>;
+  forged.laneContract = { version: plan.laneContract?.version ?? 1, fingerprint: "b".repeat(64) };
+  forged.fingerprint = computePlanFingerprint(forged as unknown as VideoPlanEnvelope);
+  throwsWith(() => parsePlanEnvelope(JSON.stringify(forged)), /recompile the plan/, "forged stamp refuses");
+
+  // a malformed stamp fails the shape check
+  const malformed = JSON.parse(serializePlanEnvelope(plan)) as Record<string, unknown>;
+  malformed.laneContract = { version: 0 };
+  throwsWith(() => parsePlanEnvelope(JSON.stringify(malformed)), /laneContract/, "malformed stamp fails shape");
+
+  // LEGACY: a pre-stamp plan (the field stripped, fingerprint recomputed
+  // as the old compiler would have left it) still parses — back-compat
+  const legacy = JSON.parse(serializePlanEnvelope(plan)) as Record<string, unknown>;
+  delete legacy.laneContract;
+  legacy.fingerprint = computePlanFingerprint(legacy as unknown as VideoPlanEnvelope);
+  const parsedLegacy = parsePlanEnvelope(JSON.stringify(legacy));
+  ok(parsedLegacy.laneContract === undefined, "the legacy plan carries no stamp");
 });
 
 await test("deterministic compilation is byte-stable", () => {
