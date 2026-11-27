@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useAppStore } from "@/lib/store";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -34,6 +35,7 @@ import {
   Radar,
   PlayCircle,
   CheckCircle2,
+  Workflow,
 } from "lucide-react";
 
 const STAGE_ICONS: Record<string, typeof FileText> = {
@@ -231,6 +233,24 @@ export function DashboardView() {
           )}
         </div>
       </Card>
+
+      {/* Workspace adjudication (G2): / is the canonical studio. The
+          additive planner-pipeline surface at /studio stays reachable from
+          exactly ONE quiet, honestly-labeled entry — never from the nav,
+          which would present a preview as canonical. */}
+      <Link
+        href="/studio"
+        className="group flex items-center gap-2.5 rounded-xl border border-white/8 bg-white/3 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:border-white/16 hover:bg-white/6 transition-colors tf-focusable"
+        aria-label="Open the planner pipeline preview workspace — an additive surface, not the main studio"
+      >
+        <Workflow className="h-3.5 w-3.5 shrink-0 text-white/50 group-hover:text-white/80 transition-colors" aria-hidden="true" />
+        <span className="min-w-0">
+          <span className="font-medium">Planner pipeline preview</span>
+          <span className="mx-1.5 text-white/30" aria-hidden="true">—</span>
+          the alternate six-lane pipeline workspace; the main studio stays here.
+        </span>
+        <ArrowRight className="h-3 w-3 shrink-0 ml-auto text-white/40 group-hover:translate-x-0.5 transition-transform" aria-hidden="true" />
+      </Link>
 
       {/* KPI row (T-4.2) — published + failed finally surfaced. An EMPTY
           studio skips the four zeros (the hero + first-production panel
