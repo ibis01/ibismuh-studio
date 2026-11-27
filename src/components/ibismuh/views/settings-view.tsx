@@ -88,26 +88,36 @@ import {
   type ProviderTier,
 } from "@/lib/ibismuh/providers/registry";
 
-// R2 GUI pass — the settings page is a ~13-card form in one 672px column.
-// These ids anchor the sticky section rail rendered above the cards: one
-// tap jumps to the section, the scroll listener keeps the active pill lit.
-// Anchors touch no form state — zero risk to the save flows.
+// Full-page settings — the shell gives every view up to 1400px; the old R2
+// pass clamped this view to one 672px column (max-w-2xl) with a horizontal
+// pill rail, leaving most of the page dead. The layout is now the canonical
+// two-pane settings page: a sticky section rail on the left (lg+), and a
+// content pane that uses the full remaining width — compact sibling cards
+// pair into a two-column grid on xl (production+content, security+account,
+// app+youtube), while the dense cards (plan, providers, stock, music,
+// pipeline, jobs) keep the full row. The horizontal pill rail survives
+// below lg where a sidebar would eat the narrow viewport. The rail order
+// below IS the visual order — the scroll-spy iterates it, so it must match
+// the DOM. Anchors touch no form state — zero risk to the save flows.
 const SETTINGS_SECTIONS = [
-  { id: "plan", label: "Plan" },
-  { id: "production", label: "Production" },
-  { id: "security", label: "Security" },
-  { id: "account", label: "Account" },
-  { id: "app-device", label: "App" },
-  { id: "providers", label: "AI Providers" },
-  { id: "stock", label: "Stock" },
-  { id: "music", label: "Music" },
-  { id: "youtube", label: "YouTube" },
-  { id: "content", label: "Content" },
-  { id: "pipeline", label: "Pipeline" },
-  { id: "jobs", label: "Jobs" },
+  { id: "plan", label: "Plan", icon: Coins },
+  { id: "production", label: "Production", icon: Zap },
+  { id: "content", label: "Content", icon: Sparkles },
+  { id: "security", label: "Security", icon: ShieldCheck },
+  { id: "account", label: "Account", icon: Users },
+  { id: "app-device", label: "App", icon: Smartphone },
+  { id: "youtube", label: "YouTube", icon: Play },
+  { id: "providers", label: "AI Providers", icon: Bot },
+  { id: "stock", label: "Stock", icon: Film },
+  { id: "music", label: "Music", icon: AudioLines },
+  { id: "pipeline", label: "Pipeline", icon: Clapperboard },
+  { id: "jobs", label: "Jobs", icon: History },
 ] as const;
 
-function SettingsSectionNav() {
+// One scroll-spy shared by both rails — the last section whose top has
+// crossed the sticky-header line is the active one. The page scrolls on the
+// document, so the listener lives on window (never re-created per rail).
+function useActiveSettingsSection(): string {
   const [active, setActive] = useState<string>(SETTINGS_SECTIONS[0].id);
 
   useEffect(() => {
@@ -128,21 +138,29 @@ function SettingsSectionNav() {
     };
   }, []);
 
+  return active;
+}
+
+function jumpToSection(id: string) {
+  document
+    .getElementById(id)
+    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function SettingsSectionNav() {
+  const active = useActiveSettingsSection();
+
   return (
     <nav
       aria-label="Settings sections"
-      className="sticky top-16 z-20 -mx-1 px-1 py-1.5 glass-strong rounded-xl overflow-x-auto tf-scroll-bar"
+      className="sticky top-16 z-20 -mx-1 px-1 py-1.5 glass-strong rounded-xl overflow-x-auto tf-scroll-bar lg:hidden"
     >
       <div className="flex items-center gap-1">
         {SETTINGS_SECTIONS.map((s) => (
           <button
             key={s.id}
             type="button"
-            onClick={() =>
-              document
-                .getElementById(s.id)
-                ?.scrollIntoView({ behavior: "smooth", block: "start" })
-            }
+            onClick={() => jumpToSection(s.id)}
             aria-current={active === s.id ? "true" : undefined}
             className={clsx(
               "tf-focusable shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border transition-colors",
@@ -155,6 +173,42 @@ function SettingsSectionNav() {
           </button>
         ))}
       </div>
+    </nav>
+  );
+}
+
+function SettingsSideRail() {
+  const active = useActiveSettingsSection();
+
+  return (
+    <nav
+      aria-label="Settings sections"
+      className="hidden lg:block sticky top-24 shrink-0"
+    >
+      <ul className="flex flex-col gap-1 p-2 rounded-2xl border border-white/10 bg-white/[0.03]">
+        {SETTINGS_SECTIONS.map((s) => {
+          const Icon = s.icon;
+          const isActive = active === s.id;
+          return (
+            <li key={s.id}>
+              <button
+                type="button"
+                onClick={() => jumpToSection(s.id)}
+                aria-current={isActive ? "true" : undefined}
+                className={clsx(
+                  "tf-focusable w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium border text-left transition-colors",
+                  isActive
+                    ? "border-primary/50 bg-primary/15 text-cyan-200"
+                    : "border-transparent text-muted-foreground hover:text-foreground hover:bg-white/5"
+                )}
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{s.label}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </nav>
   );
 }
@@ -912,10 +966,14 @@ export function SettingsView() {
 
   if (!loaded) {
     return (
-      <div className="max-w-2xl space-y-4">
-        <Skeleton className="h-64 rounded-2xl bg-white/5" />
-        <Skeleton className="h-44 rounded-2xl bg-white/5" />
-        <Skeleton className="h-56 rounded-2xl bg-white/5" />
+      <div className="grid lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-6 xl:gap-8 items-start">
+        <Skeleton className="hidden lg:block h-[26rem] rounded-2xl bg-white/5" />
+        <div className="min-w-0 space-y-4">
+          <Skeleton className="h-9 rounded-xl bg-white/5 lg:hidden" />
+          <Skeleton className="h-64 rounded-2xl bg-white/5" />
+          <Skeleton className="h-44 rounded-2xl bg-white/5" />
+          <Skeleton className="h-56 rounded-2xl bg-white/5" />
+        </div>
       </div>
     );
   }
@@ -940,11 +998,13 @@ export function SettingsView() {
   ];
 
   return (
-    <div className="max-w-2xl space-y-5">
-      <SettingsSectionNav />
-      <div id="plan" className="scroll-mt-24">
-        <PlanCard />
-      </div>
+    <div className="grid lg:grid-cols-[208px_minmax(0,1fr)] lg:gap-6 xl:gap-8 items-start">
+      <SettingsSideRail />
+      <div className="min-w-0 space-y-5 xl:grid xl:grid-cols-2 xl:items-start xl:gap-5 xl:space-y-0">
+        <SettingsSectionNav />
+        <div id="plan" className="scroll-mt-24 xl:col-span-2">
+          <PlanCard />
+        </div>
       <Card id="production" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
         <div className="flex items-center gap-2.5 mb-5">
           <div className="h-9 w-9 rounded-xl bg-brand-gradient flex items-center justify-center glow-brand-soft shrink-0">
@@ -999,6 +1059,122 @@ export function SettingsView() {
         </div>
       </Card>
 
+      <Card id="content" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
+        <h3 className="font-semibold">Content Defaults</h3>
+        <p className="text-xs text-muted-foreground mb-5">
+          Pre-fills the Create studio every time
+        </p>
+
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label>Default niche</Label>
+            <Select
+              value={form.defaultNiche}
+              onValueChange={(v) => setForm((f) => ({ ...f, defaultNiche: v }))}
+            >
+              <SelectTrigger className="bg-white/5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {NICHES.map((n) => (
+                  <SelectItem key={n} value={n}>
+                    {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Default tone</Label>
+            <Select
+              value={form.defaultTone}
+              onValueChange={(v) => setForm((f) => ({ ...f, defaultTone: v }))}
+            >
+              <SelectTrigger className="bg-white/5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TONES.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Default length</Label>
+            <Select
+              value={form.defaultLength}
+              onValueChange={(v) =>
+                setForm((f) => ({ ...f, defaultLength: v }))
+              }
+            >
+              <SelectTrigger className="bg-white/5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LENGTHS.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>
+                    {l.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Default narrator</Label>
+            <VoiceSelectWithPreview
+              value={form.defaultVoice}
+              onValueChange={(v) => setForm((f) => ({ ...f, defaultVoice: v }))}
+              voices={voices}
+            />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Tap the <span className="text-primary">▶</span> next to a voice in
+              the picker to hear how it sounds.
+            </p>
+          </div>
+          <div className="space-y-2 sm:col-span-2">
+            <div className="flex items-center justify-between">
+              <Label>Default speech speed</Label>
+              <span className="text-xs font-medium tabular-nums text-primary">
+                {Number(form.defaultSpeed).toFixed(1)}x
+              </span>
+            </div>
+            <Slider
+              value={[Number(form.defaultSpeed)]}
+              min={0.5}
+              max={2}
+              step={0.1}
+              onValueChange={([v]) =>
+                setForm((f) => ({ ...f, defaultSpeed: v }))
+              }
+              aria-label="Default speech speed"
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Default thumbnail style</Label>
+            <Select
+              value={form.defaultThumbStyle}
+              onValueChange={(v) =>
+                setForm((f) => ({ ...f, defaultThumbStyle: v }))
+              }
+            >
+              <SelectTrigger className="bg-white/5">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {THUMB_STYLES.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </Card>
+
       <div id="security" className="scroll-mt-24">
         <SecurityAccessCard />
       </div>
@@ -1024,8 +1200,179 @@ export function SettingsView() {
         </div>
       </Card>
 
+      <Card id="youtube" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
+        <div className="flex items-center gap-2.5 mb-1">
+          <div className="h-9 w-9 rounded-xl bg-red-600/90 flex items-center justify-center shrink-0 shadow-[0_0_18px_rgba(239,43,70,0.25)]">
+            <Play className="h-4.5 w-4.5 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold leading-tight">YouTube Connection</h3>
+            <p className="text-xs text-muted-foreground">
+              One-click uploads — render, title, tags, thumbnail and all
+            </p>
+          </div>
+          {yt?.connected && yt.channelTitle && (
+            <Badge className="bg-red-500/15 text-red-200 border border-red-500/30 text-xs shrink-0">
+              <Check className="h-3 w-3 mr-1" />
+              {yt.channelTitle}
+            </Badge>
+          )}
+        </div>
+
+        {yt?.connected ? (
+          <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/6 p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              {yt.channelThumb ? (
+                <img
+                  src={yt.channelThumb}
+                  alt="Channel avatar"
+                  className="h-10 w-10 rounded-full border border-white/15"
+                />
+              ) : (
+                <div className="h-10 w-10 rounded-full bg-white/8 flex items-center justify-center">
+                  <Play className="h-4 w-4 text-red-200" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {yt.channelTitle ?? "Connected channel"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Uploads publish as {yt.privacyStatus} · uploads from the video
+                  dialog
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={disconnectYt}
+              className="border-red-500/30 bg-red-500/8 text-red-200 hover:bg-red-500/15 h-7 text-xs"
+            >
+              Disconnect
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-4 space-y-4">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>OAuth client ID</Label>
+                <Input
+                  value={ytClientId}
+                  onChange={(e) => setYtClientId(e.target.value)}
+                  placeholder="1234-abc.apps.googleusercontent.com"
+                  className="bg-white/5 border-white/10 text-xs"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Client secret</Label>
+                <SecretInput
+                  value={ytClientSecret}
+                  onChange={(e) => setYtClientSecret(e.target.value)}
+                  placeholder={
+                    yt?.configured ? "saved — type to replace" : "GOCSPX-…"
+                  }
+                  className="bg-white/5 border-white/10 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/3 p-3">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                In{" "}
+                <a
+                  href="https://console.cloud.google.com/apis/credentials"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-foreground/80 hover:text-foreground underline underline-offset-2 inline-flex items-center gap-0.5"
+                >
+                  Google Cloud Console <ExternalLink className="h-2.5 w-2.5" />
+                </a>{" "}
+                create an OAuth client (Web application) and add this exact
+                authorized redirect URI:
+              </p>
+              <div className="flex items-center gap-2 mt-2">
+                <code className="flex-1 min-w-0 truncate rounded-lg bg-black/40 border border-white/10 px-2.5 py-1.5 text-xs text-foreground/80">
+                  {yt?.callbackUrl ?? "…"}
+                </code>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copyCallbackUrl}
+                  className="h-7 px-2.5 border-white/15 bg-white/4 shrink-0"
+                  title="Copy the redirect URI"
+                >
+                  {ytCopied ? (
+                    <Check className="h-3 w-3 text-emerald-300" />
+                  ) : (
+                    <Copy className="h-3 w-3" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                onClick={saveYtCredentials}
+                disabled={
+                  ytSaving || (!ytClientId.trim() && !ytClientSecret.trim())
+                }
+                className="border-white/15 bg-white/6 hover:bg-white/10 font-medium h-8"
+                variant="outline"
+              >
+                {ytSaving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Save className="h-3.5 w-3.5" />
+                )}
+                Save credentials
+              </Button>
+              <Button
+                size="sm"
+                onClick={startConnect}
+                disabled={ytConnecting || !yt?.configured}
+                className="bg-brand-gradient hover:opacity-90 text-white font-medium h-8"
+                title={
+                  yt?.configured
+                    ? "Opens the Google consent page in a new tab"
+                    : "Save your client ID and secret first"
+                }
+              >
+                {ytConnecting ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5" />
+                )}
+                Connect channel
+              </Button>
+              <Select
+                value={yt?.privacyStatus ?? "unlisted"}
+                onValueChange={async (v) => {
+                  await fetch("/api/youtube/config", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ privacyStatus: v }),
+                  });
+                  void loadYouTube();
+                }}
+              >
+                <SelectTrigger className="h-8 w-[130px] bg-white/5 border-white/10 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-white/10">
+                  <SelectItem value="unlisted">Upload as unlisted</SelectItem>
+                  <SelectItem value="public">Upload as public</SelectItem>
+                  <SelectItem value="private">Upload as private</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+      </Card>
+
       {/* AI providers — mix and match: one provider per task, shared creds */}
-      <Card id="providers" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
+      <Card id="providers" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24 xl:col-span-2">
         <div className="flex items-center gap-2.5 mb-1">
           <div className="h-9 w-9 rounded-xl bg-indigo-500/90 flex items-center justify-center shrink-0 shadow-[0_0_18px_rgba(99,102,241,0.25)]">
             <Bot className="h-4.5 w-4.5 text-white" />
@@ -1797,301 +2144,14 @@ export function SettingsView() {
         </div>
       </Card>
 
-      <div id="stock" className="scroll-mt-24">
+      <div id="stock" className="scroll-mt-24 xl:col-span-2">
         <StockFootageSection />
       </div>
-      <div id="music" className="scroll-mt-24">
+      <div id="music" className="scroll-mt-24 xl:col-span-2">
         <MusicLibrarySection />
       </div>
 
-      <Card id="youtube" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
-        <div className="flex items-center gap-2.5 mb-1">
-          <div className="h-9 w-9 rounded-xl bg-red-600/90 flex items-center justify-center shrink-0 shadow-[0_0_18px_rgba(239,43,70,0.25)]">
-            <Play className="h-4.5 w-4.5 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold leading-tight">YouTube Connection</h3>
-            <p className="text-xs text-muted-foreground">
-              One-click uploads — render, title, tags, thumbnail and all
-            </p>
-          </div>
-          {yt?.connected && yt.channelTitle && (
-            <Badge className="bg-red-500/15 text-red-200 border border-red-500/30 text-xs shrink-0">
-              <Check className="h-3 w-3 mr-1" />
-              {yt.channelTitle}
-            </Badge>
-          )}
-        </div>
-
-        {yt?.connected ? (
-          <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/6 p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              {yt.channelThumb ? (
-                <img
-                  src={yt.channelThumb}
-                  alt="Channel avatar"
-                  className="h-10 w-10 rounded-full border border-white/15"
-                />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-white/8 flex items-center justify-center">
-                  <Play className="h-4 w-4 text-red-200" />
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">
-                  {yt.channelTitle ?? "Connected channel"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Uploads publish as {yt.privacyStatus} · uploads from the video
-                  dialog
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={disconnectYt}
-              className="border-red-500/30 bg-red-500/8 text-red-200 hover:bg-red-500/15 h-7 text-xs"
-            >
-              Disconnect
-            </Button>
-          </div>
-        ) : (
-          <div className="mt-4 space-y-4">
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>OAuth client ID</Label>
-                <Input
-                  value={ytClientId}
-                  onChange={(e) => setYtClientId(e.target.value)}
-                  placeholder="1234-abc.apps.googleusercontent.com"
-                  className="bg-white/5 border-white/10 text-xs"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Client secret</Label>
-                <SecretInput
-                  value={ytClientSecret}
-                  onChange={(e) => setYtClientSecret(e.target.value)}
-                  placeholder={
-                    yt?.configured ? "saved — type to replace" : "GOCSPX-…"
-                  }
-                  className="bg-white/5 border-white/10 text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-white/10 bg-white/3 p-3">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                In{" "}
-                <a
-                  href="https://console.cloud.google.com/apis/credentials"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-foreground/80 hover:text-foreground underline underline-offset-2 inline-flex items-center gap-0.5"
-                >
-                  Google Cloud Console <ExternalLink className="h-2.5 w-2.5" />
-                </a>{" "}
-                create an OAuth client (Web application) and add this exact
-                authorized redirect URI:
-              </p>
-              <div className="flex items-center gap-2 mt-2">
-                <code className="flex-1 min-w-0 truncate rounded-lg bg-black/40 border border-white/10 px-2.5 py-1.5 text-xs text-foreground/80">
-                  {yt?.callbackUrl ?? "…"}
-                </code>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={copyCallbackUrl}
-                  className="h-7 px-2.5 border-white/15 bg-white/4 shrink-0"
-                  title="Copy the redirect URI"
-                >
-                  {ytCopied ? (
-                    <Check className="h-3 w-3 text-emerald-300" />
-                  ) : (
-                    <Copy className="h-3 w-3" />
-                  )}
-                </Button>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                onClick={saveYtCredentials}
-                disabled={
-                  ytSaving || (!ytClientId.trim() && !ytClientSecret.trim())
-                }
-                className="border-white/15 bg-white/6 hover:bg-white/10 font-medium h-8"
-                variant="outline"
-              >
-                {ytSaving ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Save className="h-3.5 w-3.5" />
-                )}
-                Save credentials
-              </Button>
-              <Button
-                size="sm"
-                onClick={startConnect}
-                disabled={ytConnecting || !yt?.configured}
-                className="bg-brand-gradient hover:opacity-90 text-white font-medium h-8"
-                title={
-                  yt?.configured
-                    ? "Opens the Google consent page in a new tab"
-                    : "Save your client ID and secret first"
-                }
-              >
-                {ytConnecting ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Play className="h-3.5 w-3.5" />
-                )}
-                Connect channel
-              </Button>
-              <Select
-                value={yt?.privacyStatus ?? "unlisted"}
-                onValueChange={async (v) => {
-                  await fetch("/api/youtube/config", {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ privacyStatus: v }),
-                  });
-                  void loadYouTube();
-                }}
-              >
-                <SelectTrigger className="h-8 w-[130px] bg-white/5 border-white/10 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-popover border-white/10">
-                  <SelectItem value="unlisted">Upload as unlisted</SelectItem>
-                  <SelectItem value="public">Upload as public</SelectItem>
-                  <SelectItem value="private">Upload as private</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        )}
-      </Card>
-
-      <Card id="content" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
-        <h3 className="font-semibold">Content Defaults</h3>
-        <p className="text-xs text-muted-foreground mb-5">
-          Pre-fills the Create studio every time
-        </p>
-
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div className="space-y-1.5">
-            <Label>Default niche</Label>
-            <Select
-              value={form.defaultNiche}
-              onValueChange={(v) => setForm((f) => ({ ...f, defaultNiche: v }))}
-            >
-              <SelectTrigger className="bg-white/5">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {NICHES.map((n) => (
-                  <SelectItem key={n} value={n}>
-                    {n}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Default tone</Label>
-            <Select
-              value={form.defaultTone}
-              onValueChange={(v) => setForm((f) => ({ ...f, defaultTone: v }))}
-            >
-              <SelectTrigger className="bg-white/5">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TONES.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Default length</Label>
-            <Select
-              value={form.defaultLength}
-              onValueChange={(v) =>
-                setForm((f) => ({ ...f, defaultLength: v }))
-              }
-            >
-              <SelectTrigger className="bg-white/5">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {LENGTHS.map((l) => (
-                  <SelectItem key={l.id} value={l.id}>
-                    {l.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Default narrator</Label>
-            <VoiceSelectWithPreview
-              value={form.defaultVoice}
-              onValueChange={(v) => setForm((f) => ({ ...f, defaultVoice: v }))}
-              voices={voices}
-            />
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Tap the <span className="text-primary">▶</span> next to a voice in
-              the picker to hear how it sounds.
-            </p>
-          </div>
-          <div className="space-y-2 sm:col-span-2">
-            <div className="flex items-center justify-between">
-              <Label>Default speech speed</Label>
-              <span className="text-xs font-medium tabular-nums text-primary">
-                {Number(form.defaultSpeed).toFixed(1)}x
-              </span>
-            </div>
-            <Slider
-              value={[Number(form.defaultSpeed)]}
-              min={0.5}
-              max={2}
-              step={0.1}
-              onValueChange={([v]) =>
-                setForm((f) => ({ ...f, defaultSpeed: v }))
-              }
-              aria-label="Default speech speed"
-            />
-          </div>
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>Default thumbnail style</Label>
-            <Select
-              value={form.defaultThumbStyle}
-              onValueChange={(v) =>
-                setForm((f) => ({ ...f, defaultThumbStyle: v }))
-              }
-            >
-              <SelectTrigger className="bg-white/5">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {THUMB_STYLES.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </Card>
-
-      <Card id="pipeline" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
+      <Card id="pipeline" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24 xl:col-span-2">
         <div className="flex items-center gap-2.5 mb-5">
           <div className="h-9 w-9 rounded-xl bg-brand-gradient flex items-center justify-center glow-brand-soft shrink-0">
             <ShieldCheck className="h-4.5 w-4.5 text-white" />
@@ -2233,7 +2293,7 @@ export function SettingsView() {
         </div>
       </Card>
 
-      <Card id="jobs" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24">
+      <Card id="jobs" className="glass rounded-2xl p-5 sm:p-6 scroll-mt-24 xl:col-span-2">
         <div className="flex items-center justify-between gap-3 mb-1">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
@@ -2420,7 +2480,7 @@ export function SettingsView() {
           AI providers). The inline "Save & Apply" inside the AI Providers
           card still exists for quick iteration, but users no longer need to
           remember two save buttons. */}
-      <div className="sticky bottom-4 z-20">
+      <div className="sticky bottom-4 z-20 xl:col-span-2">
         <div className="glass-strong rounded-2xl border border-white/10 tf-elev-3 px-4 py-3 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground hidden sm:block leading-relaxed">
             Saves content defaults <em>and</em> AI providers together.
@@ -2438,6 +2498,7 @@ export function SettingsView() {
             Save All Changes
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );

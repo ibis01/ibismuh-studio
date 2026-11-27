@@ -8062,3 +8062,17 @@ Work Log:
 Stage Summary:
 - Deliverable: the plan's recommended order items 1–4 executed with per-commit receipts; two real product bugs (tenant-scoping 500, dead studio toasts) found by the new coverage and closed; the lane contract is single-source and versioned; the build ships zero tracing warnings; main advanced f53b8c7 → 8d977a28 → 9717bd38 → 99a2ff1d (this worklog commit follows), every step CI 8/8.
 - Deliberately not here: the Phase 5/6/7 product-depth slices, the log-classification harness, the middleware→proxy migration, benchmark/fault-injection/blind-review infrastructure — each recorded with its reason and its next-step shape.
+
+---
+Task ID: Settings-FullPage
+Agent: main (Z.ai)
+Task: The operator asked for the Settings page to be full page, not one-sided content — the view was clamped to a single 672px column (max-w-2xl) under a horizontal pill rail, leaving most of the shell dead. Rebuilt as the canonical two-pane full-page settings layout.
+
+Work Log:
+- DIAGNOSIS: settings-view.tsx rendered one max-w-2xl (672px) column inside a shell that offers up to ~1400px — over half the content area dead on desktop, every dense card (providers, stock, music, pipeline, jobs) crammed into a sliver of the available width.
+- LAYOUT: the two-pane settings page — a sticky 208px section rail on lg+ whose order IS the visual order (the scroll-spy iterates it), and a content pane on minmax(0,1fr) that fills ALL remaining width. Compact sibling cards pair into a two-column grid on xl (production+content, security+account, app+youtube); the dense cards keep the full row. Below lg the horizontal pill rail survives (a 208px sidebar would eat the narrow viewport).
+- STICKY SAVE: the sticky bottom bar persists across the long page and saves content defaults and AI providers together — no hunting for separate save buttons.
+- RECEIPTS (agent-browser, 1280 and 390): at 1280 the grid is 992px = 208px rail + 752px content pane (24px right shell pad only; the xl grid resolves to 366px + 366px); at 390 the side rail is hidden, the pill rail visible, content 358px with zero horizontal overflow; footer bottom == document height on the long page (natural push, no floating gap); 12px floor clean (no text-[9-11px] in the view); zero page errors and zero console warnings; typecheck 0; lint 0/0.
+
+Stage Summary:
+- Deliverable: Settings is a full-page two-pane surface — sticky rail + full-width content with xl card pairing — verified geometrically at both breakpoints with zero console noise. View-only rework: no route, data, or API behavior touched.
