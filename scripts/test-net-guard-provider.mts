@@ -187,6 +187,38 @@ async function main(): Promise<void> {
     }
     ok(threw, "2.7b an invalid CIDR mask throws");
   }
+  {
+    // The hostname:port peel — the accidental-port law (the fix's receipt:
+    // the IPv6 branch used to claim these entries first, so an ordinary
+    // self-hosted entry like "ollama.internal:11434" threw "invalid IPv6
+    // address" and the documented port-strip never ran).
+    const withPort = parsePrivateDestinations(["ollama.internal:11434"]);
+    ok(
+      withPort.length === 1 && withPort[0].kind === "host" && withPort[0].host === "ollama.internal",
+      "2.8  a hostname:port allowlist entry strips the port and parses as the bare host",
+    );
+    const ipWithPort = parsePrivateDestinations(["10.0.0.5:8443"]);
+    ok(
+      ipWithPort.length === 1 && ipWithPort[0].kind === "host" && ipWithPort[0].host === "10.0.0.5",
+      "2.8b an ip:port allowlist entry parses as the bare address (any port is admitted on a covered host, by the destination law)",
+    );
+    let ambiguousThrew = false;
+    try {
+      parsePrivateDestinations(["dead:beef"]);
+    } catch {
+      ambiguousThrew = true;
+    }
+    ok(ambiguousThrew, "2.8c a digits-free colon shape (dead:beef) stays on the IPv6 path and throws loudly — no silent reinterpretation");
+    const u = await assertSafeRemoteUrl("http://localtest.me:8443/x", {
+      privateDestinations: ["localtest.me:8443"],
+    });
+    ok(Boolean(u), "2.9  the port-bearing hostname entry admits the covered host on a non-standard port through the pinned lookup");
+    await rejects(
+      () => assertSafeRemoteUrl("http://localtest.me/x", { privateDestinations: ["other.internal:11434"] }),
+      "2.9b a port-bearing entry still covers ONLY its own host",
+      /loopback|private/,
+    );
+  }
 
   // ---------- 3. END-TO-END TRANSPORT ------------------------------------
   console.log("\n— 3. End-to-end transport: a real local server (allowlisted vs blocked)");

@@ -272,6 +272,18 @@ export function parsePrivateDestinations(
   for (const raw of entries) {
     const entry = String(raw).trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/$/, "");
     if (!entry) continue;
+    // A trailing ":port" on a hostname-shaped entry (ollama.internal:11434,
+    // 10.0.0.5:8443) is an ACCIDENTAL PORT, not an IPv6 literal — the
+    // allowlist names DESTINATIONS and admits every port on a covered host,
+    // so the port strips here and the entry parses as the bare host. The
+    // shape test must run BEFORE the IPv6 branch below: that branch claims
+    // every colon-bearing entry, and a hostname:port can never be a valid
+    // v6 (its port strips to a hex-free charset) — without this guard the
+    // port-strip law at the hostname branch was unreachable dead code and
+    // a perfectly ordinary self-hosted entry threw "invalid IPv6 address".
+    // Genuinely ambiguous shapes stay loud: `dead:beef` (digits-free port)
+    // and `[fd00::1]:8443` (bracketed v6) still ride the IPv6 branch.
+    const hostPortShape = /^([a-z0-9.-]+):(\d+)$/.exec(entry);
     if (entry.includes("/") && !entry.includes(":")) {
       // IPv4 CIDR
       const [addr, bitsRaw] = entry.split("/");
@@ -284,8 +296,9 @@ export function parsePrivateDestinations(
       out.push({ kind: "cidr", isV6: false, ...range });
       continue;
     }
-    if (entry.includes(":")) {
-      // IPv6 literal or CIDR (a colon can only appear in v6)
+    if (entry.includes(":") && !hostPortShape) {
+      // IPv6 literal or CIDR (a colon can only appear in v6, or in the
+      // hostname:port shape already peeled off above)
       const [addr, bitsRaw] = entry.split("/");
       const base = v6ToBig(addr.replace(/^\[|\]$/g, ""));
       if (base === null)
@@ -309,8 +322,12 @@ export function parsePrivateDestinations(
       out.push({ kind: "ip", ip: entry, isV6: false });
       continue;
     }
-    // hostname entry — strip any accidental port
-    const host = entry.replace(/:\\d+$/, "");
+    // hostname entry — strip any accidental port (the hostPortShape peel
+    // already removed it; this also catches a port that reached the branch
+    // another way. The digit class must be "\d" — a doubled "\\d" matches a
+    // literal backslash and could never match a port, which is how the
+    // strip sat dead even where it was reachable).
+    const host = (hostPortShape ? hostPortShape[1] : entry).replace(/:\d+$/, "");
     if (!/^[a-z0-9.-]+$/.test(host) || !host.includes("."))
       throw new UrlGuardError(`Bad private-destination allowlist entry "${raw}" — expected a hostname, IPv4/IPv6 literal, or CIDR`);
     out.push({ kind: "host", host });
