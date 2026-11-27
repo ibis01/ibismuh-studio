@@ -1,10 +1,10 @@
 // repo.ts — tenant-safe data access for the studio (server-only).
 //
-// Every query filters organizationId = ORG — the tenant-scoping seam stays
-// explicit even in the single-tenant sandbox, so the multi-tenant upgrade
-// is a one-constant edit. This module owns the CRUD surface (projects,
-// briefs, events) and delegates the expensive work to pipeline.ts (compile,
-// assets, narration). The render job machine lives in pipeline.ts too.
+// Every query scopes by the CALLER's organization (orgId() — see tenant.ts);
+// outside a request scope it falls back to the sandbox org, so worker and
+// boot callers keep the pre-F-2 behavior. This module owns the CRUD surface
+// (projects, briefs, events) and delegates the expensive work to pipeline.ts
+// (compile, assets, narration). The render job machine lives in pipeline.ts.
 //
 // THE LAWS: lanes resolve through the registry (never a local string);
 // voices validate against the catalog; a brief edit supersedes the plan
@@ -38,7 +38,8 @@ import type { AudioReceipt } from "./audio-receipt";
 import { parseAudioReceipt } from "./audio-receipt";
 import type { AssetDTO, PlanRevisionDTO, ProjectState, ProjectSummary, StudioEventDTO } from "./api-dto";
 
-export { ORG, HttpError } from "./dto-mappers";
+export { HttpError } from "./dto-mappers";
+export { orgId } from "./dto-mappers";
 
 // ---------- validation helpers ----------
 

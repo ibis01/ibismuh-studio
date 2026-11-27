@@ -26606,6 +26606,12 @@ await test("F-2: orgId() follows the entered context; the sandbox constant is on
   const assets = await fsp.readFile("src/app/api/assets/[id]/route.ts", "utf8");
   ok(assets.includes("organizationId: orgId()"), "the assets lane scopes by the caller's org, not a constant");
   ok(!assets.includes("Cache-Control: public"), "tenant bytes no longer ship a public immutable cache header");
+  // The studio-preview battery caught the last hardcoded-org seam: with the
+  // F-2 guards entering a real tenant on /api/projects, dto-mappers' constant
+  // made EVERY shared helper write/read the sandbox org — create → 500.
+  const dto = await fsp.readFile("src/lib/ibismuh/dto-mappers.ts", "utf8");
+  ok(!/export const ORG\b/.test(dto), "the projects seam has no hardcoded org constant left");
+  ok((dto.match(/organizationId: orgId\(\)/g) ?? []).length >= 3, "the shared event/row helpers scope by the caller's org");
 });
 
 await test("F-8: the videos list reads the slim select — no doc column rides the payload", async () => {

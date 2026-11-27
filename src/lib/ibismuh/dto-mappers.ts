@@ -41,12 +41,16 @@ import type {
 import type { PlannerOutput, StudioBrief } from "./planner-types";
 import { isVideoType } from "./studio-lanes";
 import { db } from "@/lib/ibismuh/tenant-db";
+import { orgId } from "./tenant";
 
-/**
- * The tenant-scoping seam. Single-tenant sandbox today; every query filters
- * organizationId = ORG so the multi-tenant upgrade is a one-constant edit.
- */
-export const ORG = "local";
+// The tenant-scoping seam: the projects/pipeline helpers below scope by the
+// CALLER's organization (orgId() — see tenant.ts). Outside a request scope
+// (worker bodies, boot recovery, scripts) orgId() falls back to the sandbox
+// org, preserving the pre-F-2 behavior those callers always had; inside
+// ctx-entered routes every row lands on / is read from the acting tenant.
+// The old constant ("local") is GONE: with the F-2 route guards entering a
+// real tenant, a hardcoded org refused every create and read for signed-in
+// accounts (caught by the studio-preview browser battery — create → 500).
 
 // ---------- errors + request reading ----------
 
@@ -99,14 +103,14 @@ export async function writeStudioEvent(
   sceneRef?: string,
 ): Promise<void> {
   await db.studioEvent.create({
-    data: { projectId, organizationId: ORG, stage, sceneRef: sceneRef ?? null, level, message },
+    data: { projectId, organizationId: orgId(), stage, sceneRef: sceneRef ?? null, level, message },
   });
 }
 
 // ---------- row loaders (tenant-scoped, fail-closed) ----------
 
 export async function loadProjectRow(projectId: string): Promise<StudioProject> {
-  const row = await db.studioProject.findFirst({ where: { id: projectId, organizationId: ORG } });
+  const row = await db.studioProject.findFirst({ where: { id: projectId, organizationId: orgId() } });
   if (!row) throw new HttpError(404, "project not found");
   return row;
 }
@@ -114,7 +118,7 @@ export async function loadProjectRow(projectId: string): Promise<StudioProject> 
 export async function loadCurrentRevisionRow(project: StudioProject): Promise<PlanRevision | null> {
   if (!project.currentPlanRevisionId) return null;
   return db.planRevision.findFirst({
-    where: { id: project.currentPlanRevisionId, projectId: project.id, organizationId: ORG },
+    where: { id: project.currentPlanRevisionId, projectId: project.id, organizationId: orgId() },
   });
 }
 
@@ -501,5 +505,5 @@ export function mapTimingSource(
 }
 
 // The audit's F-2 re-export: the projects/assets lane scopes by the caller's
-// organization (see tenant.ts orgId) instead of the constant below.
-export { orgId } from "./tenant";
+// organization (see tenant.ts orgId).
+export { orgId };

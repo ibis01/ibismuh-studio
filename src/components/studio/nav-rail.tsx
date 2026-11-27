@@ -58,7 +58,10 @@ export function NavRail({
           {showDetail && (
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold tracking-tight text-zinc-100">Ibismuh Studio</span>
-              <span className="block text-xs text-zinc-500 tf-mono">six-lane production</span>
+              {/* Workspace adjudication (G2): this surface is the additive
+                  preview — the visible marker keeps it from ever passing as
+                  the canonical studio (whose branding lives at /). */}
+              <span className="block text-xs text-zinc-500 tf-mono">planner-pipeline preview</span>
             </span>
           )}
           {variant === "rail" && (

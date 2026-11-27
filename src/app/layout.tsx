@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { ServiceWorkerRegister } from "@/components/ibismuh/pwa";
 
 // S104 CSP regression fix — the middleware stamps a FRESH per-request nonce
@@ -77,6 +78,13 @@ export default function RootLayout({
         {children}
         <ServiceWorkerRegister />
         <Toaster />
+        {/* The sonner store — the studio surface (/studio + the shared scene
+            editor, music, and brand-kit components) emits feedback through
+            sonner's toast(), while the radix-backed <Toaster /> above only
+            renders useToast() callers. Without this mount every studio
+            toast was a silent no-op (caught by the studio-preview battery:
+            "Saved" was asserted, never rendered). */}
+        <SonnerToaster position="bottom-right" />
       </body>
     </html>
   );
