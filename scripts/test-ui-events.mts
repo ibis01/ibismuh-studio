@@ -145,6 +145,29 @@ await test("the catalog declares every browser event the components broadcast", 
   }
 });
 
+// --- the seek-slider keyboard law (G3 / briefing PART 2.3) ----------------------
+
+await test("the studio timeline seek slider owns its full keyboard set", () => {
+  // The /studio timeline-strip seek surface is a role="slider" with tabIndex;
+  // its keyboard law: ArrowLeft/ArrowRight step ±500 ms, Home/End jump to the
+  // edges, and every handled key is consumed via preventDefault so the
+  // overflow-x scroll container never double-acts on the same keypress.
+  const file = path.resolve(here, "..", "src/components/studio/timeline-strip.tsx");
+  const text = fs.readFileSync(file, "utf8");
+  ok(text.includes('role="slider"'), "seek surface must declare role=slider");
+  ok(/tabIndex=\{0\}/.test(text), "seek surface must be keyboard-focusable (tabIndex)");
+  ok(text.includes("aria-valuemin") && text.includes("aria-valuemax") && text.includes("aria-valuenow"),
+    "slider must carry the value triple");
+  for (const key of ["ArrowRight", "ArrowLeft", "Home", "End"]) {
+    ok(text.includes(`"${key}"`), `onKeyDown must handle ${key}`);
+  }
+  ok(text.includes("e.preventDefault()"), "handled keys must be consumed (preventDefault) before seeking");
+  ok(/if \(e\.key === "Home"\)\s*requestSeek\(0\)/.test(text), "Home must seek to the timeline start");
+  ok(/if \(e\.key === "End"\)\s*requestSeek\(total\)/.test(text), "End must seek to the timeline end");
+  // The scroll container keeps pointer/touch seek intact.
+  ok(text.includes("onPointerDown") && text.includes("onPointerMove"), "pointer seek must remain declared");
+});
+
 // --- teardown -------------------------------------------------------------------
 
 console.log(`\n${passed} passed, ${failed} failed${failures.length ? ":" : ""}`);

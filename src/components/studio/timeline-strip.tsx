@@ -150,8 +150,20 @@ export function TimelineStrip({ state, accentHex }: TimelineStripProps) {
         aria-valuenow={Math.round(timeMs)}
         tabIndex={0}
         onKeyDown={(e) => {
+          // Seek-slider keyboard law: arrows step ±500 ms, Home/End jump to
+          // the edges, and every handled key is consumed — the scroll
+          // container must never double-act on a key the slider owns.
+          const handled =
+            e.key === "ArrowRight" ||
+            e.key === "ArrowLeft" ||
+            e.key === "Home" ||
+            e.key === "End";
+          if (!handled) return;
+          e.preventDefault();
           if (e.key === "ArrowRight") requestSeek(Math.min(total, timeMs + 500));
           if (e.key === "ArrowLeft") requestSeek(Math.max(0, timeMs - 500));
+          if (e.key === "Home") requestSeek(0);
+          if (e.key === "End") requestSeek(total);
         }}
       >
         {!hasPlan ? (
