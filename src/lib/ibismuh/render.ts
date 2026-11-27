@@ -918,7 +918,9 @@ async function buildSegment(opts: {
     if (!fs.existsSync(slidePath))
       throw new Error(`Scene ${scene.index} has no slide image — the slide deck step was skipped`);
     const kineticClip = opts.slideKinetic?.clip ?? null;
-    if (kineticClip && fs.existsSync(kineticClip)) {
+    // kineticClip is a rendered slide artifact under the mounted data
+    // root — runtime bytes, never source; skip whole-project tracing.
+    if (kineticClip && fs.existsSync(/*turbopackIgnore: true*/ kineticClip)) {
       // The kinetic clip IS the scene's video — it passes through
       // unfiltered (this graph is audio-only), so the video map names the
       // INPUT stream. Mapping the story lane's [v] filter label here
@@ -2269,7 +2271,9 @@ export async function renderVideo(opts: RenderOptions): Promise<RenderResult> {
       // the captions pass below (it is a document-level edit, not a
       // segment-builder fact).
       const engineSeg = engineSegments?.[i] ?? null;
-      if (engineSeg && fs.existsSync(engineSeg)) {
+      // engineSeg is a rendered engine segment under the mounted data
+      // root — runtime bytes, never source; skip whole-project tracing.
+      if (engineSeg && fs.existsSync(/*turbopackIgnore: true*/ engineSeg)) {
         const kind = sceneKindOf(i);
         report(i, `Drawing the ${kind} scene ${i + 1} (its engine lane's own render)`);
         const segPath = path.join(tmpDir, `seg-${String(i + 1).padStart(2, "0")}.mp4`);

@@ -24,7 +24,11 @@ import { scratchDir, remove } from "@/lib/ibismuh/storage";
 async function invalidateRenders(videoId: string) {
   for (const f of ["final.mp4", "preview.mp4"]) {
     await remove(`${videoId}/${f}`).catch(() => {});
-    fs.rmSync(path.join(scratchDir(videoId), f), { force: true });
+    // The scratch dir is RUNTIME data (uploads/<videoId> under the mounted
+    // data root — docker-compose/fly volumes), never bundled source; the
+    // ignore keeps Turbopack from tracing the whole project into the
+    // standalone output for a path that does not exist at build time.
+    fs.rmSync(path.join(/*turbopackIgnore: true*/ scratchDir(videoId), f), { force: true });
   }
 }
 

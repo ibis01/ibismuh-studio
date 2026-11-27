@@ -256,7 +256,9 @@ export async function runVoiceoverJob(
         "short-thumb.png",
       ]) {
         await remove(`${videoId}/${f}`).catch(() => {});
-        fs.rmSync(path.join(videoDir(videoId), f), { force: true });
+        // videoDir is RUNTIME data (uploads/<videoId> under the mounted
+        // data root) — never bundled source; skip whole-project tracing.
+        fs.rmSync(path.join(/*turbopackIgnore: true*/ videoDir(videoId), f), { force: true });
       }
     }
 
@@ -967,7 +969,9 @@ async function buildEngineSegments(
         },
       });
       const file = res.scenes[0]?.file ?? null;
-      if (!file || !fs.existsSync(file)) {
+      // file is the engine's rendered artifact under the mounted data
+      // root — runtime bytes, never source; skip whole-project tracing.
+      if (!file || !fs.existsSync(/*turbopackIgnore: true*/ file)) {
         throw new Error(`the whiteboard engine returned no artifact for scene ${sceneIndex}`);
       }
       out[i] = file;
@@ -1015,7 +1019,9 @@ async function buildEngineSegments(
         },
       });
       const file = res.scenes[0]?.file ?? null;
-      if (!file || !fs.existsSync(file)) {
+      // file is the engine's rendered artifact under the mounted data
+      // root — runtime bytes, never source; skip whole-project tracing.
+      if (!file || !fs.existsSync(/*turbopackIgnore: true*/ file)) {
         throw new Error(`the graphics engine returned no artifact for scene ${sceneIndex}`);
       }
       out[i] = file;

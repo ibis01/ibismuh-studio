@@ -47,7 +47,9 @@ export function resolveTitleFontFile(): string | null {
   }
   for (const candidate of TITLE_FONT_CANDIDATES) {
     try {
-      if (fs.existsSync(candidate)) return candidate;
+      // candidates are deployment-mounted font paths (generated or volume
+    // provided) — not build-time source; skip whole-project tracing.
+    if (fs.existsSync(/*turbopackIgnore: true*/ candidate)) return candidate;
     } catch {
       /* stat failure → next candidate */
     }
