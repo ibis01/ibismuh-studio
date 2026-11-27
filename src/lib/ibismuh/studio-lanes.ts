@@ -1,4 +1,5 @@
-// video-lanes.ts — THE CANONICAL LANE REGISTRY (master plan §4.1, P1).
+// studio-lanes.ts — THE CANONICAL LANE REGISTRY for the /studio pipeline
+// (master plan §4.1, P1).
 //
 // Single source of truth for the six create presets. Before this module the
 // lane knowledge was scattered across the create wizard, the render-mode
@@ -16,6 +17,15 @@
 // against). It DECLARES the six create presets as contracts over those
 // catalogs and hosts the laws that keep the catalogs and the presets in
 // lockstep.
+//
+// THE SIBLING REGISTRY — a deliberate, law-guarded split: video-lanes.ts is
+// this module's twin for the /videos surface (same six contracts, imports
+// ./types instead of ./studio-catalogs, `accent` UI meta instead of
+// `accentHex`). The two must NEVER disagree on a contract field; the drift
+// law (scripts/test-lane-registry-drift.mts, `npm run test:lane-drift`) pins
+// the order, every contract field, the shared vocabularies, and the declared
+// UI divergence. A preset change lands in BOTH files in the same commit, or
+// the battery fails CI.
 
 import { FORMATS, RENDER_MODES } from "./studio-catalogs";
 

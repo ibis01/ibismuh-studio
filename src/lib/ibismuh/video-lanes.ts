@@ -19,6 +19,15 @@
 // brief-level catalog the API validates against). It DECLARES the six
 // create presets as contracts over those catalogs and hosts the laws that
 // keep the catalogs and the presets in lockstep.
+//
+// THE SIBLING REGISTRY — a deliberate, law-guarded split: studio-lanes.ts is
+// this module's twin for the /studio pipeline (same six contracts, imports
+// ./studio-catalogs instead of ./types, `accentHex` UI meta instead of
+// `accent`). The two must NEVER disagree on a contract field; the drift law
+// (scripts/test-lane-registry-drift.mts, `npm run test:lane-drift`) pins the
+// order, every contract field, the shared vocabularies, and the declared
+// UI divergence. A preset change lands in BOTH files in the same commit, or
+// the battery fails CI.
 
 import { FORMATS, RENDER_MODES } from "./types";
 
