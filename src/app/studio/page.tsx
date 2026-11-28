@@ -9,6 +9,11 @@
 // ("Planner pipeline preview") and never from the main nav, so a preview
 // can never present itself as the canonical studio.
 //
+// The decision record: docs/decisions/0001-studio-ownership.md (Master
+// plan Phase 3). Amending the adjudication requires amending that record
+// and e2e/studio-preview.spec.ts in the same commit — a silent fork of
+// the surfaces is a defect by definition.
+//
 // It shares the six-lane contract via ./studio-catalogs + studio-lanes.ts —
 // the drift law (scripts/test-lane-registry-drift.mts) keeps that contract
 // identical to the canonical registry.

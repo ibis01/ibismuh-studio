@@ -8122,3 +8122,16 @@ Work Log:
 
 Stage Summary:
 - Deliverable: the gate lives at src/proxy.ts under the current convention, the build log is asserted (not eyeballed), and the smoke's base image matches the build contract. Receipts: tsc 0; lint 0; unit battery 1078/0; live header receipts pinned.
+
+---
+Task ID: MasterPlan-Phase3
+Agent: main (Z.ai)
+Task: Master plan Phase 3 — the /studio ownership decision record (the fork-prevention law made durable).
+
+Work Log:
+- docs/decisions/0001-studio-ownership.md: the G2 adjudication ("/" canonical, /studio additive and subordinate) written as a decision record — status, the five laws (one quiet entry, honest identity, shared contract no fork, no second render engine, in-source adjudication), consequences (features land at / first; reversal requires amending this file + page.tsx + the e2e spec in one commit), and cross-references.
+- The in-source adjudication header (src/app/studio/page.tsx) now points at the record; the enforcement seams pre-exist and stay: e2e/studio-preview.spec.ts (default-deny, identity marker, main-nav absence, dashboard presence), the drift battery (test:lane-drift in the check chain), render-lane.ts admission.
+- The stale route-count figure in docs/audits/b0-ibismuh-studio-baseline.md ("App pages: 2") is deliberately left as written — a historical receipt is not rewritten; the decision record supersedes it explicitly.
+
+Stage Summary:
+- Deliverable: the ownership decision is discoverable in docs/, linked from the code it governs. No behavior change (doc + comment only); tsc 0, lint 0.
