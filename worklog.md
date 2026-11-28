@@ -646,7 +646,7 @@ Work Log:
 - Restarted sandbox dev server via scripts/restart-dev.py to wake the preview proxy after a transient 403 (preview host needs the dev server up).
 
 Stage Summary:
-- User apply path: `curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/ibismuh/story.ts -o ~/ibismuh-studio/src/lib/ibismuh/story.ts` then restart the local dev server (fuser -k 3000/tcp && npm run dev). After the patch, clicking "Generate Storyboard" again only paints scenes whose image file is missing — scenes 1-4 are skipped, scene 5+ resumes. Per-scene "重新生成" buttons still force a single scene to repaint as before.
+- User apply path: `curl -fsSL https://preview-chat-92cf2337-6ca5-4169-a0bc-3579414f698b.space-z.ai/ibismuh/story.ts -o ~/ibismuh-studio/src/lib/ibismuh/story.ts` then restart the local dev server (fuser -k 3000/tcp && npm run dev). After the patch, clicking "Generate Storyboard" again only paints scenes whose image file is missing — scenes 1-4 are skipped, scene 5+ resumes. Per-scene "regenerate" buttons (label quoted from the Chinese-language UI of that era) still force a single scene to repaint as before.
 - Reminders still pending: enable Settings → Studio access lock before sharing the public URL; optional ngrok free static domain for a permanent address; README/LICENSE; rm -rf ~/tf-pkg cleanup.
 
 ---
@@ -829,7 +829,7 @@ The transitions / BGM / Scene Studio feature set shipped functionally complete; 
 
 The one capability MoneyPrinterTurbo (and most rivals) don't ship: clone a speaker's voice from a short sample and narrate in it. Investigated first: the bundled Z.ai internal SDK API silently IGNORES `reference_audio` (probe: clone-shaped requests returned default-voice pacing — 4.67s vs jam's 6.19s — and no voice-management endpoints exist there). The real path is Zhipu's public platform: GLM-TTS-Clone creates a `voice_clone_*` id from a 3-30s sample (upload → `/files` purpose `voice-clone-input` → `/voice/clone`), and that id is a first-class `voice` value for `glm-tts`.
 
-- New TTS provider **zhipu** (open.bigmodel.cn, keyUrl bigmodel.cn): same 7 studio voices as Z.ai + every cloned voice. `sanitizeVoice` became clone-aware — zhipu passes `voice_clone_*` ids through; openai/zai fall back to their catalog so a clone never leaks where it can't speak. Verified against the live API: 401 with a fake key surfaces verbatim ("令牌已过期或验证不正确"), proving the full request path.
+- New TTS provider **zhipu** (open.bigmodel.cn, keyUrl bigmodel.cn): same 7 studio voices as Z.ai + every cloned voice. `sanitizeVoice` became clone-aware — zhipu passes `voice_clone_*` ids through; openai/zai fall back to their catalog so a clone never leaks where it can't speak. Verified against the live API: 401 with a fake key surfaces verbatim (a token-expired/auth-failure message, returned in Chinese by the provider), proving the full request path.
 - `voice-clone.ts` pipeline: ffprobe validation (real audio stream, ≥2s) → ffmpeg normalize to mono 24 kHz PCM-16, trimmed to the documented 30s window → platform upload → clone → VoiceProfile row + best-effort audition WAV cache. Caught + fixed a same-path ffmpeg read/write hazard (.wav sources staged and wrote `sample.wav`). All staging in `os.tmpdir()` (serverless-safe); SSRF-guarded URL mode reuses net-guard's pinned dispatcher.
 - API: `GET /api/voices`, `POST /api/voices/clone` (multipart; 409 with pointed setup guidance when the provider/key isn't configured — verified), `DELETE /api/voices/[id]` (platform delete best-effort, never blocks local removal — verified), `GET /api/voices/[id]/audition` (cached WAV, verified 229 KB round-trip). `/api/settings/voices` merges clones into the picker catalog + exposes `canClone`; preview flow is clone-aware (deleted clones preview as unknown, not silent fallback).
 - UI: 4th "Clone" tab in the video voice panel — sample picker, optional name + sample transcript, clone button with progress, cloned-voice manager (audition replay, delete), consent reminder, and a setup hint that names the exact Settings path. Every open voice picker live-refreshes via `VOICES_CHANGED_EVENT` (mock-profile E2E: clone appeared in the catalog as "Clone · Mock Cloned Voice", audition played, delete removed it, 404 on re-delete).
@@ -1052,7 +1052,7 @@ The pre-launch review found five billing production blockers. All five are fixed
 
 The user's ask: "voice cloning is very important to me". Cloning EXISTED (upload → selfhost/zhipu clone → voice picker) but synthesis required per-user setup (their laptop / Oracle VM / Zhipu key) — so on the preview deployment a cloned voice appeared but couldn't actually SPEAK. This sprint makes cloning work end-to-end with ZERO per-user setup, live on the preview URL, and turns the mechanism into a real operator feature.
 
-- **Probed the zero-setup options first.** The ambient Z.ai key (internal-api.z.ai) does NOT expose the Zhipu clone endpoints (`/files`, `/voice/clone` → 404) and is rejected by the public api.z.ai / open.bigmodel.cn endpoints (401 身份验证失败). Zero-config cloning via the platform key is therefore impossible — the self-hosted Chatterbox server is the only zero-cost path.
+- **Probed the zero-setup options first.** The ambient Z.ai key (internal-api.z.ai) does NOT expose the Zhipu clone endpoints (`/files`, `/voice/clone` → 404) and is rejected by the public api.z.ai / open.bigmodel.cn endpoints (401, auth-failed — verbatim Chinese response). Zero-config cloning via the platform key is therefore impossible — the self-hosted Chatterbox server is the only zero-cost path.
 
 - **Chatterbox Turbo inside the sandbox.** Installed `voice-server/.venv` (CPU-only torch 2.6.0 — chatterbox-tts 0.1.7 pins it exactly; the PyPI default pulls the 2.5 GB CUDA build and filled the disk before `pip cache purge` + `--index-url https://download.pytorch.org/whl/cpu` fixed it). The ORIGINAL model OOMs this 4 GB box at load (3 GB anonymous weights → exit 137). Two fixes landed in `voice_server.py`:
   - `--model chatterbox-turbo` — the distilled GPT2-medium + meanflow variant: **4.8-5.6× real-time vs 34-48×** for the original, and ~2.4 GB lighter.
@@ -1554,7 +1554,7 @@ TASKS.md (record), this entry.
 ## S42 (2026-11-06 UTC) — the upload that looked like a no-op
 
 **Trigger:** user report — replacing a scene's storyboard image with
-their own artwork in the Scene Studio ("上传自有图片") "doesn't work":
+their own artwork in the Scene Studio (the "upload your own image" control) "doesn't work":
 the dialog keeps showing the old AI-generated take after the upload.
 
 **Diagnosis (evidence-first):** the s29 route-e2e already proves the
@@ -4637,7 +4637,7 @@ that MEASURES the delivered narration pace instead of estimating it.
   projections. ADVISORY ONLY.
 
 The pins caught two things worth recording: the CJK fixture miscounted
-twice in review (市场 = 2 characters — the CODE was right both times),
+twice in review (a 2-char CJK word counted as 2 characters — the CODE was right both times),
 and the projection carried float noise (100 × 1.12 = 112.00000000000001)
 — now rounded to a tenth.
 
@@ -6863,7 +6863,7 @@ order, narration alignment — is the operator's next human step.
 - The external audit's #1 engineering priority was "finish W4". Slice 2 (glyph-outline text, decision §10.3's single-face route) starts with its foundation: the COMMITTED TABLE.
 - scripts/w4-generate-glyphs.py: the ONE place fontTools exists (not an npm dep). Pinned inputs — Caveat (OFL, vendored at public/fonts/caveat/ with its OFL.txt), weight 500 instanced from the variable font, ASCII 0x20–0x7E, 2dp precision — SVGPathPen outlines + advances emitted as src/lib/ibismuh/whiteboard/glyphs.ts (95 glyphs). Double-run byte-identical (--verify); receipt at docs/baselines/w4-glyph-table-receipt.json (font sha256, table sha256).
 - The runtime parses NO fonts: text-draw.ts grows textToGlyphPaths — pure layout (font-units → asset-space, y-flip, fixed 2dp, letterSpacing, width law without trailing spacing) reporting uncovered chars in `skipped` instead of guessing; the scheduler owns the marker-wipe fallback decision (honest degradation).
-- PROOF: 572 → 574 (the W4 slice-2 step-1 battery: the table hash pin — regeneration cannot land silently, full ASCII coverage, absolute M/L/Q/C/Z-only outlines, positive advances, exact advance/y-flip/spacing arithmetic, double-run byte-identity, honest skips incl. é/你, degenerate zero-size). eslint . clean repo-wide (the CI gate, not just touched files), tsc clean.
+- PROOF: 572 → 574 (the W4 slice-2 step-1 battery: the table hash pin — regeneration cannot land silently, full ASCII coverage, absolute M/L/Q/C/Z-only outlines, positive advances, exact advance/y-flip/spacing arithmetic, double-run byte-identity, honest skips incl. é and CJK chars, degenerate zero-size). eslint . clean repo-wide (the CI gate, not just touched files), tsc clean.
 - Honest edges: no kerning (GPOS) yet — plain advances (marker-hand tolerates it; noted for the fit check when the consumer lands); the table is 157KB of source (acceptable; it IS the artifact).
 - NOT YET (the rest of slice 2): the scheduler emitting draw_path rows for glyph-mode text assets, the SVG injection at the render seam, wb-page riding them, and the W1 harness receipt — the table has no callers, so rendered pixels are unchanged by construction; the harness gate runs when the consumer lands.
 
@@ -8237,3 +8237,19 @@ Work Log:
 
 Stage Summary:
 - Deliverable: the release gate is governed — records with status, the composite law machine-checked, the contract stamp pinned, CI gates declared and enforced, receipts committed. Receipts: gate GOVERNED (0 violations / 1 honest NOT VERIFIED); tsc 0; lint 0.
+
+---
+Task ID: ChineseCleanup
+Agent: main (Z.ai)
+Task: The zero-Chinese sweep — no CJK characters anywhere in the code, per the owner's directive.
+
+Work Log:
+- THE SCAN (comprehensive): every text file across src/, scripts/, e2e/, prisma/, mini-services/, docs/, root configs — planes scanned: CJK Unified (4E00-9FFF), Extension A (3400-4DBF), compatibility (F900-FAFF), punctuation (3000-303F), fullwidth forms (FF00-FFEF), Extension B (20000-2FFFF). All code, config, schema, workflow, script and markdown text is now CLEAN (zero matches).
+- WHAT WAS THERE (all deliberate CJK TEST FIXTURES, not stray text): test-unit.mts + s34-unit-probe.mts used literal CJK strings for the tokenizer laws (each CJK char is a word-equivalent; token estimates over-reserve CJK 1.5×). FIXTURES ESCAPED, NOT WEAKENED: "市场 崩盘" → \u5E02\u573A \u5D29\u76D8, "你好世界" → \u4F60\u597D\u4E16\u754C, "好" → \u597D, etc. — the SAME code points ride the assertions, so the laws are tested identically while the source carries zero CJK glyphs. Spot-verified: estimateInputTokens("\u4F60\u597D\u4E16\u754C") = 6 and "\u597D".repeat(6000) = 9000 exactly as before.
+- ONE GLYPH OF MINE: the Phase-4 toolbar used fullwidth ＋ (FF0B) — replaced with ASCII +.
+- THE RECEIPTS (historical journal + one audit doc): six quoted fragments translated to English — UI-label quotes became English descriptions, verbatim provider error responses (which arrived in Chinese) became described evidence ("returned in Chinese by the provider" / "verbatim Chinese response"). The evidence's substance is preserved; nothing is falsified. docs/audits/external-six-repo-reception.md: the quoted external-review phrase described in English.
+- NOT IN SCOPE (binary, not text): UI screenshots, golden MP4s, fixture PNGs and the handbook PDF contain rendered Chinese pixels from captured evidence — they are images, not code, and stay as captured.
+- VERIFICATION: full unit battery 1078 passed / 0 failed AFTER the fixture escaping; typecheck 0; lint 0.
+
+Stage Summary:
+- Deliverable: zero Chinese characters in any code/config/text file across the repository. Receipts: battery 1078/0 post-change; rescan clean.

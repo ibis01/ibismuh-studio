@@ -1571,8 +1571,9 @@ suiteStart("S92 narration pacing — measured, not guessed");
 
 await test("countWords: English tokens; CJK counts per character", () => {
   eq(countWords("The market crashed overnight."), 4, "whitespace tokens");
-  eq(countWords("市场 崩盘"), 4, "two CJK words = FOUR characters (each is a word-equivalent)");
-  eq(countWords("市场 crash"), 3, "two CJK chars + one English word");
+  const CJK_TWO_WORDS = "\u5E02\u573A \u5D29\u76D8"; // two 2-char CJK words (market crash), escaped — no literal CJK in source
+  eq(countWords(CJK_TWO_WORDS), 4, "two CJK words = FOUR characters (each is a word-equivalent)");
+  eq(countWords("\u5E02\u573A crash"), 3, "two CJK chars + one English word");
 });
 
 await test("sceneWpm: the real arithmetic, honest nulls", () => {
@@ -4745,13 +4746,14 @@ await test("estimateInputTokens: the ASCII chars/3 law is unchanged", async () =
 
 await test("estimateInputTokens: non-Latin scripts price ABOVE chars/3 (the S34 fix)", async () => {
   const { estimateInputTokens } = await import("../src/lib/ibismuh/spend.ts");
-  // The pre-S34 bug: "你好世界".length 4 → chars/3 = 2 tokens, but a real
+  // The pre-S34 bug: a 4-char CJK string .length 4 → chars/3 = 2 tokens, but a real
   // tokenizer bills ~4-6 for CJK — the $5 law broke on non-English content.
-  eq(estimateInputTokens("你好世界"), 6, "4 CJK chars → ceil(4×1.5) = 6");
+  eq(estimateInputTokens("\u4F60\u597D\u4E16\u754C"), 6, "4 CJK chars → ceil(4×1.5) = 6");
   eq(estimateInputTokens("あいうえお"), 8, "5 kana → ceil(5×1.5) = 8");
   eq(estimateInputTokens("한국어"), 5, "3 Hangul syllables → ceil(3×1.5) = 5");
   eq(estimateInputTokens("ก".repeat(10)), 15, "Thai → 1.5/char");
-  eq(estimateInputTokens("好".repeat(6000)), 9000, "6000 CJK chars → 9000 (was 2000 — the 4.5x under-reserve)");
+  const CJK_CHAR = "\u597D"; // one CJK char, escaped
+  eq(estimateInputTokens(CJK_CHAR.repeat(6000)), 9000, "6000 CJK chars → 9000 (was 2000 — the 4.5x under-reserve)");
   eq(estimateInputTokens("Привет"), 6, "Cyrillic → 1/char (6 chars, real ratio 2-4 ch/tok so 1/char is ≥)");
   eq(estimateInputTokens("مرحبا"), 5, "Arabic → 1/char");
   eq(estimateInputTokens("café"), 2, "accented Latin: 3 ASCII → 1, é → 1");
@@ -4769,7 +4771,7 @@ await test("estimateInputTokens: astral plane (emoji) counts as surrogate pairs 
 await test("estimateInputTokens: mixed-script text sums per class", async () => {
   const { estimateInputTokens } = await import("../src/lib/ibismuh/spend.ts");
   // 2 ASCII → 1; 2 CJK → 3; 1 emoji → 2 — total 6, every class at its own floor.
-  eq(estimateInputTokens("hi你好😀"), 6, "ascii+cjk+astral mix");
+  eq(estimateInputTokens("hi\u4F60\u597D\u{1F600}"), 6, "ascii+cjk+astral mix");
 });
 
 await test("estimateDispatchMicroUsd: same-length CJK input reserves strictly more than ASCII", async () => {
@@ -4778,7 +4780,7 @@ await test("estimateDispatchMicroUsd: same-length CJK input reserves strictly mo
   // the token math (the estimator's own heavy-payload rule), so the ASCII
   // side uses real prose shape.
   const ascii = estimateDispatchMicroUsd("gpt-6.1-sol", ["hello world ".repeat(500)]);
-  const cjk = estimateDispatchMicroUsd("gpt-6.1-sol", ["你好".repeat(3000)]);
+  const cjk = estimateDispatchMicroUsd("gpt-6.1-sol", ["\u4F60\u597D".repeat(3000)]);
   ok(cjk > ascii, `CJK dispatch reserves more (ascii ${ascii}µ$ < cjk ${cjk}µ$)`);
   // The input-side delta: 9000 vs 2000 tokens, each at 2 µ$ ($2 per 1M) =
   // exactly 14000µ$ (the output half is priced identically in both).

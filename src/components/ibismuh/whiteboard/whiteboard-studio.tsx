@@ -1351,7 +1351,7 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                     <button onClick={() => nudgeGroup(0, 20)} disabled={partLocked} className={btnFaint} title="Move the group down">↓</button>
                     <button onClick={() => nudgeGroup(20, 0)} disabled={partLocked} className={btnFaint} title="Move the group right">→</button>
                     <button onClick={duplicateGroup} disabled={partLocked} className={btnGhost} title="Place an independent copy of the whole compound">Duplicate</button>
-                    <button onClick={() => transformGroup(1.1, 0)} disabled={partLocked} className={btnFaint} title="Scale the whole group 10% up about its centroid (Recompose keeps it)">＋</button>
+                    <button onClick={() => transformGroup(1.1, 0)} disabled={partLocked} className={btnFaint} title="Scale the whole group 10% up about its centroid (Recompose keeps it)">+</button>
                     <button onClick={() => transformGroup(1 / 1.1, 0)} disabled={partLocked} className={btnFaint} title="Scale the whole group 10% down about its centroid (Recompose keeps it)">−</button>
                     <button onClick={() => transformGroup(1, 15)} disabled={partLocked} className={btnFaint} title="Rotate the whole group 15° clockwise about its centroid (Recompose keeps it)">⟳</button>
                     <button onClick={() => transformGroup(1, -15)} disabled={partLocked} className={btnFaint} title="Rotate the whole group 15° counterclockwise about its centroid (Recompose keeps it)">⟲</button>

@@ -56,7 +56,7 @@ import-lane work as three parallel projects (A: PNG-alpha sequences, D: WebM
 alpha video, F: sprite sheets). **Corrected at reception:** the three collapse
 into ONE import lane (S126) — one syntax minor extension, one QC lens set, one
 quota surface. Parallel pipelines are exactly what the shared-contract law
-forbids ("禁并行管线"); the lane is a lane, not three.
+forbids (the original external review's phrasing, in Chinese: parallel pipelines are forbidden); the lane is a lane, not three.
 
 Evaluation claims otherwise accepted: Effekseer as a future FX grammar donor
 (concept-level), OpenVDB as out-of-scope for the 2D roadmap (kept at

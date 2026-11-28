@@ -82,11 +82,11 @@ console.log("\n§1 script-aware input floors");
   check("ASCII law unchanged: 6000 ASCII chars → 2000 tokens",
     estimateInputTokens("a".repeat(6000)) === 2000, estimateInputTokens("a".repeat(6000)));
   check("CJK law: 6000 Han chars → 9000 tokens (was 2000 — the 4.5x under-reserve)",
-    estimateInputTokens("好".repeat(6000)) === 9000, estimateInputTokens("好".repeat(6000)));
+    estimateInputTokens("\u597D".repeat(6000)) === 9000, estimateInputTokens("\u597D".repeat(6000)));
   check("astral law: 100 emoji → 200 tokens",
     estimateInputTokens("😀".repeat(100)) === 200, estimateInputTokens("😀".repeat(100)));
   check("dispatch-level: same-length CJK text reserves strictly more µ$",
-    estimateDispatchMicroUsd("gpt-6.1-sol", ["好".repeat(6000)]) >
+    estimateDispatchMicroUsd("gpt-6.1-sol", ["\u597D".repeat(6000)]) >
       estimateDispatchMicroUsd("gpt-6.1-sol", ["a".repeat(6000)]));
   check("dispatch-level: base64 runs are stripped before token math (a giant image payload prices as one small text)",
     estimateDispatchMicroUsd("gpt-6.1-sol", ["data:image/png;base64," + "A".repeat(100_000)]) ===
