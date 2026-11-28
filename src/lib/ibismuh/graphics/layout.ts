@@ -111,6 +111,42 @@ export const ASPECT_POLICIES: Readonly<Record<GraphicsAspect, AspectPolicy>> = {
 
 const CHAR_W_RATIO = 0.55;
 const LINE_H_RATIO = 1.4;
+// THE ONE METRIC TABLE (master plan Phase 6, the single-source law): the
+// restatement in repair.ts is gone — the repair seam imports THESE. A
+// second table would drift and the collision/wrap gates would judge
+// different boxes than the repair solves against.
+export const GRAPHICS_CHAR_W_RATIO = CHAR_W_RATIO;
+export const GRAPHICS_LINE_H_RATIO = LINE_H_RATIO;
+
+// THE MEASURED-TYPE SEAM (Phase 6): the ratio model above is a declared
+// ESTIMATE — layout.ts's own comment names the day "until the estimator
+// is measured". This seam is that day's arrival, honestly additive: a
+// rich client (or the render proof harness) may install a REAL glyph
+// measurer; without one, every consumer falls back to the ratio model
+// byte-identically (the default law — no consumer behavior changes until
+// a measurer is actually installed). The seam is deliberately NOT
+// persisted anywhere: it is a per-process capability, the deterministic
+// battery always runs provider-less.
+export interface GraphicsTextMetricsProvider {
+  /** Width of one text line at sizePx (px) — the caller's real font. */
+  measure(text: string, sizePx: number): number;
+  /** The real face's line-height ratio; absent = the ratio model's 1.4. */
+  lineHeightRatio?: number;
+}
+let metricsProvider: GraphicsTextMetricsProvider | null = null;
+export function setTextMetricsProvider(p: GraphicsTextMetricsProvider | null): void {
+  metricsProvider = p;
+}
+/** Measured width of the widest line (px). Provider present → the real
+ *  measurement; absent → the conservative ratio model. */
+export function measureTextWidth(text: string, sizePx: number): number {
+  if (metricsProvider !== null) return metricsProvider.measure(text, sizePx);
+  return sizePx * CHAR_W_RATIO;
+}
+/** The active line-height ratio (provider's, else the model's). */
+export function activeLineHeightRatio(): number {
+  return metricsProvider?.lineHeightRatio ?? LINE_H_RATIO;
+}
 /** The compose chart box fraction + the chart label size — the estimator
  *  rides the SAME constants the renderer draws with (one estimate model,
  *  restated from compose.ts's DrawDefaults; the repair math needs them
@@ -171,9 +207,10 @@ export function estimateBox(el: GraphicsElement, doc: GraphicsDoc): EstimatedBox
   if (content !== null) {
     const size = textSizePx(el) * scale;
     const lines = textLines(el);
-    const longest = Math.max(...content.split("\n").map((l) => l.length), 1);
-    const w = Math.max(longest * size * CHAR_W_RATIO, 60);
-    const h = size * LINE_H_RATIO * lines;
+    const lines_ = content.split("\n");
+    const widest = Math.max(...lines_.map((l) => measureTextWidth(l, size)), size * CHAR_W_RATIO);
+    const w = Math.max(widest, 60);
+    const h = size * activeLineHeightRatio() * lines;
     return { x0: x - w / 2, y0: y - h / 2, x1: x + w / 2, y1: y + h / 2 };
   }
   const s = 120 * scale; // shapes/groups: the compose default mark band

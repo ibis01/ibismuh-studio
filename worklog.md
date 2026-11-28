@@ -8165,3 +8165,19 @@ Work Log:
 
 Stage Summary:
 - Deliverable: the pack dimension is real data with laws, not machinery. Receipts: catalog battery 31/0; tsc 0; lint 0.
+
+---
+Task ID: MasterPlan-Phase6
+Agent: main (Z.ai)
+Task: Master plan Phase 6 — graphics measured typography (the one metric table + the measured seam), the recipe contract fingerprint, and the chart-data provenance fields.
+
+Work Log:
+- THE ONE METRIC TABLE (single-source law): layout.ts now exports GRAPHICS_CHAR_W_RATIO / GRAPHICS_LINE_H_RATIO; repair.ts's restatement is deleted and rides the imports — the wrap math and the gate math judge the SAME boxes (the battery pins the absence of the literal 0.55 restatement).
+- THE MEASURED-TYPE SEAM: layout.ts gains an optional per-process GraphicsTextMetricsProvider (setTextMetricsProvider + measureTextWidth + activeLineHeightRatio). estimateBox uses it when installed; WITHOUT one, every box is the byte-identical ratio model (the default law — the deterministic batteries always run provider-less, pinned by the uninstall-restore law). The seam arrives honestly additive: no consumer changes behavior until a real measurer is installed.
+- THE RECIPE FINGERPRINT (the lane-contracts precedent): recipes-fingerprint.ts (server-only sibling — node:crypto lives here, the registry stays client-safe) computes a canonical sha256 over {version, recipes[...in closed-vocabulary order, sorted-key bodies]} — GRAPHICS_RECIPE_VERSION = 1. A receipt produced under stamp F stays reproducible exactly while the registry still computes F; body changes must bump the version, never sneak.
+- THE DATA PROVENANCE: BarDatum.source + CounterPayload.source (optional citation strings, provenanceCharsMax = 200 wall) — the validator carries them intact, drops oversized citations with a NAMED warning (tolerant-parse law, never a refusal), and the WRITER now serializes them (en route fix: the writer would have silently dropped provenance on every save — caught by the round-trip law). QC can see a citation's absence; nothing renders differently until a designed attribution slice lands.
+- HOUSEKEEPING: scripts/s150-typography-proof.mts deleted — it imported a src/lib/tubeforge/ tree that no longer exists (dead since the rename); its historical references in docs/design + docs/audits stay as written (receipts are not rewritten).
+- THE BATTERY (test-graphics-design-system, +6 laws): the one-table pin, the seam bite + restore-exactness, the fingerprint determinism + version, provenance round-trip integrity, the named provenance wall, solver provider-less determinism — 49 passed / 0 failed.
+
+Stage Summary:
+- Deliverable: the estimator is single-sourced and measure-capable, recipes carry a tamper-evident contract stamp, chart data can cite its sources and survives every save. Receipts: tsc 0; lint 0; graphics battery 49/0.

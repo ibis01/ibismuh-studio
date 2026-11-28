@@ -285,9 +285,23 @@ export interface CounterPayload {
   /** "%", "×", "k" … rendered after the number. */
   unit?: string;
   decimals?: 0 | 1 | 2;
+  /** Master plan Phase 6 — DATA PROVENANCE: where this number comes from
+   *  (a citation, a dataset name, a scene-narration reference). Optional
+   *  (absent = the author owes the audience nothing machine-checkable
+   *  yet), but the validator carries it intact and the QC layer can see
+   *  its absence. Bounded by the provenance wall (200 chars). */
+  source?: string;
 }
 
-export interface BarDatum { label: string; value: number; } // value finite, ≥ 0
+export interface BarDatum {
+  label: string;
+  /** finite, ≥ 0. */
+  value: number;
+  /** Master plan Phase 6 — DATA PROVENANCE: where this row's number comes
+   *  from (bounded by the provenance wall, 200 chars). Optional; carried
+   *  intact by the validator; visible to QC by its absence. */
+  source?: string;
+}
 
 export interface BarPayload {
   /** 1..GRAPHICS_BUDGETS.barDataMax rows. */
@@ -516,6 +530,8 @@ export const GRAPHICS_BUDGETS = {
    *  OPTIONAL decorations (counter/bar unit) warning-drop instead (the
    *  house tolerance law — decorations are droppable, content is not). */
   textCharsMax: 2_000,
+  /** Master plan Phase 6 — the data-provenance citation wall (chars). */
+  provenanceCharsMax: 200,
   /** S128 (the review's F2) — max chars per icon path-data string. The
    *  iconPathCommandBudget counts COMMANDS, not characters: a single
    *  command's coordinate literal could carry an unbounded digit run
@@ -612,8 +628,8 @@ function parseRecipeField(raw: unknown, where: string, errors: string[]): string
 const ROUTING_KEYS = new Set(["suggestedEngine", "confidence", "reason"]);
 
 const TEXT_PAYLOAD_KEYS = new Set(["text", "sizePx", "weight", "color", "align"]);
-const COUNTER_PAYLOAD_KEYS = new Set(["from", "to", "unit", "decimals"]);
-const BAR_PAYLOAD_KEYS = new Set(["data", "unit", "max", "horizontal"]);
+const COUNTER_PAYLOAD_KEYS = new Set(["from", "to", "unit", "decimals", "source"]);
+const BAR_PAYLOAD_KEYS = new Set(["data", "unit", "max", "horizontal", "source"]);
 const ICON_PAYLOAD_KEYS = new Set(["paths", "color", "strokeWidth"]);
 const CALLOUT_PAYLOAD_KEYS = new Set(["text", "pointsAt"]);
 const SHAPE_PAYLOAD_KEYS = new Set(["kind", "w", "h", "r", "stroke", "fill", "strokeWidth"]);
@@ -1166,6 +1182,11 @@ function parseCounterPayload(raw: unknown, where: string, warnings: string[], er
   const decimals = num(raw.decimals);
   if (decimals === 0 || decimals === 1 || decimals === 2) out.decimals = decimals;
   else if (raw.decimals !== undefined) warnings.push(`${where}: decimals dropped — must be 0|1|2`);
+  const source = str(raw.source);
+  if (source !== null && source.length > GRAPHICS_BUDGETS.provenanceCharsMax) {
+    warnings.push(`${where}: counter source dropped — ${source.length} chars exceeds the provenance wall (${GRAPHICS_BUDGETS.provenanceCharsMax})`);
+  } else if (source !== null) out.source = source;
+  else if (raw.source !== undefined) warnings.push(`${where}: counter source dropped — not a string`);
   warnUnknownKeys(raw, COUNTER_PAYLOAD_KEYS, `${where} counter payload`, warnings);
   return out;
 }
@@ -1202,7 +1223,11 @@ function parseBarPayload(raw: unknown, where: string, warnings: string[], errors
       );
       return null;
     }
-    data.push({ label, value });
+    const rowSource = str(row.source);
+    if (rowSource !== null && rowSource.length > GRAPHICS_BUDGETS.provenanceCharsMax) {
+      warnings.push(`${where}: bar row source dropped — ${rowSource.length} chars exceeds the provenance wall (${GRAPHICS_BUDGETS.provenanceCharsMax})`);
+    }
+    data.push({ label, value, ...(rowSource !== null && rowSource.length <= GRAPHICS_BUDGETS.provenanceCharsMax ? { source: rowSource } : {}) });
   }
   const out: BarPayload = { data };
   const unit = str(raw.unit);
@@ -1936,6 +1961,7 @@ function serializePayload(kind: GraphicsElementKind, el: GraphicsElement): Rec |
       const out: Rec = { from: p.from, to: p.to };
       if (p.unit !== undefined) out.unit = p.unit;
       if (p.decimals !== undefined) out.decimals = p.decimals;
+      if (p.source !== undefined) out.source = p.source;
       return out;
     }
     case "bar":
@@ -1943,7 +1969,7 @@ function serializePayload(kind: GraphicsElementKind, el: GraphicsElement): Rec |
       if (el.bar === undefined) return null;
       const p = el.bar;
       const out: Rec = {
-        data: p.data.map((d) => ({ label: d.label, value: d.value })),
+        data: p.data.map((d) => ({ label: d.label, value: d.value, ...(d.source !== undefined ? { source: d.source } : {}) })),
       };
       if (p.unit !== undefined) out.unit = p.unit;
       if (p.max !== undefined) out.max = p.max;

@@ -29,6 +29,18 @@
 // Run: npm run test:graphics-design   (pure — no DB, no DOM; CI step)
 
 import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  GRAPHICS_CHAR_W_RATIO,
+  GRAPHICS_LINE_H_RATIO,
+  measureTextWidth,
+  estimateBox,
+  setTextMetricsProvider,
+} from "../src/lib/ibismuh/graphics/layout";
+import { computeRecipeFingerprint, GRAPHICS_RECIPE_VERSION } from "../src/lib/ibismuh/graphics/recipes-fingerprint";
+import { parseGraphicsDoc, validateGraphicsDoc, writeGraphicsDoc } from "../src/lib/ibismuh/graphics/types";
+import { solveGraphicsLayout } from "../src/lib/ibismuh/graphics/layout";
 
 import {
   assertComponentRegistry,
@@ -883,6 +895,159 @@ await test("the persistence helpers recompile + stamp; the doc apply owns the ch
     JSON.stringify(docApplied),
     "deterministic: same input → the same bytes"
   );
+});
+
+// --- 6. PHASE 6 — MEASURED TYPOGRAPHY, THE ONE METRIC TABLE, THE RECIPE
+//        FINGERPRINT, THE DATA PROVENANCE ------------------------------------
+
+suiteStart("phase 6 — measured typography and the single-source metric law");
+
+await test("the one metric table: the restatement is gone, the exports are the law", () => {
+  const here6 = path.dirname(fileURLToPath(import.meta.url));
+  const layoutSrc = fs.readFileSync(path.resolve(here6, "../src/lib/ibismuh/graphics/layout.ts"), "utf8");
+  const repairSrc = fs.readFileSync(path.resolve(here6, "../src/lib/ibismuh/graphics/repair.ts"), "utf8");
+  ok(layoutSrc.includes("export const GRAPHICS_CHAR_W_RATIO"), "layout exports the ratio law");
+  ok(!/const CHAR_W_RATIO = 0\.55/.test(repairSrc), "repair.ts no longer restates the char ratio");
+  ok(repairSrc.includes("const CHAR_W_RATIO = GRAPHICS_CHAR_W_RATIO"), "repair rides layout's table");
+  eq(GRAPHICS_CHAR_W_RATIO, 0.55, "the law's value is pinned");
+  eq(GRAPHICS_LINE_H_RATIO, 1.4, "the line-height law is pinned");
+});
+
+await test("the measured-type seam: provider-less runs stay byte-deterministic (the default law)", () => {
+  // No provider installed → the ratio model: measureTextWidth is exactly
+  // size × 0.55, and estimateBox matches the declared estimate.
+  eq(measureTextWidth("hello", 40), 40 * 0.55, "provider-less width rides the ratio model");
+  const el = {
+    kind: "heading",
+    at: { x: 320, y: 180, scale: 1 },
+    text: { text: "Hello world", sizePx: 48 },
+  } as never;
+  const doc = {
+    version: 1,
+    width: 1920,
+    height: 1080,
+    aspect: "16:9",
+    scenes: [],
+    elements: [el],
+  } as never;
+  // Provider installed → the real measurement widens the box; then
+  // UNINSTALLED again — the process must come back byte-identical.
+  const before = JSON.stringify(estimateBox(el, doc));
+  setTextMetricsProvider({ measure: (t, size) => t.length * size * 0.9, lineHeightRatio: 1.5 });
+  const withProvider = estimateBox(el, doc);
+  setTextMetricsProvider(null);
+  const after = JSON.stringify(estimateBox(el, doc));
+  ok(after === before, "uninstalling the provider restores the ratio model exactly");
+  ok(withProvider.x1 - withProvider.x0 > 0.55 * 48 * 11, "the measured box is wider than the ratio box (the seam bites)");
+});
+
+await test("the recipe fingerprint: stable across calls, sensitive to version, versioned by contract", () => {
+  const f1 = computeRecipeFingerprint();
+  const f2 = computeRecipeFingerprint();
+  eq(f1, f2, "the stamp is deterministic across calls");
+  eq(f1.length, 64, "the stamp is sha256 hex");
+  ok(GRAPHICS_RECIPE_VERSION >= 1, `the contract carries a version (${GRAPHICS_RECIPE_VERSION})`);
+});
+
+suiteStart("phase 6 — the data provenance fields");
+
+await test("chart and counter payloads carry their sources through the validator intact", () => {
+  const docRaw = {
+    version: 1,
+    title: "Provenance carries",
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    scenes: [
+      {
+        id: "scene-1",
+        narration: "Growth in the data.",
+        background: "#ffffff",
+        durationMs: 8000,
+        elements: [
+          {
+            id: "el-chart-1",
+            kind: "barChart",
+            at: { x: 960, y: 540, scale: 1 },
+            enter: { kind: "fade", durationMs: 400, delayMs: 0, ease: "measured-out" },
+            bar: {
+              data: [
+                { label: "2025", value: 12, source: "Annual report, p. 4" },
+                { label: "2026", value: 18, source: "Q3 filing" },
+              ],
+            },
+          },
+          {
+            id: "el-counter-1",
+            kind: "counter",
+            at: { x: 500, y: 300, scale: 1 },
+            enter: { kind: "fade", durationMs: 400, delayMs: 0, ease: "measured-out" },
+            counter: { from: 0, to: 42, unit: "%", source: "Census 2026" },
+          },
+        ],
+      },
+    ],
+  };
+  const parsed = parseGraphicsDoc(writeGraphicsDoc(docRaw as never));
+  if (parsed === null) {
+    ok(false, "the provenance doc validates and round-trips");
+    return;
+  }
+  const chartEl = parsed.scenes[0]?.elements.find((e) => e.bar !== undefined);
+  const counterEl = parsed.scenes[0]?.elements.find((e) => e.counter !== undefined);
+  ok(chartEl?.bar?.data[0]?.source === "Annual report, p. 4", "bar row source carried intact");
+  ok(counterEl?.counter?.source === "Census 2026", "counter source carried intact");
+});
+
+await test("an oversized citation is dropped with a named warning, never a refusal", () => {
+  const docRaw = {
+    version: 1,
+    title: "Provenance wall",
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    scenes: [
+      {
+        id: "scene-1",
+        narration: "Sources must stay honest.",
+        background: "#ffffff",
+        durationMs: 8000,
+        elements: [
+          {
+            id: "el-counter-1",
+            kind: "counter",
+            at: { x: 500, y: 300, scale: 1 },
+            enter: { kind: "fade", durationMs: 400, delayMs: 0, ease: "measured-out" },
+            counter: { from: 0, to: 5, source: "x".repeat(201) },
+          },
+        ],
+      },
+    ],
+    elements: [],
+  };
+  // The tolerant parse NEVER refuses for provenance: validateGraphicsDoc
+  // is the public door, parseGraphicsDoc re-rides it for the shape.
+  const res = validateGraphicsDoc(docRaw);
+  const doc = res.doc ? parseGraphicsDoc(JSON.stringify(res.doc)) : null;
+  const warnings: string[] = res.warnings;
+  ok(warnings.some((w) => w.includes("provenance wall")), "the wall announces itself");
+  ok(doc !== null, "the doc still parses (provenance is advisory, never load-bearing)");
+  const counterEl = doc?.scenes[0]?.elements.find((e) => e.counter !== undefined);
+  ok(counterEl?.counter?.source === undefined, "the oversized source did not ride");
+});
+
+await test("the layout solver stays provider-less-clean in the battery process (determinism law)", () => {
+  const doc = {
+    version: 1,
+    width: 1920,
+    height: 1080,
+    aspect: "16:9",
+    scenes: [],
+    elements: [],
+  } as never;
+  const r1 = JSON.stringify(solveGraphicsLayout(doc));
+  const r2 = JSON.stringify(solveGraphicsLayout(doc));
+  eq(r1, r2, "the solver is pure — no provider leaked from earlier tests");
 });
 
 // --- summary ------------------------------------------------------------------

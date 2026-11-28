@@ -41,6 +41,8 @@ import {
   type EstimatedBox,
   type LayoutFinding,
   type LayoutSolveReport,
+  GRAPHICS_CHAR_W_RATIO,
+  GRAPHICS_LINE_H_RATIO,
 } from "./layout";
 
 /** The clearance a reposition leaves between the two boxes (px). */
@@ -48,8 +50,11 @@ const REPAIR_PAD_PX = 12;
 /** The wrap target: a fraction of the safe width the longest line must
  *  fit (the reading-comfort bound the 16:9 compose implicitly rides). */
 const WRAP_WIDTH_FRACTION = 0.6;
-const CHAR_W_RATIO = 0.55;
-const LINE_H_RATIO = 1.4;
+// Phase 6 single-source law: the ratios ride layout.ts's ONE table — the
+// restatement is deleted, the wrap math and the gate math now judge the
+// SAME boxes.
+const CHAR_W_RATIO = GRAPHICS_CHAR_W_RATIO;
+const LINE_H_RATIO = GRAPHICS_LINE_H_RATIO;
 
 // ---------------------------------------------------------------------------
 // The proposals
