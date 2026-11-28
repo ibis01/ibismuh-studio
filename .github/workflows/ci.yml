@@ -55,6 +55,10 @@ on:
     # invalid glob that silently narrowed push coverage (branch pushes never
     # fired the battery; main kept working only because the PR lane and the
     # coincidental glob behavior aligned). Restored to the documented list.
+    # Phase 1 repair (master plan after 941a6ee): the "restore" above never
+    # actually landed a valid glob — the line still parsed as the literal
+    # string "ain]", which matches NO branch, so push coverage stayed
+    # narrowed exactly as described. Now it is a real single-item list.
     branches: [main]
   pull_request:
   # S128 (the PR #24 integration review, 2026-11-15): the Docker production
@@ -210,6 +214,15 @@ jobs:
 
       - name: Install dependencies (postinstall bootstraps SQLite + Prisma)
         run: npm ci
+
+      - name: Proxy convention guard (Phase 0, source-level)
+        # Master plan after 941a6ee, Phase 0: the dual-convention blocker
+        # (src/middleware.ts + src/proxy.ts together) kills `next build`
+        # outright. The build-log guard in the build job catches the
+        # deprecation WARNING; this source assertion catches the FILE SET
+        # itself, before any battery spends a minute on a tree that cannot
+        # build. Same auditor locally and in CI.
+        run: npm run test:proxy-convention
 
       - name: Typecheck
         run: npm run typecheck
@@ -387,6 +400,19 @@ jobs:
         # gate has not run yet); a REAL violation fails the push.
         run: node --import tsx scripts/release-gate.mts
 
+      # Phase 1 (master plan after 941a6ee): the governance receipts ride out
+      # as artifacts too — a red push carries its own evidence; a reviewer
+      # does not need a clone to reconstruct the verdict.
+      - name: Upload governance receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governance-receipts
+          path: |
+            docs/baselines/release-gate-*.json
+            docs/baselines/mp7-lane-manifest-*.json
+          if-no-files-found: ignore
+
   build:
     name: Production build
     runs-on: ubuntu-24.04
@@ -433,6 +459,17 @@ jobs:
             exit 1
           fi
           echo "guard PASS: zero dynamic-fs tracing warnings, zero convention deprecations"
+
+      # Phase 1 (master plan after 941a6ee): the audited build log itself is
+      # an artifact — the build-log guard above is only as trustworthy as the
+      # log it read.
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
+          if-no-files-found: error
 
   coverage:
     name: Money-path coverage
@@ -764,6 +801,17 @@ jobs:
           path: |
             test-results/log-classification.json
             test-results/e2e-server.log
+          if-no-files-found: ignore
+
+      # Phase 1 (master plan after 941a6ee): a red browser test must be
+      # debuggable from the artifact (trace.zip + error-context.md), not
+      # from a local re-run.
+      - name: Upload E2E failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-artifacts
+          path: test-results
           if-no-files-found: ignore
 
       # S87 slice 5 — the §4.C acceptance battery (the Universal Timeline

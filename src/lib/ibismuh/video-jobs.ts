@@ -76,6 +76,7 @@ import {
 import { expectedCutsForTimeline } from "./render-qc";
 import type { ExpectedCuts } from "./render-qc";
 import { log } from "./log";
+import { writeRenderFailureState } from "./render-failure-state";
 import { applyQcPolicy, qcEnforcementMode } from "./qc-policy";
 import { parsePlan, getApprovedAudioMap } from "./director-plan";
 import { parseTimeline, docSceneSettings, type DocSceneSettings } from "./timeline";
@@ -412,24 +413,14 @@ export async function runStoryboardJob(videoId: string): Promise<void> {
       painted === null
         ? { error: message }
         : { hasStoryboard: painted, error: message };
-    const writeFailureState = () =>
-      db.video
-        .update({ where: { id: videoId }, data: failData })
-        .catch(async () => {
-          await new Promise((r) => setTimeout(r, 500));
-          return db.video.update({ where: { id: videoId }, data: failData }).catch(() => {});
-        });
-    await writeFailureState();
-    await db.activity.create({
-      data: {
-        organizationId: video.organizationId,
-        userId: ctx.userId,
-        videoId,
-        stage: "storyboard",
-        level: "error",
-        message: `Storyboard failed: ${message}`,
-      },
-    }).catch(() => {});
+    await writeRenderFailureState({
+      videoId,
+      organizationId: video.organizationId,
+      userId: ctx.userId,
+      stage: "storyboard",
+      data: failData,
+      message: `Storyboard failed: ${message}`,
+    });
     throw err;
   }
 }
@@ -589,24 +580,14 @@ export async function runSceneJob(
     const message = errorText(err, "Scene edit failed");
     // S136 — the S135 ORDER REPAIR, ported to the scene lane (the receipt
     // guard: video row FIRST with a bounded retry, Activity best-effort).
-    const writeFailureState = () =>
-      db.video
-        .update({ where: { id: videoId }, data: { error: message } })
-        .catch(async () => {
-          await new Promise((r) => setTimeout(r, 500));
-          return db.video.update({ where: { id: videoId }, data: { error: message } }).catch(() => {});
-        });
-    await writeFailureState();
-    await db.activity.create({
-      data: {
-        organizationId: video.organizationId,
-        userId: ctx.userId,
-        videoId,
-        stage: "storyboard",
-        level: "error",
-        message: `Scene ${sceneIndex} ${mode === "edit" ? "edit" : "re-roll"} failed: ${message}`,
-      },
-    }).catch(() => {});
+    await writeRenderFailureState({
+      videoId,
+      organizationId: video.organizationId,
+      userId: ctx.userId,
+      stage: "storyboard",
+      data: { error: message },
+      message: `Scene ${sceneIndex} ${mode === "edit" ? "edit" : "re-roll"} failed: ${message}`,
+    });
     throw err;
   }
 }
@@ -1238,8 +1219,9 @@ export async function runRenderJob(
     const painted = await storyboardComplete(videoId, scenes).catch(() => false);
     if (!painted)
       throw new Error("Generate the storyboard first — there is no scene art yet");
+    // Phase 2 (master plan after 941a6ee) — guarded: a deleted row matches zero rows, no P2025 print.
     await db.video
-      .update({ where: { id: videoId }, data: { hasStoryboard: true } })
+      .updateMany({ where: { id: videoId }, data: { hasStoryboard: true } })
       .catch(() => {});
   }
   if (!video.hasVoiceover)
@@ -1543,7 +1525,8 @@ export async function runRenderJob(
     }
   } catch (err) {
     if (err instanceof JobCancelledError) {
-      await db.video.update({ where: { id: videoId }, data: { error: null } });
+      // Phase 2 — guarded: a deleted row matches zero rows, no P2025 print.
+      await db.video.updateMany({ where: { id: videoId }, data: { error: null } });
       await db.activity.create({
         data: {
           organizationId: video.organizationId,
@@ -1567,26 +1550,14 @@ export async function runRenderJob(
     // clicking Render instead of Generate voice. The refusal heals the flag:
     // the UI flips to the honest "Generate voice" state, the export bundle's
     // chip stops showing a green checkmark for a file that does not exist.
-    const writeFailureState = () =>
-      db.video
-        .update({ where: { id: videoId }, data: voiceoverGateFailurePatch(message) })
-        .catch(async () => {
-          await new Promise((r) => setTimeout(r, 500));
-          return db.video
-            .update({ where: { id: videoId }, data: voiceoverGateFailurePatch(message) })
-            .catch(() => {});
-        });
-    await writeFailureState();
-    await db.activity.create({
-      data: {
-        organizationId: video.organizationId,
-        userId: ctx.userId,
-        videoId,
-        stage: "render",
-        level: "error",
-        message: `Render failed: ${message}`,
-      },
-    }).catch(() => {});
+    await writeRenderFailureState({
+      videoId,
+      organizationId: video.organizationId,
+      userId: ctx.userId,
+      stage: "render",
+      data: voiceoverGateFailurePatch(message),
+      message: `Render failed: ${message}`,
+    });
     throw err;
   }
 }
@@ -1718,26 +1689,14 @@ export async function runShortJob(
     // S136 — the S135 receipt guard, ported to the short lane. The
     // voiceover-gate healing rides along: a short refuses on the same
     // per-scene WAV truth the full render does.
-    const writeFailureState = () =>
-      db.video
-        .update({ where: { id: videoId }, data: voiceoverGateFailurePatch(message) })
-        .catch(async () => {
-          await new Promise((r) => setTimeout(r, 500));
-          return db.video
-            .update({ where: { id: videoId }, data: voiceoverGateFailurePatch(message) })
-            .catch(() => {});
-        });
-    await writeFailureState();
-    await db.activity.create({
-      data: {
-        organizationId: video.organizationId,
-        userId: ctx.userId,
-        videoId,
-        stage: "short",
-        level: "error",
-        message: `Short render failed: ${message}`,
-      },
-    }).catch(() => {});
+    await writeRenderFailureState({
+      videoId,
+      organizationId: video.organizationId,
+      userId: ctx.userId,
+      stage: "short",
+      data: voiceoverGateFailurePatch(message),
+      message: `Short render failed: ${message}`,
+    });
     throw err;
   }
 }
@@ -1756,24 +1715,14 @@ export async function runConvertJob(videoId: string): Promise<void> {
   } catch (err) {
     const message = errorText(err, "Conversion failed");
     // S136 — the S135 receipt guard, ported to the convert lane.
-    const writeFailureState = () =>
-      db.video
-        .update({ where: { id: videoId }, data: { error: message } })
-        .catch(async () => {
-          await new Promise((r) => setTimeout(r, 500));
-          return db.video.update({ where: { id: videoId }, data: { error: message } }).catch(() => {});
-        });
-    await writeFailureState();
-    await db.activity.create({
-      data: {
-        organizationId: video.organizationId,
-        userId: ctx.userId,
-        videoId,
-        stage: "convert",
-        level: "error",
-        message: `Scene conversion failed: ${message}`,
-      },
-    }).catch(() => {});
+    await writeRenderFailureState({
+      videoId,
+      organizationId: video.organizationId,
+      userId: ctx.userId,
+      stage: "convert",
+      data: { error: message },
+      message: `Scene conversion failed: ${message}`,
+    });
     throw err;
   }
 }
@@ -1788,7 +1737,8 @@ export async function runVerifyJob(videoId: string): Promise<void> {
     await verifyNarration(videoId);
   } catch (err) {
     const message = errorText(err, "Narration check failed");
-    await db.video.update({ where: { id: videoId }, data: { error: message } });
+    // Phase 2 (master plan after 941a6ee) — guarded: a deleted row matches zero rows, no P2025 print.
+    await db.video.updateMany({ where: { id: videoId }, data: { error: message } });
     await db.activity.create({
       data: {
         organizationId: video.organizationId,
@@ -1830,7 +1780,8 @@ export async function runCommentsJob(videoId: string): Promise<void> {
     });
   } catch (err) {
     const message = errorText(err, "Engagement kit failed");
-    await db.video.update({ where: { id: videoId }, data: { error: message } });
+    // Phase 2 (master plan after 941a6ee) — guarded: a deleted row matches zero rows, no P2025 print.
+    await db.video.updateMany({ where: { id: videoId }, data: { error: message } });
     await db.activity.create({
       data: {
         organizationId: video.organizationId,
@@ -1890,7 +1841,8 @@ export async function runContinuityJob(videoId: string): Promise<void> {
     await runContinuityCheck(videoId);
   } catch (err) {
     const message = errorText(err, "Continuity check failed");
-    await db.video.update({ where: { id: videoId }, data: { error: message } });
+    // Phase 2 (master plan after 941a6ee) — guarded: a deleted row matches zero rows, no P2025 print.
+    await db.video.updateMany({ where: { id: videoId }, data: { error: message } });
     await db.activity.create({
       data: {
         organizationId: video.organizationId,
@@ -1929,7 +1881,8 @@ export async function runConsistencyJob(
     }
   } catch (err) {
     const message = errorText(err, "Consistency check failed");
-    await db.video.update({ where: { id: videoId }, data: { error: message } });
+    // Phase 2 (master plan after 941a6ee) — guarded: a deleted row matches zero rows, no P2025 print.
+    await db.video.updateMany({ where: { id: videoId }, data: { error: message } });
     await db.activity.create({
       data: {
         organizationId: video.organizationId,
@@ -2220,7 +2173,8 @@ export async function runSlideJob(entityId: string): Promise<void> {
     });
   } catch (err) {
     const message = errorText(err, "Slide redesign failed");
-    await db.video.update({ where: { id: videoId }, data: { error: message } });
+    // Phase 2 (master plan after 941a6ee) — guarded: a deleted row matches zero rows, no P2025 print.
+    await db.video.updateMany({ where: { id: videoId }, data: { error: message } });
     await db.activity.create({
       data: {
         organizationId: video.organizationId,
@@ -2509,7 +2463,8 @@ export async function runWhiteboardJob(
     });
   } catch (err) {
     if (err instanceof JobCancelledError) {
-      await db.video.update({ where: { id: videoId }, data: { error: null } });
+      // Phase 2 — guarded: a deleted row matches zero rows, no P2025 print.
+      await db.video.updateMany({ where: { id: videoId }, data: { error: null } });
       await db.activity
         .create({
           data: {
@@ -2524,7 +2479,8 @@ export async function runWhiteboardJob(
       throw err;
     }
     const message = errorText(err, "Whiteboard render failed");
-    await db.video.update({ where: { id: videoId }, data: { error: message } });
+    // Phase 2 (master plan after 941a6ee) — guarded: a deleted row matches zero rows, no P2025 print.
+    await db.video.updateMany({ where: { id: videoId }, data: { error: message } });
     await db.activity
       .create({
         data: {
@@ -2751,7 +2707,8 @@ export async function runGraphicsJob(
     });
   } catch (err) {
     if (err instanceof JobCancelledError) {
-      await db.video.update({ where: { id: videoId }, data: { error: null } });
+      // Phase 2 — guarded: a deleted row matches zero rows, no P2025 print.
+      await db.video.updateMany({ where: { id: videoId }, data: { error: null } });
       await db.activity
         .create({
           data: {
@@ -2766,7 +2723,8 @@ export async function runGraphicsJob(
       throw err;
     }
     const message = errorText(err, "Graphics render failed");
-    await db.video.update({ where: { id: videoId }, data: { error: message } });
+    // Phase 2 (master plan after 941a6ee) — guarded: a deleted row matches zero rows, no P2025 print.
+    await db.video.updateMany({ where: { id: videoId }, data: { error: message } });
     await db.activity
       .create({
         data: {

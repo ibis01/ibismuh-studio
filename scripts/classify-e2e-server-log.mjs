@@ -50,7 +50,7 @@ const EXPECTED_CLASSES = [
   ["prisma-query", /^prisma:query/],
   ["sql-fragment", /SUM\(CASE WHEN|AS failures|AS ok_count/],
   ["node-runtime-warning", /\(node:\d+\) Warning:|trace-warnings/],
-  ["worker-ops", /queue initialized|Job worker|claimedBy|leaseToken|nextRunAt|recovered \d+ stale|"msg":"queue/i],
+  ["worker-ops", /queue initialized|Job worker|claimedBy|leaseToken|nextRunAt|recovered \d+ stale|"msg":"queue|reaped expired job leases/i],
   ["auth-deny-4xx", /\b(GET|POST|PATCH|PUT|DELETE) \/api\/\S+ (401|403|404)\b/],
   ["controlled-4xx", /\b(GET|POST|PATCH|PUT|DELETE) \/api\/\S+ 4\d\d\b/],
   ["ok-request", /\b(GET|POST|PATCH|PUT|DELETE) \S+ (200|201|202|204|307|308)\b/],

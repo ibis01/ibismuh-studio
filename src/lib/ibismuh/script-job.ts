@@ -17,6 +17,7 @@
 // "Writing script…" in the UI (no user action needed).
 
 import { db } from "./tenant-db";
+import { writeRenderFailureState } from "./render-failure-state";
 import { generateScriptPackage, type ResearchBrief } from "./ai";
 import { generateSceneScriptPackage, parseScenes } from "./story";
 import { JobCancelledError, cancellableSleep, throwIfCancelled } from "./cancel";
@@ -74,10 +75,22 @@ export async function runScriptJob(
     if (video.status === "scripted" && video.script) return;
 
     try {
-      await db.video.update({
+      // Phase 2 (master plan after 941a6ee) — the guarded start-marker: the
+      // row can vanish between the findUnique above and this write (an E2E
+      // teardown or a real deletion). updateMany matches zero rows instead
+      // of printing a P2025 — and a zero count bails out BEFORE the
+      // expensive provider call: a deleted video never spends tokens.
+      const marked = await db.video.updateMany({
         where: { id: videoId },
         data: { status: "scripting", error: null },
       });
+      if (!marked.count) {
+        log.info(
+          "script generation skipped — the video row is already gone (deleted during the run)",
+          { mod: "script-job", videoId },
+        );
+        return;
+      }
 
       if (video.format === "story") {
         const pkg = await generateSceneScriptPackage({
@@ -108,6 +121,23 @@ export async function runScriptJob(
         // S112 — whole-script regen = EPOCH (fresh ids for all scenes,
         // genesis revisions, retired lines simply stop). The job body runs
         // under the spawning request's tenant ctx, so createdBy resolves.
+        // Phase 2 (master plan after 941a6ee) — the row can vanish during
+        // the MINUTES-long generation; commitSceneChanges writes the row
+        // with a bare update whose P2025 print would fail the integrity
+        // contract. Verify existence right before the commit: when the row
+        // is gone the generated package is honestly abandoned at info (the
+        // spend is already metered; nothing else is owed).
+        const stillThere = await db.video.findUnique({
+          where: { id: videoId },
+          select: { id: true },
+        });
+        if (!stillThere) {
+          log.info(
+            "script result write skipped — the video row is already gone (deleted during the run)",
+            { mod: "script-job", videoId },
+          );
+          return;
+        }
         await commitSceneChanges({
           video,
           beforeScenes: parseScenes(video.scenes),
@@ -152,7 +182,11 @@ export async function runScriptJob(
         }
         const tags = [...modelTags].slice(0, 12);
 
-        await db.video.update({
+        // The completion write is count-gated (Phase 2): a row deleted
+        // mid-generation matches zero rows (no P2025 print) and the Activity
+        // row — whose FK targets cascade with the video — is skipped with
+        // one honest info line.
+        const landed = await db.video.updateMany({
           where: { id: videoId },
           data: {
             title: pkg.title,
@@ -164,6 +198,14 @@ export async function runScriptJob(
             error: null,
           },
         });
+
+        if (!landed.count) {
+          log.info(
+            "script result write skipped — the video row is already gone (deleted during the run)",
+            { mod: "script-job", videoId },
+          );
+          return; // nothing owed — the account is gone, the spend is already metered honestly
+        }
 
         await db.activity.create({
           data: {
@@ -190,8 +232,9 @@ export async function runScriptJob(
             },
           })
           .catch(() => {});
+        // Phase 2 (master plan after 941a6ee) — guarded: a deleted row matches zero rows, no P2025 print.
         await db.video
-          .update({ where: { id: videoId }, data: { status: "failed", error: "Cancelled by user" } })
+          .updateMany({ where: { id: videoId }, data: { status: "failed", error: "Cancelled by user" } })
           .catch(() => {});
         throw err;
       }
@@ -239,40 +282,19 @@ export async function runScriptJob(
         select: { renderMode: true },
       });
       const engineMode = fresh?.renderMode === "whiteboard" || fresh?.renderMode === "graphics";
-      // The video row may have been deleted mid-flight — tolerate that. A
-      // bounded second attempt: the first write after a blown transaction
-      // can meet the lingering SQLite writer lock.
-      const writeFailureState = () =>
-        db.video
-          .update({
-            where: { id: videoId },
-            data: engineMode
-              ? { status: "failed" }
-              : { status: "failed", error: message },
-          })
-          .catch(async () => {
-            await new Promise((r) => setTimeout(r, 500));
-            return db.video
-              .update({
-                where: { id: videoId },
-                data: engineMode
-                  ? { status: "failed" }
-                  : { status: "failed", error: message },
-              })
-              .catch(() => {});
-          });
-      await writeFailureState();
-      await db.activity
-        .create({
-          data: {
-            organizationId: video.organizationId,
-            videoId,
-            stage: "script",
-            level: "error",
-            message: `Script generation failed: ${message}`,
-          },
-        })
-        .catch(() => {});
+      // The video row may have been deleted mid-flight — the guarded write
+      // (Phase 2, master plan after 941a6ee) tolerates that WITHOUT the
+      // P2025/FK print: updateMany matches zero rows instead of throwing,
+      // and the Activity row lands only when the update did.
+      await writeRenderFailureState({
+        videoId,
+        organizationId: video.organizationId,
+        stage: "script",
+        data: engineMode
+          ? { status: "failed" }
+          : { status: "failed", error: message },
+        message: `Script generation failed: ${message}`,
+      });
       throw err; // job registry marks the row "failed"
     }
   }

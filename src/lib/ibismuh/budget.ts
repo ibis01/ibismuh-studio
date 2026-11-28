@@ -388,6 +388,32 @@ async function recordAiUsage(
       usage && model && isPaidProvider(provider)
         ? computeCostMicroUsd(model, usage)
         : 0;
+    // Phase 2 (master plan after 941a6ee) — the FK-safe metering gate: this
+    // insert is fire-and-forget and can land AFTER the attribution account
+    // (org/user) was deleted — E2E teardowns and real account deletions
+    // both. A bare insert then FK-fails and Prisma prints the P2003 to the
+    // server log even though the code catches it; the integrity classifier
+    // (and the e2e FK law) fail the run on exactly those lines. When the
+    // account is gone the row is not owed — and billing evidence MUST NOT
+    // outlive its tenant (data retention) — so the write is skipped at
+    // info (a classifier-vocabulary-safe line), never an FK error.
+    const [orgRow, userRow] = await Promise.all([
+      rawDatabase.organization.findUnique({
+        where: { id: ctx.organizationId },
+        select: { id: true },
+      }),
+      rawDatabase.user.findUnique({
+        where: { id: ctx.userId },
+        select: { id: true },
+      }),
+    ]);
+    if (!orgRow || !userRow) {
+      usageLog.info("metering row skipped — the attribution account no longer exists", {
+        capability,
+        organizationId: ctx.organizationId,
+      });
+      return null;
+    }
     const usageRecord = await rawDatabase.usageRecord.create({
       data: {
         organizationId: ctx.organizationId,

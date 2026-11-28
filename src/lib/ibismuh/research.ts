@@ -2,6 +2,7 @@
 // durable research-scan job body (Stage 3, T-3.5).
 
 import { db } from "./tenant-db";
+import { writeEntityState } from "./render-failure-state";
 import { assertCtx } from "./tenant";
 import { generateTopicResearch } from "./ai";
 import { applyPerformanceBoost } from "./analytics";
@@ -137,39 +138,51 @@ export async function runResearchScan(sessionId: string): Promise<void> {
 
     const finalResult = { ...result, ideas };
 
-    await db.researchSession.update({
-      where: { id: sessionId },
-      data: { ideas: JSON.stringify(finalResult) },
-    });
-    await db.activity.create({
-      data: {
-        organizationId: ctx.organizationId,
-        userId: ctx.userId,
-        stage: "research",
-        message: `Topic Radar scanned "${session.niche}"${session.query && session.query !== "—" ? ` for "${session.query}"` : ""} — ${ideas.length} ideas found${boosted.boosted > 0 ? ` (${boosted.boosted} performance-boosted)` : ""}${results.length > 0 ? ` · ${ideas.filter((i) => i.sources?.length).length} source-grounded` : ""}`,
-      },
+    // Phase 2 (master plan after 941a6ee) — the guarded state write: the
+    // async research job can outlive its session row (an E2E teardown or a
+    // real deletion). updateMany matches zero rows instead of printing a
+    // P2025; the Activity row lands only when the session update did.
+    await writeEntityState({
+      entityLabel: "research session",
+      update: () =>
+        db.researchSession.updateMany({
+          where: { id: sessionId },
+          data: { ideas: JSON.stringify(finalResult) },
+        }),
+      onLanded: () =>
+        db.activity.create({
+          data: {
+            organizationId: ctx.organizationId,
+            userId: ctx.userId,
+            stage: "research",
+            message: `Topic Radar scanned "${session.niche}"${session.query && session.query !== "—" ? ` for "${session.query}"` : ""} — ${ideas.length} ideas found${boosted.boosted > 0 ? ` (${boosted.boosted} performance-boosted)` : ""}${results.length > 0 ? ` · ${ideas.filter((i) => i.sources?.length).length} source-grounded` : ""}`,
+          },
+        }),
     });
   } catch (err) {
     const message = errorText(err, "Research failed");
     // Persist the failure on the session itself — the job registry's
-    // in-memory lastJobError is lost on restart, the row is not.
-    await db.researchSession
-      .update({
-        where: { id: sessionId },
-        data: { ideas: JSON.stringify({ ideas: [], nicheSummary: "", error: message }) },
-      })
-      .catch(() => {});
-    await db.activity
-      .create({
-        data: {
-          organizationId: ctx.organizationId,
-          userId: ctx.userId,
-          stage: "research",
-          level: "error",
-          message: `Topic Radar failed: ${message}`,
-        },
-      })
-      .catch(() => {});
+    // in-memory lastJobError is lost on restart, the row is not. The write
+    // is the guarded variant (Phase 2): a deleted session matches zero rows
+    // instead of printing a P2025, and the Activity row is count-gated.
+    await writeEntityState({
+      entityLabel: "research session",
+      update: () =>
+        db.researchSession.updateMany({
+          where: { id: sessionId },
+          data: { ideas: JSON.stringify({ ideas: [], nicheSummary: "", error: message }) },
+        }),
+      onLanded: () =>
+        db.activity.create({
+          data: {
+            organizationId: ctx.organizationId,
+            userId: ctx.userId,
+            stage: "research",
+            level: "error",
+            message: `Topic Radar failed: ${message}`,
+          },
+        }),
+    });
     throw err;
   }
 }

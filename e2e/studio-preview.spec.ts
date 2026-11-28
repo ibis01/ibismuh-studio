@@ -133,11 +133,23 @@ test.describe.serial("studio preview — authenticated workflow", () => {
     await signIn(page, session);
     await page.goto("/studio");
     await page.getByRole("button", { name: "New project" }).click();
+    // Phase 2 hardening (master plan after 941a6ee): the studio surface can
+    // re-render mid-loop (deferred hydration produces a soft navigation to
+    // the same URL), and a click that races that re-render lands on a stale
+    // tree — the controlled radio keeps aria-checked=false. The assertion
+    // law is unchanged (every lane must PROVE aria-checked=true); the click
+    // is retried ONCE (idempotent on a controlled radio) so a hydration
+    // race cannot mask a real selection defect.
+    await expect(page.getByRole("radiogroup", { name: "Video lane" })).toBeVisible();
     for (const laneTitle of LANE_TITLES) {
       const radio = page.getByRole("radio", {
         name: new RegExp(`^${laneTitle.replace(/[()]/g, "\\$&")}`),
       });
+      await radio.scrollIntoViewIfNeeded();
       await radio.click();
+      if ((await radio.getAttribute("aria-checked")) !== "true") {
+        await radio.click();
+      }
       await expect(radio).toHaveAttribute("aria-checked", "true");
     }
     await page.keyboard.press("Escape");

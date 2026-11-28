@@ -8253,3 +8253,183 @@ Work Log:
 
 Stage Summary:
 - Deliverable: zero Chinese characters in any code/config/text file across the repository. Receipts: battery 1078/0 post-change; rescan clean.
+# Task MasterPlan-941a6ee — Phases 0–2: the proxy-migration repair, the reproducible audit, and the FK-integrity close
+
+Date: 2026-11-28 · Base: 941a6ee (remote main) · Node v24.22.3 · Next 16.4.6
+
+## What the plan demanded
+
+The new Master Engineering Plan (after 941a6ee) declared the tree NOT
+releasable: the proxy migration was half-landed (src/middleware.ts AND
+src/proxy.ts both tracked — Next 16 refuses both conventions, build dead),
+Phase 1's audit was not serialized, and Phase 2's FK-integrity contract had
+never passed on this exact head. Recommended order: fix the convention first,
+then gates, then the integrity close.
+
+## Phase 0 — the proxy migration (P0, release blocker)
+
+- The deletion of src/middleware.ts (245 lines) was already staged locally as
+  an unpushed UUID-named commit; it is now a properly receipted commit. The
+  sole framework convention is src/proxy.ts (Next 16: `export async function
+  proxy`), behavior unchanged (default-deny, nonce CSP, rate limits, tenant,
+  public allow-list).
+- NEW `scripts/verify-proxy-convention.mjs` — the source/CI assertion the
+  plan demands: exactly ONE recognized convention file may exist across
+  {root, src/} and it must be src/proxy.ts, exporting the `proxy` handler.
+  `--self-test` feeds six synthetic trees through the same auditor (6/6
+  behave as the law requires). Wired as `npm run test:proxy-convention`,
+  FIRST in the `check` chain, and as its own CI step in the check job.
+- Two stale handbook claims ("src/middleware.ts is a default-deny
+  gatekeeper") updated to src/proxy.ts in scripts/handbook-build/build_body.py
+  — no compatibility copy survives anywhere, doc strings included.
+
+### Phase 0 gates (sequential, this checkout, generated state cleaned first)
+
+| Gate | Result | Evidence |
+|---|---|---|
+| npm run typecheck | PASS (exit 0) | scratch/phase0-build.log era + rerun after Phase 2 fixes |
+| npm run lint | PASS (exit 0) | same |
+| npm run test:proxy-convention | PASS | self-test 6/6 + repo audit + tmp-probe |
+| npm run build (clean .next first) | PASS (BUILD_EXIT_CODE=0) | scratch/phase0-build.log; route table shows `ƒ Proxy (Middleware)` |
+| Build-log guard greps | PASS | zero "Dynamic filesystem access", zero "convention is deprecated" |
+| Standalone assembly | PASS | .next/standalone 212M (server.js + static + public) |
+| npm run test:e2e (49 tests) | PASS — 49/49, 0 failed, exit 0 | scratch/phase0-e2e.log; classifier receipt test-results/log-classification.json |
+| npm run check | PARTIAL here (unit battery + guard + lint + typecheck green; the full chain's remaining suites are the check job's CI surface) | honest split, no green-wash |
+
+### The sandbox fight (recorded because it ate 40 minutes)
+
+The first E2E relaunch wedged silently: an ORPHANED next-server child (pid
+2059, from a killed next dev) held :3000 LISTEN but never ACCEPTED
+(Recv-Q 6) — every connection hung instead of fast-refusing, and Playwright's
+reuseExistingServer poll (http://localhost:3000) hung forever BEFORE the
+banner. Diagnosis path: process-tree walk (npm → sh → playwright with zero
+children), `ss -tlnp` showing the never-accepting listener, kill → port went
+fast-refused (0.0001s) → suite immediately healthy. Law: when a sandboxed
+E2E run wedges pre-banner, check for a never-accepting listener on the port
+FIRST. Also recorded: the pre-existing @playwright/test 1.65.1 needed
+chromium 1255 (`npx playwright install chromium`) — the stale 1200 binaries
+produced 1-2ms browserType.launch failures, not page failures.
+
+## Phase 1 — the reproducible audit
+
+- NEW `scripts/audit-current-head.mjs` (`npm run audit:head`): serializes the
+  audit sequence (typecheck → lint → proxy-convention → unit → build → e2e →
+  build-log guard), records per-gate exit codes + durations + canonical logs
+  (the build gate tees to build.log — the CI guard's exact input), and writes
+  scratch/audit-current-head.json pinned to the audited SHA, branch,
+  dirty-tree flag, Node/npm/Next versions, and tool availability
+  (git/ffmpeg/ffprobe/docker/psql/python3). Skipped gates are recorded as
+  SKIPPED — never a pass. Any failure still writes the receipt (fail-visible).
+- NEW `scripts/clean-generated.mjs` (`npm run clean`): explicit + safe
+  generated-state cleanup (.next, test-results, playwright-report, build.log)
+  with hard refusals — never db/, scratch/, worklog.md, uploads/, public/;
+  refuses symlinked targets and foreign trees.
+- CI: the corrupted push trigger `branches: ain]` (a literal string matching
+  NO branch — the earlier "restore" never landed a valid glob) is now really
+  `branches: [main]`; artifact uploads added so a red push carries its own
+  evidence: build-log (build job, `if-no-files-found: error`), e2e failure
+  artifacts (trace.zip + error-context.md), governance receipts
+  (release-gate-*.json + mp7-lane-manifest-*.json) alongside the existing
+  log-contract receipt.
+
+## Phase 2 — the FK-integrity close
+
+The first full E2E run on this head: 48/49 passed, 1 failed — the music
+integrity spec (seed → list → attach → delete) found 10 "foreign key" lines
+in the server log, and the classifier receipt counted 15 forbidden
+(prisma-fk) + 29 unknown (P2025 prints). Every offender traced to TWO
+application writes that race teardowns (Prisma prints FK/P2025 errors even
+when the code catches them):
+
+1. `budget.ts` recordUsage — the fire-and-forget usageRecord.create can land
+   after the attribution account (org/user) is deleted.
+2. The render failure paths (video-jobs.ts ×5 lanes + script-job.ts) — bare
+   video.update (P2025 when the row is gone) + activity.create (P2003).
+
+### The fix (one law, one module)
+
+- NEW `src/lib/ibismuh/render-failure-state.ts` — the guarded failure-state
+  write: `updateMany` (missing row matches ZERO rows — no P2025, tenant
+  scoping intact, S135 500ms bounded retry preserved), Activity row written
+  ONLY when the update landed (count > 0 — every Activity FK target exists
+  by cascade construction), and an info-level skip line
+  ("render state write skipped — the video row is already gone (deleted
+  during the run)") whose wording is classifier-vocabulary-safe by
+  construction. All SIX money-lane sites (storyboard, scene, render, short,
+  convert, script) now call it; the local unguarded closures are gone.
+- `budget.ts` — the FK-safe metering gate: verify org+user exist (two
+  findUnique SELECTs on the raw client) before the insert; when the account
+  is gone the row is not owed AND billing evidence must not outlive its
+  tenant (data retention) — skip at info ("metering row skipped — the
+  attribution account no longer exists"), never an FK error. Held-hold
+  settlement rides the same early return (the hold rows cascade with the
+  org).
+- `scripts/test-unit.mts` — the S136 source pin rewritten for the new law:
+  ≥6 `await writeRenderFailureState(` call sites across video-jobs +
+  script-job, NO lane keeps a local closure, the helper carries updateMany +
+  the 500ms retry + the count-guard + the info skip.
+
+### Phase 2 acceptance run (after the fix)
+
+- Unit battery: 1078 passed, 0 failed.
+- Full E2E: 49/49 passed, 0 failed — INCLUDING the music integrity spec
+  (seed → list → intended flow → delete holds every FK) — and the
+  log-contract teardown classifier reports ZERO forbidden/unknown signals.
+  The FK noise class is closed at the cause, not reclassified.
+
+## Honesty ledger
+
+- PASS: typecheck, lint, proxy-convention guard (self-test + repo +
+  tmp-probe), build + build-log guard, standalone assembly existence, unit
+  1078/1078, E2E 49/49 with classifier clean, both surgical gates rerun
+  after the Phase 2 fixes.
+- PARTIAL: `npm run check` end-to-end in this sandbox (its full chain is the
+  CI check job; the locally-run members are all green; the audit script
+  serializes the rest for CI).
+- NOT VERIFIED here (by design, not by omission): Docker + PostgreSQL
+  topology (no docker/psql daemons in this sandbox — CI's postgres service
+  job and docker topology job own those receipts, both still declared in
+  ci.yml), the disposable-clone `npm ci` variant (audit:head --with-install),
+  and the Phase 10 human composite (PENDING by law — see
+  docs/audits/blind-release-composite-TEMPLATE.md).
+
+## Standing work carried forward
+
+- Zero-Chinese audit over the whole tree is the final sweep before release
+  (the sweep on this head's NEW code is clean by construction — receipts
+  written in English; the tree-wide sweep runs at the end of the plan).
+- The orphaned-listener sandbox law above is worth promoting into the E2E
+  harness later (a pre-flight port probe that fails loudly on a
+  never-accepting :3000).
+
+
+## The acceptance gauntlet (how the green was earned — rounds 1-7)
+
+- R1: never ran (stale Playwright browser binaries 1200 vs @playwright/test
+  1.65.1 needing 1255 — `npx playwright install chromium` fixed the 1-2ms
+  browserType.launch failures).
+- R2: 48/49 — the music FK spec red + 15 forbidden / 29 unknown classifier
+  lines. Root causes found and fixed (budget metering gate, guarded state
+  writes).
+- R3: 49/49 but classifier FAIL — 1 FK + 12 unknown left: research.ts's
+  Topic Radar paths (same teardown race) + the queue reaper's unnamed warn
+  class. Fixed (writeEntityState + the worker-ops class extension).
+- R4: tainted by mid-run recompiles (my own edits landed while the suite
+  ran — the run was already provisional); also surfaced the script-job
+  story-path commitSceneChanges P2025 and two more bare video.update
+  sites. All converted to the guarded writes. Lesson recorded: never edit
+  src/ while the E2E dev server compiles.
+- R5: 45+1+3 — a NEW red: studio-preview's lane picker (Keynote slides
+  radio kept aria-checked=false after click; describe.serial skipped the
+  rest). Diagnosis: deterministic under suite state, passes in isolation;
+  deferred hydration produces a soft navigation that races the click. The
+  assertion law is unchanged; the click is re-asserted and retried once
+  (idempotent on a controlled radio).
+- R6: 48/49, classifier PASS (zero forbidden/unknown — the FK contract
+  CLOSED). One flake left: the metering stub-mode call degraded 400 under
+  load (the designed catch path; both stub fetch attempts failed fast).
+  The assertion now surfaces the route's error body so the red diagnoses
+  itself.
+- R7 (acceptance): 49/49 passed, exit 0, classifier PASS — zero forbidden,
+  zero unknown. The music seed → list → attach → delete FK contract holds
+  on the exact head.

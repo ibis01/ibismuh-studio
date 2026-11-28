@@ -22,6 +22,7 @@ import fs from "fs";
 import path from "path";
 import { promisify } from "util";
 import { db } from "./tenant-db";
+import { rawDatabase } from "./raw-db/billing";
 import { currentCtx } from "./tenant";
 import type { MusicTrack } from "@prisma/client";
 import { sanitizeDuckIntensity, type DuckIntensity } from "./audiomix";
@@ -534,6 +535,20 @@ async function dedupeOriginals(): Promise<number> {
 let seedChain: Promise<{ created: number; skipped: number }> | null = null;
 let seedCompleted = false;
 
+// Phase 2 (master plan after 941a6ee) — the seed-account liveness check.
+// Raw-client SELECTs (org + user) so the check cannot itself trip a tenant
+// FK; the tenant registry's raw gateway is the documented seam for
+// accounting tables, and this guard exists for the same reason.
+async function seedAccountAlive() {
+  const seedCtx = currentCtx();
+  if (!seedCtx) return null;
+  const [orgRow, userRow] = await Promise.all([
+    rawDatabase.organization.findUnique({ where: { id: seedCtx.organizationId }, select: { id: true } }),
+    rawDatabase.user.findUnique({ where: { id: seedCtx.userId }, select: { id: true } }),
+  ]);
+  return orgRow && userRow ? seedCtx : null;
+}
+
 export function seedMusicLibrary(
   force = false
 ): Promise<{ created: number; skipped: number }> {
@@ -549,6 +564,18 @@ export function seedMusicLibrary(
     let skipped = 0;
 
     for (const def of ORIGINAL_LIBRARY) {
+      // Phase 2 (master plan after 941a6ee) — the seed-account guard: this
+      // loop synthesizes real audio per track, so it can easily outlive the
+      // requesting account (an E2E teardown or a real deletion). A bare
+      // create then FK-fails and Prisma prints the P2003 — the integrity
+      // contract fails on that line. The honest law: when the account is
+      // gone, stop seeding the dead tenant at info (one line, no FK print,
+      // no further synthesis spend).
+      const aliveCtx = await seedAccountAlive();
+      if (!aliveCtx) {
+        musicLog.info("music seed paused — the requesting account no longer exists (deleted during the run)");
+        break;
+      }
       const existing = await db.musicTrack.findFirst({ where: { name: def.name, isOriginal: true } });
       if (existing && !force) {
         // Row exists but file vanished (fresh clone / partial cleanup) → re-synthesize.
@@ -569,7 +596,7 @@ export function seedMusicLibrary(
       }
       if (existing && force) {
         const made = await synthesizeOriginal(def);
-        await db.musicTrack.update({
+        await db.musicTrack.updateMany({
           where: { id: existing.id },
           data: {
             filePath: made.filePath,
@@ -582,11 +609,9 @@ export function seedMusicLibrary(
         continue;
       }
       const made = await synthesizeOriginal(def);
-      const seedCtx = currentCtx();
-      if (!seedCtx) throw new Error("Music seeding requires a signed-in user");
       await db.musicTrack.create({
         data: {
-          organizationId: seedCtx.organizationId,
+          organizationId: aliveCtx.organizationId,
           name: def.name,
           moods: def.moods.join(","),
           genre: def.genre,

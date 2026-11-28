@@ -9,5 +9,7 @@
 // still covers these models for any request-scoped path (Phase 3).
 //
 // APPROVED IMPORTERS: billing.ts, budget.ts, spend.ts, cost-guard.ts,
-// storage-quota.ts, shared-rate-limit.ts.
+// storage-quota.ts, shared-rate-limit.ts, music.ts (Phase 2 after 941a6ee:
+// the seed-account liveness guard — two SELECTs before synthesis, so a dead
+// account pauses the seed at info instead of printing an FK error).
 export { rawDatabase } from "../tenant-db";

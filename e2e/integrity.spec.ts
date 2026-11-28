@@ -178,7 +178,14 @@ test.describe.serial("usage metering integrity (Phase 1.1)", () => {
         headers: { cookie },
         data: { mode: "panel", candidates: 2 },
       });
-      expect(panel.status(), `the stubbed LLM call must SUCCEED (got ${panel.status()})`).toBeLessThan(300);
+      // Phase 2 hardening: when this degrades under full-suite load, the
+      // route's 400 body carries the real provider error — surface it in
+      // the assertion so a red run diagnoses itself.
+      const panelBody = await panel.json().catch(() => ({}) as Record<string, unknown>);
+      expect(
+        panel.status(),
+        `the stubbed LLM call must SUCCEED (got ${panel.status()} — ${JSON.stringify(panelBody).slice(0, 400)})`,
+      ).toBeLessThan(300);
 
       // The row lands ok=true for the stub provider — and only the stub
       // provider proves success; the zai gateway's absence proves nothing.

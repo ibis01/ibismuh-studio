@@ -22471,16 +22471,25 @@ await test("S136 the receipt guard rides every money lane — the S135 ordering 
   // ordering in script-job ONLY; the same unguarded order (video update →
   // activity create, neither guarded) remained in the sibling lanes and
   // could lose BOTH writes to the post-timeout SQLite writer lock — the
-  // live incident class. The guard (video row FIRST with a bounded 500ms
-  // retried second attempt, Activity best-effort AFTER it) now rides all
-  // five money lanes: render, storyboard, scene, short, convert.
+  // live incident class. Since Phase 2 of the master plan after 941a6ee
+  // the guard is ONE shared module (src/lib/ibismuh/render-failure-state.ts)
+  // and every money lane calls it: render, storyboard, scene, short,
+  // convert (+ the script lane). The helper pins the ordering law AND the
+  // teardown-race law (updateMany + count-guarded Activity + the info-level
+  // skip) so the server log never carries a P2025/P2003 print — the exact
+  // integrity-defect class the e2e FK contract failed on.
   const src = await fsp.readFile("src/lib/ibismuh/video-jobs.ts", "utf8");
-  const guards = src.match(/const writeFailureState = \(\) =>/g)?.length ?? 0;
-  ok(guards >= 5, `the guarded writeFailureState closure rides all five money lanes (found ${guards}, need 5)`);
-  const retried = src.match(/setTimeout\(r, 500\)/g)?.length ?? 0;
-  ok(retried >= 5, `every guard carries the bounded second attempt (found ${retried}, need 5)`);
-  const bestEffort = src.match(/\.catch\(\(\) => \{\}\);\n    throw err;/g)?.length ?? 0;
-  ok(bestEffort >= 5, `the Activity row is best-effort BEFORE the rethrow in every lane (found ${bestEffort}, need 5)`);
+  const scriptSrc = await fsp.readFile("src/lib/ibismuh/script-job.ts", "utf8");
+  const helper = await fsp.readFile("src/lib/ibismuh/render-failure-state.ts", "utf8");
+  const calls =
+    (src.match(/await writeRenderFailureState\(/g)?.length ?? 0) +
+    (scriptSrc.match(/await writeRenderFailureState\(/g)?.length ?? 0);
+  ok(calls >= 6, `every money lane rides the shared guarded write (found ${calls}, need 6)`);
+  ok(!/const writeFailureState = \(\) =>/.test(src + scriptSrc), "no lane keeps a local unguarded closure");
+  ok(helper.includes("db.video\n    .updateMany"), "the guarded write uses updateMany (missing row matches zero — no P2025 print)");
+  ok(helper.includes("setTimeout(r, 500)"), "the guarded write carries the bounded second attempt");
+  ok(helper.includes("if (!updated.count)"), "the Activity row lands only when the update did (count-guarded)");
+  ok(helper.includes("render state write skipped"), "the skip path speaks at info level (classifier-safe)");
   // The lanes' guard comments name the law (the receipts stay readable).
   for (const lane of ["render lane", "storyboard lane", "scene lane", "short lane", "convert lane"]) {
     ok(src.includes(`ported to the ${lane}`), `the ${lane} names the S135 port`);

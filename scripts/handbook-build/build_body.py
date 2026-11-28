@@ -439,7 +439,7 @@ h2(story, '2.1 Topology')
 body(story,
      'The browser talks HTTPS to a Next.js 16 standalone server (Node 20), '
      'authenticating with either a session cookie or a scoped bearer API token. '
-     'Inside the server, src/middleware.ts is a default-deny gatekeeper whose public '
+     'Inside the server, src/proxy.ts is a default-deny gatekeeper whose public '
      'allow-list contains exactly six auth endpoints plus the YouTube OAuth callback; '
      'everything else requires an authenticated, tenant-scoped request. The 123 API '
      'route files under src/app/api are tenant-scoped through async-local-storage '
@@ -602,7 +602,7 @@ body(story,
      'lifecycle.')
 h2(story, '4.2 The default-deny gate')
 body(story,
-     'src/middleware.ts denies everything by default. The public allow-list is six '
+     'src/proxy.ts denies everything by default. The public allow-list is six '
      'auth endpoints plus /api/youtube/callback; every other route requires an '
      'authenticated session or token. A production fail-safe refuses to serve at all '
      'when IBISMUH_STUDIO_AUTH_SECRET is missing - the failure mode is a down deployment, '

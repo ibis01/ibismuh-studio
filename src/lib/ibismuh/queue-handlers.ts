@@ -105,7 +105,9 @@ export async function runStockRefresh(
     });
 
     invalidateRenders(videoId);
-    await db.video.update({
+    // Phase 2 (master plan after 941a6ee) — guarded: a video deleted
+    // mid-job matches zero rows here instead of printing a P2025.
+    await db.video.updateMany({
       where: { id: videoId },
       data: { hasVideo: false, videoDuration: null, error: null },
     });
@@ -208,7 +210,9 @@ export async function runStockSceneJob(
         setJobProgress(entityId, "stock", current, total, label),
     });
     invalidateRenders(videoId);
-    await db.video.update({
+    // Phase 2 (master plan after 941a6ee) — guarded: a video deleted
+    // mid-job matches zero rows here instead of printing a P2025.
+    await db.video.updateMany({
       where: { id: videoId },
       data: { hasVideo: false, videoDuration: null, error: null },
     });
