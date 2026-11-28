@@ -8093,3 +8093,17 @@ Work Log:
 Stage Summary:
 - Deliverable: Phase 1 closed — the FK noise can never hide again. Receipts: self-test PASS; tsc 0; lint 0/0; lint:budget PASS; representative local set green (integrity 3 + isolation + csp + smoke) with the log-contract receipt PASS pinned to this commit; CI owns the full 46-test suite + artifact upload on push.
 - Deliberately not here: per-worker timestamp attribution of server lines (the server is one shared process; the gate is global) — recorded as the documented follow-up the plan itself names (4.4 policy).
+
+---
+Task ID: MasterPlan-Phase0
+Agent: main (Z.ai)
+Task: Master plan "After 646c79c" Phase 0 — freeze and reproduce the baseline before any phase work mutates behavior.
+
+Work Log:
+- Reproduced on the session head c783bff (Phase 1 already closed and pushed; remote verified identical via ls-remote before any phase work began).
+- Receipts pinned to docs/baselines/mp0-*-2026-11-28.txt: typecheck 0 errors; eslint 0 errors / 0 new warnings; log-contract self-test PASS; unit battery 1078 passed / 0 failed (docs/baselines/mp0-unit-2026-11-28.txt tail).
+- Environment facts for later phases: ffmpeg 7.1.5 present; sandbox cannot run docker or full standalone builds (OOM law) — docker smoke remains CI-owned.
+- Four-state accounting: everything above PASS; nightly route-probe 12-failure question remains NOT VERIFIED (outside this phase's scope).
+
+Stage Summary:
+- Deliverable: the reproducible baseline is frozen and pinned; phase work may now mutate behavior against this receipt.

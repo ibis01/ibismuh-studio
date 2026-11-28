@@ -1,0 +1,1323 @@
+
+> ibismuh-studio@1.0.0 test
+> node --import tsx scripts/test-unit.mts
+
+
+◆ audiomix — ducking configuration
+  ✓ sanitizeDuckIntensity: valid ids pass through, junk → standard
+  ✓ isDuckIntensity validates exactly the catalog ids
+  ✓ duckParams: deeper intensity = lower threshold, higher ratio
+  ✓ duckChain: off = passthrough that still sinks the sidechain
+  ✓ duckChain: standard encodes the sidechaincompress parameters
+  ✓ voiceSplitChain binds voice + sidechain stems
+
+◆ audiomix — bed chains
+  ✓ bedChain: gain + in/out fades with correct fade-out start
+prisma:query PRAGMA journal_mode=WAL
+  ✓ bedChain: zero-length fade never produces NaN
+  ✓ droneBedChain: lowpass + fades
+  ✓ mixTail: two inputs, first-bounded, weights preserved
+
+◆ audiomix — loudnorm parsing + normalization
+  ✓ parseLoudnormJson: extracts the measurement from noisy stderr
+  ✓ parseLoudnormJson: -inf integrated loudness (silence) → null
+  ✓ parseLoudnormJson: malformed / empty / non-JSON → null
+  ✓ normalizationFilter(null): dynamic fallback, no measured_ fields
+  ✓ normalizationFilter(m): linear two-pass with measurement + limiter + 48k
+
+◆ audiomix — static-run collapsing
+  ✓ frameMeanDiff: identical frames → 0, different → >0, mismatch → ∞
+  ✓ staticRunsFromFrames: 9.5s identical stretch is flagged
+  ✓ staticRunsFromFrames: a 4.5s stretch is below the 6s floor
+  ✓ staticRunsFromFrames: fully static input flags via the final flush
+  ✓ staticRunsFromFrames: too few samples → no runs, no crash
+  ✓ staticRunsDetail formats ranges
+
+◆ qc — SRT parsing (pure)
+  ✓ parseSrt: two clean cues
+  ✓ parseSrt: garbage and empty inputs → no cues, no crash
+  ✓ formatSrtCues: hard non-overlap — the earlier cue always yields (Battle Yamuk 54 overlaps)
+  ✓ formatSrtCues: sane cues pass through untouched
+
+◆ qc — three-state contract on real fixtures
+  … rendering QC fixtures with ffmpeg
+  ✓ missing file: playable=fail, report fails, nothing pretends otherwise
+  ✓ garbage bytes: failed analysis → unmeasured, NEVER clean
+  ✓ S136 silent-draft law: video-only MP4 + silent contract → playable PASSES, audio lenses not applicable
+  ✓ S136 narrated contract kept strict: video-only MP4 + narration → playable FAILS, audio lenses stay fail-closed
+  ✓ fade-out ending: tail-fade measures and PASSES
+  ✓ abrupt mid-tone ending: tail-fade measures and FAILS
+  ✓ near-silent clip: loudness MEASURED and failing (not unmeasured)
+  ✓ tone-then-silence: dead-air detector catches the 4s gap
+  ✓ healthy fixture: analysis-derived checks all reach a verdict
+  ✓ S136 narration-sync: +0.5s drift (lead-in band) PASSES the duration check
+  ✓ S136 narration-sync: a video 6s SHORTER than its narration FAILS hard
+  ✓ S136 caption alignment: detectSpeechRuns measures the known speech windows
+
+◆ music — mood presets + niche mapping
+  ✓ isMusicMoodId: auto + catalog ids valid, junk rejected
+  ✓ moodTags: known ids map to library tags, auto/unknown → []
+  ✓ NICHE_MOODS: every niche maps to non-empty tag lists
+
+◆ voice-clone — cloned-voice ids + name/URL hygiene
+  ✓ isClonedVoiceId: only the platform prefix counts
+  ✓ sanitizeVoice: zhipu keeps cloned ids, other providers fall back
+  ✓ voiceCatalog: zhipu exposes the 7 studio voices (clones appended by the API layer)
+  ✓ describeVoiceHealth: /health payloads render as one readable line
+  ✓ shared-voice: endpoint precedence — user server > shared env > nothing
+  ✓ cleanCloneName: trims, strips control chars, falls back to the file name
+  ✓ isValidSampleUrl: http(s) only, internal hosts blocked
+  ✓ sample limits: clone API window enforced (>= 2s, trimmed at 30s)
+
+◆ stock queries — scene→search keywords
+  ✓ sceneQueries: visual leads, narration keywords included
+  ✓ sceneQueries: digits and stop-words never become queries
+  ✓ sceneQueries: no duplicates, hard cap of 4
+
+◆ S89 stock index — adapter normalization + dedupe
+  ✓ pexelsParse: landscape ≥1280 mp4 picked, license stamped, id carried
+  ✓ pixabayParse: tags carried, license stamped, largest rendition picked
+  ✓ mergeIntoIndex: source:id dedupe, matchedQueries union, namespaces distinct
+  ✓ configuredSources: zero keys throws the pinned operator error
+
+◆ S89 stock ranker — floors + factors
+  ✓ candidateFloors: the unusable shapes are named
+  ✓ rankCandidates: duration coverage dominates the walk order
+  ✓ rankCandidates: aspect closeness to 16:9 breaks the tie
+  ✓ rankCandidates: tag semantics lift (neutral, never penalizing)
+  ✓ rankCandidates: duplicates rank last, visibly
+  ✓ rankCandidates: deterministic tiebreak (score desc, key asc)
+
+◆ S89 verdict math — multi-frame relevance + motion
+  ✓ combineFrameVerdicts: the evidence table
+  ✓ combineFrameVerdicts: static motion rejects even relevant clips
+  ✓ stockFrameTimes: interior samples, degenerate clips
+  ✓ THE NEVER-SILENT PIN: verdict pass implies ≥2 passing frames
+
+◆ S89 stock ref round-trip — verification survives the doc
+  ✓ parseScenes: new ref fields survive (license, providerId, verification)
+  ✓ parseScenes: legacy ref still valid; bad verification drops the record only
+
+◆ S90 provider selection — priors, weights, the unknown-pricing law
+  ✓ priorsComplete: every registry provider has a priors row (the sync law)
+  ✓ THE UNKNOWN-PRICING LAW: an unpriced paid model is NEVER free
+  ✓ free-by-design: the gateway, locals and keyless providers cost 1.0
+  ✓ non-chat paid without observations: cost unknown, cautious, never free
+  ✓ non-chat paid WITH observations: the org's own spend is the truth
+  ✓ reliabilityBlend: prior when silent, data-dominated when loud
+  ✓ latencyBlend: 2s ≈ perfect, 30s ≈ floor, no data → prior
+  ✓ the weighted sum: exact arithmetic on the default weights (zai chat)
+  ✓ configurable weights flip the recommendation
+  ✓ parseScoreWeights: tolerant, clamped, all-zero-safe
+  ✓ deterministic order + the configured flag
+
+◆ S91 production board — the honest derivation table
+  ✓ deriveBoardStages: the five states, running outranks done
+  ✓ deriveBoardStages: partial is first-class, never rounded up
+  ✓ deriveBoardStages: classic script format + the empty video
+  ✓ deriveCheckpoints: each gate claims exactly its evidence
+
+◆ S92 narration pacing — measured, not guessed
+  ✓ countWords: English tokens; CJK counts per character
+  ✓ sceneWpm: the real arithmetic, honest nulls
+  ✓ the bands + the roles
+  ✓ pacingProposal: speaks the plan's own vocabulary
+  ✓ pacingReport: the summary a creator reads first
+
+◆ S93 character rig — a motion source, not a pipeline
+  ✓ rigEligible: portrait-backed cast scenes only
+  ✓ rigPlan: the breath cycle — alternation, focal, amplitude
+  ✓ rigPlan: amplitude clamps + the stillness contract
+  ✓ rigPlan: the pacing hint modulates the breath rate
+
+◆ S94 3D engine — the contract laws
+  ✓ the doc laws: junk refused, version refused, byte-stable round-trip
+  ✓ the scaffold derives geometry from the aspect; the object vocabulary clamps
+  ✓ cameraAt: exact interpolation, clamped ends
+  ✓ S134 objectAt: keyless objects mirror their static fields exactly (the render-path byte-identity)
+  ✓ S134 objectAt: per-channel tracks, clamped holds, independent channels
+  ✓ S134 the tolerant keyframes read + the strict write round-trip
+
+◆ art dedupe — dHash perceptual hashing
+  ✓ dHash pure: flat frame → zero hash, self-distance 0
+  ✓ dHash pure: ramps and noise behave like the duplicate detector needs
+  ✓ hamming: symmetric, malformed input rejected, closest picks min
+  ✓ imageHash: real ffmpeg roundtrip + directory scan
+  ✓ crypto: AES-256-GCM roundtrip + distinct IVs
+  ✓ crypto: tampering is detected (GCM tag)
+  ✓ crypto: sha256Hex is deterministic and format-stable
+
+◆ Stage 3 — provider timeout matrix (D-09)
+{"level":40,"time":1795845583153,"msg":"ignoring invalid IBISMUH_STUDIO_TIMEOUT (need >= 1000 ms)","app":"ibismuh-studio","mod":"http","capability":"youtube-api","raw":"50"}
+  ✓ timeoutFor: defaults per capability; env overrides apply; invalid env ignored
+  ✓ timeoutFor: no timeout regression — youtube.ts routes through the matrix
+
+◆ Stage 3 — queue claim liveness (multi-process safety)
+  ✓ claimIsStale: null claim, own claim, dead pid, live foreign pid, prior incarnation
+
+◆ Stage 3 — streaming ZIP (D-24)
+  ✓ streamZip: entries round-trip byte-exact (store + deflate + text/binary)
+  ✓ streamZip: python zipfile validates the archive and extracts exact bytes
+  ✓ buildZip (in-memory path) still works — no regression for small bundles
+
+◆ Stage 3 — structured logging (T-3.2)
+  ✓ log: pino-format JSON lines, level filtering, child bindings, redaction
+  ✓ storage: normalizeKey rejects traversal and absolute paths, passes clean keys
+  ✓ storage: local driver roundtrip — put / get / stat / exists / remove
+  ✓ storage: putFromPath same-path no-op + cross-dir move works
+  ✓ storage: removePrefix wipes a whole video folder
+  ✓ storage: driver kind + info respond to env without restarts
+  ✓ storage: scratchDir tracks the driver (uploads locally, tmp under s3)
+  ✓ storage: list() enumerates a prefix and tolerates absence (T-4.0)
+  ✓ S42 sceneArtVersion: URL-safe token that rotates with mtime AND size
+prisma:query SELECT `main`.`Job`.`id`, `main`.`Job`.`entityId`, `main`.`Job`.`status`, `main`.`Job`.`error` FROM `main`.`Job` WHERE (`main`.`Job`.`entityId` LIKE (? || '%') AND `main`.`Job`.`kind` = ?) ORDER BY `main`.`Job`.`createdAt` DESC LIMIT ? OFFSET ?
+prisma:query SELECT `main`.`Job`.`id`, `main`.`Job`.`entityId`, `main`.`Job`.`status`, `main`.`Job`.`error` FROM `main`.`Job` WHERE (`main`.`Job`.`entityId` LIKE (? || '%') AND `main`.`Job`.`kind` = ?) ORDER BY `main`.`Job`.`createdAt` DESC LIMIT ? OFFSET ?
+prisma:query SELECT `main`.`Job`.`id`, `main`.`Job`.`entityId`, `main`.`Job`.`status`, `main`.`Job`.`error` FROM `main`.`Job` WHERE (`main`.`Job`.`entityId` LIKE (? || '%') AND `main`.`Job`.`kind` = ?) ORDER BY `main`.`Job`.`createdAt` DESC LIMIT ? OFFSET ?
+prisma:query SELECT `main`.`Job`.`id`, `main`.`Job`.`entityId`, `main`.`Job`.`status`, `main`.`Job`.`error` FROM `main`.`Job` WHERE (`main`.`Job`.`entityId` LIKE (? || '%') AND `main`.`Job`.`kind` = ?) ORDER BY `main`.`Job`.`createdAt` DESC LIMIT ? OFFSET ?
+  ✓ S42 serializeScenes: the art URL carries ?v= and rotates when art is replaced
+  ✓ S43 sniffImageFormat: HEIC brands pass, non-HEIC ftyp boxes do not
+  ✓ S43 replaceSceneImage: a real HEIC decodes, cover-crops and lands as scene art
+  ✓ S43 captionOverridesFor: doc caption > user-edited row caption > word-synced chunks
+  ✓ S43 parseScenes: captionUser survives the row round-trip (legacy rows default false)
+  ✓ S43 assembleTimeline: doc captions seed ONLY from user-edited rows
+  ✓ email: console mode logs and reports delivered=console, link stays in responses
+  ✓ email: smtp mode hides the link from responses and refuses empty config
+  ✓ queue: splitEntityId parses scene/slide composite ids, rejects garbage
+  ✓ queue: resumableKinds covers every kind the routes start
+  ✓ pronounce: substitutes longest-first, word-boundary, case-insensitive
+  ✓ pronounce: parseStoredPronunciations degrades corrupt rows to empty
+  ✓ tenant-db: every org-scoped model matches the lowercased lookup
+  ✓ director-plan: parsePlan normalizes junk into the vocabularies
+  ✓ director-plan: corrupt / empty / null plans degrade to null
+  ✓ director-plan: addendum + duration + transition accessors
+  ✓ motion: panEndpoints never emits a dead pan (Battle Yamuk 2.5s frozen stretch)
+  ✓ director-plan: planStaticRuns flags 3+ consecutive unmotivated static shots
+  ✓ director-plan: module E audio fields normalize + pacing factors
+  ✓ M1: legacy plan parsing — profile field stays absent (byte-identical)
+  ✓ M1: profile overlay — system + user prompts include the overlay and narrow vocabularies
+  ✓ M1: validation — advertisement without a product-forward shot 0 returns a readable issue
+  ✓ M1: story regression — narrative profile output ≡ today's prompt shape
+  ✓ M1: format gate — empty-scenes check still throws; profiles resolve cleanly
+  ✓ timeline: estimateNarrationSec clamps + scales with TTS speed
+  ✓ timeline: assembleTimeline derives per-scene start/end + caption timing
+  ✓ timeline: plan duration can only EXTEND a scene, never cut narration (Battle Yamuk −34s drift)
+  ✓ timeline: measured WAV lengths win over word-count estimates (S1 honesty)
+  ✓ timeline: parseTimeline degrades bad/legacy payloads to null
+  ✓ timeline: render-job consumes per-scene durationSec from the assembled timeline
+  ✓ captions: srtToVtt header + fractional separator + cue-number strip
+  ✓ research: matchSourcesToIdeas attaches only keyword-relevant sources
+  ✓ billing: PLAN_DEFAULTS has the three tiers with sensible monthly credits
+  ✓ billing: planSupportsResolution gates by plan tier
+  ✓ billing: hasCredits — Starter never hard-blocks; paid tier gates on balance
+  ✓ billing: CreditSpendKind covers every ROADMAP §7 spend kind + Stage 7.2 reservation kinds
+  ✓ billing: reservationEnforcement — starter is unmetered, paid tiers enforce
+  ✓ billing: CreditBlockedError carries readable balance facts
+prisma:query SELECT `main`.`Subscription`.`id`, `main`.`Subscription`.`userId`, `main`.`Subscription`.`planId`, `main`.`Subscription`.`stripeCustomerId`, `main`.`Subscription`.`stripeSubscriptionId`, `main`.`Subscription`.`status`, `main`.`Subscription`.`currentPeriodEnd`, `main`.`Subscription`.`createdAt`, `main`.`Subscription`.`updatedAt` FROM `main`.`Subscription` WHERE (`main`.`Subscription`.`userId` = ? AND 1=1) LIMIT ? OFFSET ?
+  ✓ billing: resolveUserPlan returns the Starter default when no Subscription row exists
+  ✓ billing: getEstimatedCostMicro covers every metered capability with positive costs
+  ✓ billing: subscriptionAccess maps every Stripe status — unknown statuses fail CLOSED
+  ✓ billing: credit units — microCredits are canonical, conversion is total (no mixed-unit sums)
+  ✓ billing: verifyStripeSignature rejects tampered, stale, and malformed signatures
+  ✓ shots M2: CAMERA_TO_MOVE covers every CAMERA_MOVES entry
+  ✓ shots M2: buildSceneShots planned path — one execution per DirectorShot, imagePrompt leads
+  ✓ shots M2: duration reconciliation — extend-only when the plan outruns narration
+  ✓ shots M2: no plan → legacy fallback (golden behavior)
+  ✓ shots M2: extras budget — at most 3 fresh AI images per scene, surplus keeps its rhythm as pseudo
+  ✓ shots M2: movementForKind — engine-grade MotionShot for every move, stills contract honored
+  ✓ shots M2: multiShotSceneGraph — per-input zoompan graph with an exact frame budget
+  ✓ shots M2 render contract: 2-shot synthetic plan → exact duration + distinct visual segments (real ffmpeg)
+  ✓ migrate-stage2: decideBaselinePrefix fingerprints every schema era
+
+◆ preview lanes — the Timeline Studio projection
+  ✓ projectLanes: three lanes share the scene windows
+  ✓ cameraAt: deterministic cycle, eased, honors overrides
+  ✓ resolveFrame: mid-scene single layer
+  ✓ resolveFrame: fade seam → outgoing under incoming
+  ✓ resolveFrame: cut seam never blends; clamp + empty guard
+  ✓ resolveFrame: short scenes cap the blend window (40% rule)
+  ✓ playhead helpers: snap + boundaries + timecode
+  ✓ previewSettingsFrom: clamps like the render
+
+◆ clip ops: narration split + doc surgery
+  ✓ splitNarrationAt: mid-playhead splits the word list proportionally
+  ✓ splitNarrationAt: quarter playhead skews the boundary early
+  ✓ splitNarrationAt: playhead outside the speakable span refuses
+  ✓ splitNarrationAt: degenerate narrations refuse
+  ✓ applySplitToDoc: two entries, cut at the razor, later windows shift
+  ✓ applySplitToDoc: the input doc is never mutated
+  ✓ applyDeleteToDoc: the gap closes
+  ✓ applyDuplicateToDoc: an exact copy with a cut seam
+  ✓ sceneSegmentSec mirrors the render's segment formula
+
+◆ razor guard: speakableSpan
+  ✓ mirror constants match the real render exports
+  ✓ exact path: boundaries agree with splitNarrationAt
+  ✓ estimate path: fresh-assembly durations, floor refusal
+  ✓ degenerate wavs have no speakable interior
+  ✓ wavDurationSec reads durations off the headers alone
+
+◆ S2 honest mix: per-boundary transitions
+  ✓ uniform Multi settings reproduce the classic API exactly
+  ✓ per-boundary offsets: each seam removes its own d
+  ✓ per-boundary graph honors each seam's style + duration
+  ✓ cut boundaries: partition runs, graph refuses, windows filter
+  ✓ blend groups with per-boundary debt stay exact
+  ✓ shiftSegmentsForBlendMulti: per-scene trimEnd debts
+  ✓ docSceneSettings: alignment guard + field sanitizing
+  ✓ musicLevelAutomation: uniform → null; priority windows
+  ✓ cut boundaries carry ZERO debt everywhere (mixed docs)
+  ✓ MUSIC_SLIDER_GAIN pins the slider curve the automation divides by
+  ✓ sanitizeTransitionDuration: absent means DEFAULT (0.5), not the 0.2 minimum
+  ✓ S163 Phase A: the preset table — opus-measured beats at their literals, fps-free
+  ✓ S163 Phase A: sanitizeTransition/resolveTransition — the absent duration is style-aware
+  ✓ S163 Phase A: the graph builder emits the presets — measured durations ride the xfade args
+  ✓ estimateInputTokens: the ASCII chars/3 law is unchanged
+  ✓ estimateInputTokens: non-Latin scripts price ABOVE chars/3 (the S34 fix)
+  ✓ estimateInputTokens: astral plane (emoji) counts as surrogate pairs at 2 tokens each
+  ✓ estimateInputTokens: mixed-script text sums per class
+  ✓ estimateDispatchMicroUsd: same-length CJK input reserves strictly more than ASCII
+  ✓ spend sink: per-hold slices — baseline + usageSinceBaseline
+  ✓ S35 selector: mode wins — animated is i2v everywhere, slides is slides everywhere
+  ✓ S35 selector: stock mode — matched footage wins, fallbacks follow the plan + provider
+  ✓ S35 selector: the loop-closure — kenburns mode finally consumes the plan's needsI2V
+  ✓ S35 selector: explicit human edits stay senior — keys, stills contract, off overrides
+  ✓ S35 i2v prompt: legacy camera ids keep their phrases; unknown falls back to drift
+  ✓ S35 i2v prompt: the FULL Director vocabulary drives generative motion (the old code drifted)
+  ✓ S35 i2v prompt: scene-kind subject motion — text stays legible, faces live subtly
+  ✓ S36 flicker: pumping luma flags one merged event; crossfade ramps and single flashes stay clean
+  ✓ S36 parsers: captured ffmpeg 7.1.5 fixtures — YAVG log, packet pts CSV, showinfo lines
+  ✓ S36 stutter: decode-order pts sorts clean, duplicate runs and gaps flag
+  ✓ S36 cut alignment: stray cuts fail, missing hard cuts fail, blends explain
+  ✓ S36 single-scene expectation: any detected cut is a genuine continuity break
+  ✓ S36-audit: spendOverrides reports the operator escape hatches; a clean env stays silent
+  ✓ S37 zai-video-core: happy path polls to SUCCESS and downloads a real-sized clip
+  ✓ S37 zai-video-core: FAIL, no task id, SUCCESS-without-url, timeout, empty download all throw
+  ✓ S37 zai-video-core: url fallback keys (video_url, url, video) all accepted
+  ✓ S39 tenant ALS: module-graph duplication shares one storage
+  ✓ S40 matrix: every battery check classified exactly once — 10 block, 8 report
+  ✓ S40 applyQcPolicy: the fail-closed decision table
+  ✓ S40 override: the human accepted THIS report or nobody
+  ✓ S40 report mode: the gate never blocks, findings stay visible
+  ✓ S40 parseQcReport: tolerance matches the serializer (bad payloads never read as clean)
+  ✓ S45 parseJsonLoose: plain and fenced JSON still parse untouched
+  ✓ S45 parseJsonLoose: trailing commas and curly quotes are repaired
+  ✓ S45 parseJsonLoose: prose-with-a-brace after the JSON no longer swallows it
+  ✓ S45 parseJsonLoose: braces inside string values never break the scan
+  ✓ S47 parseJsonLoose: unquoted scalar values are quoted (the live glm-4.6 killer)
+  ✓ S47 parseJsonLoose: missing closers are appended, unmatched trailing closers dropped
+  ✓ S47 parseJsonLoose: truncation INSIDE a string value still fails honestly
+  ✓ S45 parseJsonLoose: unparseable input throws the READABLE error, never a SyntaxError
+  ✓ S45 aiCallJson: parse + validate run INSIDE the retried closure — variance costs a fresh ask, not the job
+  ✓ S45 applyQcPolicy: preview-scoped evidence NEVER certifies the final artifact
+  ✓ S45 parseQcReport: the scope field survives the round trip
+  ✓ S45 previewQcPatch: preview evidence persists ONLY while no full render stands
+  ✓ S45 qcForPreview: scoped battery on a real preview.mp4 — no narration-sync, no captions, scope stamped
+  ✓ S46 loginWindowDecision: the law is unchanged — 5 in-window failures lock until the OLDEST ages out
+  ✓ S46 loginWindowDecision: stale hits are invisible — the window slides, it does not reset
+  ✓ S46 loginWindowDecision: the straddle hole is closed (4+4 across a window border locks)
+  ✓ S48 CAMERA_TO_MOVE: every v2 verb is engine-verbatim (identity or a documented 1:1 rename)
+  ✓ S48 parsePlan: a v2 plan parses with all 19 fields snapped; version records provenance
+  ✓ S48 parsePlan: a v1 plan upgrades losslessly — legacy verbs kept verbatim, version stays 1
+  ✓ S48 buildSceneShots: per-shot focal + moveSpeed ride the execution verbatim
+  ✓ S48 shotIntensity + focalFromToken: the motion-side seams
+  ✓ S48 resolveChatModel: operator pick > director hint > gateway default
+  ✓ S48 directorSystemPrompt: the 19-field schema + engine vocabulary reach the LLM
+  ✓ S48 shotPrompt: v2 cinematic clauses weave into extra-shot prompts (v1 shots unchanged)
+  ✓ S48 planStaticRuns: the pacing gate survives the v2 schema untouched
+  ✓ S49 resolveContentPolicy: unknown/absent/garbage → standard, never silent activation
+  ✓ S49 scanRestrictedSubjects: the registry detects every tier, word-bounded
+  ✓ S49 sanitizePromptForPolicy: substitution, negative clause, identity
+  ✓ S49 policy overlays: empty for standard, doctrine for islamic-history
+  ✓ S49 directorSystemPrompt: the policy overlay stacks on the profile voice
+  ✓ S49 parsePlan: contentPolicy provenance rides the plan
+  ✓ S49 qc battery: the restricted-visual check rides the report when the scan ran
+  ✓ S49 qc gate: restricted-visual blocks export/publish (fail-closed)
+  ✓ S49 runRestrictedVisualScan: a scan that cannot run reports unmeasured, never throws
+  ✓ S49 islamic-history profile: 8th profile, catalog + parsePlan snap agree
+  ✓ S50 multiShotSceneGraph: per-shot fade — the xfade chain with an EXACT frame budget
+  ✓ S50 multiShotSceneGraph fade render contract: the xfade chain renders with EXACT duration (real ffmpeg)
+  ✓ S50 i2vMotionPrompt: the v2 vocabulary speaks, subjectAction leads, moveSpeed colors
+  ✓ S50 buildSceneShots carries transitionOut into the execution
+  ✓ S50 PALINDROME_LOOP_GRAPH: the loop the renderer runs really loops seamlessly (real ffmpeg)
+  ✓ S51 parseReferenceKeys: the JSON column's fail-open contract
+  ✓ S51 nextReferenceKey: lowest-free allocation stays inside the cap forever
+  ✓ S51 isReferenceKey: the DELETE route's path-traversal guard
+  ✓ S51 saveReferenceImage: real ffmpeg normalization + the storage seam
+  ✓ S51 buildPortraitPrompt: the age-fidelity contract (anchor primacy + echo)
+  ✓ S51 getApprovedLocationRefKey's selection law, pinned at the seam it shares with the world clause
+  ✓ S52 profilePickerList: the picker's wire contract
+  ✓ S52 planProfileNotes: the authoring profile's live advisory (no silent creative decisions)
+  ✓ S53 subjectVerdictFromJudge: the threshold law (lighting never flips it)
+  ✓ S53 visual scan prompts: the two laws the judges must carry
+  ✓ S53 sampleFramesEvenly: real ffmpeg sampling + the never-throw contract
+  ✓ S53 qc battery: the advanced visual lenses ride the report when the scans ran
+  ✓ S53 qc gate: the advanced visual lenses ADVISE, never hold
+  ✓ S53 runSubjectContinuityScan + runTextArtifactScan: cannot-run reports unmeasured, never throws
+
+◆ S55 — cinematic quality fixes (T-55.3)
+  ✓ S55 movementForKind: declared statics execute the ambient drift; the stillness contract stays a TRUE hold
+  ✓ S55 shotZoompan: the ambient-drift static executes the creep; TRUE holds keep the constant graph
+  ✓ S55 shotGraphJoins: the graph's own boundaries, frame-exact against the fitted allocation
+  ✓ S55 expectedCutsForTimeline: intra-scene shot joins ride the expectation as blended-clock windows
+  ✓ S55 ambient-drift static: freezedetect-clean on a real render, the TRUE hold still flags (real ffmpeg)
+
+◆ S55 — Islamic dense-frame QC (T-55.4)
+  ✓ S55 planDenseGrid: 0.50s grid, honest coarsening at the 240 cap, degenerate durations snap safe
+  ✓ S55 selectVlmFrames: forced seats kept, even grid fills the cap, deterministic + chronological
+  ✓ S55 restrictedVerdictFromBatches: first fail wins, unmeasured beats pass, all-clean is the only pass
+  ✓ S55 face tripwire (real detector when present): solid frames are a false-positive control; absence degrades gracefully
+
+◆ S55 — Islamic export acceptance (T-55.5)
+  ✓ S55 editSceneImage instruction: the AI-edit prompt rides the L3 sanitizer (standard = the pre-S55 bytes)
+
+◆ S57 — request ids + the portable sink
+  ✓ log: requestLog binds the middleware-stamped request id
+  ✓ log: the portable sink falls back to console when process streams are absent
+  ✓ S62 motion prompt: camera phrase + speed prefix + subjectAction priority
+  ✓ S62 motion prompt: planScene null → scene's legacy camera + per-kind subject clause
+  ✓ S62 motion prompt: the full S48 engine camera vocabulary maps to real phrases
+  ✓ S62 motion prompt: only slow/fast modulate — normal and absent leave the phrase bare
+  ✓ S63 tempo law: no camera phrase carries a tempo word — the prefix owns tempo
+  ✓ S63 doctrine-always-rides: a pose subjectAction can no longer delete the motion clause
+
+◆ S64 whiteboard — the SVG security gate (sanitizeSvg)
+  ✓ S64 sanitizer strips <script> subtrees and keeps legitimate markup
+  ✓ S64 sanitizer strips event-handler attributes (quoted or bare)
+  ✓ S64 sanitizer strips foreignObject / image / use / animate (external-content elements)
+  ✓ S64 sanitizer neutralizes javascript:/data: hrefs
+  ✓ S64 sanitizer removes XML prolog / DOCTYPE / ENTITY declarations
+  ✓ S64 sanitizer neutralizes external url() refs and script-y style payloads
+  ✓ S64 sanitizer passes clean house markup through byte-identical
+
+◆ S64 whiteboard — the path grammar + arc-length geometry
+  ✓ S64 parsePathData tokenizes commands and numbers (scientific notation included)
+  ✓ S64 normalizeCommands: implicit repeats — extra pairs after M degrade to L (same case)
+  ✓ S64 flattenPath: absolute and relative lines accumulate exact lengths
+  ✓ S64 flattenPath: H/V move one axis (absolute + relative)
+  ✓ S64 flattenPath: cubic C hits its endpoint and bows past the chord
+  ✓ S64 flattenPath: S reflects the previous cubic control — spec-exact equivalence
+  ✓ S64 flattenPath: T reflects the previous quadratic control — spec-exact equivalence
+  ✓ S64 flattenPath: A arcs — semicircle and quarter-circle ≈ π·r (spec F.6 endpoint→center)
+  ✓ S64 flattenPath: Z closes the subpath; M opens a new one
+  ✓ S64 sampleAtLength: position, tangent, and clamping
+  ✓ S64 transformPoint: translate∘rotate∘scale matches SVG transform semantics
+
+◆ S64 whiteboard — the storyboard schema (validateWhiteboardProject)
+  ✓ S64 storyboard: a valid project parses; a cameraless scene stays EMPTY (the W5 no-camera-keys law)
+  ✓ S64 storyboard: unknown asset / double placement / invalid placement are rejected
+  ✓ S64 storyboard: draw_path / write_text / reveal_color reference integrity
+  ✓ S64 storyboard: unknown animation type / bad times / bad move target rejected
+  ✓ S64 storyboard: malformed camera keyframes are dropped with an error; valid ones sort
+  ✓ S64 storyboard: defaults and clamps (dimensions, fps, hand)
+  ✓ S64 storyboard: missing narration nulls the project
+
+◆ S64 whiteboard — timing: narration clock, draw scheduling, the frame plan
+  ✓ S64 timing: estimateNarrationMs — the 2.6 wps house pace, clamped [4s, 30s]
+  ✓ S64 timing: sceneDurationMs precedence — explicit > measured VO > estimate
+  ✓ S64 timing: scheduleScene fills the narration window — weighted, fill-scaled, deterministic
+  ✓ S64 timing: the editor's explicit timing is senior — no double-schedule
+  ✓ S64 timing: frameAt — progress ramp, camera drift, pen follows/rests/enters on the true path
+  ✓ S64 timing: cameraAt — eased keyframes; W5: keys ride the DIRECTED breath, the fallback drift stays cameraless
+  ✓ S68 timing: cameraAt — the empty-camera fallback centers on the project's own dimensions
+  ✓ S64 timing: cameraDrift — bounded, deterministic, and always moving
+  ✓ S64 timing: placementAt — move_object eases between base and target
+  ✓ S64 timing: frameCount
+  ✓ S64 timing: the frame plan is a pure function — same inputs, same frames
+
+◆ S76 whiteboard — the VO-slot loudness contract (normalizeVoSlot)
+  ✓ normalizeVoSlot: a far-below-target slot is linear-normalized into the window
+  ✓ normalizeVoSlot: an in-window slot passes through untouched (no double processing)
+
+◆ S64 whiteboard — the asset library
+  ✓ S64 assets: every drawable is an id-carrying <path>/<text> — extraction is complete
+  ✓ S64 assets: loadLibrary builds the index + registers the scheduler's text metadata
+  ✓ S142 the effects pack (audit P4) — the emphasis vocabulary registers clean and rides every law
+  ✓ S64 assets: extractAsset parses path data and text geometry
+
+◆ S64 whiteboard — renderer pure contracts
+  ✓ S64 render: framePayload serializes the full frame state (the applier's wire format)
+  ✓ S64 render: the applier resolves frame-plan keys through the registered id maps (the namespace seam)
+
+◆ S65 whiteboard — E1: the id-charset law
+  ✓ S65 charset: validWhiteboardId accepts legal ids and rejects the namespace separators + exotics
+  ✓ S65 charset: the project validator rejects scene ids that break the law (missing ids still default)
+  ✓ S65 charset: extractAsset excludes corrupting ids from the drawable index and reports them
+  ✓ S65 charset: the starter library is clean under the law (nothing rejected, no separator ids in the index)
+
+◆ S65 whiteboard — E1: the resource budgets
+  ✓ S65 budgets: the per-path command budget counts through the real grammar (implicit repeats included)
+  ✓ S65 budgets: per-scene caps — placements, animations, camera keys
+  ✓ S65 budgets: project caps — scenes, explicit scene duration, Σ explicit durations
+  ✓ S65 budgets: the pure frame estimator — duration priority, arithmetic, and the render wall
+  ✓ S65 budgets: renderWhiteboard refuses an over-budget project BEFORE chromium launches
+
+◆ S67 whiteboard — the ported E2 library (reconciliation)
+  ✓ S67 port: the library grew to 18 assets and every drawable survives the laws
+  ✓ S67 port: every ported path is a SINGLE subpath (the S64 seam constraint)
+  ✓ S67 port: every ported path sits inside the expanded-command budget
+
+◆ S67 whiteboard — the native scaffold planner (E5 phase 1)
+  ✓ S67 scaffold: deterministic, narration-copied, budgeted, validator-clean
+  ✓ S67 scaffold: the keyword rule table picks from the library tags
+  ✓ S67 scaffold: no-cue scenes rotate the fallback cycle deterministically
+  ✓ S67 scaffold: opener gets the title card, closer gets the stat card
+  ✓ S67 scaffold: the scene-count wall refuses beyond the project budget
+
+◆ S137 whiteboard — generated cards + the rich scaffold
+  ✓ S137 cards: deterministic, topic-bearing, charset-legal, no benchmark text
+  ✓ S137 rich scaffold: the topic's cards, large primary + support, alternating paper
+  ✓ S137 additive law: without generated assets the planner is byte-identical to the legacy contract
+  ✓ S137 reserved law: the LLM planner keeps the generated cards structural and out of the catalog
+
+◆ S67 whiteboard — doc parse/serialize + job entity ids
+  ✓ S67 doc: tolerant parse discipline — null on junk, never a throw
+  ✓ S67 jobs: splitEntityId('#wb') carries charset-legal scene ids only
+  ✓ S67 jobs: parseWhiteboardPayload is tolerant of junk payloads
+
+◆ S68 whiteboard — aspect-aware scaffold, validator camera key, scheduler precedence
+  ✓ S68 scaffold: 9:16 / 1:1 boards carry their own center and proportionally placed ink
+  ✓ S68 scaffold: out-of-band dims fall back to the house 1920×1080@24
+  ✓ S68 validator: a cameraless doc stays EMPTY; the dimension-aware center is the render fallback; explicit keys pass the policies
+  ✓ S68 scheduler: explicit events are SENIOR — verbatim times, the fill law takes the rest
+
+◆ S69 whiteboard — upload gates 1-4 (E9 Phase C / E11 §7, the pure half)
+  ✓ S69 id derivation: filename stems slug to charset-legal up- ids
+  ✓ S69 sniff: valid single-root SVG yields the fragment + viewBox
+  ✓ S69 sniff: the structure walls refuse readably
+  ✓ S69 validate: the happy path passes gates 1-4 with counts
+  ✓ S69 validate: the attack surface is neutralized, the asset survives
+  ✓ S69 validate: the budget walls refuse with the reasons
+  ✓ S69 validate: charset-violating ids + reserved ids + no drawables refuse
+  ✓ S69 loadLibrary(uploads): the merge registers uploads beside the built-ins
+  ✓ S69 load-time sanitize law: a re-sanitized upload is safe even if storage lied
+
+────────────────────────────────────────────────────────
+
+◆ S70 creator intelligence — CI-1 hook scoring (deterministic anchor)
+  ✓ S70 hook scorer: specific + tense beats vague, evidence in the notes
+  ✓ S70 retention beats ride the story engine's own spine
+  ✓ S70 title-promise check: missing concrete terms are the gap
+
+◆ S70 creator intelligence — CI-2 packaging lint (the pairing)
+  ✓ S70 packaging lint: truncation, vagueness, duplication, thumb text
+  ✓ S70 packaging lint: the report aggregates honestly, no VLM invented
+
+◆ S70 CI-3 — Shorts self-containment (the moment-pick seam)
+  ✓ S70 self-containment: a cold-start clip outscores a backward-pointing one
+  ✓ S70 self-containment: the Shorts speech window and payoff ending
+
+◆ S72 CI-4 — retention analysis (the pure half)
+  ✓ S72 retention: cliffs surface with evidence, mapped through the timeline projection
+  ✓ S72 retention: a boundary cliff reads as an opener problem; caps + tolerance
+
+◆ S73 whiteboard — the LLM scaffold planner (E5 phase 2)
+  ✓ S73 catalog: reserved ids never reach the model; uploads lead, order deterministic
+  ✓ S73 normalize: unknown/reserved/dupes dropped with reasons; coordinates clamped onto the board
+  ✓ S73 normalize: the per-scene concept cap drops extras and names the cap
+  ✓ S73 compose: structural cards survive, concepts swap, camera/fill law untouched, validator-clean
+  ✓ S73 wrapper: a good model reply composes an LLM scaffold that validates clean
+  ✓ S73 wrapper: a scene the model skips falls back per-scene, honestly listed
+  ✓ S73 wrapper: a failed round-trip degrades to the native scaffold, labeled with the reason
+
+◆ S74 — the paired motion re-measure (S63's open item, adapted post-rebuild)
+  ✓ S74: i2vMotionPrompt reads ONLY shot0's camera/moveSpeed/subjectAction from the plan — the reconstruction law
+  ✓ S74: the committed S62 manifest + BRIEFS reconstruct all eight after-prompts (pose-kill repaired, tempo law, sentence boundary)
+  ✓ S74: the blind scorer REJECTS malformed replies instead of clamping them to 1 (the review fix)
+
+◆ S75 — E10 readiness: the container-safe chromium launch (the /dev/shm receipt)
+  ✓ S75: the whiteboard chromium launch args are container-safe (--no-sandbox + --disable-dev-shm-usage)
+  ✓ S75: BOTH whiteboard launch sites launch through WB_CHROMIUM_LAUNCH_ARGS — no bare launch can return
+  ✓ S75: the scene loop RECYCLES its chromium context per scene — no page outlives a scene boundary
+  ✓ S75: the scene encode PADS the VO (apad) — -shortest must never eat the estimator's tail
+  ✓ S75: the assembly MIXES the narration — the voice track must reach final.mp4
+  ✓ S75: the slides engine keeps its container-safe launch args (S165: through the SHARED constant)
+  ✓ S75: the per-job cancel route derives KINDS from the live registry — no hand literal can drift again
+  ✓ S75: the whiteboard render's duration probe runs BEFORE putFromPath renames the output away
+  ✓ S77: verdictFromScore keeps the family thresholds (80/55) — shared with the continuity pass
+  ✓ S77: worstVerdict ranks off < drift < consistent
+  ✓ S77: sceneScoreOf takes the MIN checked dimension — the binding constraint is the honest number
+  ✓ S77: overallScoreOf averages EVERY checked dimension; honest zero when nothing checked
+  ✓ S77: deriveStyleContract — mode majority, first-seen tie-break, config outliers, null → default
+  ✓ S77: approvedColorGrade mirrors the addendum read — approved plan, first scene's first shot
+  ✓ S77: buildStyleBatches chunks in story order
+  ✓ S77: parseStyleVerdicts — STRING keys, clamped scores, missing scene → unavailable (never a fail)
+  ✓ S77: parseStyleVerdicts — malformed reply → null; the caller marks the whole batch unavailable (§0.3)
+  ✓ S77: buildRepairProposals — flagged scenes only, identity passthrough + style template, capped at 8
+  ✓ S77: pushHistory — bounded ledger, newest last, cap 12
+  ✓ S77: parseConsistencyReport — a legacy V1 identity-only row parses with EMPTY additive fields (never fabricated)
+  ✓ S77: parseConsistencyReport — V2 roundtrip keeps dims, contract, proposals and history; junk → null
+  ✓ S77: the style prompt's laws are pinned — style-only judgement, strict JSON, per-scene reply completeness
+  ✓ S78: buildAppearanceTargets — approved + cast + logged-look gates, ascending, deduped
+  ✓ S78: buildAppearanceLook — mirrors getApprovedAppearanceClause (outfit, accessory, ', '-joined, trimmed)
+  ✓ S78: parseAppearanceVerdict — clamped + issues filtered; missing score → null, NEVER the legacy fake 50
+  ✓ S78: appearance joins the verdict math — min-across three dims, worst-of, honest zero
+  ✓ S78: overallScoreOf counts appearance scores in the mean and the honest count
+  ✓ S78: buildRepairProposals — the appearance branch proposes a redress, capped as usual
+  ✓ S78: parseConsistencyReport — an appearance dim roundtrips; V1 rows still map with none
+  ✓ S78: the appearance prompt's laws are pinned — costume-only judgement, both neighbours disclaimed, strict JSON
+  ✓ S79: buildTargetBatch — the target plus nearest painted neighbours, nearest-first, capped, order kept
+  ✓ S79: mergeTargetedRow — replace-or-insert ONE row, scene order kept, every other row's identity untouched
+  ✓ S80: normalizeConsistencyCheckMode — the two valid non-defaults pass; junk falls to auto, never silently disables
+  ✓ S81: composeLockedShotPrompt — anchor-only is BYTE-IDENTICAL to the pre-S81 composition
+  ✓ S81: composeLockedShotPrompt — no locks returns the base prompt unchanged
+  ✓ S81: composeLockedShotPrompt — full stack: anchor, then style, then continuity clauses joined by space
+  ✓ S81: composeLockedShotPrompt — continuity rides without an anchor or style
+  ✓ S81: shotLikenessEditPrompt / shotLocationEditPrompt — the scene-art edit sentences, re-aimed at the shot
+  ✓ S81: pickShotEditSeed — cast likeness outranks the set piece; neither means fresh generation
+  ✓ S82: buildCrossVideoBatch — newest-first, capped at 6, frame-less and beyond-cap entries reported skipped with honest reasons
+  ✓ S82: parseCrossVideoVerdict — index-aligned; missing/non-numeric score stays NULL, never a fabricated 50; clamping and issue caps hold
+  ✓ S82: crossVideoOverall — min-across the scored rows (the library is as consistent as its worst video); nulls ignored; honest zero
+  ✓ S82: CROSS_VIDEO_SYSTEM — the charter disclaims clothing and style; identity only; STRICT JSON
+  ✓ S82: crossVideoReportKey + parseCrossVideoReport — the storage key format; roundtrip; corrupt or wrong-schema JSON → null
+  ✓ S83: buildPoseTargets — POSES declaration order, only existing, capped
+  ✓ S83: POSE_IDENTITY_SYSTEM — the sheet is judged AGAINST the portrait; the pose itself is disclaimed
+  ✓ S83: parseCrossVideoReport — a pre-S83 report (no poses field) parses with NO pose rows; pose rows roundtrip
+  ✓ S84: DIMENSION_CHECKS — every battery check id is classified exactly once; subject-continuity is deliberately excluded
+  ✓ S84: dimensionFromChecks — worst-of mapping: fail → hold, unmeasured → unmeasured, all-pass → pass, empty → unmeasured
+  ✓ S84: consistencyDimensionFromReport — no report → unmeasured; worst scene verdict decides; all-unavailable → unmeasured
+  ✓ S84: parseCriticVerdict — per-dimension null on missing scores (never 50); clamping; 80 passes, 79 holds
+  ✓ S84: buildCriticVerdict — any hold → hold; nothing measured → insufficient-evidence (never a pass); else ship
+  ✓ S84: buildCriticProposals — every hold maps to ONE concrete action; unmeasured asks for evidence; passes and unavailables propose nothing
+  ✓ S84: criticReportKey + parseCriticReport — namespace key; roundtrip; corrupt/wrong-schema → null
+  ✓ S84: CRITIC_SYSTEM — two dimensions, each on its own; audio/technical/identity disclaimed; STRICT JSON
+  ✓ S87 slice 1: assembleTimeline stamps every doc it builds (schema: 2) and derives the v2 tracks
+  ✓ S87 slice 1: serializeTimeline leads with schema: 2, derives tracks AT SERIALIZATION, roundtrips byte-identical
+  ✓ S87 slice 1: THE refinement pin — stale tracks can NEVER persist (serialize re-derives from the scenes it is handed)
+  ✓ S87 slice 1: deriveTracks — the three scene-backed projections, deterministic, junk-tolerant
+  ✓ S87 slice 1: slides scenes project onto the image kind; absent caption timing falls back to the scene window
+  ✓ S87 slice 1: parseTimeline re-derives the projection — a stored (possibly junk) tracks copy never enters memory
+  ✓ S87 slice 1: guardTimelineOverwrite — a doc this build cannot parse is never overwritten
+  ✓ S87: parseTimeline — a legacy doc (no stamp) parses as v1 (the tolerant-read law), tracks re-derived
+  ✓ S87: parseTimeline — an UNKNOWN stamp is null, never a guessed parse
+  ✓ S87: parseTimeline — junk keys tolerated on read; the strict writer never stores them
+  ✓ S87 slice 2: PARITY — the tracks read and the scenes read agree exactly (kenburns / stock / slides)
+  ✓ S87 slice 2: the render CLOCK parity — identical cut points, blend windows, black-dip windows from both reads
+  ✓ S87 slice 2: compositionPlan — the origin ledger + fail-open (junk tracks NEVER block the render)
+  ✓ S87 slice 2: the honest-geometry pin — when the durationSec field LIES, the tracks read uses the window
+  ✓ S87 slice 3: framePlanClock — the frame-quantized clock (windows ≡ delivered frames, contiguous by construction)
+  ✓ S87 slice 3: whiteboardTracks — the frame plan in the universal grammar (kinds, ids, linkages, slots)
+  ✓ S87 slice 3: the engine tracks READ BACK through the shared planFromTracks (one consumer, every engine)
+  ✓ S87 slice 3: THE two-clock pin — the plan ≡ the estimator's frame plan (estimateProjectFrames → tracks → plan)
+  ✓ S87 slice 4: KIND COMPLETENESS — every engine-written doc carries kind + assetSource on every scene (the mode fallback is provably unreachable for aligned docs)
+  ✓ S87 slice 4: the MIXED-kind law — per-scene truth where the mode proxy was a video-level guess
+  ✓ S87 slice 4: the doc-camera gate stays CHANNEL-scoped (recorded, not collapsed)
+  ✓ S88: pacingStats + pacingProfile — the pacing law (deterministic, junk-tolerant)
+  ✓ S88: sceneWindowsFromCuts + deterministicBeats — the scene map and the fail-open structure
+  ✓ S88: the doc laws — versioned, tolerant parse, strict write, round-trip
+  ✓ S88: THE copyright wall — referenceBlockForPrompt carries STRUCTURE, never the transcript
+  ✓ S95 THE PRICING SYNC LAW: every registry chat model of a PAID provider prices at a real row
+  ✓ S95 pricing provenance: the three reconciled rows price at their verified sources
+  ✓ S95 THE TOMBSTONE LAW: a retired model has NO row — it rides the conservative fallback, never a stale cheap one
+  ✓ S95 heygen cost honesty: a keyed free TIER is cost-unknown, never free
+  ✓ S95 heygen: the voice-id law, the free model default, and the x-api-key ride along
+  ✓ S95 heygen: a 32-hex voice id passes through; custom base url and model are honored
+  ✓ S95 heygen: the JSON envelope — audio_url, nested data.audio_url and bare url all resolve
+  ✓ S95 heygen: JSON without a url, empty audio, HTTP 401, and a missing key all throw honestly
+
+◆ S149 — the Cartesia live-voice law (the archived-library incident)
+  ✓ S149 catalog: the static safety net carries ONLY verified ids — the eight archived-library ids are gone
+  ✓ S149 shapes: the UUID test and the cartesia sanitize law
+  ✓ S149 resolve: a UUID the live list KNOWS rides verbatim; resolve never synthesizes
+  ✓ S149 resolve: an UNKNOWN uuid (an archived id) lands on the live first voice — audio, not a 404
+  ✓ S149 resolve: an unreachable live list NEVER rewrites a uuid — Cartesia's readable 404 stays honest
+  ✓ S149 resolve: a foreign name goes to the live first voice; offline it falls to the static first (Clive)
+  ✓ S149 self-heal: a 404 after a verbatim resolve refreshes the list and retries ONCE on the real first voice
+  ✓ S149 self-heal: a 404 whose refreshed list still lacks a substitute rethrows the readable Cartesia error
+  ✓ S95 magichour: the four-step happy path — upload-url, timed PUT, submit, video-projects poll, download
+  ✓ S95 magichour: missing upload shape, no job id, failure status, url-less complete, and the poll budget all throw
+  ✓ S96 priors + registry: together joins the image lane in lockstep
+  ✓ S96 THE BETTER-FREE LAW: together beats pollinations' anonymous lane on quality AND latency
+  ✓ S96 together cost honesty: a keyed free TIER is cost-unknown, never free
+  ✓ S96 pollinations watermark honesty: the registry note discloses the anonymous-tier watermark
+  ✓ S96 together: URL, bearer key, and the full body contract (model/prompt/size/steps 4/seed/negative/png)
+  ✓ S96 together: non-schnell models take the provider step default; the url envelope downloads; seeds clamp
+{"level":40,"time":1795845595833,"msg":"transient transport failure — retrying","app":"ibismuh-studio","mod":"http","label":"Together AI https://api.together.xyz/v1/images/generations","attempt":1,"attempts":3,"delayMs":3000,"err":"Together AI request failed (HTTP 429): {\"error\":{\"message\":\"rate limited\"}}"}
+{"level":40,"time":1795845598833,"msg":"transient transport failure — retrying","app":"ibismuh-studio","mod":"http","label":"Together AI https://api.together.xyz/v1/images/generations","attempt":2,"attempts":3,"delayMs":6000,"err":"Together AI request failed (HTTP 429): {\"error\":{\"message\":\"rate limited\"}}"}
+  ✓ S96 together: no key, 429 cool-down, and image-less JSON all throw honestly
+  ✓ S98 imageTestFreeLane: the free lanes skip the paid-test confirm, everything else confirms
+  ✓ S99 schema sync law: the committed SQLite mirror is byte-identical to what sync-sqlite-schema.mjs derives
+  ✓ S99 migration chain: Postgres-owned, alive, and every migration carries SQL
+  ✓ S99 fresh-clone hygiene law: .gitignore buries every runtime artifact, postinstall selects the dialect by protocol
+  ✓ S99 the verifier's own contract: forbidden list, the .gitkeep allowance, dual-dialect determinism, and the boot probe
+  ✓ S100 lease config law: the renewal cadence sits strictly inside the TTL
+  ✓ S100 THE FENCING LAW: every Job write in queue.ts is conditional — no unconditional terminal writes survive
+  ✓ S100 the lease columns are real schema, backed by a migration in the chain
+  ✓ S101 THE ADMISSION LAW: the ceiling check and the hold are ONE serialized transaction
+  ✓ S101 THE INTEGRATION LAW: put and putFromPath hold BEFORE writing, release on failure, settle the real delta
+  ✓ S101 the sweep + wiring: expired holds drop lazily from the queue tick, the model is real schema
+  ✓ S102 THE TRUST LAW: one proxy-trust module, both resolvers delegate, the edge bundle stays pure
+  ✓ S102 THE SHARED LAW: the authoritative limiter is DB-backed, atomic, fail-open, and wired at the universal gate
+  ✓ S104 THE CSP LAW: production script-src carries a nonce + strict-dynamic, never unsafe-inline/unsafe-eval
+  ✓ S104 THE OWNERSHIP LAW: middleware owns the CSP, next.config ships no static policy, documents match the middleware
+  ✓ scene-revisions: mintSceneId is deterministic and collision-free
+  ✓ scene-revisions: carrySceneIds preserves identity by index, mints for new scenes
+  ✓ scene-revisions: mintFreshSceneIds never reuses a retired identity
+  ✓ scene-revisions: ensureSceneIdsInPlace mints without replacing objects
+  ✓ scene-revisions: the union slice round-trips and diffs honestly
+  ✓ scene-revisions: checkExpectedVersion — 0 passes on no history, mismatch conflicts
+  ✓ scene-revisions: the eleven mutator sites all record revisions (source pin)
+  ✓ scene-revisions: PATCH /scenes carries the optimistic-concurrency gate (source pin)
+  ✓ scene-deps: the dependency table laws (narration/caption/visual/seedVariant)
+  ✓ scene-deps: planSceneInvalidation folds fields and names exact keys
+  ✓ scene-deps: the key vocabulary covers both lanes
+  ✓ scene-artifacts: the cost bridge rides the metering layer (source pin)
+  ✓ scene-revisions: rollback sweeps through the declarative map (source pin)
+  ✓ scene-artifacts: the stale law (current / stale / unknown)
+  ✓ scene-preview: the lane is wired and walled (source pin)
+  ✓ scene-repairs: the estimate uses the admission's own table
+  ✓ scene-repairs: the repair plan names exactly what regenerates
+  ✓ cost-guard: the ceiling admission law
+  ✓ s115: the idempotency + approval gates are wired (source pin)
+  ✓ scene-qc: seamExpectation derives the seam from the stitcher's own math
+  ✓ scene-qc: alignSeam — the seam law (cut must appear, blend need not, strays fail)
+  ✓ scene-qc: checkSceneCues — the scene-sliced caption laws
+  ✓ scene-qc sceneAudioVerdict: silent scene + video-only preview → playable PASSES, sound lenses not asked
+  ✓ scene-qc sceneAudioVerdict: narrated scene + no audio → playable FAILS (words cut), lenses stay fail-closed
+  ✓ scene-qc sceneAudioVerdict: narrated + AAC → the legacy verdict byte-identical, lenses asked
+  ✓ scene-qc sceneAudioVerdict: an unreadable probe stays fail-closed (applicability true)
+  ✓ scene-qc sceneAudioVerdict: no H.264 video stream → honest value, never a playable pass
+  ✓ scene-qc: the verdict law + the approval gate
+  ✓ scene-qc: seamsOfScene — which seams a scene owns
+  ✓ scene-qc: resolveSceneDuration — the render's own fold, exported once (no private copies)
+  ✓ scene-qc: the battery reuses the whole-file probes (source pin)
+  ✓ render-assembly: parseRenderManifest — tolerant, schema 1 only
+  ✓ render-assembly: compareManifest — the staleness law (pure)
+  ✓ render-assembly: the assembly + manifest + gates are wired (source pin)
+  ✓ s118: the §8.1 upload route is alive and rides the full pipeline (source pin)
+  ✓ s118: the §8.2 audit rows + the VCE persistence + the surfaces are wired (source pin)
+  ✓ s119: the render lane contract — resolveRenderLane truth table (pure)
+  ✓ s123: the graphics lane rows of the truth table + the ship-dark law
+  ✓ s123 P3: the lane is wired end-to-end — route branch, job dispatch, queue handler, doc column (source pin)
+  ✓ s119: the lane contract is wired — route resolves the lane, scaffold pins, workspace surfaces rejections (source pin)
+  ✓ w1: the benchmark definition is pure, fixed and aspect-complete
+  ✓ w1: the baseline receipt, the rubric doc and the text-reveal fix are in the tree (source pin)
+
+◆ W2 whiteboard — the semantic beat compiler (beat-plan.ts)
+  ✓ W2 splitSentences: punctuation attaches, empties drop, unpunctuated text is one sentence
+  ✓ W2 planBeats: deterministic; windows inside the clock; the hold holds; order monotonic
+  ✓ S147 the rhetorical layer — the second lens classifies the directive's taxonomy
+  ✓ S147 planBeats fills the additive fields; the mark fires LAST in the compile
+  ✓ S147 byte-identity — no fx placements ⇒ identical windows, assignments, and compiled events with or without meta
+  ✓ W2 planBeats: the cards own the opening and closing sentences
+  ✓ R1 planBeats: the opening-stroke guarantee — in the anchors world a late-opening beat pulls its first placement to sentence 0
+  ✓ W2 compileBeats: explicit events stay senior; no double claims; nothing outlasts the clock
+  ✓ W2 beatSceneEvents: the semantic delta is real — draws ride the narration, not the lead-in
+  ✓ W2 beatSceneEvents: the fallback is the fill law byte-for-byte when the plan degenerates
+  ✓ W2 LLM beats: normalization validates beat-by-beat; valid beats set the mention order
+  ✓ W2: the seams and the one-source constants are wired (source pins)
+
+◆ W3 asset validator — the stroke-authored law, gated (S120 §3)
+  ✓ W3 teleport: a mid-path M fires, a degenerate path fires, every built-in rides one stroke
+  ✓ W3 self-intersection: a bowtie fires, a T-touch passes, closed shapes close clean
+  ✓ W3 caps: missing/zero width fires, bad linecap fires, pen groups hold one pen
+  ✓ W3 closed-direction: a retrace fires, every built-in closed shape winds
+  ✓ W3 fill-after-outline: a lead fill fires, the hand's fills are exempt, dual-role strokes pass
+  ✓ W3 orientation: a flipped arrow head fires, real arrows point, labels stay in the box
+  ✓ W3 aggregate: all built-ins pass their own validator, byte-identical on rerun
+  ✓ W3 loadLibrary: built-ins self-validate (a broken one throws), uploads warn-and-exclude without mutation
+  ✓ W3 upload gate: stroke-authored geometry rejects with readable copy
+  ✓ W3 extraction: the pen attributes ride along for the validator
+
+◆ W4 slice 1 — word anchors: the schedule rides the spoken clock
+  ✓ W4 anchorEnvelope: sane anchors collapse to their envelope, garbage degrades to null
+  ✓ W4 scheduleScene: absent anchors are byte-for-byte today's fill law; degenerate anchors degrade identically
+  ✓ W4 scheduleScene: with anchors the draw fills the SPOKEN window
+  ✓ W4 planBeats: aligned anchors make each sentence's window its spoken span; a mismatch degrades byte-for-byte
+  ✓ W4 beatSceneEvents: anchors flow through the fallback AND the plan (one seam)
+  ✓ W4 checkReadability: the pixel wall rejects scale-0.4 specks; zoom rescues; unknown text fails closed
+  ✓ W4 compile-only: the anchors never ride the doc contract
+
+◆ Stage S — anim/: easing, keyframes, the clock (S120 §8)
+  ✓ S easing: the table is complete, pure, clamped — and the overshoot curves actually overshoot
+  ✓ S easing: the zoompan expressions reproduce motion.ts's shapes byte-for-byte
+  ✓ S keyframes: clamped evaluation, strict ascent, per-segment ease, structured lerp
+  ✓ S clock: framePlanWindows matches the whiteboard's framePlanClock byte-behavior; the wall is one wall
+  ✓ S purity: the substrate imports no fs, no clock, no randomness
+
+◆ W5 camera director — content-driven framing, the drift demoted to fallback (S120 §3)
+  ✓ W5 director: deterministic; a ≤1-beat scene returns [] (the drift fallback owns it)
+  ✓ W5 policies: crafted violations fire with readable reasons; the director's own keys pass
+  ✓ W5 validator: policy violations are ERRORS, never clamps; the directed benchmark keys validate clean
+  ✓ W5 framing receipts: the directed W1 benchmark keys pass every policy on all three aspects
+  ✓ W4 glyphs: the committed table is the receipt's table — full ASCII coverage, well-formed outlines
+  ✓ W4 glyphs: the layout math is exact — advance, y-flip, spacing, determinism, honest skips
+  ✓ W4 glyph mode: the transform is deterministic and falls back honestly
+  ✓ W4 glyph mode: registration end-to-end — paths not texts, draw_path not write_text, readability intact
+  ✓ W4 glyph mode: the PAGE seam rides the transformed svg — the contours exist where the pen rows point
+
+◆ W4 slice 3 — voice anchors: the captions lane's clock, the beat plan's strokes
+  ✓ W4 voice anchors: the count contract — the bridge's word stream IS the beat plan's tokenization
+  ✓ W4 voice anchors: exact spans — the chunk windows ride wavChunkWindows, the words slice them evenly
+  ✓ W4 voice anchors → the beat plan: the strokes move onto the spoken window
+  ✓ W4 voice anchors: the render seam and the caller are wired (compile-only source pins)
+
+◆ W6 continuous canvas — the board policy (S120 §3)
+  ✓ W6 validator: the additive-parse law — no board field means a clean scene, unchanged
+  ✓ W6 validator: continuous boards round-trip every field
+  ✓ W6 validator: crafted board violations fire with readable reasons
+  ✓ W6 resolveCarriedInk: end-state placements, subset carry, color carry, defaults
+  ✓ W6 carriedExitAt: keep is constant; fade/erase/pan are eased, deterministic, joint-continuous
+  ✓ W6 frameAt: the carried-state equality pin — frame 0 of scene K+1 contains exactly scene K's carried ink
+  ✓ W6 wb-page: the carried layer renders UNDER the scene ink through the shared seam
+  ✓ W6 tracks: the board policy changes no clip (the no-grammar-change pin)
+  ✓ W6 render seam + manifest: the carry wiring and the additive boardMode (compile-only pins)
+
+◆ W7 finishing layer — the hand family, travel, poses (S120 §3)
+  ✓ W7 hand family: all eight register through the validator; the left mirrors derive from one art source
+  ✓ W7 pen-up travel: the hand crosses the gap visibly, joint-continuous, bounded, holding the next tool
+  ✓ W7 poses: role metadata selects the grip; text writes; the tail rests
+  ✓ excellence P0-A: the tail hand glides to a park point OFF the ink — clear, joint-continuous, bounded, deterministic
+  ✓ excellence P0-A: frameAt passes the project's real dimensions — the park clamps on a portrait board
+  ✓ excellence P0-B: text starts within the lead-in bound — paths compress, payload re-fills, the span end is preserved
+  ✓ excellence P0-B: paths-only schedules are byte-identical (the law is a no-op without text)
+  ✓ excellence P0-B: boundTextLeadIn — the helper's exact contract (no text, leading text, degenerate window)
+  ✓ excellence P0-B: the beat compiler rides the same bound — the w1-phrase shape compiles with the text inside it
+  ✓ W7 board policy extras: hand.side and sfxOn round-trip (the editor's new fields survive)
+
+◆ W7 finishing layer — the whiteboard SFX (recipes + the pure cue plan)
+  ✓ W7 sfx recipes: the four whiteboard kinds synthesize real wavs; the director catalog is untouched
+  ✓ W7 cue plan: pop opens, page-turns mark the wipes, pen-stops need a hearable gap, the cap keeps the accents
+  ✓ W7 seams: the render consumes the family + the sfx layer; the page shows the pose groups (compile-only pins)
+
+◆ S121 P0 — the VoiceStudio optional provider + measured word timing
+  ✓ S121 voice passthrough: a VoiceStudio voice reaches the server verbatim; the alias catalog is served
+  ✓ S121 detailed ASR: support table, verbose_json parsing, the wire form
+  ✓ S121 measured captions: token stream, measured chunk windows, the laws hold
+  ✓ S121 measured anchors: per-word measured spans land; the proportional baseline is byte-identical when the rung is absent
+  ✓ S121 consent ledger: the basis vocabulary is closed
+  ✓ S121 consent ledger: the clone flow's consent law (parseCloneConsent)
+  ✓ S121 word-offset arithmetic: chunked audio shifts measured words by the measured chunk start
+{"level":50,"time":1795845606737,"msg":"[getCapability:tts] the saved selection row could not be read — serving the capability default until the storage issue is fixed","app":"ibismuh-studio","mod":"providers/settings","detail":"No tenant context (settings.getUserSettings) — this code path must run behind requireUser() or inside a job body."}
+{"level":50,"time":1795845606737,"msg":"[getCapability:tts] the saved credential for provider \"zai\" could not be decrypted — the key reports missing (re-enter it in Settings) instead of resetting the provider","app":"ibismuh-studio","mod":"providers/settings","detail":"No tenant context (settings.getProviderCredential) — this code path must run behind requireUser() or inside a job body."}
+{"level":50,"time":1795845606737,"msg":"[getCapability:tts] the saved selection row could not be read — serving the capability default until the storage issue is fixed","app":"ibismuh-studio","mod":"providers/settings","detail":"No tenant context (settings.getUserSettings) — this code path must run behind requireUser() or inside a job body."}
+{"level":50,"time":1795845606737,"msg":"[getCapability:tts] the saved credential for provider \"zai\" could not be decrypted — the key reports missing (re-enter it in Settings) instead of resetting the provider","app":"ibismuh-studio","mod":"providers/settings","detail":"No tenant context (settings.getProviderCredential) — this code path must run behind requireUser() or inside a job body."}
+  ✓ S121 settings: the asr capability follows tts until an ai.asr row is saved
+
+◆ S121 P1 — semantic scene directives + pause-aware captions + evidence-bound review gates
+  ✓ S121 P1 grouping: measured cues split at real spoken pauses, never misalign
+  ✓ S121 P1 director: the semantic directive vocabulary is policed
+  ✓ S121 P1 evidence binding: the override covers the report's CONTENT, not just its timestamp
+
+◆ S121 P2 — the camera-keys, two-bone IK, contact and gait substrate
+  ✓ S121 P2 anim/camera: the keys model validates, interpolates smoothstep, and projects
+  ✓ S121 P2 anim/ik: two-bone IK round-trips, respects the pole, refuses the unreachable
+  ✓ S121 P2 anim/contact: ownership flows legally or the timeline is refused
+  ✓ S121 P2 anim/gait: the phase rides world distance, never the camera
+
+◆ S121 P3/P4 — the dub client builders and the license policy
+  ✓ S121 P3/P4: the dub client builders and the license policy table
+
+◆ graphics — S123 G1.1 the doc contract + validator
+  ✓ G1.1 the mixed v1 doc — every element kind — round-trips byte-identical
+  ✓ G1.1 validation is deterministic — same input, same report, byte-identical
+  ✓ G1.1 a higher version parses with a warning (v-next loads in v1 readers)
+  ✓ G1.1 a junk version shape is unreadable — errors + parse null
+  ✓ G1.1 the id-charset law rejects separator-carrying and malformed ids
+  ✓ G1.1 validGraphicsId mirrors the whiteboard law exactly
+  ✓ G1.1 the elementsPerScene wall rejects with its name
+  ✓ G1.1 the scenesPerProject wall rejects with its name
+  ✓ G1.1 the sceneDurationMsMax wall rejects with its name
+  ✓ G1.1 the projectExplicitDurationMsMax wall rejects with its name
+  ✓ G1.1 the barDataMax wall rejects with its name
+  ✓ G1.1 the iconPathCommandBudget wall rejects with its name; junk paths refuse
+  ✓ G1.1 the groupDepthMax wall rejects with its name
+  ✓ S128 the textCharsMax wall — a megabyte headline refuses with its name; the boundary parses
+  ✓ S128 the textCharsMax wall — callout text and bar labels refuse too
+  ✓ S128 the textCharsMax wall — narration and the doc title refuse
+  ✓ S128 the textCharsMax wall — OPTIONAL units warning-drop, never refuse (the tolerance law)
+  ✓ S128 the iconPathCharsMax wall — one command with a huge literal refuses (the F2 hole)
+  ✓ G1.1 the compatibility table rejects cross-kind motions by name
+  ✓ G1.1 enter is required — an element that cannot enter has no reason to exist
+  ✓ G1.1 unknown element kinds drop with warnings (the closed v1 set)
+  ✓ G1.1 unknown fields drop with warnings at every level
+  ✓ G1.1 junk optional fields drop honestly; ranges clamp with warnings
+  ✓ G1.1 an absent payload for a kind that has one warns but never refuses
+  ✓ G1.1 a payload parked under the wrong kind is ignored with a warning
+  ✓ G1.1 the counter shape: from < to, finite, decimals 0|1|2
+  ✓ G1.1 the bar shape: 1..barDataMax rows, label + finite value ≥ 0
+  ✓ G1.1 group integrity: missing child and self-reference reject; dupes dedupe with a warning
+  ✓ G1.1 time sanity: negative delay, zero clock, spans past the scene clock
+  ✓ G1.1 the estimated clock (absent durationMs) uses the house 2.6-wps model
+  ✓ G1.1 fps ∈ {24, 30}; the surface must be a house size
+  ✓ G1.1 a junk background refuses (never substituted); junk palette fields drop
+  ✓ G1.1 duplicate element ids reject (the group seam); duplicate scene ids reject (S87 tracks)
+  ✓ G1.1 one wall, two engines — GRAPHICS_FRAME_BUDGET is ANIM_FRAME_BUDGET
+  ✓ G1.1 the compatibility table is compile-total and closed
+  ✓ G1.1 parseGraphicsDoc nulls on junk JSON and non-objects
+
+◆ graphics — S129 (PAE-1) the tween directive
+  ✓ S129 a tweened doc round-trips byte-identical (strict write, declared order)
+  ✓ S129 the tweensPerElementMax wall — excess directives warn-drop with the wall name
+  ✓ S129 the tweenKeysPerChannelMax wall — excess keys warn-drop with the wall name
+  ✓ S129 tween time-sanity — a window past the scene clock REFUSES (the motions-loop law)
+  ✓ S129 a progress tween on a non-reveal kind REFUSES; on a bar it parses (the compat-table law)
+  ✓ S129 junk tween tracks warn-drop with their reasons; the element still renders
+  ✓ S129 unknown keys inside tween objects warn-drop (the id law rides every level)
+  ✓ S129 the fold — additive dx holds pre/post-window and glides linearly in between
+  ✓ S129 the fold — rotateDeg unlocks rotation; the eased segment follows the destination key
+  ✓ S129 the fold — multiplicative channels compose with enter (progress × reveal, opacity × fade)
+  ✓ S129 composition order — emphasis STILL shapes the final state over tweens (the G1.2 pin, tween form)
+  ✓ S129 multi-tween phases fold in array order — move left, then right
+  ✓ S129 tween-less byte-identity — an element's frames are untouched by OTHER elements' tweens
+  ✓ S129 the tween fold is deterministic — the tweened sweep is byte-identical across two passes
+
+◆ graphics — S130 (PAE-2) the scene camera
+  ✓ S130 a camera'd doc round-trips byte-identical (strict write, declared order)
+  ✓ S130 the cameraKeysMax wall — excess keys warn-drop with the wall name
+  ✓ S130 junk camera keys warn-drop with their reasons; an all-junk camera parses to absent
+  ✓ S130 camera time-sanity — a key past the scene clock REFUSES (the motions-loop law)
+  ✓ S130 cameraAt — clamped holds, linear glide, the destination key's ease
+  ✓ S130 frameAt carries the camera only when the scene directs it — camera-less frames unchanged
+  ✓ S130 the composer wraps scene content in #gcam only when a camera exists (additive seam)
+  ✓ S130 graphicsFramePayload serializes the camera state; the applier builds the board-center transform
+  ✓ S130 the camera'd sweep is deterministic — byte-identical across two passes
+  ✓ S130 the tween + camera directives coexist on one scene (the PAE stack)
+
+◆ graphics — S131 (PAE-3) the event channel
+  ✓ S131 an evented doc round-trips byte-identical (events ride the PAE block, declared order)
+  ✓ S131 the eventsPerSceneMax wall — excess cues warn-drop with the wall name
+  ✓ S131 junk events warn-drop with their reasons; an all-junk array parses to absent
+  ✓ S131 event time-sanity — a cue past the scene clock REFUSES (the motions-loop law)
+  ✓ S131 graphicsEventList — the global projection: frame accumulation across scenes, quantized tSec, 0-based index
+
+◆ graphics — S132 (PAE-4) render recovery
+  ✓ S132 the render fingerprint — every scene-shaping input moves it; map order never does
+  ✓ S132 the resume decision — fresh start, fail-closed refusal, encoded-and-present skips
+  ✓ S132 the manifest io — round-trip through a real dir; corrupt/wrong-version reads as NO manifest
+  ✓ S145 the drill's finding — the manifest is written on the FRESH path too (a first-time crash is recoverable)
+
+◆ graphics — S133 (PAE-5) the QC lenses
+  ✓ S133 the read-time formula — clamp(400 + 30 ms/char, 400, 4000), ONE home
+  ✓ S133 the readcheck lens — the visibility window math and the longest-string rule
+  ✓ S133 the determinism sweep — stable hash, finite channels, the ≤600 grid, the NaN tripwire
+  ✓ S133 the matrix rows — G1-READ-1 and G1-DET-1 ride the pre-render evidence
+  ✓ S133 the hold windows — tween and camera windows extend the legal hold start
+
+◆ graphics — S123 G1.2 frame truth
+  ✓ G1.2 the frame sweep is deterministic — same doc, same grid, byte-identical
+  ✓ G1.2 element state is never non-finite anywhere — the named pin
+  ✓ G1.2 tween continuity — no discontinuity at any motion boundary
+  ✓ G1.2 pre-enter holds the start state; post-enter holds the placed state
+  ✓ G1.2 the exit drains to its end state — fade out, un-reveal, count-back
+  ✓ G1.2 emphasis composes over the exit state (fixed order: enter → exit → emphasis)
+  ✓ G1.2 the doc clock resolves the active scene and clamps (never NaN)
+  ✓ G1.2 the progress channel defaults to 1 when no motion drives it
+  ✓ G1.2 base opacity multiplies the motion factor
+  ✓ G1.2 emphasis count pulses the pop channel and leaves the value untouched
+  ✓ G1.2 graphicsFrameCount is the doc clock in frames at the doc fps
+  ✓ G1.2 an empty doc is a caller bug — refused loudly, never fabricated
+
+◆ graphics — S123 G1.3 the composer — static skeleton + one APPLY_FRAME_FN
+  ✓ G1.3 compose is deterministic — same scene, byte-identical html and payload
+  ✓ G1.3 the skeleton carries every element; group children nest INSIDE the group
+  ✓ G1.3 the hostile icon lands inert — sanitizeSvg strips the payload, escape holds the attribute
+  ✓ G1.3 the compose defaults are the ONE table — absent payload fields land on it
+  ✓ G1.3 bar lengths bake the data reveal — value/scaleMax × ½ surface, data-base for vertical
+  ✓ G1.3 icon paths bake the stroke-dash reveal along their arc length (svg.ts geometry, reused)
+  ✓ G1.3 the ONE reveal mechanism per element — grow/wipe/draw bake differently
+  ✓ G1.3 formatCounter is the ONE formatter — decimals, unit, negatives
+  ✓ G1.3 the counter bakes its format — the applier writes textContent from the tweened value
+  ✓ G1.3 the payload carries frameAt verbatim — same states, doc order, stable keys
+  ✓ G1.3 the applier's construction laws — set-only writes, no element creation, no wall clock, no randomness
+  ✓ G1.3 the poster is the placed state — the skeleton renders truthfully before any apply
+  ✓ G1.3 author text lands escaped — markup and quotes ride as content
+  ✓ G1.3 the surface drives the geometry — the same scene composes per house size
+
+◆ graphics — S123 G1.4 the native planner + the LLM scaffold
+  ✓ G1.4 the native scaffold is deterministic and validator-clean
+  ✓ G1.4 the rule table routes the archetypes — stat / list / chart / opener / closer
+  ✓ G1.4 every scaffold motion is legal per kind and inside the scene clock
+  ✓ G1.4 the walls — an empty story and an over-budget story refuse
+  ✓ G1.4 surface snapping — caller geometry lands on a house surface
+  ✓ G1.4 the icon library parses — every path under the command budget
+  ✓ G1.4 normalize polices the grammar — every drop reported, survivors clamped
+  ✓ G1.4 normalize is pure — same proposals, same result, byte-identical
+  ✓ G1.4 the scene clock clamps overrunning motions and drops the unfittable
+  ✓ G1.4 the group police — children must be accepted same-scene non-group elements
+  ✓ G1.4 the cap — over 6 elements per scene drops the extras and names the cap
+  ✓ G1.4 compose — served scenes swap elements, unserved scenes pass byte-identical
+  ✓ G1.4 wrapper — a good reply composes an LLM doc that validates clean
+  ✓ G1.4 wrapper — every failure degrades to the native doc, byte-identical, honestly labeled
+
+◆ graphics — S123 pins: D2 routing neutrality + the 24/30 fps contract (D3)
+  ✓ S123 pin 1 — frameCountOf round-trips the frame↔time conversion at both rates (D3 §5.2.1)
+  ✓ S123 pin 2 — framePlanWindows is contiguous with delivered = frames/fps at both rates; junk fps refuses loudly (D3 §5.2.2)
+  ✓ S123 pin 3 — graphicsFrameCount reads doc.fps, never an assumed rate (D3 §5.2.3)
+  ✓ S123 pin 4 — golden frames: ms-sampled states are fps-free; the per-fps frame series hashes distinct and stable (D3 §5.2.4)
+  ✓ S123 D2 — routing parses tolerantly, writes strictly, round-trips byte-identical (spec §5.1)
+  ✓ S123 D2 — neutrality: with and without routing, the reads are byte-identical and frameAt never sees the hints (spec §5.1)
+  ✓ S123 pin 5 — the multi-scene clock law: motions evaluate against the SCENE-LOCAL clock (R-6)
+  ✓ S123 pin 6 — the budget wall refuses at doc.fps against the DELIVERED count (D3 §5.2.5, R-1)
+  ✓ S123 tracks — graphicsTracks projects the frame plan onto the S87 contract at doc.fps
+  ✓ S123 tracks — hand-authored scene ids carry no row linkage (null is the honest read)
+
+◆ S163 Phase B — the native graphics transition engine
+  ✓ S163 Phase B: the fps-free law — frames are the unit of account, seconds derive once
+  ✓ S163 Phase B: the seeded geometry — hash01/axisFor/cornerR are pure, deterministic, stateless
+  ✓ S163 Phase B: the compositor — every native type rides the transform/alpha/mask hooks
+  ✓ S163 Phase B: the spec sanitizer — the closed native set, the walls, junk drops honestly
+  ✓ S163 Phase B: the doc grammar — nativeTransitions rides additive; absent stays absent
+  ✓ S163 Phase B: the overlap accounting — Σ clips + Σ windows ≡ Σ legacy frames, exactly
+  ✓ S163 Phase B: byte-identity — absent transitions take the exact legacy path
+  ✓ S163 Phase B: the sweep hash — same doc + seeds → identical frame plans across two computations
+  ✓ S163 Phase B: the window encode — the scene law mirrored, the carved VO tail continues
+  ✓ S163 Phase B: the applier + page — set-only, idempotent, the network-aborted page law
+
+◆ graphics — S123 P3: the renderer contract (pure seams), the draft viewport, the QC group
+  ✓ S123 P3 — the draft viewport law: closed scales, even dims ≥ 64, non-reviewable, no credit (the b6 pattern)
+  ✓ S123 P3 — the renderer's pure seams: the global frame clock, the encode args, the assembly args
+  ✓ S123 P3 — the tracks projection gains the audio truth (VO slots + the bed clip), absent opts stays byte-identical
+  ✓ S123 P3 — the graphics QC matrix: re-derived, fail-closed, never a broad-pass cover
+  ✓ S123 P3 — the lane-aware battery judgments: designed holds + hard cuts (the graphics group)
+
+◆ graphics — S124 the element editor: placed truth, hit-test, placement math, the z-order law
+  ✓ S124 the placed frame rides the placement — at, base opacity, full reveal, no counter channel
+  ✓ S124 the placed frame IS the poster — the skeleton's baked transform/opacity match (the one-truth pin)
+  ✓ S124 the placed payload is byte-stable through the ONE serializer — double-run identical
+  ✓ S124 the claim map is the ONE claim truth — matches the composer's emission pass
+  ✓ S124 the hit-test reads doc order — the topmost containing bounds wins, edges inclusive, miss is null
+  ✓ S124 the hit slop keeps zero-area geometry grabbable — a bare line along its length
+  ✓ S124 move is exact and unclamped — scene-unit deltas, off-canvas is legal
+  ✓ S124 scale rides the band — the ratio applies, the clamps hold, non-finite is a no-op
+  ✓ S124 z-order: the four actions on a flat scene — exact expected arrays
+  ✓ S124 z-order: the slots law — claimed children keep their exact array slots; the group's rank moves them
+  ✓ S124 z-order refusals — unknown ids and claimed members (the error names the owning group)
+  ✓ S124 z-order purity — the input scene is never mutated
+  ✓ S124 a z-ordered + re-placed doc round-trips the validator byte-stable
+  ✓ S124 the editor limits keep the validator silent at both band edges
+
+◆ characters — S125 the rig grammar (rig2d)
+  ✓ S125 the rig doc round-trips byte-stable (write ∘ validate ∘ parse ∘ write)
+  ✓ S125 the standard slot vocabulary maps from the parts (the §6 slot law)
+  ✓ S125 a partial mouth set is an ERROR — the speaking beats would visibly break
+  ✓ S125 a mouthless rig validates with the honesty warning (the rig will not fake speech)
+  ✓ S125 referential integrity — unresolved svgRef, unknown pose joint, cyclic parent, junk pivot all refuse
+  ✓ S125 the walls — joint bands, pose budget, stage bounds, junk background, fps pin
+  ✓ S125 the missing standard poses WARN and the planner degrades (quality loss, never breakage)
+  ✓ S125 the parts library — duplicate mouth variants refuse, junk slot refuses, the budget wall holds
+  ✓ S125 the scaffold builds a valid doc from seeds + art (the auto planner's native half)
+  ✓ S125 the ease reader — the shared check for the doc and the timeline grammars
+
+◆ characters — S125 the rig frame truth (rig-frame)
+  ✓ S125 poseAt is deterministic — same inputs, byte-identical frame states
+  ✓ S125 the FK chain — a torso rotation carries the head, brow and arms with it
+  ✓ S125 a parent rotation carries children — FK, not per-part absolutes
+  ✓ S125 pose rows hold; the tween window clamps; rest before the first row
+  ✓ S125 an unknown pose id resolves to rest — authored timelines stay honest
+  ✓ S125 the syllable counter — deterministic vowel-group beats (beat-sync, not phonemes)
+  ✓ S125 mouth beats land STRICTLY INSIDE their word spans (the W4 tolerance pin)
+  ✓ S125 the schedule ladder — anchors first, estimator fallback, no narration → closed
+  ✓ S125 the mouth visibility swap — one shape visible, the rest hidden, closed at rest
+  ✓ S125 the gesture mouth override wins its window — smile is a gesture, never speech
+  ✓ S125 never-NaN at the band edges — ±360°, scale 0.2/3, offset extremes stay finite
+  ✓ S125 classifySentence is exported and unchanged — one classifier, two consumers
+
+◆ characters — S125 the contract seats (compose, tracks, preflight)
+  ✓ S125 the compose skeleton — z-ordered rp- groups at rest, the closed mouth visible, sanitize on every fragment
+  ✓ S125 the applier — absolute matrix/display writes, idempotence by construction (the source pin)
+  ✓ S125 characterTracks — the S87 projection: contiguous from zero at either fps, contract read-back
+  ✓ S125 the preflight wall — the DELIVERED arithmetic is the truth (R-1), the refusal names the cap
+
+◆ characters — S125 the planner + the renderer contract
+  ✓ S125 the planner is deterministic and compile-only — byte-identical timelines, speech rides
+  ✓ S125 the gesture table — setup welcomes, action points (alternating arms), support rests
+  ✓ S125 gesture rows sit INSIDE their sentence windows; the compile wall caps rows
+  ✓ S125 the renderer's encode args — video-only, -t bounded (the arg list IS the contract)
+  ✓ S125 the clip hash — deterministic, sensitive to every render input
+
+◆ characters — S125 the lane wiring (liveliness + the render hook)
+  ✓ S125 rule 4.5 — the native rig sits BETWEEN the stills contract and the i2v pick (native-first)
+  ✓ S125 no rig → the byte-identical legacy path (the rollback law)
+  ✓ S125 the lane is wired end-to-end — route/job/schema sources (the P3 source-pin pattern)
+  ✓ S125 the admission routes — the validator is the gate, the pass degrades per-part (the source pins)
+
+◆ characters — S166 the expressiveness slice (mouth classes + pose v-next)
+  ✓ S166 the mouth classes — the cycle gains mbp + rest; the S125 five stay the floor
+  ✓ S166 the syllable chunker — onsets line up with the countSyllables slots
+  ✓ S166 mbp closure windows — a bilabial onset rides the closure class, strictly inside its span
+  ✓ S166 rest on pauses — anchored gaps ≥ the floor ride rest (a pause, never speech)
+  ✓ S166 the schedule rides rest — estimator byte-stable, anchored pauses rest, the frame truth follows
+  ✓ S166 the honest degradation — a legacy (five-shape) rig renders closed; the closure beat stays speech
+  ✓ S166 the additive-absent law — the legacy FK, doc, parts and schedule bytes ride the S125 goldens
+  ✓ S166 the parts pass asks for the two new art variants; the floor stays the S125 five (source pins)
+  ✓ S166 the pose schema v-next validates — polar bands, rigid boolean, polar seniority
+  ✓ S166 polar deltas — the axis-equivalence is exact, the tween rides the ARC, not the chord
+  ✓ S166 per-part rigidity — the pose never scales a rigid part; the subtree stays rigid; rotation still rides
+  ✓ S166 tweens INTO rigidity blend honestly; the v-next band edges stay NaN-free
+  ✓ S166 the new fields ride the S162 curves — the pose math reads the ONE curve table
+  ✓ S166 the v-next fields round-trip byte-stable (write ∘ validate ∘ parse ∘ write)
+
+◆ graphics — S126 the external import lane
+  ✓ S126 the sprite grammar — the closed-kind extension validates and round-trips byte-stable
+  ✓ S126 the sprite compatibility table — fade/slide/pop only; draw/grow/count refuse
+  ✓ S126 the sprite payload walls — junk key, layout, frames, fps, dims all refuse
+  ✓ S126 the frame index channel — bounded, scene-local, deterministic (no second clock)
+  ✓ S126 the compose seats — sheet window, sequence toggle, missing assets recorded
+  ✓ S126 the payload + applier — the frameIndex channel rides, the sprite writes are absolute sets (source pins)
+  ✓ S126 the G1-IMP lens — spriteless docs pass vacuously; broken payloads fail the row
+  ✓ S126 the pure gates — sniff, PNG/WebP headers, sheet law, sequence law, fps snap, provenance
+  ✓ S126 the lane wiring — the seven gates, the one-seam resolution, the fail-closed render (source pins)
+
+◆ characters — S125-ext the BVH sidecar (K1-ext)
+  ✓ S125-ext the BVH parser — the documented format, structure-strict, junk refuses
+  ✓ S125-ext the slot mapping — the ONE name table, unknown joints skip
+  ✓ S125-ext the converter — deterministic, stride ≤ the compile wall, the band clamps, unmapped skips
+  ✓ S125-ext the ladder seat — authored inline rows tween and outrank the pose channel
+  ✓ S136 the mocap binding law — slot-keyed rows reach the parts they name (part ids ≠ slots)
+  ✓ S125-ext the sidecar wiring — the clean-room boundary, the route, the hook ladder (source pins)
+  ✓ S141 the mocap admission wall (audit F3) — text, joints, columns, frames, and the band refuse by name
+  ✓ S141 the wall's arithmetic — the walk stays linear under the walls (the quadratic find is dead)
+
+◆ motion — C2-ext the cinematic verbs
+  ✓ C2-ext the verbs are wired through the tables — CAMERA_MOVES → CAMERA_TO_MOVE → MoveKind
+  ✓ C2-ext the shake — integer-cycle sinusoid (edge-pinned by construction), bounded amp
+  ✓ C2-ext push-follow — the zoom and the travel compose in ONE shot (they were exclusive)
+  ✓ C2-ext drift-crawl — the LINEAR clock (constant velocity) and the tiny zoom creep
+  ✓ C2-ext the shot joins stay kind-agnostic — a shake shot books its boundary like any shot
+
+◆ director — Stage R the advisory engine pick
+  ✓ Stage R the advisory field parses tolerantly — legal ids ride, junk drops, v2 plans read fine
+  ✓ Stage R the conflict report — unanimous vs mixed, the honest surface (no silent mode-flip)
+  ✓ Stage R the D2 firewall — no routing logic reads the advisory field (the source pins)
+
+◆ timeline — Stage X the schema-3 core
+  ✓ Stage X schema 3 parses and round-trips — the stamp is a KNOWN one (the guard unblocks)
+  ✓ Stage X the verifier refuses — junk grammar, bad windows, phantom scenes, clock disagreement
+  ✓ Stage X the writer verifies before storing — a disagreeing payload drops and stamps 2
+  ✓ Stage X the builder registry — the multi-kind gate is a registry, not a hard-coded wall
+  ✓ S143 Stage X-full (audit F5) — the engine-segment verdict: a mixed plan with its artifacts rides, one missing segment refuses whole
+  ✓ S135 the graphics applier string EXECUTES — camera leg, absent-camera leg, and the bare-reference ban (the CI repair receipt)
+  ✓ S135 pollScript watches the ARTIFACT — a flag-cleared unscripted row is a failure, not a pass
+  ✓ S136 the receipt guard rides every money lane — the S135 ordering law is repo-wide (source pins)
+  ✓ S136 tenant-scope coverage — every organizationId model is scoped or a documented exception
+  ✓ S136 the PATCH concurrency gate fires BEFORE the sweep (the route's ordering law)
+  ✓ S138 the music bed resolution never hands ffmpeg a dead file — the heal-or-fallback wall (source pins)
+  ✓ S139 the naturalist pen laws — eased lockstep, tremble, breathing, and the sketch pass (the animator worth the name)
+  ✓ S140 F1 — the import admission compensates every byte when it fails (nothing is admitted unless the row commits)
+  ✓ S140 F2 — the count wall rides the admission transaction (the S101 pattern mirrored for gate 6's count half)
+
+◆ S151 — the fleet-truth law (job status lives in the rows, not the instance) + the scene-count contract
+  ✓ S151 ranges: the picker promises short 6–8, medium 12–14, long 16–20 — and the target is the range's top
+  ✓ S151 floor law: the script package enforces the range's minimum — a lazy model response cannot ship a thin board
+  ✓ S151 fleet law: jobFleetStatus reads the LATEST durable row — pending/running active, failed → its error
+  ✓ S151 fleet law: the poll-facing GETs read the rows — storyboard, render (+lane), stock, per-scene flags
+  ✓ S151 scene flags: serializeScenes answers from the rows — no instance-memory per-scene probe survives
+  ✓ S151 client honesty: the poller throws a failed re-roll's error; the workspace checks the start and counts what landed
+
+◆ S152 — the measured-narration clock: an unplanned graphics scene holds its narration, never truncates it
+  ✓ S152 clock precedence: explicit durationMs > measured VO + tail > the house estimate — one rule, one tail
+  ✓ S152 frameAt resolves scenes on the EXTENDED clock — the narration hold is real frames, not a label
+  ✓ S152 the wall and the contract ride the SAME extended clock — admission judges the delivered program
+  ✓ S152 measureGraphicsVoMs: the ONE probe — WAV header math, the scene-<n> mapping law, honest omissions
+  ✓ S152 the renderer measures its own slots before the wall — the clock law is wired at every admission surface
+
+◆ S153 — the keynote deck animates: kinetic typography is the render, the still deck is the honest fallback
+  ✓ S153 frame truth: word stagger advances, the counter counts up, the sweep is byte-identical
+  ✓ S153 the counter: parse + grouped format, never locale math
+  ✓ S153 the camera mirrors the zoompan endpoints: push/pull/punch/hold, rehook → punch, every third beat pulls
+  ✓ S153 the composer: kinetic annotations are additive — the static output is byte-identical
+  ✓ S153 the seat: video-only clips, the sidecar cache, the honest fallback, cancellation never degrades
+
+◆ S154 — the character lane: mocap re-arms the render key, previews show the rig, the ledger is durable
+  ✓ S154 previews render the SAME channel as the final — the rig pair rides both preview jobs
+  ✓ S154 the liveliness ledger is DURABLE — the completion activity carries the per-scene notes
+  ✓ S154 mocap re-arms the render key — a capture upload can never again 'do nothing'
+  ✓ S154 the engine ffmpeg seams all ride the zombie-aware runner
+
+◆ S155 — the classic lane: a lazy script cannot ship thin, and the autopilot stages are independent toggles
+  ✓ S155 the classic length contract: below the floor is a failed generation — aiCall re-asks, never ships thin
+  ✓ S155 the autopilot stages are independent toggles — voice, thumbnail and render key off their OWN switches
+  ✓ S155 the batch rides THE ONE script job — storm patience, ordered failure writes, no second body
+
+◆ S156 — the title font ladder and the position-aligned doc read
+  ✓ S156 the title font is a RUNTIME ladder — a slim image degrades the overlay, never the render
+  ✓ S156 docScenes reads by POSITION — the preview's channel pick matches the final's
+
+◆ S157 — the browser-chunk seam (the production-build law)
+  ✓ S157 studio-doc rides the browser chunk — no node builtins may enter the client graph
+
+◆ S159 — the persisted keys and the wired voice catalogs
+  ✓ S159 switching providers never inherits the old provider's secret
+  ✓ S159 the settings GET serves every provider's saved-key state
+  ✓ S159 the settings UI restores saved state on provider switch
+  ✓ S159 gemini/deepgram/playht/elevenlabs voice catalogs are wired in code
+  ✓ S159 sanitizeVoice resolves per provider — foreign voices land on real ones
+  ✓ S159 the live-list resolution lands foreign voices on REAL voices (offline ladder)
+  ✓ S159 the elevenlabs lane is a REAL adapter — no more zai fallthrough
+  ✓ S159 gemini honors the picked voice, deepgram maps voice to the speak model
+  ✓ S159 the voices route overlays the live lists for every account-list provider
+
+◆ S160 — the reference motion-and-light pass
+  ✓ S160 the glide ease: the smootherstep joins the substrate, exact at the anchors
+  ✓ S160 scene3d: the destination-key ease — absent ⇒ linear (the historical evaluation), glide when shipped
+  ✓ S160 scene3d: the look seam parses tolerantly, serializes strictly, round-trips byte-stable
+  ✓ S160 render3d: the page carries the gated look passes and the Neutral tone map
+  ✓ S160 graphics: the hit kick — the KICKS grammar (flip-sign each frame, decay over 7, latest wins)
+  ✓ S160 graphics frameAt: the camera folds the kick; no camera / no live window stays byte-identical
+
+◆ S162 — the measured vocabulary rides the substrate; the counter lands with craft
+  ✓ S162 easing: the opus anchor sets pinned at their literals; the OT pair pinned at its exact laws
+  ✓ S162 easing: the zoompan compiler refuses the measured vocabulary loudly (S167 owns the compile)
+  ✓ S162 graphics frame: the counter craft — tabular numerals baked, the landing pulse breathes once
+  ✓ S162 planner: the native enter table rides the measured vocabulary; the stagger overlaps
+  ✓ S162 part 2: the measured exit table — tail-anchored, legal, the list clears first and the title completes last
+  ✓ S162 part 2: the camera breathe — two keys, the push completes AT the scene clock
+  ✓ S162 part 2: the scaffold stages the exit + the breathe — validator-clean, additive-absent
+
+◆ S164 — the whiteboard hand-drawn geometry slice (the Rough.js native port)
+  ✓ S164 (a) byte-identity — same doc + seeds → identical d strings across two independent computations
+  ✓ S164 (b) the banned-token source-pin — no ambient randomness in the whiteboard tree, no clock in the pure geometry
+  ✓ S164 (c) the command-cap guard — a too-large fill refuses loudly; every count is the expanded truth
+  ✓ S164 (d) per-shape seed independence — changing ONE shape's assetId::pathId moves ONLY that shape's ink
+  ✓ S164 (e) absent-knob byte-identity — the S139 legacy pass rides untouched, byte for byte
+  ✓ S164 (f) fixed-decimal parity — every generator emits through svg.ts's ONE serializer
+  ✓ S164 the roughen primitives — the bowing double-stroke, the rough Catmull-Rom, the ellipse overshoot
+  ✓ S164 the fill styles — hachure inside by construction, the wrappers, the seeded-skip flourish, dots with the seeded jitter
+
+◆ S165 — the render-farm determinism + throughput slice (golden harness, static dedup, the frame-truth scan)
+  ✓ S165 (a) the static-dedup pure law — stretches, the plan's two-clock shape, the fail-closed decision
+  ✓ S165 (b) the PSNR reading law — inf is a PASS (identical pixels), unparseable fails, one parser for both consumers
+  ✓ S165 (c) the render wiring — the dedup lane rides the graphics render, default ON, fail-closed (the S157 usage-scan pattern)
+  ✓ S165 (d) the golden-video harness — committed baselines + the tolerance metadata per engine
+  ✓ S165 (e) THE FRAME-TRUTH SCAN — the real tree is green, the planted nondeterminism fixture is CAUGHT
+
+◆ S167 — the cinematic finisher (the fBM shake, the CDL grade, the duck lanes, the 3D admission)
+  ✓ S167 fBM shake: zero at strength 0, bounded by ±strength/2, seeded (same seed → same shake), channels distinct
+  ✓ S167 cameraPoseAt: the exponential push-in rides S162's curve; the shake composes; absent fields are byte-identical
+  ✓ S167 grade: the SOP/CDL scalars compile to curves args; absent ⇒ the exact legacy arg stream
+  ✓ S167 duck lanes: attack 0.15 / release 0.4 / depth 0.25 — the keyframed envelope is pinned at its shape
+  ✓ S167 3D admission: PlanVisualKind '3d' reads from the tracks, refuses without its segment, rides as an engine segment with one
+  ✓ s168: the decision domains are the closed nine from the roadmap ask
+  ✓ s168: the animation catalog DERIVES from the engines' own constants
+  ✓ s168: valid directives pass the validator
+  ✓ s168: invented commands are REJECTED, never coerced
+  ✓ s168: the per-target and per-param walls hold
+  ✓ s168: the batch gate is fail-closed and names the rejections
+  ✓ s168: serialization is JSON-stable (sorted keys, round-trip equal)
+  ✓ s168: the prohibitions ride as data (the never-list)
+  ✓ s169: the six modes are the closed kind set
+  ✓ s169: a valid scene passes strict validation
+  ✓ s169: the provenance closure refuses undeclared references
+  ✓ s169: the clock walls and the closed sets hold
+  ✓ s169: an invented directive invalidates the scene (the S168 gate rides)
+  ✓ s169: the timeline projection maps the six modes onto the S87 track kinds
+  ✓ s169: the projection reads the inbound transition from the PREVIOUS scene's boundary
+  ✓ s169: the project timeline sequences back-to-back, atSec wins when present
+  ✓ s169: project validation enforces uniqueness and the closed mode set
+  ✓ s169: serialization is JSON-stable (sorted keys, round-trip equal)
+  ✓ s170: the compiler walks the S169 project into typed engine operations
+  ✓ s170: narration slots carry the scene windows
+  ✓ s170: the ease wall and the boundary arithmetic are fail-closed
+  ✓ s170: THE acceptance — the import graph carries zero provider modules (the AI can be disconnected)
+  ✓ s171: the primitive set is the closed fourteen from the roadmap ask
+  ✓ s171: every primitive rides the ONE curve table (easing overrides must be table names)
+  ✓ s171: samples are normalized, clamped and pure
+  ✓ s171: the timing walls refuse loose clocks
+  ✓ s171: the stagger schedule is arithmetic, honest, bounded
+  ✓ s172: the capability matrix is closed, honest and house-implemented
+  ✓ s172: the resolver admits hosts and named borrowers, refuses the rest
+  ✓ s173: Kokoro is adopted in the registry (the lightweight local candidate)
+  ✓ s173: the local tier contract holds (zero-cost, registry-present)
+  ✓ s176: the router honors tier order and availability — never assumption
+  ✓ s176: principle 8 BY SIGNATURE — a paid fallback needs the acknowledgement flag
+  ✓ s176: the FREE mode routes to zero-cost ONLY — paid is a refusal, not a warning
+  ✓ s174: the quality profiles compile with Nigerian English first-class
+  ✓ s175: the chunker is deterministic sentence-boundary splitting
+  ✓ s175: the planner maps chunks onto slots with corrections; regeneration is selective
+  ✓ s177: the asset cost ladder is native < reuse < stock < generate
+  ✓ s178: the sound plan rides the EXISTING catalogs (moods, duck lanes, the -16 contract)
+  ✓ s179: the inspector finds the roadmap's named problems in the PLAN
+  ✓ s180: repairs are valid S168 directives, one scene each, approval-required
+  ✓ s181: edits are immutable ops that re-validate the whole project
+  ✓ s182: the beginner drives one preset; the advanced user drives knobs — all inside the walls
+  ✓ s183: the estimate rides the plan BEFORE generation; budgets gate; dedupe reuses
+  ✓ s184: the mode contracts hold — the free tier produces COMPLETE videos, never a cripple
+
+◆ S185 — the deployment readiness slice (part 1: the config-truth scan)
+  ✓ S185: the image's node base satisfies the lockfile's engines floor AND the CI-recorded runtime — the undici receipt enforced
+  ✓ S185: the fly worker VM carries the DEPLOYMENT §5.3 measured envelope — both configs, one number, parsed not asserted
+  ✓ S185: the scan is earned, not vacuous — planted drift is caught and NAMED, honest files ride clean
+  ✓ identity: the legacy env mirror is GONE — only IBISMUH_STUDIO_* is read
+  ✓ identity: the auth secret reads ONLY the new name
+  ✓ identity: the session cookie reads ONLY the new name (pre-rebrand cookies are past their 7-day expiry)
+  ✓ identity: the encryption key reads ONLY the new name; the KDF salt stays frozen (data compatibility)
+  ✓ identity: the data-coupled seeds stay frozen and the storage path carries the new identity
+
+◆ B3 — the production workspace: the detail dialog became a full-page surface
+  ✓ B3 surface: ProductionWorkspace exports, the dialog chrome is gone, the five areas are the only tabs (source pin)
+  ✓ B3 entries: every focusVideoId producer pairs it with setView("workspace") — no flow still lands in the dialog era (source pin)
+  ✓ B3 canvas: SceneStudioPanel is inline (no open prop), the storyboard's Edit lands Canvas, the continuity panel rides along (source pin)
+  ✓ B3 language & nav: the new copy speaks creator-control and the shell knows the workspace (source pin)
+  ✓ B3 language law: the production profiles' user-facing blurbs carry no legacy vocabulary (the walk caught 'faceless' in the Director card)
+  ✓ security review P0-1: a malformed token SIGNATURE answers null — never a throw
+  ✓ security review P0-2: diag is guarded in-handler and hides the schema inventory from bearers
+{"level":40,"time":1795845608861,"msg":"[ibismuh:auth-secret] IBISMUH_STUDIO_AUTH_SECRET is below the documented 32+ hex chars (SECURITY.md) — sessions still sign, but rotate it to 64 hex chars (what npm run setup generates) to meet the documented floor.","app":"ibismuh-studio","mod":"auth-token"}
+  ✓ security review P1-1: the auth-secret floor law — 16 accepted, 15 refused (agreement, not breakage)
+  ✓ security review P1-3: fresh hashes mint at 600k, legacy 120k rows still verify, rehash detection is exact
+  ✓ security review P2-1: the legacy single-user surface is session-only — a bearer can never flip the lock
+  ✓ security review P2-2: the fail-open counterweight has a schedule, and the nightly carries the outage net
+  ✓ B4-4 — sfx cues are an ADDITIVE seam: absent cues keep the pre-B4 args byte-identical
+  ✓ B4-4 — sfx cues mix at their projected times: adelay + one amix, never a second clock
+  ✓ B4-3 — the scene3d PUT rides the ONE parse law and never overwrites with absent
+  ✓ B4-1 — the workspace layout: five first-class pages at ≥1024px, the B3 stacked tabs below
+  ✓ B4-2 — motion authoring rides the ONE writer: insertion, 15-curve ease dropdown, tweens, camera keys
+  ✓ B4 — the e2e harness rate ceilings speak the CURRENT env names (config-truth, the S68 lesson)
+  ✓ B4 production test — the music storage key resolves at render time (the e78702b regression pin)
+  ✓ UIUX §5 — the production board's stage→area mapping drives the nav spine dots
+  ✓ UIUX §5 — the legacy hub views normalize to their concrete destination
+  ✓ UIUX §5 — ONE poll, ONE strip: the workspace owns the board and the tabs carry the dots
+  ✓ UIUX §5 — the hub tab strips are retired: no page renders a second navigation row
+  ✓ UIUX §6 — the Timeline save-state chip speaks the full state machine (source pin)
+  ✓ UIUX §6 — zoom keeps the operator's place (scroll-fraction anchor, selection untouched)
+  ✓ UIUX §5 — the workspace header owns an editable title and a render chip (source pin)
+  ✓ 2026-11 render-truth — the voiceover-gate refusal heals the stale flag (pure contract)
+  ✓ 2026-11 voiceover durability — per-scene WAVs publish through storage and restore before TTS (source pins)
+  ✓ 2026-11 quality gate truth — the VLM inspector reads storage, not one machine's scratch (source pins)
+  ✓ 2026-11 JSON diagnosability — empty replies and prose replies fail with DIFFERENT, actionable errors
+  ✓ 2026-11 timeline workbench — the deck merges UNDER the studio, the gate never renders silence (source pins)
+  ✓ 2026-11 render admission — the storyboard gate falls back to storage truth (source pins)
+  ✓ excellence P1-F: the parity metric — identical frames report zero; codec-band deltas pass; structural divergence fails
+  ✓ excellence P1-F: ONE page setup — the renderer and the parity harness share it (source pins)
+
+◆ stock image index — photo adapter normalization + dedupe
+  ✓ pexelsPhotoParse: landscape >=1280 photo picked, license stamped, original URL preferred
+  ✓ pexelsPhotoParse: falls back to large2x when the original is hidden
+  ✓ pixabayPhotoParse: tags carried, license stamped, large rendition picked
+  ✓ mergeIntoImageIndex: source:id dedupe, matchedQueries union, namespaces distinct, license law
+  ✓ configuredImageSources: zero keys throws the SAME pinned operator error
+
+◆ stock image ranker — floors + factors + verdict bands
+  ✓ imageCandidateFloors: portrait, sub-720p, license-less are UNUSABLE
+  ✓ rankImageCandidates: deterministic order, the duplicate penalty sinks a reused photo
+  ✓ imageSemanticFactor: neutral for tag-less candidates, full marks at 3+ shared terms
+  ✓ imageRelevanceVerdict: the inspector's bands map to pass / reject / keep-unverified
+  ✓ RANK_IMAGE_WEIGHTS: resolution + aspect + semantic complete to 100
+
+◆ stock image lane — file naming + the decode/relevance gate (real fixtures)
+  ✓ stockImageFile: the two-digit jpg name
+  ✓ probeImage + verifyImage: a real photo decodes and passes the injected gate
+  ✓ verifyImage: the unrelated band REJECTS; no score keeps the photo, stamped unverified
+  ✓ verifyImage: garbage bytes degrade to unverified (the decode gate runs first)
+  ✓ verifyImage: a throwing inspector never rejects (fail-open, recorded)
+
+◆ stock image ref round-trip — verification survives the doc
+  ✓ parseScenes: the image ref survives with provenance + verification
+  ✓ parseScenes: a legacy scene parses undefined; junk image refs drop
+
+◆ AUDIT REMEDIATION — the new laws
+{"level":40,"time":1795845609925,"msg":"E-1: console email mode is active in production — account links will NOT be returned in API responses. Set IBISMUH_STUDIO_EMAIL_MODE=smtp to deliver links for real.","app":"ibismuh-studio","mod":"email"}
+  ✓ E-1: linkInResponse refuses in production console mode (the takeover primitive is dead)
+  ✓ A-1: a restricted figure has NO recognizable face asset — the admission law refuses by name
+  ✓ A-1 at the seams: the cast reference upload refuses BEFORE bytes are read
+  ✓ A-2: under the islamic-history policy a portrait NEVER seeds scene art, shot art or thumbnails
+  ✓ prompt fence: untrusted blocks are tagged, fake closers are neutralized, agents carry the law
+  ✓ HEIC decompression wall: ispe dims are read before decode, oversized is refused
+  ✓ F-2: orgId() follows the entered context; the sandbox constant is only the fallback
+  ✓ F-8: the videos list reads the slim select — no doc column rides the payload
+  ✓ F-1 brand lane: bytes decide the format, SVG passes the sanitizer, the serve pins the disposition
+  ✓ F-5 reference-video admission: the bytes must smell like a container
+  ✓ F-4 escape + compound registry law: the callback HTML is escaped and the namespace law is bidirectional
+  ✓ F-3: destructive routes are owner-gated (the RBAC seam exists before team members do)
+  ✓ F-3 music ledger: uploaded tracks publish through the quota-admitted seam
+  ✓ E-1 reset-link law end to end: the seam is the ONLY link source
+1078 passed, 0 failed

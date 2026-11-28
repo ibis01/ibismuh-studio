@@ -1,0 +1,4 @@
+
+> ibismuh-studio@1.0.0 lint
+> node --stack-size=8000 node_modules/eslint/bin/eslint.js .
+
