@@ -1,0 +1,29 @@
+{
+  "schema": "release-gate/1",
+  "generatedAt": "2026-11-28T07:03:51.735Z",
+  "head": "589d9f5",
+  "laneContractStamp": {
+    "version": 1,
+    "fingerprint": "00692249bbaa91b6b8664d68a93fca37d1426988e651b5b7fd1039322a14df29"
+  },
+  "blindRecords": [
+    "k1-blind-rubric.md",
+    "s123-blind-rescore.md",
+    "s144-blind-rescore-session.md",
+    "s55-blind-scoring-record.md",
+    "w1-blind-rubric.md"
+  ],
+  "composite": "not-yet-run (human gate)",
+  "ciGatesRequired": [
+    "check",
+    "build",
+    "coverage",
+    "postgres",
+    "clean-clone",
+    "docker-smoke",
+    "e2e",
+    "secrets"
+  ],
+  "strict": false,
+  "verdict": "GOVERNED"
+}

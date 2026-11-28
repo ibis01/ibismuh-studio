@@ -37,6 +37,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { buildContactSheet, fileSha256 } from "./contact-sheet.mts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -281,6 +282,17 @@ async function main(): Promise<void> {
   });
   ok(artifacts.length === 3, "three codenamed artifacts shuffled into kit/");
 
+  // --- 2b. the contact sheets (master plan Phase 10: the scorer's visual
+  // review artifact rides Phase 7's generator) — built from the CODENAMED
+  // copies (never the sources — the sheet cannot unblind the arms).
+  const sheetReceipts: { code: string; sha256: string }[] = [];
+  for (const a of artifacts) {
+    const sheet = path.join(sessionDir, "kit", `${a.code}-sheet.png`);
+    buildContactSheet([path.join(sessionDir, "kit", `${a.code}.mp4`)], { out: sheet, perVideo: 9, cols: 3 });
+    sheetReceipts.push({ code: a.code, sha256: fileSha256(sheet) });
+    ok(fs.existsSync(sheet), `contact sheet for kit/${a.code}.mp4 built`);
+  }
+
   // --- 3. the sheets + key + manifest --------------------------------------
   for (const n of [1, 2, 3]) {
     fs.writeFileSync(path.join(sessionDir, `scorer-${n}.md`), scorerSheet(n, artifacts));
@@ -297,6 +309,7 @@ async function main(): Promise<void> {
         scorersExpected: 3,
         verdictRule: "composite ≥ 4.0/5 per lane sheet, ≥ 3 scorers; a failing lane routes back before Stage X",
         artifacts: artifacts.map(({ code: c, lane, sha256: h, bytes }) => ({ code: c, lane, sha256: h, bytes })),
+        contactSheets: sheetReceipts,
       },
       null,
       2,

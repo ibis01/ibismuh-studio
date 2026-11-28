@@ -8224,3 +8224,16 @@ Work Log:
 
 Stage Summary:
 - Deliverable: the readiness question has one answer, one endpoint, and one battery. Receipts: provider-status battery 25/0; tsc 0; lint 0; the live gate answers 401 unauthenticated (verified against the dev server).
+
+---
+Task ID: MasterPlan-Phase10
+Agent: main (Z.ai)
+Task: Master plan Phase 10 — the release-gate governance surface and the CI governance job (the blind-human law becomes governed, not prose).
+
+Work Log:
+- THE GOVERNANCE SCRIPT (scripts/release-gate.mts, npm run gate:release): five findings classes — (1) every docs/audits blind record exists AND carries an explicit status line (a silent record is a violation; s55's status was declared EXECUTED en route — its substance was already returned 2026-11-08, the record just never said the word); (2) the composite law — docs/audits/blind-release-composite.md must name ≥ 3 scorers and ≥ 4.0/5 per lane to claim PASS; ABSENT reads as NOT VERIFIED (the human gate stays with humans — the script never fabricates a pass); (3) the lane-contract stamp computes and rides the receipt; (4) the CI gates the law depends on are still declared (8 named jobs — a removed gate fails the push); (5) the receipt lands committed at docs/baselines/release-gate-<sha>.json. Exit codes: violations → 1; --strict escalates NOT VERIFIED → 1 (the release-day posture). FIRST RUN: 0 violations, 1 not-verified (the composite — honest).
+- THE CI GOVERNANCE JOB (ci.yml): a new governance job runs the gate on every push/PR — 5 minutes, no DB, no render; the law's enforcement now has a heartbeat in CI.
+- THE BLIND KIT RIDES PHASE 7 (scripts/blind-rescore-kit.mts): every codenamed artifact now ships with a contact sheet built from the CODENAMED copy (never the source — the sheet cannot unblind the arms), sha256 recorded in the session manifest — scorers review sheets, not raw MP4s.
+
+Stage Summary:
+- Deliverable: the release gate is governed — records with status, the composite law machine-checked, the contract stamp pinned, CI gates declared and enforced, receipts committed. Receipts: gate GOVERNED (0 violations / 1 honest NOT VERIFIED); tsc 0; lint 0.

@@ -5,6 +5,7 @@
 | Anchors | `docs/baselines/s55-eval-kit-manifest.json` (the eight tier-1 profile anchors, recorded 2026-11-08, commit `21cf723`) |
 | Protocol | `docs/runbooks/s55-human-evaluation-kit.md` — blind, anchored rubric, human scoring |
 | Machine baseline | `docs/baselines/s55-blind-scoring-baseline-2026-11-08.json` (preserved verbatim) |
+| Status | **EXECUTED** (the kit's human half returned; mean 3.25/5 — the historical baseline of record) |
 | State | **The kit's human half RETURNED.** The runbook's "advisory until review rounds put findings on record" clause is now exercised: these findings are ON RECORD as the November 8 historical baseline. |
 
 ## 1. The scores (preserved verbatim — never overwritten)

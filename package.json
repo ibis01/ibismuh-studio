@@ -76,6 +76,7 @@
     "test:whiteboard-recipes": "node --import tsx scripts/test-whiteboard-recipes.mts",
     "test:query-benchmark": "node --import tsx scripts/test-query-benchmark.mts",
     "bench:lanes": "node --import tsx scripts/phase7-lane-manifest.mts",
+    "gate:release": "node --import tsx scripts/release-gate.mts",
     "test:log-contract": "node scripts/classify-e2e-server-log.mjs --self-test",
     "test:failpoints": "node --import tsx scripts/test-failpoints.mts",
     "test:provider-status": "node --import tsx scripts/test-provider-status.mts"
