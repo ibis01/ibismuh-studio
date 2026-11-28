@@ -8209,3 +8209,18 @@ Work Log:
 
 Stage Summary:
 - Deliverable: the failure surface is injectable by name with laws, the build context is pruned, the PG major is aligned to what CI actually tests. Receipts: failpoints battery 20/0; tsc 0; lint 0. NOT VERIFIED here (sandbox law): docker build/smoke runs — CI-owned (docker-smoke job), unchanged.
+
+---
+Task ID: MasterPlan-Phase9
+Agent: main (Z.ai)
+Task: Master plan Phase 9 — the provider readiness surface (the one honest "is this capability live?" answer) and the quota/monetization gap accounting.
+
+Work Log:
+- THE READINESS MODULE (src/lib/ibismuh/providers/status.ts): computeCapabilityReadiness aggregates — provider known in the registry for that capability AND (keyOptional OR hasKey OR platformBacked). The degradation is not prose: a not-ready capability carries the lane contracts' OWN fallbackPolicy sentences (verbatim, deduped) for every lane the capability feeds — the same law the render gates judge. The capability→lane-tag bridge lives in ONE place (voice-provider → lanes declaring it; chat/asr → every lane — the brain and the caption seam ride all lanes).
+- THE ENDPOINT (GET /api/providers/status): the standard requireUser gate; the platform's global zai grant resolved once (readZaiCredentials) and folded into the zai capabilities' platformBacked flag; a capability whose RESOLUTION throws reports explicitly not-ready with the reason (the surface never lies by omission). PRIVACY LAW: provider ids, model ids, booleans, degradation sentences — NO keys, masked or otherwise, ever ride the response.
+- THE QUOTA/MONETIZATION RECEIPT (what ALREADY enforces, honestly recorded): per-user credits — reserveCredits via budget.aiCall (the one choke point, reserve-BEFORE-run, CreditBlockedError → 402); platform spend — admitDispatch across PAID_PROVIDERS (Serializable reserve, SpendBlockedError/SpendPricingUnverifiedError); storage — the S101 atomic reservation quota (storageQuotaBytes, per org); per-project ceiling — assertWithinVideoCeiling. Stripe checkout/portal/webhook fail-closed with PLAN_DEFAULTS tiers (starter deliberately unpurchasable).
+- THE GAPS, RECORDED NOT HIDDEN: per-tier resolution/priority enforcement (PlanInfo.maxResolution is data, not yet a render gate); per-tier rate limits; webhook re-drive/DLQ tooling; per-org spend stop (the global STOP_MICRO_USD is platform-wide). These are the next monetization slices — the readiness surface is their foundation.
+- THE BATTERY (scripts/test-provider-status.mts, npm run test:provider-status, wired into the check chain): 25 laws — the ready law, fail-closed unknown providers, mechanical degradation-sentence equality against LANE_CONTRACTS, mechanical lane mapping, the privacy shape pin (declared key set + no key-shaped material), the wiring pin (requireUser, no key serialization, schema stamp).
+
+Stage Summary:
+- Deliverable: the readiness question has one answer, one endpoint, and one battery. Receipts: provider-status battery 25/0; tsc 0; lint 0; the live gate answers 401 unauthenticated (verified against the dev server).
