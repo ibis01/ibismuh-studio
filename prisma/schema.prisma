@@ -94,6 +94,10 @@ model Organization {
   sceneArtifacts   SceneArtifact[]
   // S115 — the durable repair records (Stage 4).
   sceneRepairs     SceneRepair[]
+  // Phase 9 — the webhook dead-letter store (nullable org: an event may
+  // predate tenant resolution) + the per-tier render admission counters.
+  webhookDeadLetters WebhookDeadLetter[]
+  tierRenderCounters TierRenderCounter[]
 }
 
 // One user per organization row. Exactly one member holds role "owner" —
@@ -1165,6 +1169,64 @@ model ProcessedWebhookEvent {
   id         String   @id // Stripe event id (evt_…)
   type       String
   receivedAt DateTime @default(now())
+}
+
+// Phase 9 — the webhook DEAD-LETTER STORE. When the Stripe webhook handler
+// throws on a legitimately-authenticated event, the route answers the
+// contract 500 (Stripe retries) and persists the raw event HERE — best-effort,
+// never breaking the response — so nothing Stripe delivered is silently lost
+// when the retry budget runs out. scripts/webhook-redrive.mts replays stored
+// payloads through the SAME one-handler function the route calls
+// (processStripeEvent in billing.ts); a successful replay flips the row to
+// "redeemed". organizationId is NULLABLE on purpose: the webhook is public
+// (the signature is the auth), so an event may predate tenant resolution —
+// the column is filled best-effort when the event's own payload names a user
+// (checkout client_reference_id / metadata.userId → the primary membership;
+// invoice/subscription events → the subscription's user). eventId is UNIQUE:
+// repeated failing deliveries of the same event increment `attempts` on ONE
+// row instead of minting duplicates. PRIVACY LAW (mirror of the provider-
+// status law): the payload column stores byte-faithfully what Stripe sent —
+// the store never enriches or rewrites it, so no key-shaped material can
+// appear here beyond what Stripe itself delivered; `error` carries the
+// handler's message only.
+model WebhookDeadLetter {
+  id             String    @id @default(cuid())
+  organizationId String?   // nullable — the event may predate tenant resolution
+  provider       String    @default("stripe")
+  eventId        String    @unique
+  payload        String    // the raw event JSON, exactly as received
+  error          String    // the handler failure message at the last attempt
+  attempts       Int       @default(1)
+  status         String    @default("dead") // dead | redeemed
+  createdAt      DateTime  @default(now())
+  redeemedAt     DateTime?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+// Phase 9 — PER-TIER RENDER ADMISSION counters (tier-limits.ts). One row per
+// (organization, UTC day): the atomic admission upsert increments and returns
+// the count in one statement (the DB serializes concurrent racers, exactly
+// like the shared rate limiter), and a REFUSED attempt never consumes quota —
+// the upsert's WHERE guards the increment, so an over-quota burst matches no
+// row and reports the standing count unchanged. NOT the RateLimitCounter
+// table: that one is a 60-second fixed window swept after five windows
+// (shared-rate-limit.ts) — a daily counter stored there would be silently
+// wiped minutes after the last hit, reopening the quota. The reset is
+// STRUCTURAL: a new UTC day is a new key, so every day starts at zero without
+// mutating anything. Rows older than 8 days are pruned by
+// sweepTierRenderCounters (tier-limits.ts) in the queue tick's lazy sweep slot.
+model TierRenderCounter {
+  organizationId String
+  day            String   // UTC calendar day "YYYY-MM-DD" — the quota's reset boundary
+  count          Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, day])
+  @@index([updatedAt])
 }
 
 // S46 — durable auth throttling (roadmap P1-6). One row per FAILED

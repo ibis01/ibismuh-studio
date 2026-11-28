@@ -209,10 +209,11 @@ async function main() {
         record("static-asset-load", false, "no /_next/static asset reference found in the served HTML");
       }
 
-      // 6b. route load (a non-document page route; settings is a real route)
+      // 6b. route load (a real page route; /login is the anonymous-legal
+      // page — /settings is a view inside /, not a route)
       try {
-        const route = await getRaw("/settings");
-        record("route-load", route.status === 200, `GET /settings -> ${route.status}`);
+        const route = await getRaw("/login");
+        record("route-load", route.status === 200, `GET /login -> ${route.status}`);
       } catch (e) {
         record("route-load", false, e.message);
       }

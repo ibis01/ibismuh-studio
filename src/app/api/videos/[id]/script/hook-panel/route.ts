@@ -25,6 +25,7 @@ import {
   verifyTitlePromise,
 } from "@/lib/ibismuh/hook-score";
 import { errorText } from "@/lib/ibismuh/redact";
+import { gateTierRequest } from "@/lib/ibismuh/tier-limits";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -44,6 +45,22 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   };
   const mode = body.mode === "score" ? "score" : "panel";
   const scenes = parseScenes(video.scenes);
+
+  // Phase 9 — PER-TIER EXPENSIVE-LANE CEILING (tier-limits.ts — its header
+  // is the law), on the LLM mode only: mode "score" is pure and
+  // deterministic (no provider call, no spend), so it never burns the org's
+  // expensive-lane budget; mode "panel" generates N candidates through the
+  // LLM and does. The ceiling is per TIER per MINUTE per organization (a
+  // fixed 60s epoch-aligned window — it resets in full at the next epoch
+  // minute; the honest retryAfterSec rides the refusal).
+  if (mode === "panel") {
+    const tierGate = await gateTierRequest({
+      organizationId: auth.ctx.organizationId,
+      userId: auth.ctx.userId,
+      scope: "hook-panel",
+    });
+    if (!tierGate.ok) return NextResponse.json(tierGate.body, { status: tierGate.status });
+  }
 
   // The retention beats + the title-promise check ride every response —
   // both deterministic, both anchored on the standing spine.

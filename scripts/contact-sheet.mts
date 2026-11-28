@@ -5,6 +5,14 @@
 // matches) — scorers and reviewers had only markdown text sheets and
 // per-frame JSON. This closes the artifact gap.
 //
+// MP8 EXTENSION — the SIX-LANE SHEET + per-lane panels: the generator now
+// burns a per-video LABEL into every sampled cell (the committed Caveat
+// font is the label pass's only font source, so a label is deterministic
+// from committed bytes) — what lets ONE sheet carry all six product lanes
+// as labeled rows (classic / story / whiteboard / graphics2d / character /
+// slides) instead of an anonymous grid. The phase7 lane manifest drives
+// the labeled builds and pins their determinism.
+//
 // WHAT IT MAKES: a tiled PNG contact sheet from sampled frames of one or
 // more MP4s — the human-review artifact the blind scorers and the lane
 // benchmarks were missing. ffmpeg does the decode + tile (one filter
@@ -13,9 +21,10 @@
 // LAWS:
 //   · DETERMINISTIC — sampling is by fixed timestamps, never by wall
 //     clock; the same MP4 + the same grid → the same sheet (the battery
-//     pins a stable sha256 across two builds).
-//   · FAIL-VISIBLE — a missing input, an unreadable stream, or an empty
-//     sample set is a hard, named failure (never a blank sheet).
+//     pins a stable sha256 across two builds — labels included).
+//   · FAIL-VISIBLE — a missing input, an unreadable stream, an empty
+//     sample set, or a missing label font is a hard, named failure (never
+//     a blank sheet).
 //   · REUSABLE — the whole flow is one exported function
 //     (buildContactSheet), so the blind-rescore kit (Phase 10) and the
 //     lane benchmarks can call it instead of shelling out ad hoc.
@@ -42,6 +51,15 @@ function ffprobeDuration(file: string): number {
   return dur;
 }
 
+/** The committed Caveat variable font — the label pass's ONLY font source
+ *  (a label renders deterministically from the same font bytes; a missing
+ *  font is a named failure, never a silently unlabeled sheet). */
+function committedFont(): string {
+  const font = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "public", "fonts", "caveat", "Caveat[wght].ttf");
+  if (!fs.existsSync(font)) die(`the committed label font is missing: ${font}`);
+  return font;
+}
+
 /** Extract one PNG frame at a fixed timestamp. Deterministic by law. */
 function extractFrame(file: string, atSec: number, out: string): void {
   const res = spawnSync("ffmpeg", [
@@ -60,7 +78,11 @@ export interface ContactSheetOptions {
   cols?: number;
   /** Output PNG path. */
   out: string;
-  /** Label rows under the sheet (default: the input basenames). */
+  /** Per-video labels burned into every sampled cell of that video (the
+   *  six-lane sheet's row identity). Length must equal the videos; the
+   *  label vocabulary is a controlled ASCII set (lane ids) — a quote or a
+   *  non-ASCII glyph is a named failure, never a mangled sheet. */
+  labels?: readonly string[];
 }
 
 /**
@@ -72,10 +94,23 @@ export function buildContactSheet(videos: readonly string[], opts: ContactSheetO
   if (videos.length === 0) die("no input videos");
   const perVideo = opts.perVideo ?? 6;
   const cols = opts.cols ?? 4;
+  const labels = opts.labels ?? null;
+  if (labels && labels.length !== videos.length) {
+    die(`labels (${labels.length}) must be one per input video (${videos.length})`);
+  }
+  const drawLabel = (videoIdx: number): string => {
+    if (!labels) return "";
+    const text = labels[videoIdx];
+    if (!/^[a-z0-9 _-]+$/i.test(text)) {
+      die(`label "${text}" carries characters outside the controlled vocabulary (ASCII letters, digits, space, _ -)`);
+    }
+    return `,drawtext=fontfile='${committedFont()}':text='${text}':fontsize=18:fontcolor=white:box=1:boxcolor=black@0.55:boxborderw=4:x=6:y=6`;
+  };
   const scratch = fs.mkdtempSync(path.join(path.dirname(opts.out), ".contact-sheet-"));
   try {
     const frames: string[] = [];
-    for (const video of videos) {
+    const frameOwner: number[] = []; // the video index each frame belongs to
+    for (const [vi, video] of videos.entries()) {
       if (!fs.existsSync(video)) die(`input missing: ${video}`);
       const dur = ffprobeDuration(video);
       // Fixed sample ladder: perVideo points spread 10%..90% of the run.
@@ -85,15 +120,21 @@ export function buildContactSheet(videos: readonly string[], opts: ContactSheetO
         const frame = path.join(scratch, `${path.basename(video, ".mp4")}-${String(frames.length).padStart(3, "0")}.png`);
         extractFrame(video, at, frame);
         frames.push(frame);
+        frameOwner.push(vi);
       }
     }
     // The tile: one ffmpeg graph, inputs chained, scaled to a uniform
-    // cell, padded into cols columns. -1 keeps the aspect.
+    // cell, padded into cols columns. Phase 8 (master plan after 941a6ee):
+    // the sheet now samples ALL SIX lanes, and the slides lane is PORTRAIT
+    // (1080x1920) — a bare `scale=320:-1` makes the padded cell SMALLER
+    // than the scaled input and ffmpeg refuses. force_original_aspect_
+    // ratio=decrease fits ANY aspect inside the cell; the pad then centers
+    // it (landscape goldens keep the historical look).
     const args = ["-v", "error", "-y"];
     for (const f of frames) args.push("-i", f);
     const rows = Math.ceil(frames.length / cols);
     const filter = frames
-      .map((_, i) => `[${i}:v]scale=320:-1,pad=324:200:2:2:black[t${i}]`)
+      .map((_, i) => `[${i}:v]scale=320:196:force_original_aspect_ratio=decrease,pad=324:200:(ow-iw)/2:(oh-ih)/2:black${drawLabel(frameOwner[i])}[t${i}]`)
       .join(";") + ";" +
       frames.map((_, i) => `[t${i}]`).join("") +
       `xstack=inputs=${frames.length}:layout=` +

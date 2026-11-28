@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "slice": "MP8 — the six-lane evidence slice (the character lane golden)",
+  "lane": "character",
+  "baseline": "character-golden.mp4",
+  "law": "The codec tolerance law (see scripts/benchmark-lib.mts): a re-run of scripts/benchmark-character.mts must produce ffprobe-IDENTICAL container metadata (codec h264, 480x270, 24 fps, frame count, duration within 0.06 s) and a cross-run PSNR at or above 30 dB against this baseline. Byte-identity is never pinned — libx264 is not byte-stable across runs/environments. A DELIBERATE visual change re-baselines on purpose by re-running the benchmark and committing the new baseline — that commit IS the review moment.",
+  "fixture": "The S125 smoke rig (standard slots + mouth variants + pose sheet), one 3000 ms scene at 24 fps on a 480x270 canvas, narration on the word-proportional estimate clock (no ASR anchors — the declared fallback), through the REAL native-rig channel (renderRigScene). Zero AI spend; the VLM identity floor stays honestly SKIP.",
+  "tolerances": {
+    "containerDurationSec": 0.06,
+    "minCrossRunPsnrDb": 30,
+    "twoClockToleranceSec": 0.1
+  }
+}

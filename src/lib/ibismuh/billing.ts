@@ -327,6 +327,29 @@ export async function resolveUserPlan(userId: string): Promise<ResolvedPlan> {
   };
 }
 
+// ---------- tier resolution (Phase 9 — per-tier admission) ----------
+
+/** Resolve ONLY the caller's plan tier — the cheap tier read the per-tier
+ *  admission gates (tier-limits.ts) run on every expensive request, without
+ *  the balance math resolveUserPlan carries. The derivation mirrors
+ *  spendCredits/reserveCredits EXACTLY: the tier follows the ACCESS decision
+ *  (subscriptionAccess), not the stored plan row — a canceled creator
+ *  subscription has already fallen back to Starter in the resolver, so it
+ *  must be gated as Starter here too (a stale plan row must never keep
+ *  entitlement-shaped limits after the access is gone). One indexed read.
+ *
+ *  Unknown tiers fail toward "starter" (the tightest documented limits) —
+ *  a new tier is not entitled to a looser ceiling until tier-limits.ts
+ *  knows it. */
+export async function resolveUserTier(userId: string): Promise<string> {
+  const subscription = await rawDb.subscription.findUnique({
+    where: { userId },
+    select: { status: true, plan: { select: { tier: true } } },
+  });
+  if (!subscription || subscriptionAccess(subscription.status) === "none") return "starter";
+  return subscription.plan?.tier ?? "starter";
+}
+
 // ---------- ledger writes ----------
 
 export type CreditSpendKind =
@@ -1109,6 +1132,143 @@ export async function handleStripeEvent(event: StripeEvent): Promise<void> {
     default:
       // Unhandled event type — Stripe sends many; we silently ack.
       break;
+  }
+}
+
+// ---------- webhook dead letters (Phase 9) ----------
+//
+// The route's catch path (src/app/api/billing/webhook/route.ts) records every
+// authenticated event whose handler threw. Stripe's retry budget is finite
+// (hours); when it gives up, the only copy of the event was the wire. The
+// dead-letter store (WebhookDeadLetter) keeps it — raw payload,
+// byte-faithful — so scripts/webhook-redrive.mts can replay it through the
+// SAME handler (processStripeEvent above) once the failure is fixed.
+//
+// LAWS:
+//   * BEST-EFFORT — the write never breaks the webhook response. A failed
+//     dead-letter write is logged loudly (error), never thrown: the route's
+//     500 is the contract Stripe retries on, and it must not depend on a
+//     second table being healthy.
+//   * ONE ROW PER EVENT — eventId is UNIQUE; a repeated failing delivery
+//     increments `attempts` on the standing row, so the failure history stays
+//     one row per event (greppable, dedupable). An event that was already
+//     redeemed is flipped back to "dead" by a new failure — the honest state,
+//     even though no reachable path currently produces it (a redeemed event
+//     acks as a duplicate before its handler can throw again).
+//   * PRIVACY — the payload column stores exactly what Stripe sent (the
+//     provider-status privacy law, mirrored): the store never enriches or
+//     rewrites it, so no key-shaped material can appear here beyond what
+//     Stripe itself delivered. `error` carries the handler's message only.
+//   * TENANT — organizationId is filled best-effort when the event names a
+//     user (checkout client_reference_id / metadata.userId → the primary
+//     membership; invoice/subscription events → the subscription's user).
+//     A null org is legal — the webhook is public and the event may predate
+//     tenant resolution.
+//   * EVENTS WITHOUT AN ID cannot be deduped (processStripeEvent skips the
+//     idempotency table for them); each failed delivery of such an event gets
+//     its own synthetic-id row — documented, honest bookkeeping.
+
+/** Handler failure messages are long (Prisma internals) — keep the column
+ *  bounded; the payload keeps the event, the error keeps the verdict. */
+const DEAD_LETTER_ERROR_MAX = 2000;
+/** Stripe events are small; a runaway payload is truncated honestly (the
+ *  redrive's JSON.parse will fail visibly on a truncated row and report it). */
+const DEAD_LETTER_PAYLOAD_MAX = 1_000_000;
+
+/** Best-effort organizationId for a dead letter — probes the event's own
+ *  payload for a user reference. Never throws: tenant resolution is
+ *  enrichment, never a gate (a null org is a legal dead letter). */
+async function deadLetterOrganizationId(event: StripeEvent): Promise<string | null> {
+  try {
+    const obj = event.data?.object ?? {};
+    const meta = (obj.metadata ?? {}) as Record<string, string>;
+    const userId = String(obj.client_reference_id ?? "") || String(meta.userId ?? "");
+    if (!userId) {
+      // invoice.paid / customer.subscription.* carry the Stripe subscription
+      // id — resolve the user through our Subscription row instead.
+      const stripeSubscriptionId = String(obj.subscription ?? "");
+      if (!stripeSubscriptionId) return null;
+      const sub = await rawDb.subscription.findFirst({
+        where: { stripeSubscriptionId },
+        select: { userId: true },
+      });
+      if (!sub) return null;
+      const membership = await rawDb.membership.findFirst({
+        where: { userId: sub.userId },
+        orderBy: { createdAt: "asc" },
+        select: { organizationId: true },
+      });
+      return membership?.organizationId ?? null;
+    }
+    const membership = await rawDb.membership.findFirst({
+      where: { userId },
+      orderBy: { createdAt: "asc" },
+      select: { organizationId: true },
+    });
+    return membership?.organizationId ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Record a webhook handler failure in the dead-letter store. Best-effort:
+ *  never throws (a failure here is logged, loudly, and the caller's 500
+ *  still goes out — the contract Stripe retries on). Returns the stored
+ *  row's bookkeeping, or null when the store itself failed. */
+export async function recordWebhookDeadLetter(opts: {
+  event: StripeEvent;
+  /** The raw request body, byte-faithful — the replay source. */
+  payload: string;
+  error: unknown;
+}): Promise<{ eventId: string; attempts: number; status: string } | null> {
+  const id = typeof opts.event.id === "string" && opts.event.id ? opts.event.id : "";
+  const eventId =
+    id ||
+    // No id → no dedupe is possible (processStripeEvent skips its
+    // idempotency table too) — a synthetic one keeps the column honest.
+    `evt_unidentified_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const message = opts.error instanceof Error ? opts.error.message : String(opts.error);
+  const error = message.slice(0, DEAD_LETTER_ERROR_MAX);
+  const payload = opts.payload.slice(0, DEAD_LETTER_PAYLOAD_MAX);
+  try {
+    const organizationId = await deadLetterOrganizationId(opts.event);
+    const existing = await rawDb.webhookDeadLetter.findUnique({
+      where: { eventId },
+      select: { id: true, attempts: true },
+    });
+    if (existing) {
+      const updated = await rawDb.webhookDeadLetter.update({
+        where: { id: existing.id },
+        data: {
+          attempts: existing.attempts + 1,
+          error,
+          organizationId,
+          status: "dead", // a new failure un-redeems (defensive; see the law above)
+          redeemedAt: null,
+        },
+      });
+      webhookLog.warn("webhook event failed again — dead-letter attempts incremented", {
+        eventId,
+        type: opts.event.type,
+        attempts: updated.attempts,
+      });
+      return { eventId, attempts: updated.attempts, status: updated.status };
+    }
+    const created = await rawDb.webhookDeadLetter.create({
+      data: { eventId, provider: "stripe", payload, error, organizationId, status: "dead" },
+    });
+    webhookLog.warn("webhook event failed — stored in the dead-letter store for redrive", {
+      eventId,
+      type: opts.event.type,
+      organizationId,
+    });
+    return { eventId, attempts: created.attempts, status: created.status };
+  } catch (err) {
+    webhookLog.error("dead-letter write failed — the event survives only in Stripe's retry queue", {
+      eventId,
+      err: err instanceof Error ? err.message : err,
+    });
+    return null;
   }
 }
 

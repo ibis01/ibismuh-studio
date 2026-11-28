@@ -37,7 +37,17 @@ import { buildContactSheet, fileSha256 } from "./contact-sheet.mts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
-const GOLDEN_DIR = path.join(HERE, "golden", "s165");
+// Phase 8 (master plan after 941a6ee): goldens live per lane — the s165
+// pair (whiteboard, graphics) plus the four lanes this plan closed
+// (classic, story, character, slides). The scan is explicit and
+// fail-visible: a golden dir that vanishes names itself.
+const GOLDEN_DIRS: Record<string, string> = {
+  s165: path.join(HERE, "golden", "s165"),
+  classic: path.join(HERE, "golden", "classic"),
+  story: path.join(HERE, "golden", "story"),
+  character: path.join(HERE, "golden", "character"),
+  slides: path.join(HERE, "golden", "slides"),
+};
 const VALIDATION = path.join(ROOT, "validation", "mp7");
 const BASELINES = path.join(ROOT, "docs", "baselines");
 
@@ -86,26 +96,57 @@ function extractFrame(file: string, atSec: number, out: string): void {
 
 // --- 1. THE LANE TABLE ------------------------------------------------------
 
-const GOLDEN_FILES = fs.existsSync(GOLDEN_DIR)
-  ? fs.readdirSync(GOLDEN_DIR).filter((f) => f.endsWith(".mp4"))
-  : [];
-
 /** Which lane each golden exercises (honest mapping — scene3d is a render
  *  mode, not one of the six lanes; recorded as such). */
 const GOLDEN_LANE: Record<string, string | null> = {
   "whiteboard-golden.mp4": "whiteboard",
   "graphics-golden.mp4": "graphics2d",
   "scene3d-golden.mp4": null,
+  "classic-golden.mp4": "classic",
+  "story-golden.mp4": "story",
+  "character-golden.mp4": "character",
+  "golden-slides.mp4": "slides",
 };
 
 const BENCHMARK_SCRIPTS: Record<string, string[]> = {
-  classic: ["scripts/s87-acceptance-battery.mts (arm B: compositor + kenburns)"],
-  story: ["scripts/s47-continuity-benchmark.mts", "scripts/s54-genre-benchmark.mts"],
+  classic: ["scripts/benchmark-classic.mts", "scripts/s87-acceptance-battery.mts (arm B: compositor + kenburns)"],
+  story: ["scripts/benchmark-story.mts", "scripts/s47-continuity-benchmark.mts", "scripts/s54-genre-benchmark.mts"],
   whiteboard: ["scripts/w1-whiteboard-benchmark.mts", "scripts/s75-e10-benchmark.mts", "scripts/wb-preview-parity.mts"],
   graphics2d: ["scripts/s123-graphics-proof.mts"],
-  character: ["scripts/k1-rig-smoke.mts"],
-  slides: [], // THE GAP, recorded: no MP4 benchmark exists for the slides lane yet
+  character: ["scripts/benchmark-character.mts", "scripts/k1-rig-smoke.mts"],
+  // Phase 8: the recorded gap is CLOSED — the slides lane has its own
+  // deterministic MP4 benchmark (3 slides, container + pixel + QC pins).
+  slides: ["scripts/benchmark-slides.mts"],
 };
+
+// Phase 8 — the failure-injection receipt (env-gated failpoints, fail-closed
+// verdicts per lane). The file is committed by scripts/lane-failure-injection.mts.
+const FAILURE_INJECTION_RECEIPT = "docs/baselines/mp8-lane-failure-injection-2026-11-28.json";
+
+// The parity law stays honest per lane: the whiteboard golden carries the
+// MEASURED parity exercise below; every other lane's preview-vs-final parity
+// is NOT VERIFIED here (no measured comparison exists yet) — recorded, never
+// disguised.
+const PARITY_STATUS: Record<string, string> = {
+  whiteboard: "measured (the parity exercise below)",
+  classic: "NOT VERIFIED",
+  story: "NOT VERIFIED",
+  character: "NOT VERIFIED",
+  slides: "NOT VERIFIED",
+  graphics2d: "NOT VERIFIED",
+};
+
+const GOLDEN_FILES: string[] = [];
+const GOLDEN_FILE_DIR: Record<string, string> = {};
+for (const [dirKey, dir] of Object.entries(GOLDEN_DIRS)) {
+  if (!fs.existsSync(dir)) continue;
+  for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".mp4")).sort()) {
+    GOLDEN_FILES.push(f);
+    GOLDEN_FILE_DIR[f] = dirKey;
+  }
+}
+if (GOLDEN_FILES.length === 0) die("no golden MP4s found in any golden dir");
+const goldenPath = (f: string) => path.join(GOLDEN_DIRS[GOLDEN_FILE_DIR[f]], f);
 
 const stamp = currentLaneContractStamp();
 const lanes = LANE_ORDER.map((type) => {
@@ -118,8 +159,9 @@ const lanes = LANE_ORDER.map((type) => {
     renderer: contract.renderer,
     queueJobKind: contract.queueJobKind,
     qcProfile: contract.qcProfile,
-    goldenMp4: goldens.length > 0 ? goldens.map((f) => `scripts/golden/s165/${f}`) : [],
+    goldenMp4: goldens.length > 0 ? goldens.map((f) => path.relative(ROOT, goldenPath(f))) : [],
     benchmarkScripts: BENCHMARK_SCRIPTS[type] ?? [],
+    parityStatus: PARITY_STATUS[type] ?? "NOT VERIFIED",
   };
 });
 
@@ -128,13 +170,16 @@ const manifest: Record<string, unknown> = {
   generatedAt: new Date().toISOString(),
   laneContractStamp: stamp,
   lanes,
-  goldensNotALane: GOLDEN_FILES.filter((f) => GOLDEN_LANE[f] === null).map((f) => `scripts/golden/s165/${f} (scene3d render-mode golden)`),
+  goldensNotALane: GOLDEN_FILES.filter((f) => GOLDEN_LANE[f] === null).map((f) => `${path.relative(ROOT, goldenPath(f))} (scene3d render-mode golden)`),
+  failureInjectionReceipt: fs.existsSync(path.join(ROOT, FAILURE_INJECTION_RECEIPT))
+    ? FAILURE_INJECTION_RECEIPT
+    : `MISSING — ${FAILURE_INJECTION_RECEIPT} not committed (fail-visible)`,
 };
 
 // --- 2. THE CONTACT SHEET (built twice, pinned byte-identical) --------------
 
 fs.mkdirSync(VALIDATION, { recursive: true });
-const sheetVideos = GOLDEN_FILES.map((f) => path.join(GOLDEN_DIR, f));
+const sheetVideos = GOLDEN_FILES.map(goldenPath);
 if (sheetVideos.length === 0) die("no golden MP4s to sheet");
 const sheetA = buildContactSheet(sheetVideos, { out: path.join(VALIDATION, "sheet-a.png"), perVideo: 6 });
 const sheetB = buildContactSheet(sheetVideos, { out: path.join(VALIDATION, "sheet-b.png"), perVideo: 6 });
@@ -150,7 +195,7 @@ manifest.contactSheet = {
 
 // --- 3. THE PARITY EXERCISE (real golden frames through the real metric) ----
 
-const wbGolden = path.join(GOLDEN_DIR, "whiteboard-golden.mp4");
+const wbGolden = path.join(GOLDEN_DIRS.s165, "whiteboard-golden.mp4");
 if (!fs.existsSync(wbGolden)) die("whiteboard golden missing — parity exercise needs it");
 const dims = ffprobeDims(wbGolden);
 const frameA = path.join(VALIDATION, "parity-a.png");

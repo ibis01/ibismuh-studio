@@ -8433,3 +8433,179 @@ when the code catches them):
 - R7 (acceptance): 49/49 passed, exit 0, classifier PASS — zero forbidden,
   zero unknown. The music seed → list → attach → delete FK contract holds
   on the exact head.
+# Task MasterPlan-941a6ee — Phases 3–10: packaging proof, product depth, and the honest ledger
+
+Date: 2026-11-28 · Base: 853d433 (Phase 0–2 close) · the phase fleet (5 parallel workers) + orchestrator integration
+
+## Phase 3 — production packaging and topology
+
+- `npm run smoke:standalone` (scripts/standalone-smoke.mjs): the standalone
+  assembly is BOOTED and WALKED — 16/16 PASS. The checks: assembly exists
+  (server.js + static + public); a DISPOSABLE db copy (better-sqlite3
+  WAL-safe .backup into the assembly) so the smoke never touches the live
+  database; boot with explicit runtime roots + a smoke-only random secret;
+  /api/health readiness; /api/auth/status anonymous shape; the anonymous
+  default-deny 401 law; exactly ONE CSP header with nonce + strict-dynamic;
+  security headers recorded; a real /_next/static chunk + the /login route
+  load; boot-log clean (no tracing warnings, no deprecations, no unhandled
+  rejections, no missing modules); graceful SIGTERM shutdown; and the
+  zero-residue law proven by sha256 (the live db is byte-unchanged).
+  Honest fix during the walk: the smoke's route probe used /settings —
+  which is a VIEW inside /, not a route — corrected to /login (the
+  anonymous-legal page).
+- Docker + PostgreSQL: NOT VERIFIED in this sandbox (no docker/psql
+  daemons). CI owns them: the postgres-17 service job and the docker
+  topology job (smoke:docker) remain declared in ci.yml and run on every
+  push. No release claim below uses SQLite-only evidence beyond what the
+  receipts name.
+
+## Phase 4 — /studio ownership convergence
+
+- docs/studio-capability-matrix.md: the capability matrix (canonical vs
+  preview per capability), the admission rule (features land in / first),
+  and the REVIEW/SUNSET clause (next review 2027-05-31; drift beyond one
+  review cycle sunsets the preview, never bends the canonical surface).
+- Parity: e2e/studio-preview.spec.ts's round-trip receipt plus the new
+  group-ops spec's cross-surface assertions (the studio lane picker's nine
+  lanes) carry the shared-contract law.
+
+## Phase 5 — Whiteboard compound editing at studio standard (Task 5-e)
+
+- Rich choreography receipts: the group receipt evolved from a bare
+  preset-id string to { presetId, timingSource: "scene-clock",
+  eventFingerprint (FNV-1a over the SORTED event identities), affectedMembers
+  (sorted roster), version (monotonic per group) } — with the BACKWARD-
+  COMPAT law: legacy bare strings upgrade on parse (version 1, roster and
+  fingerprint derived); rich records are validated, never recomputed
+  (byte-stable round-trips).
+- The choreography law is enforced, not just recorded: an empty event set
+  refuses; overlapping member windows refuse FAIL-VISIBLE with the
+  offending pair named (the route answers 400 and the doc revision never
+  bumps); one scene clock per group.
+- Browser acceptance: NEW e2e/whiteboard-group-ops.spec.ts — two repeated
+  compounds stay independent across transform, save/reload, lock,
+  duplicate, delete, ungroup, recompose; the overlap-law 400 names the
+  pair; all nine presets compile live with version 1→9; the legacy-string
+  PUT upgrades to the rich shape; the choreographed board renders a real
+  preview that serves video bytes. Verified GREEN in the E2E round 8 run
+  (tests 46-47).
+- Mirror decision (argued in scratch/5e-receipt.md): the negative-scale
+  refusal IS the correct law — mirror would break the positive-scale
+  similarity algebra and scramble geometry-keyed choreography against the
+  draw-order coherence law; mirror support, if ever wanted, enters through
+  a declared mirrored compound spec, never scale < 0.
+- Battery: scripts/test-whiteboard-compounds.mts 55/55 (9 new pins).
+
+## Phase 6 — pack coverage, measured (Task 5-c)
+
+- scripts/pack-coverage-metrics.mts (`npm run pack:coverage-metrics`): the
+  nine subject packs measured per pack — duplicate semantic pairs, query
+  success/fallback/false-friend rates (the §15.2 suite run through the real
+  resolver), hand-travel distance (mean/max, normalized), stroke
+  continuity, draw-order coherence, safe bounds + aspect behavior,
+  provenance gaps (SPDX/attribution/approval/a11y/version). Floors stated
+  in the header; self-test 28/28 (a known-broken geometry must score
+  broken; twins must be detected).
+- Measured verdict: 9 PASS, 0 FAIL — zero false friends, zero twin pairs,
+  zero provenance gaps, 100% safe bounds/continuity/order everywhere. The
+  honest gaps are named, not hidden: travel-food and sports-music are
+  covered by no named §15.2 queries (null rates, never fake zeros), and
+  the row builders' intra-row term repeats are made visible (verdict-
+  exempt by law, now measurable).
+- Receipt: scratch/pack-coverage-metrics.json (typed, manifest-fingerprinted).
+
+## Phase 7 — Graphics measurement is real (Task 5-b)
+
+- The seam is INSTALLED: src/lib/ibismuh/graphics/font-metrics.ts — the
+  production provider (pure committed advance-table math: no DOM, no
+  canvas, no fs, no clock — server-render deterministic), weight→face
+  resolution, idempotent installer; installed at the render pipeline entry,
+  the QC matrix entry, and the design seat's module init.
+- The font is real and provenance-complete: the drawn stack
+  (Arial,Helvetica → fontconfig resolves to Liberation Sans on the deploy
+  image) is measured through COMMITTED Liberation faces
+  (public/fonts/liberation/, SIL OFL 1.1, Regular + Bold, both sha256-
+  recorded); the generated advance table
+  (src/lib/ibismuh/graphics/font-advances.ts) carries its own content-hash
+  pin + the generator script (the W4 precedent — fontTools at build time
+  only, zero npm deps).
+- The layout receipt now exists (GraphicsLayoutReceipt): fontFamily,
+  fontFile, fontSha256, weight, sizePx, lineHeightPx, locale, metricSource
+  ("real-glyph-table" | "ratio-estimate-fallback"), fallback — carried by
+  solveGraphicsLayout reports and surfaced in the QC matrix's G1-LAY-1 row.
+  Provider-less environments keep the byte-identical ratio model, honestly
+  labeled "ratio-estimate-fallback".
+- Battery: scripts/test-graphics-design-system.mts 55/55 (the new pins:
+  real-vs-estimate differ AND are deterministic; the receipt flips
+  honestly with the provider; uninstall restores byte-identical ratio
+  behavior).
+
+## Phase 8 — the six-lane evidence set closes (Task 5-d + orchestrator)
+
+- NEW deterministic lane benchmarks (all run green on this head):
+  benchmark-classic (7/7), benchmark-story (7/7), benchmark-character
+  (9/9), benchmark-slides (6/6 — the manifest's recorded "THE GAP" is
+  CLOSED: 3 fixed slides, container pins 1080x1920@24 h264, FFprobe-
+  identical across runs, PSNR floor, non-black midpoints, measured cuts).
+- Goldens committed: scripts/golden/classic/classic-golden.mp4 (8.9s),
+  golden/story/story-golden.mp4 (14.8s), golden/character/
+  character-golden.mp4 (3.0s), golden/slides/golden-slides.mp4 (+ thumbs +
+  golden-metadata.json each) beside the s165 pair.
+- Failure injection: scripts/lane-failure-injection.mts writes
+  docs/baselines/mp8-lane-failure-injection-2026-11-28.json — 27 probe
+  rows over the env-gated failpoint seam (FAIL-CLOSED / DECLARED-FALLBACK
+  / WALL-PINNED / NOT VERIFIED verdicts, none disguised).
+- The lane manifest regenerated (scripts/phase7-lane-manifest.mts): all
+  six lanes carry golden + benchmark + contact-sheet panel + parity status;
+  the contact sheet now samples ALL SIX lanes (the portrait-slides tile
+  bug — `scale=320:-1` padding below the scaled input — fixed with
+  force_original_aspect_ratio=decrease; the sheet is byte-deterministic
+  across two builds). The parity law stays honest per lane: whiteboard is
+  the measured reference; classic/story/character/slides/graphics2d parity
+  is recorded NOT VERIFIED — never fabricated.
+
+## Phase 9 — tier admission, quota, dead-letter (Task 5-a, completed by the orchestrator)
+
+- Per-tier render admission: the tier resolution lives in billing.ts (one
+  answer per tier), src/lib/ibismuh/tier-limits.ts carries the per-tier
+  render admission (a TierRenderCounter table + the documented daily
+  policy), enforced at the render seam; scripts/test-tier-limits.mts pins
+  the admission law (battery PASS).
+- Webhook dead-letter: the WebhookDeadLetter model (nullable org for
+  pre-tenant-resolution events — the S136 registry law updated with the
+  two new scoped models), the handler extracted so the route and redrive
+  share ONE code path, the raw payload stored byte-faithfully,
+  scripts/webhook-redrive.mts replays dead rows through the same handler,
+  scripts/test-webhook-dead-letter.mts proves the lifecycle (dead →
+  redeemed, idempotent eventId, redrive idle on redeemed rows, the
+  privacy law: no key-shaped material) — battery PASS 6/6.
+- The tenant-registry source pin (scripts/test-unit.mts) updated lawfully:
+  webhookdeadletter + tierrendercounter join the scoped set (31 → 33).
+- Live provider/quota/monetization tests: NOT VERIFIED (no live Stripe or
+  provider credentials in this sandbox) — the readiness surface, the
+  admission law, and the dead-letter machinery are proven locally; the
+  live runbook stays with the operator.
+
+## Phase 10 — the human gate
+
+- The composite law is GOVERNED (release-gate.mts) and the human side is
+  READY but PENDING: docs/audits/blind-release-composite-TEMPLATE.md is
+  the execution template (kit generation → ≥3 independent scorers → the
+  anchored rubric → per-lane composites ≥4.0/5 → the exception path with
+  risk/expiry/rollback/follow-up). The template carries an honest PENDING
+  status; the gate script treats the absent composite as NOT VERIFIED —
+  nobody fabricates scores. `npm run gate:release -- --strict` remains the
+  release-day posture once the composite exists.
+
+## Final acceptance (this head)
+
+- typecheck PASS · lint PASS · unit battery 1078/1078 · the four new lane
+  benchmarks 7/7 7/7 9/9 6/6 · pack coverage 9/9 PASS · tier admission +
+  dead-letter batteries PASS · lane manifest regenerated with ZERO golden
+  or benchmark gaps · E2E round 8: 51/51 passed (the 2 new browser
+  group-ops tests included), exit 0, log-contract classifier PASS — zero
+  forbidden, zero unknown.
+- Zero-Chinese audit: the strict CJK scan
+  ([\x{4e00}-\x{9fff}]) over src/, scripts/, e2e/, the committed fonts,
+  the new docs, the baselines, and prisma/ — ZERO hits. The codebase is
+  glyph-clean.

@@ -53,6 +53,14 @@ import { expandComponent, type ComponentContent } from "@/lib/ibismuh/graphics/c
 import { applyDocRecipe, applySceneRecipe, resolveRecipe } from "@/lib/ibismuh/graphics/recipes";
 import { applyGraphicsRepairs, proposeGraphicsRepairs, type GraphicsRepair } from "@/lib/ibismuh/graphics/repair";
 import { solveGraphicsLayout } from "@/lib/ibismuh/graphics/layout";
+// Phase 7 — the design seat's layout panel + repair proposals judge the
+// SAME boxes the QC gates judge: the REAL glyph-table provider installed
+// ONCE at module init (idempotent, pure — a committed-table read). The
+// solve's receipt names the metric source either way, so the studio can
+// never mistake the ratio fallback for a measurement.
+import { installGraphicsFontMetrics } from "@/lib/ibismuh/graphics/font-metrics";
+
+installGraphicsFontMetrics();
 
 interface GraphicsBudgetReport {
   fps: 24 | 30;

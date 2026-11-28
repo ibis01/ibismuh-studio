@@ -11,6 +11,7 @@ import { serializeVideo } from "@/lib/ibismuh/serialize";
 import { commitSceneChanges } from "@/lib/ibismuh/scene-revisions";
 import { parseTimeline } from "@/lib/ibismuh/timeline";
 import { errorText } from "@/lib/ibismuh/redact";
+import { gateTierRequest } from "@/lib/ibismuh/tier-limits";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -70,6 +71,21 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       { error: "Script generation is already running for this video" },
       { status: 409 }
     );
+
+  // Phase 9 — PER-TIER EXPENSIVE-LANE CEILING (tier-limits.ts — its header
+  // is the law). Script generation is an expensive lane: one click spawns an
+  // LLM job. The ceiling is per TIER per MINUTE per organization (fixed 60s
+  // epoch-aligned window — resets in full at the next epoch minute; the
+  // per-tier daily laws live on the render seams). It runs BEFORE the video
+  // mutation below so a refused call leaves no write behind, and after the
+  // cheap guards (404 / 400 / the job-running 409) so an already-running
+  // job's no-op rejections never burn the org's budget.
+  const tierGate = await gateTierRequest({
+    organizationId: auth.ctx.organizationId,
+    userId: auth.ctx.userId,
+    scope: "script",
+  });
+  if (!tierGate.ok) return NextResponse.json(tierGate.body, { status: tierGate.status });
 
   const isStory = video.format === "story";
   const hadScript = Boolean(video.script);

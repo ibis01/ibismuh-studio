@@ -6,6 +6,7 @@ import { runWhiteboardJob } from "@/lib/ibismuh/video-jobs";
 import { validateWhiteboardProject, validWhiteboardId } from "@/lib/ibismuh/whiteboard/storyboard";
 import { parseWhiteboardDoc } from "@/lib/ibismuh/whiteboard/whiteboard-planner";
 import { loadVideoLibrary } from "@/lib/ibismuh/whiteboard/asset-store";
+import { gateTierRequest, gateTierRenderQuota } from "@/lib/ibismuh/tier-limits";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -67,6 +68,21 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       { status: 400 }
     );
 
+  // Phase 9 — PER-TIER EXPENSIVE-LANE CEILING (tier-limits.ts — its header
+  // is the law). Every POST here (previews included) rides the plan's
+  // per-minute ceiling for the whiteboard lane (fixed 60s epoch-aligned
+  // window, per organization; resets in full at the next epoch minute). The
+  // DAILY render quota sits on the FULL-render branch only — single-scene
+  // previews are working-doc looks (720p, non-reviewable), not admitted
+  // renders. Refusals carry code + plan + the honest retry/reset figures
+  // so the UI can show them.
+  const tierGate = await gateTierRequest({
+    organizationId: auth.ctx.organizationId,
+    userId: auth.ctx.userId,
+    scope: "whiteboard",
+  });
+  if (!tierGate.ok) return NextResponse.json(tierGate.body, { status: tierGate.status });
+
   const body = await req.json().catch(() => ({}));
   const rawSceneId = (body as Record<string, unknown> | null)?.sceneId;
   let jobKey = id;
@@ -80,6 +96,20 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     if (!project.scenes.some((s) => s.id === sceneId))
       return NextResponse.json({ error: `Scene "${sceneId}" does not exist in this project` }, { status: 400 });
     jobKey = `${id}#wb${sceneId}`;
+  }
+
+  // Phase 9 — the DAILY per-tier render quota (tier-limits.ts): the FULL
+  // render IS an admitted render in the policy's sense (starter 3/day/org,
+  // creator 20/day, studio unmetered — the counter is structural-reset per
+  // UTC day and a refused attempt never consumes quota). The single-scene
+  // previews above ride the per-minute ceiling alone.
+  if (!sceneId) {
+    const quotaGate = await gateTierRenderQuota({
+      organizationId: auth.ctx.organizationId,
+      userId: auth.ctx.userId,
+      tier: tierGate.tier, // the ceiling already resolved the tier — one read per request
+    });
+    if (!quotaGate.ok) return NextResponse.json(quotaGate.body, { status: quotaGate.status });
   }
 
   // Clear any stale error before the job starts (the house convention).

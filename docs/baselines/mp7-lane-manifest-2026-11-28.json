@@ -1,6 +1,6 @@
 {
   "schema": "mp7-lane-manifest/1",
-  "generatedAt": "2026-11-28T06:50:06.359Z",
+  "generatedAt": "2026-11-28T10:27:54.044Z",
   "laneContractStamp": {
     "version": 1,
     "fingerprint": "00692249bbaa91b6b8664d68a93fca37d1426988e651b5b7fd1039322a14df29"
@@ -13,10 +13,14 @@
       "renderer": "story-compositor",
       "queueJobKind": "render",
       "qcProfile": "story-compositor-v1",
-      "goldenMp4": [],
+      "goldenMp4": [
+        "scripts/golden/classic/classic-golden.mp4"
+      ],
       "benchmarkScripts": [
+        "scripts/benchmark-classic.mts",
         "scripts/s87-acceptance-battery.mts (arm B: compositor + kenburns)"
-      ]
+      ],
+      "parityStatus": "NOT VERIFIED"
     },
     {
       "type": "story",
@@ -25,11 +29,15 @@
       "renderer": "story-compositor",
       "queueJobKind": "render",
       "qcProfile": "story-compositor-v1",
-      "goldenMp4": [],
+      "goldenMp4": [
+        "scripts/golden/story/story-golden.mp4"
+      ],
       "benchmarkScripts": [
+        "scripts/benchmark-story.mts",
         "scripts/s47-continuity-benchmark.mts",
         "scripts/s54-genre-benchmark.mts"
-      ]
+      ],
+      "parityStatus": "NOT VERIFIED"
     },
     {
       "type": "whiteboard",
@@ -45,7 +53,8 @@
         "scripts/w1-whiteboard-benchmark.mts",
         "scripts/s75-e10-benchmark.mts",
         "scripts/wb-preview-parity.mts"
-      ]
+      ],
+      "parityStatus": "measured (the parity exercise below)"
     },
     {
       "type": "graphics2d",
@@ -59,7 +68,8 @@
       ],
       "benchmarkScripts": [
         "scripts/s123-graphics-proof.mts"
-      ]
+      ],
+      "parityStatus": "NOT VERIFIED"
     },
     {
       "type": "character",
@@ -68,10 +78,14 @@
       "renderer": "story-compositor + native-rig channel",
       "queueJobKind": "render",
       "qcProfile": "story-compositor-v1",
-      "goldenMp4": [],
+      "goldenMp4": [
+        "scripts/golden/character/character-golden.mp4"
+      ],
       "benchmarkScripts": [
+        "scripts/benchmark-character.mts",
         "scripts/k1-rig-smoke.mts"
-      ]
+      ],
+      "parityStatus": "NOT VERIFIED"
     },
     {
       "type": "slides",
@@ -80,20 +94,30 @@
       "renderer": "slides-deck (+ kinetic clips)",
       "queueJobKind": "render",
       "qcProfile": "story-compositor-v1",
-      "goldenMp4": [],
-      "benchmarkScripts": []
+      "goldenMp4": [
+        "scripts/golden/slides/golden-slides.mp4"
+      ],
+      "benchmarkScripts": [
+        "scripts/benchmark-slides.mts"
+      ],
+      "parityStatus": "NOT VERIFIED"
     }
   ],
   "goldensNotALane": [
     "scripts/golden/s165/scene3d-golden.mp4 (scene3d render-mode golden)"
   ],
+  "failureInjectionReceipt": "docs/baselines/mp8-lane-failure-injection-2026-11-28.json",
   "contactSheet": {
     "path": "validation/mp7/sheet-a.png",
-    "sha256": "4fc7000830473e5651dd39327fa32b71c76f06ee3533f387197e7723e9a9c636",
+    "sha256": "90ebe7973ce4e301a4cdf2297619ea52a576f59dc0e88eb2d907f748c7e070ef",
     "inputs": [
       "scripts/golden/s165/graphics-golden.mp4",
       "scripts/golden/s165/scene3d-golden.mp4",
-      "scripts/golden/s165/whiteboard-golden.mp4"
+      "scripts/golden/s165/whiteboard-golden.mp4",
+      "scripts/golden/classic/classic-golden.mp4",
+      "scripts/golden/story/story-golden.mp4",
+      "scripts/golden/character/character-golden.mp4",
+      "scripts/golden/slides/golden-slides.mp4"
     ],
     "deterministic": true
   },

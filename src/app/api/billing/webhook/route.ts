@@ -33,7 +33,7 @@
 // session cookie. The signature is the auth.
 
 import { NextRequest, NextResponse } from "next/server";
-import { processStripeEvent, verifyStripeSignature } from "@/lib/ibismuh/billing";
+import { processStripeEvent, recordWebhookDeadLetter, verifyStripeSignature, type StripeEvent } from "@/lib/ibismuh/billing";
 import { requestLog } from "@/lib/ibismuh/log";
 
 export async function POST(req: NextRequest) {
@@ -86,6 +86,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true, ...(outcome === "duplicate" ? { duplicate: true } : {}) });
   } catch (err) {
     requestLog(req, { mod: "billing:webhook" }).error("handler failed", { err });
+    // Phase 9 — THE DEAD-LETTER STORE (billing.ts recordWebhookDeadLetter —
+    // its header is the law). The event passed authentication and failed
+    // HANDLING: Stripe's retry budget is finite, and when it gives up the
+    // only copy of the event was the wire. The raw payload is persisted
+    // best-effort so scripts/webhook-redrive.mts can replay it through the
+    // SAME handler (processStripeEvent) once the failure is fixed. The write
+    // never breaks the response: the 500 below is the contract Stripe
+    // retries on, and a failed dead-letter write is logged, not thrown.
+    await recordWebhookDeadLetter({
+      event: event as StripeEvent,
+      payload: raw,
+      error: err,
+    });
     return NextResponse.json({ error: "Handler failed" }, { status: 500 });
   }
 }

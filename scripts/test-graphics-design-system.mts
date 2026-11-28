@@ -25,11 +25,17 @@
 //                  component-less proposals ride untouched; the prompt
 //                  teaches the vocabulary (source pin).
 //   5. WIRING    — the check chain and CI carry the battery (source pins).
+//   6. PHASE 7   — the real font metrics at the seam: the committed advance
+//                  table (pinned hash + committed faces), the provider's
+//                  measured widths (deterministic, ≠ the ratio estimate),
+//                  the layout receipt's honest metricSource label both ways,
+//                  and byte-identical ratio behavior on uninstall.
 //
 // Run: npm run test:graphics-design   (pure — no DB, no DOM; CI step)
 
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import {
   GRAPHICS_CHAR_W_RATIO,
@@ -67,6 +73,18 @@ import {
   nativeExitFor,
 } from "../src/lib/ibismuh/graphics/native-defaults";
 import { scaffoldGraphicsDoc } from "../src/lib/ibismuh/graphics/planner";
+// Phase 7 — the real font metrics + the layout receipt (appended suite below).
+import {
+  activeLayoutReceipt,
+  GRAPHICS_TEXT_FONT_STACK,
+} from "../src/lib/ibismuh/graphics/layout";
+import { installGraphicsFontMetrics } from "../src/lib/ibismuh/graphics/font-metrics";
+import {
+  GRAPHICS_ADVANCE_TABLE,
+  GRAPHICS_ADVANCE_TABLE_JSON,
+  GRAPHICS_ADVANCE_TABLE_SHA256,
+} from "../src/lib/ibismuh/graphics/font-advances";
+import { graphicsQcMatrix } from "../src/lib/ibismuh/graphics/qc";
 import { applyDocRecipe, applySceneRecipe } from "../src/lib/ibismuh/graphics/recipes";
 import { effectiveRecipe } from "../src/lib/ibismuh/graphics/recipe-ids";
 import {
@@ -1048,6 +1066,209 @@ await test("the layout solver stays provider-less-clean in the battery process (
   const r1 = JSON.stringify(solveGraphicsLayout(doc));
   const r2 = JSON.stringify(solveGraphicsLayout(doc));
   eq(r1, r2, "the solver is pure — no provider leaked from earlier tests");
+});
+
+// --- 7. PHASE 7 — THE REAL FONT METRICS AND THE LAYOUT RECEIPT ----------------
+
+suiteStart("phase 7 — the committed advance table");
+
+await test("the committed table is the receipt's table: pinned hash, committed faces, full ASCII coverage", () => {
+  eq(GRAPHICS_ADVANCE_TABLE.fontId, "liberation-sans-w400-w700", "the graphics face pair is pinned");
+  eq(GRAPHICS_ADVANCE_TABLE.family, "Liberation Sans", "the family is the farm's Arial-metrics substitute");
+  eq(GRAPHICS_ADVANCE_TABLE.cssStack, GRAPHICS_TEXT_FONT_STACK, "the table's stack IS the seam's stack (one source)");
+  eq(GRAPHICS_ADVANCE_TABLE.upem, 2048, "Liberation Sans upem");
+  // the battery RECOMPUTES the table's own hash — a hand-edited table
+  // cannot land silently (the W4 glyph-table pin, mirrored)
+  const digest = createHash("sha256").update(GRAPHICS_ADVANCE_TABLE_JSON).digest("hex");
+  eq(digest, GRAPHICS_ADVANCE_TABLE_SHA256, "the table's content hash matches its pin");
+  // every face's file is committed and hashes to the table's record —
+  // the file↔table consistency the receipt's provenance rides on
+  const here7 = path.dirname(fileURLToPath(import.meta.url));
+  eq(GRAPHICS_ADVANCE_TABLE.faces.map((f) => f.weightClass), [400, 700], "the drawn weights (chart labels 400, text default 700)");
+  for (const face of GRAPHICS_ADVANCE_TABLE.faces) {
+    const file = path.resolve(here7, "..", face.fontFile);
+    ok(fs.existsSync(file), `${face.fontFile} is committed`);
+    const sha = createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+    eq(sha, face.fontSha256, `${face.fontFile} hashes to the table's record`);
+    let covered = 0;
+    for (let c = 0x20; c < 0x7f; c++) {
+      const adv = face.advances[String.fromCharCode(c)];
+      if (adv === undefined) continue;
+      covered += 1;
+      ok(Number.isFinite(adv) && adv > 0, `advance for U+${c.toString(16).padStart(4, "0")} is a positive number`);
+    }
+    eq(covered, 95, `${face.fontFile} covers every printable ASCII char (0x20–0x7E)`);
+  }
+  ok(
+    GRAPHICS_ADVANCE_TABLE.faces[1].advances["m"] !== GRAPHICS_ADVANCE_TABLE.faces[0].advances["m"],
+    "the faces are distinct tables (regular ≠ bold) — a weight-blind table would be a bug",
+  );
+});
+
+suiteStart("phase 7 — the real provider at the seam");
+
+await test("the real provider: measured widths differ from the ratio estimate and are deterministic (the deliverable law)", () => {
+  setTextMetricsProvider(null);
+  const estimate = measureTextWidth("Revenue growth", 48);
+  installGraphicsFontMetrics();
+  const real1 = measureTextWidth("Revenue growth", 48, 700);
+  const real2 = measureTextWidth("Revenue growth", 48, 700);
+  eq(real1, real2, "the same string twice → identical width (pure table math, no clock, no DOM)");
+  ok(real1 !== estimate, "the real measurement differs from the 0.55 ratio estimate");
+  // the provider's math IS the table's math — recomputed here, char for char
+  const bold = GRAPHICS_ADVANCE_TABLE.faces[1];
+  const expected = Math.round(
+    [..."Revenue growth"].reduce((a, ch) => a + bold.advances[ch] * (48 / GRAPHICS_ADVANCE_TABLE.upem), 0) * 100,
+  ) / 100;
+  eq(real1, expected, "the measured width is the committed advances, summed at size/upem");
+  // the weight resolves the face: bold 'm' is wider than regular 'm'
+  ok(measureTextWidth("mmm", 48, 700) > measureTextWidth("mmm", 48, 400), "weight 700 measures the wider bold face");
+  // the seam bites through the box estimator; uninstall restores the ratio box exactly
+  const el = {
+    kind: "heading",
+    at: { x: 960, y: 480, scale: 1 },
+    text: { text: "Revenue growth", sizePx: 48 },
+  } as never;
+  const doc = {
+    version: 1,
+    width: 1920,
+    height: 1080,
+    aspect: "16:9",
+    scenes: [],
+    elements: [],
+  } as never;
+  setTextMetricsProvider(null);
+  const ratioBox = JSON.stringify(estimateBox(el, doc));
+  installGraphicsFontMetrics();
+  const realBox = JSON.stringify(estimateBox(el, doc));
+  ok(realBox !== ratioBox, "the installed provider changes the estimated box (the seam bites)");
+  setTextMetricsProvider(null);
+  eq(JSON.stringify(estimateBox(el, doc)), ratioBox, "uninstalling restores the ratio box exactly");
+});
+
+suiteStart("phase 7 — the layout receipt, honestly labeled");
+
+await test("the receipt: metricSource names the model — real-glyph-table installed, ratio-estimate-fallback not", () => {
+  setTextMetricsProvider(null);
+  const fallback = activeLayoutReceipt({ sizePx: 64, weight: 700 });
+  eq(fallback.metricSource, "ratio-estimate-fallback", "provider-less → the declared estimate, NAMED");
+  eq(fallback.fallback, true, "the fallback flag is true for the estimate");
+  eq(fallback.fontFamily, GRAPHICS_TEXT_FONT_STACK, "the fallback names the drawn stack");
+  eq(fallback.fontFile, null, "the fallback has no committed face to name (honest null)");
+  eq(fallback.fontSha256, null, "no face → no hash");
+  eq(fallback.locale, "en", "the house locale assumption rides");
+  eq(fallback.lineHeightPx, Math.round(64 * 1.4 * 100) / 100, "the fallback's line height rides the 1.4 model");
+  installGraphicsFontMetrics();
+  const real = activeLayoutReceipt({ sizePx: 64, weight: 700 });
+  eq(real.metricSource, "real-glyph-table", "installed → the committed table, NAMED");
+  eq(real.fallback, false, "the measured receipt is not the fallback");
+  eq(real.fontFamily, "Liberation Sans", "the family is the face the farm rasterizes");
+  eq(real.fontFile, "public/fonts/liberation/LiberationSans-Bold.ttf", "weight 700 resolves the bold face file");
+  ok(/^[0-9a-f]{64}$/.test(real.fontSha256 ?? ""), "the face hash is a sha256 hex record");
+  eq(real.lineHeightPx, 80, "the measured line height rides the composer's drawn 1.25 advance");
+  const label = activeLayoutReceipt({ sizePx: 20, weight: 400 });
+  eq(label.fontFile, "public/fonts/liberation/LiberationSans-Regular.ttf", "weight 400 resolves the regular face file");
+  setTextMetricsProvider(null);
+});
+
+await test("the solve emits the receipt, and the headline profile rides it", () => {
+  const doc = {
+    version: 1,
+    width: 1920,
+    height: 1080,
+    aspect: "16:9",
+    scenes: [
+      {
+        id: "scene-1",
+        narration: "The year in review.",
+        background: "#ffffff",
+        durationMs: 8000,
+        elements: [
+          {
+            id: "el-h",
+            kind: "headline",
+            at: { x: 960, y: 480, scale: 1 },
+            enter: { kind: "fade", durationMs: 400, delayMs: 0, ease: "measured-out" },
+            text: { text: "The year in review", sizePx: 64 },
+          },
+          {
+            id: "el-s",
+            kind: "subhead",
+            at: { x: 960, y: 620, scale: 1 },
+            enter: { kind: "fade", durationMs: 400, delayMs: 0, ease: "measured-out" },
+            text: { text: "smaller", sizePx: 40, weight: 400 },
+          },
+        ],
+      },
+    ],
+    elements: [],
+  } as never;
+  setTextMetricsProvider(null);
+  const est = solveGraphicsLayout(doc);
+  eq(est.receipt.metricSource, "ratio-estimate-fallback", "the solve says it estimated");
+  eq(est.receipt.sizePx, 64, "the headline (the largest drawn text) is the receipt's profile");
+  eq(est.receipt.weight, 700, "the headline's drawn weight rides");
+  installGraphicsFontMetrics();
+  const real = solveGraphicsLayout(doc);
+  eq(real.receipt.metricSource, "real-glyph-table", "the solve says it measured");
+  eq(real.receipt.fontSha256, GRAPHICS_ADVANCE_TABLE.faces[1].fontSha256, "the receipt's hash is the bold face's hash");
+  setTextMetricsProvider(null);
+  const again = solveGraphicsLayout(doc);
+  eq(JSON.stringify(again), JSON.stringify(est), "uninstalling restores the provider-less solve byte for byte");
+});
+
+suiteStart("phase 7 — the receipt survives the QC matrix");
+
+await test("the QC matrix installs the provider and the G1-LAY-1 row names the metric source", () => {
+  const doc = {
+    version: 1,
+    title: "Receipt survives QC",
+    width: 1920,
+    height: 1080,
+    fps: 30,
+    scenes: [
+      {
+        id: "scene-1",
+        narration: "The gates judge measured boxes.",
+        background: "#ffffff",
+        durationMs: 8000,
+        elements: [
+          {
+            id: "el-chart-1",
+            kind: "barChart",
+            at: { x: 960, y: 540, scale: 1 },
+            enter: { kind: "fade", durationMs: 400, delayMs: 0, ease: "measured-out" },
+            bar: { data: [{ label: "2025", value: 12 }, { label: "2026", value: 18 }] },
+          },
+          {
+            id: "el-counter-1",
+            kind: "counter",
+            at: { x: 500, y: 300, scale: 1 },
+            enter: { kind: "fade", durationMs: 400, delayMs: 0, ease: "measured-out" },
+            counter: { from: 0, to: 42, unit: "%" },
+          },
+        ],
+      },
+    ],
+  };
+  const qc = graphicsQcMatrix(doc as never, 0);
+  const lay = qc.rows.find((r) => r.id === "G1-LAY-1");
+  ok(lay !== undefined, "the layout row ran");
+  ok(
+    (lay?.detail ?? "").includes("metrics real-glyph-table"),
+    `the row names the measured source: ${lay?.detail ?? "(no detail)"}`,
+  );
+  ok(
+    (lay?.detail ?? "").includes("Liberation Sans"),
+    "the row names the family the numbers came from",
+  );
+  setTextMetricsProvider(null);
+});
+
+await test("the suite leaves the seam provider-less (the battery's determinism law, restored)", () => {
+  setTextMetricsProvider(null);
+  eq(measureTextWidth("hello", 40), 40 * 0.55, "the ratio model is restored byte-identically");
+  eq(activeLayoutReceipt().metricSource, "ratio-estimate-fallback", "the receipt says the fallback again");
 });
 
 // --- summary ------------------------------------------------------------------

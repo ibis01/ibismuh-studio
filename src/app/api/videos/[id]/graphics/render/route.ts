@@ -11,6 +11,7 @@ import {
 import { assertGraphicsBudget } from "@/lib/ibismuh/graphics/preflight";
 import { measureGraphicsVoMs } from "@/lib/ibismuh/graphics/vo-ms";
 import { graphicsDraftPlan } from "@/lib/ibismuh/graphics/draft";
+import { gateTierRequest, gateTierRenderQuota } from "@/lib/ibismuh/tier-limits";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -87,6 +88,20 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     );
   }
 
+  // Phase 9 — PER-TIER EXPENSIVE-LANE CEILING (tier-limits.ts — its header
+  // is the law). Every POST here (drafts included) rides the plan's
+  // per-minute ceiling for the graphics lane (fixed 60s epoch-aligned
+  // window, per organization; resets in full at the next epoch minute).
+  // The DAILY render quota sits on the FULL-render branch only — drafts are
+  // labelled looks (the b6 draft law), not admitted renders. Refusals carry
+  // code + plan + the honest retry/reset figures so the UI can show them.
+  const tierGate = await gateTierRequest({
+    organizationId: auth.ctx.organizationId,
+    userId: auth.ctx.userId,
+    scope: "graphics",
+  });
+  if (!tierGate.ok) return NextResponse.json(tierGate.body, { status: tierGate.status });
+
   // Clear any stale error before the job starts (the house convention).
   await db.video.update({ where: { id }, data: { error: null } });
 
@@ -150,6 +165,17 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   }
 
   // ---- the full render ----
+  // Phase 9 — the DAILY per-tier render quota (tier-limits.ts): the full
+  // render IS an admitted render in the policy's sense (starter 3/day/org,
+  // creator 20/day, studio unmetered — the counter is structural-reset per
+  // UTC day and a refused attempt never consumes quota). Drafts above ride
+  // the per-minute ceiling alone.
+  const quotaGate = await gateTierRenderQuota({
+    organizationId: auth.ctx.organizationId,
+    userId: auth.ctx.userId,
+    tier: tierGate.tier, // the ceiling already resolved the tier — one read per request
+  });
+  if (!quotaGate.ok) return NextResponse.json(quotaGate.body, { status: quotaGate.status });
   const accepted = await startJob(id, "graphics", () => runGraphicsJob(id, {}));
   return NextResponse.json(
     { accepted, generating: true, scope: "full" },

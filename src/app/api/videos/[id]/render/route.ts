@@ -16,6 +16,7 @@ import { parseTimeline } from "@/lib/ibismuh/timeline";
 import { getApprovedAudioMap } from "@/lib/ibismuh/director-plan";
 import { sanitizeTransition } from "@/lib/ibismuh/transitions";
 import { resolveUserPlan, hasCredits, RENDER_ESTIMATE_MICRO, planSupportsResolution, microToCredits } from "@/lib/ibismuh/billing";
+import { gateTierRequest, gateTierRenderQuota } from "@/lib/ibismuh/tier-limits";
 import { parseWhiteboardDoc } from "@/lib/ibismuh/whiteboard/whiteboard-planner";
 import { validateWhiteboardProject } from "@/lib/ibismuh/whiteboard/storyboard";
 import { loadVideoLibrary } from "@/lib/ibismuh/whiteboard/asset-store";
@@ -148,6 +149,47 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     );
 
   const body = await req.json().catch(() => ({}));
+
+  // Phase 9 — PER-TIER RENDER ADMISSION (tier-limits.ts — read its header for
+  // the full law). THE SEAM: this gate runs before the lane contract below
+  // dispatches ANY lane's render and before ANY write happens (the lane pin
+  // mutates the row — a quota-refused click must not flip the video's render
+  // mode). Source law: the per-minute tier ceiling (fixed 60s epoch-aligned
+  // window, per lane scope, per organization — resets in full at the next
+  // epoch minute) plus the per-tier DAILY RENDER QUOTA (starter 3 full
+  // renders/day/org, creator 20/day, studio unmetered — resets structurally
+  // at UTC midnight; a refused attempt never consumes quota). Receipt plan:
+  // every refusal carries code + plan + limit + used/retryAfterSec/resetsAt
+  // so the UI can show the honest wait or the upgrade path; an admitted
+  // full render bumps the org's day counter exactly once.
+  //
+  // What counts: FULL renders only. The scene-scoped grammars below
+  // (sceneLimit / sceneIndex / boundaryAfter — parsed later from the same
+  // body) are preview-class work and ride the per-minute ceiling alone;
+  // the exemption uses the SAME validity rule the parsers apply (an integer
+  // >= 1), so a zero/garbage value cannot masquerade as a preview to dodge
+  // the quota.
+  const sceneLimitRaw = Number(body?.sceneLimit);
+  const sceneIndexRaw = Number(body?.sceneIndex);
+  const boundaryAfterRaw = Number(body?.boundaryAfter);
+  const sceneScopedRender =
+    (Number.isInteger(sceneLimitRaw) && sceneLimitRaw >= 1) ||
+    (Number.isInteger(sceneIndexRaw) && sceneIndexRaw >= 1) ||
+    (Number.isInteger(boundaryAfterRaw) && boundaryAfterRaw >= 1);
+  const tierGate = await gateTierRequest({
+    organizationId: auth.ctx.organizationId,
+    userId: auth.ctx.userId,
+    scope: "render",
+  });
+  if (!tierGate.ok) return NextResponse.json(tierGate.body, { status: tierGate.status });
+  if (!sceneScopedRender) {
+    const quotaGate = await gateTierRenderQuota({
+      organizationId: auth.ctx.organizationId,
+      userId: auth.ctx.userId,
+      tier: tierGate.tier, // the ceiling already resolved the tier — one read per request
+    });
+    if (!quotaGate.ok) return NextResponse.json(quotaGate.body, { status: quotaGate.status });
+  }
 
   // S119 — THE LANE CONTRACT (render-lane.ts, unit-pinned truth table):
   // resolve the lane from the body's explicit mode (the click) and the
@@ -324,7 +366,8 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const subtitles = resolveBurnSubtitles(body?.subtitles, video.burnCaptions, mode);
   const smartCaptions = body?.smartCaptions !== false; // default: ASR-synced cues (Phase 4)
   const music = body?.music !== false; // default: ambient bed
-  const sceneLimitRaw = Number(body?.sceneLimit);
+  // (sceneLimitRaw parsed up at the Phase 9 admission gate — the SAME parse
+  // feeds both the quota exemption and the preview derivation below.)
   const sceneLimit =
     Number.isInteger(sceneLimitRaw) && sceneLimitRaw >= 1
       ? Math.min(sceneLimitRaw, scenes.length)
@@ -334,7 +377,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   // scene-preview-NN.mp4 (the story-lane twin of the whiteboard lane's
   // per-scene preview). Mutually exclusive with sceneLimit — the prefix
   // grammar and the arbitrary-scene grammar are different requests.
-  const sceneIndexRaw = Number(body?.sceneIndex);
+  // (sceneIndexRaw parsed up at the Phase 9 admission gate.)
   const sceneIndex =
     Number.isInteger(sceneIndexRaw) && sceneIndexRaw >= 1 ? sceneIndexRaw : undefined;
   if (sceneIndex != null && sceneLimit != null)
@@ -349,7 +392,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   // boundaryAfter + boundaryAfter+1 with their seam — as
   // scene-boundary-NN.mp4, the media the scene recheck's boundary lens
   // measures. Mutually exclusive with BOTH other scene-scoped grammars.
-  const boundaryAfterRaw = Number(body?.boundaryAfter);
+  // (boundaryAfterRaw parsed up at the Phase 9 admission gate.)
   const boundaryAfter =
     Number.isInteger(boundaryAfterRaw) && boundaryAfterRaw >= 1 ? boundaryAfterRaw : undefined;
   if (boundaryAfter != null && (sceneIndex != null || sceneLimit != null))

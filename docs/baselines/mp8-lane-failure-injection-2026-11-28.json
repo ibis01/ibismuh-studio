@@ -1,0 +1,246 @@
+{
+  "schema": "mp8-lane-failure-injection/1",
+  "generatedAt": "2026-11-28T10:26:27.011Z",
+  "law": "Never turn an unavailable proof into a PASS: FAIL-CLOSED = the seam refused with a named error; DECLARED-FALLBACK / DECLARED-COERCION = the lane contract's declared honest degradation; WALL-PINNED = the wall decision pinned arithmetically; NOT VERIFIED = no seam in this sandbox, recorded open.",
+  "failpointEnv": "IBISMUH_STUDIO_FAILPOINTS",
+  "declaredFailpoints": [
+    "queue.claim",
+    "queue.lease.renew",
+    "storage.put"
+  ],
+  "probes": [
+    {
+      "lane": "classic",
+      "failure": "publish-time fault (the env-gated failpoint)",
+      "seam": "storage.put (failpoints.ts declared site; armed via IBISMUH_STUDIO_FAILPOINTS)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "FaultInjectionError at \"storage.put\": classic publish drill; the off law re-proved the write lands"
+    },
+    {
+      "lane": "story",
+      "failure": "publish-time fault (the env-gated failpoint)",
+      "seam": "storage.put (failpoints.ts declared site; armed via IBISMUH_STUDIO_FAILPOINTS)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "FaultInjectionError at \"storage.put\": story publish drill; the off law re-proved the write lands"
+    },
+    {
+      "lane": "whiteboard",
+      "failure": "publish-time fault (the env-gated failpoint)",
+      "seam": "storage.put (failpoints.ts declared site; armed via IBISMUH_STUDIO_FAILPOINTS)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "FaultInjectionError at \"storage.put\": whiteboard publish drill; the off law re-proved the write lands"
+    },
+    {
+      "lane": "graphics2d",
+      "failure": "publish-time fault (the env-gated failpoint)",
+      "seam": "storage.put (failpoints.ts declared site; armed via IBISMUH_STUDIO_FAILPOINTS)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "FaultInjectionError at \"storage.put\": graphics2d publish drill; the off law re-proved the write lands"
+    },
+    {
+      "lane": "character",
+      "failure": "publish-time fault (the env-gated failpoint)",
+      "seam": "storage.put (failpoints.ts declared site; armed via IBISMUH_STUDIO_FAILPOINTS)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "FaultInjectionError at \"storage.put\": character publish drill; the off law re-proved the write lands"
+    },
+    {
+      "lane": "slides",
+      "failure": "publish-time fault (the env-gated failpoint)",
+      "seam": "storage.put (failpoints.ts declared site; armed via IBISMUH_STUDIO_FAILPOINTS)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "FaultInjectionError at \"storage.put\": slides publish drill; the off law re-proved the write lands"
+    },
+    {
+      "lane": "shared-encode-seam",
+      "failure": "timeout at the encode seam",
+      "seam": "proc.ts runProcess (the zombie-aware runner; the graphics/slides/rig/compositor encodes ride it)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "ffmpeg timed out after 0s — etadata:\n    encoder         : Lavf61.7.103\n  Stream #0:0: Video: h264, yuv420p(tv, progressive), 640x360 [SAR 1:1 DAR 16:9], q=2-31"
+    },
+    {
+      "lane": "whiteboard",
+      "failure": "timeout at the encode seam",
+      "seam": "whiteboard/render.ts encode budget race (its own wall around the ffmpeg call)",
+      "verdict": "RECORDED (live evidence: the shared encode-seam drill)",
+      "evidence": "the shared runProcess drill above is the live timeout evidence; the whiteboard renderer carries its own budget race around execFileP (pinned textually — the same wall class), so this row records rather than re-arms"
+    },
+    {
+      "lane": "classic",
+      "failure": "missing asset (the storyboard art)",
+      "seam": "the render gate (render.ts preflight: ensureSceneAssetsLocal / the art existence wall)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "Scene 1 has no storyboard image — generate the storyboard first"
+    },
+    {
+      "lane": "classic",
+      "failure": "invalid input (a corrupt timeline doc)",
+      "seam": "parseTimeline (timeline.ts — refuses, never throws a render)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "parseTimeline answered null for non-JSON garbage (fail-closed refusal)"
+    },
+    {
+      "lane": "story",
+      "failure": "missing asset (the scene narration)",
+      "seam": "the render gate (render.ts preflight: the WAV existence wall)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "Scene 1 has no voiceover — generate the voiceover first"
+    },
+    {
+      "lane": "story",
+      "failure": "invalid input (an ambiguous format+renderMode row)",
+      "seam": "resolveLaneFromRow (lane-contracts.ts — the no-silent-default law)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "status \"ambiguous\", candidates story + character, message \"format \"story\" + renderMode \"kenburns\" matches story, character — a canonical lane column \""
+    },
+    {
+      "lane": "whiteboard",
+      "failure": "missing asset (a placement naming an unknown library asset)",
+      "seam": "validateWhiteboardProject (storyboard.ts — the admission validator)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "scene 1: unknown asset \"no-such-asset-anywhere\""
+    },
+    {
+      "lane": "whiteboard",
+      "failure": "invalid input (an id that breaks the DOM namespace)",
+      "seam": "validateWhiteboardProject (storyboard.ts — the S65 id-charset law)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "scene 1: id \"scene::1--bad\" violates the id charset (namespace separators --/:: and exotic characters are forbidden)"
+    },
+    {
+      "lane": "graphics2d",
+      "failure": "missing asset (a narration slot file that does not exist)",
+      "seam": "renderGraphics VO-slot normalization (render.ts VO-first law, pre-chromium)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "the whiteboard renderer failed at the encode gate (vo normalize (\"scene-1\")): Command failed: ffmpeg -y -v error -i /nonexistent/mp8-missing-vo.wav -af loudnorm=I=-16:TP=-1:LRA=11,alimiter=limit=0.841"
+    },
+    {
+      "lane": "graphics2d",
+      "failure": "invalid input (a doc whose delivered clock exceeds the engine wall)",
+      "seam": "assertGraphicsBudget (graphics/preflight.ts — the E0 §6 risk-4 wall)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "the graphics frame budget wall (25920 frames) is exceeded at 24 fps: 86400 delivered frames for 3600.0s of scenes — the cap at 24 fps is 1080.0s (18.0 min); split or shorten the project before renderi"
+    },
+    {
+      "lane": "character",
+      "failure": "missing asset (a rig seed naming a part id the library lacks)",
+      "seam": "validateRigDoc (rig2d.ts — the admission validator)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "rig part \"ghost\": svgRef \"does-not-exist\" resolves to no parts-library row (referential integrity)"
+    },
+    {
+      "lane": "character",
+      "failure": "invalid input (a slot whose delivered clock exceeds the rig wall)",
+      "seam": "assertRigBudget (characters/preflight.ts — the R-1 wall)",
+      "verdict": "FAIL-CLOSED",
+      "evidence": "the character frame budget wall (25920 frames) is exceeded at 24 fps: 86400 delivered frames for 3600.0s of rig scenes — the cap at 24 fps is 1080.0s (18.0 min); split or shorten the program before re"
+    },
+    {
+      "lane": "slides",
+      "failure": "invalid input (a garbage slide spec from the planner)",
+      "seam": "sanitizeSlideSpec (slides.ts — the declared never-throws coercion)",
+      "verdict": "DECLARED-COERCION",
+      "evidence": "layout \"statement\", headline \"Next slide\" — the fallback deck stays renderable (the sanitizer's own contract)"
+    },
+    {
+      "lane": "slides",
+      "failure": "missing asset (the photo layout's art file)",
+      "seam": "renderKineticSlideClips → dataUriFromFile (the composer's null-art fallback)",
+      "verdict": "DECLARED-FALLBACK",
+      "evidence": "the slide degraded to its fallback and the clip still landed (slide-anim-01.mp4, 79645 bytes — the lane contract's declared degradation)"
+    },
+    {
+      "lane": "slides",
+      "failure": "invalid input (a deck whose program exceeds the kinetic frame budget)",
+      "seam": "the deck-total gate (render.ts caller over SLIDES_KINETIC_FRAME_BUDGET)",
+      "verdict": "WALL-PINNED",
+      "evidence": "frameCountOf(40min, 30fps) = 72000 > budget 25920 — the caller refuses the pass and the still deck plays (declared per scene)"
+    },
+    {
+      "lane": "classic",
+      "failure": "queue-time fault (claim / lease renewal)",
+      "seam": "queue.claim + queue.lease.renew (the DB-backed queue)",
+      "verdict": "NOT VERIFIED",
+      "evidence": "the queue sites are DB-backed; this benchmark never touches the database — the drills are owned by scripts/test-failpoints.mts (the env-gated seam itself IS pinned above at the publish seam)"
+    },
+    {
+      "lane": "story",
+      "failure": "queue-time fault (claim / lease renewal)",
+      "seam": "queue.claim + queue.lease.renew (the DB-backed queue)",
+      "verdict": "NOT VERIFIED",
+      "evidence": "the queue sites are DB-backed; this benchmark never touches the database — the drills are owned by scripts/test-failpoints.mts (the env-gated seam itself IS pinned above at the publish seam)"
+    },
+    {
+      "lane": "whiteboard",
+      "failure": "queue-time fault (claim / lease renewal)",
+      "seam": "queue.claim + queue.lease.renew (the DB-backed queue)",
+      "verdict": "NOT VERIFIED",
+      "evidence": "the queue sites are DB-backed; this benchmark never touches the database — the drills are owned by scripts/test-failpoints.mts (the env-gated seam itself IS pinned above at the publish seam)"
+    },
+    {
+      "lane": "graphics2d",
+      "failure": "queue-time fault (claim / lease renewal)",
+      "seam": "queue.claim + queue.lease.renew (the DB-backed queue)",
+      "verdict": "NOT VERIFIED",
+      "evidence": "the queue sites are DB-backed; this benchmark never touches the database — the drills are owned by scripts/test-failpoints.mts (the env-gated seam itself IS pinned above at the publish seam)"
+    },
+    {
+      "lane": "character",
+      "failure": "queue-time fault (claim / lease renewal)",
+      "seam": "queue.claim + queue.lease.renew (the DB-backed queue)",
+      "verdict": "NOT VERIFIED",
+      "evidence": "the queue sites are DB-backed; this benchmark never touches the database — the drills are owned by scripts/test-failpoints.mts (the env-gated seam itself IS pinned above at the publish seam)"
+    },
+    {
+      "lane": "slides",
+      "failure": "queue-time fault (claim / lease renewal)",
+      "seam": "queue.claim + queue.lease.renew (the DB-backed queue)",
+      "verdict": "NOT VERIFIED",
+      "evidence": "the queue sites are DB-backed; this benchmark never touches the database — the drills are owned by scripts/test-failpoints.mts (the env-gated seam itself IS pinned above at the publish seam)"
+    }
+  ],
+  "summary": {
+    "classic": {
+      "missingAsset": "FAIL-CLOSED",
+      "invalidInput": "FAIL-CLOSED",
+      "timeout": "FAIL-CLOSED (via the shared encode seam)",
+      "publishFailpoint": "FAIL-CLOSED",
+      "queueFailpoint": "NOT VERIFIED (DB-backed — scripts/test-failpoints.mts owns the queue drills)"
+    },
+    "story": {
+      "missingAsset": "FAIL-CLOSED",
+      "invalidInput": "FAIL-CLOSED",
+      "timeout": "FAIL-CLOSED (via the shared encode seam)",
+      "publishFailpoint": "FAIL-CLOSED",
+      "queueFailpoint": "NOT VERIFIED (DB-backed — scripts/test-failpoints.mts owns the queue drills)"
+    },
+    "whiteboard": {
+      "missingAsset": "FAIL-CLOSED",
+      "invalidInput": "FAIL-CLOSED",
+      "timeout": "RECORDED (live evidence: the shared encode-seam drill)",
+      "publishFailpoint": "FAIL-CLOSED",
+      "queueFailpoint": "NOT VERIFIED (DB-backed — scripts/test-failpoints.mts owns the queue drills)"
+    },
+    "graphics2d": {
+      "missingAsset": "FAIL-CLOSED",
+      "invalidInput": "FAIL-CLOSED",
+      "timeout": "FAIL-CLOSED (via the shared encode seam)",
+      "publishFailpoint": "FAIL-CLOSED",
+      "queueFailpoint": "NOT VERIFIED (DB-backed — scripts/test-failpoints.mts owns the queue drills)"
+    },
+    "character": {
+      "missingAsset": "FAIL-CLOSED",
+      "invalidInput": "FAIL-CLOSED",
+      "timeout": "FAIL-CLOSED (via the shared encode seam)",
+      "publishFailpoint": "FAIL-CLOSED",
+      "queueFailpoint": "NOT VERIFIED (DB-backed — scripts/test-failpoints.mts owns the queue drills)"
+    },
+    "slides": {
+      "missingAsset": "DECLARED-FALLBACK",
+      "invalidInput": "DECLARED-COERCION",
+      "timeout": "FAIL-CLOSED (via the shared encode seam)",
+      "publishFailpoint": "FAIL-CLOSED",
+      "queueFailpoint": "NOT VERIFIED (DB-backed — scripts/test-failpoints.mts owns the queue drills)"
+    }
+  }
+}

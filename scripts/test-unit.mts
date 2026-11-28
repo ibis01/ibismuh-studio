@@ -2645,6 +2645,12 @@ await test("tenant-db: every org-scoped model matches the lowercased lookup", as
     // when the S136 schema-scan pin caught them unscoped on the merged tree.
     "studioproject", "planrevision", "assetrecord", "audioreceiptrecord",
     "renderjob", "qcreportrecord", "studioevent",
+    // Phase 9 (master plan after 941a6ee): the webhook dead-letter store
+    // (nullable org — operator redrive surface) and the per-tier render
+    // admission counter join the scoped registry (defense in depth; both
+    // write through the raw billing gateway, the registration covers any
+    // future request-scoped access).
+    "webhookdeadletter", "tierrendercounter",
   ];
   for (const m of expected) {
     ok(ORG_SCOPED_MODELS.has(m), `"${m}" is org-scoped`);

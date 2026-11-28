@@ -12,7 +12,7 @@ import type { Placement } from "./svg";
 import { cameraPolicies } from "./camera-director";
 import { WHITEBOARD_PROFILE_IDS, type WhiteboardProfileId } from "./profiles";
 import { resolveInCompoundIndex } from "./compounds";
-import { COMPOUND_CHOREOGRAPHY_IDS } from "./choreography";
+import { COMPOUND_CHOREOGRAPHY_IDS, normalizeChoreographyGroupReceipt } from "./choreography";
 
 export type HandStyle = "marker" | "pencil" | "chalk";
 /** W7 — which hand holds the tool (additive; absent = right, today). */
@@ -182,12 +182,46 @@ export interface WhiteboardScene {
   groupTransforms?: Record<string, GroupTransformRecord>;
   /** Master plan Phase 4 — the GROUP-KEYED choreography receipts: one
    *  named preset PER compound group (a two-group scene can now carry two
-   *  assemblies). The legacy whole-scene `choreography` scalar stays for
-   *  back-compat (it mirrors the most recent compile); the validator
-   *  checks BOTH against the closed vocabulary, and every map key must
-   *  name a group THIS scene actually places. ABSENT = no per-group
-   *  receipt. */
-  choreographyGroups?: Record<string, string>;
+   *  assemblies). Phase 5 — the receipt is RICH (ChoreographyGroupReceipt:
+   *  preset, one scene clock, event-set fingerprint, member roster,
+   *  monotonic version). The legacy whole-scene `choreography` scalar
+   *  stays for back-compat (it mirrors the most recent compile); the
+   *  validator accepts BOTH receipt shapes (the Phase 4 bare preset
+   *  string upgrades on parse — the backward-compatibility law) and
+   *  every map key must name a group THIS scene actually places. ABSENT
+   *  = no per-group receipt. */
+  choreographyGroups?: Record<string, ChoreographyGroupReceipt>;
+}
+
+/** Master plan Phase 5 — the RICH choreography receipt: the record one
+ *  compile stamps per compound group (see choreography.ts for the
+ *  builders). The scene's assembly carries its own evidence:
+ *  presetId — the closed-vocabulary preset that was compiled;
+ *  timingSource — "scene-clock", THE one clock (the compile retimes
+ *    onto the scene's single timeline; never a second scheduler);
+ *  eventFingerprint — the deterministic digest (8 lowercase hex, FNV-1a)
+ *    over the SORTED event identities the compile addressed — a change
+ *    of membership, stroke, or window moves it;
+ *  affectedMembers — the group's member placement keys at receipt time
+ *    (sorted; must BE the group's placed members — a receipt naming
+ *    strangers is a lie, and the validator refuses one);
+ *  version — monotonic per group: the receipt continues itself
+ *    (previous + 1) at every re-compile. The producer (the choreography
+ *    route) owns the bump; the validator pins the shape.
+ *
+ *  BACKWARD COMPATIBILITY: Phase 4 docs carry the bare preset STRING in
+ *  this map's slot. The reader (normalizeChoreographyGroupReceipt)
+ *  accepts both shapes and upgrades the legacy string on parse — version
+ *  1, roster and fingerprint derived from the members and events the
+ *  receipt rides at parse time. A rich receipt is validated, never
+ *  recomputed: it records the compile-time state, not the live timeline
+ *  (later event edits do not invalidate it). */
+export interface ChoreographyGroupReceipt {
+  presetId: string;
+  timingSource: "scene-clock";
+  eventFingerprint: string;
+  affectedMembers: string[];
+  version: number;
 }
 
 /** One accumulated group transform (see WhiteboardScene.groupTransforms):
@@ -619,11 +653,15 @@ export function validateWhiteboardProject(
     //   · two instances of one compound coexist (distinct instance ids,
     //     each judged alone) — the repeated-placement win.
     const sceneGroups = new Map<string, string[]>();
+    const sceneMemberKeys = new Map<string, string[]>();
     for (const pl of placements) {
       if (pl.groupId === undefined) continue;
       const members = sceneGroups.get(pl.groupId) ?? [];
       members.push(pl.assetId);
       sceneGroups.set(pl.groupId, members);
+      const keys = sceneMemberKeys.get(pl.groupId) ?? [];
+      keys.push(pl.placementId ?? pl.assetId);
+      sceneMemberKeys.set(pl.groupId, keys);
     }
     let groupsOk = true;
     for (const [gid, memberAssetIds] of sceneGroups) {
@@ -680,19 +718,20 @@ export function validateWhiteboardProject(
       }
       choreography = s.choreography;
     }
-    // Phase 4 — the GROUP-KEYED receipts: same closed vocabulary, one key
-    // per placed compound group (a receipt without its group is still a
-    // lie; a ghost key is dead data).
-    let choreographyGroups: Record<string, string> | undefined;
+    // Phase 5 — the GROUP-KEYED receipts, the RICH shape: one receipt per
+    // placed compound group (a receipt without its group is still a lie;
+    // a ghost key is dead data). BACKWARD COMPATIBILITY: the Phase 4 bare
+    // preset string is the legacy shape — the tolerant reader upgrades it
+    // on parse (version 1, roster + fingerprint derived from what the
+    // receipt rides HERE); a rich record is validated, never recomputed
+    // (it records the compile-time state, not the live timeline).
+    let choreographyGroups: Record<string, ChoreographyGroupReceipt> | undefined;
     if (s.choreographyGroups !== undefined) {
       const raw = s.choreographyGroups as Record<string, unknown> | null;
-      const mapOk =
-        raw !== null &&
-        typeof raw === "object" &&
-        !Array.isArray(raw) &&
-        Object.values(raw).every((v) => typeof v === "string" && (COMPOUND_CHOREOGRAPHY_IDS as readonly string[]).includes(v));
-      if (!mapOk) {
-        errors.push(`scene ${i + 1}: choreographyGroups must map placed group ids to compound preset ids (${COMPOUND_CHOREOGRAPHY_IDS.join(", ")})`);
+      if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
+        errors.push(
+          `scene ${i + 1}: choreographyGroups must map placed group ids to compound preset ids or receipt records (${COMPOUND_CHOREOGRAPHY_IDS.join(", ")})`
+        );
         continue;
       }
       const ghost = Object.keys(raw).find((g) => !sceneGroups.has(g) || !validWhiteboardId(g));
@@ -700,7 +739,26 @@ export function validateWhiteboardProject(
         errors.push(`scene ${i + 1}: choreographyGroups key "${ghost.slice(0, 40)}" does not name a compound group this scene places (a receipt rides a real group)`);
         continue;
       }
-      choreographyGroups = raw as Record<string, string>;
+      const rawRows = Array.isArray(s.animations) ? (s.animations as unknown[]) : [];
+      const normalized: Record<string, ChoreographyGroupReceipt> = {};
+      let receiptsOk = true;
+      for (const [gid, value] of Object.entries(raw)) {
+        const receipt = normalizeChoreographyGroupReceipt({
+          raw: value,
+          memberKeys: sceneMemberKeys.get(gid) ?? [],
+          events: rawRows,
+        });
+        if (receipt === null) {
+          errors.push(
+            `scene ${i + 1}: choreographyGroups["${gid.slice(0, 40)}"] is not a compound choreography receipt (a bare preset id from ${COMPOUND_CHOREOGRAPHY_IDS.join(", ")}, or a {presetId, timingSource "scene-clock", eventFingerprint, affectedMembers, version} record naming this group's members)`
+          );
+          receiptsOk = false;
+          continue;
+        }
+        normalized[gid] = receipt;
+      }
+      if (!receiptsOk) continue;
+      choreographyGroups = normalized;
     }
     // Phase 4 — the canonical group transform records: every key names a
     // placed group; every number is finite; scale stays positive (a

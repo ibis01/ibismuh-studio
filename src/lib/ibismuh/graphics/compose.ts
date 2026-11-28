@@ -71,8 +71,9 @@
 //
 // PURE — no fs, no DOM execution, no clock, no randomness (the S64 law):
 // this module builds STRINGS; the DOM owns execution. Leaf-module law:
-// imports the grammar (types.ts), the frame truth (frame.ts) and two
-// whiteboard siblings (svg) — never the reverse.
+// imports the grammar (types.ts), the frame truth (frame.ts), the metric
+// seam's font-stack constant (layout.ts — the drawn family, Phase 7) and
+// two whiteboard siblings (svg) — never the reverse.
 import {
   sanitizeSvg,
   pathSegments,
@@ -81,6 +82,11 @@ import {
 import type { GraphicsDoc, GraphicsElement, GraphicsScene } from "./types";
 import type { GraphicsFrameState } from "./frame";
 import { GRAPHICS_MOTION_SEMANTICS } from "./frame";
+// Phase 7 — the drawn font stack rides layout.ts's ONE constant (the
+// metric seam names what the boxes must model; a second stack string
+// here would drift from the receipt's family). Same bytes on write —
+// the constant IS the literal this rule always carried.
+import { GRAPHICS_TEXT_FONT_STACK } from "./layout";
 
 // ---------------------------------------------------------------------------
 // The compose-time defaults — ONE table, cited by the skeleton and the pins
@@ -645,7 +651,7 @@ export function composeGraphicsScene(
     `<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;padding:0;background:${scene.background};overflow:hidden}
 svg{display:block}
-text{font-family:Arial,Helvetica,sans-serif}
+text{font-family:${GRAPHICS_TEXT_FONT_STACK}}
 </style></head><body>
 <svg id="board" width="${doc.width}" height="${doc.height}" viewBox="0 0 ${doc.width} ${doc.height}" xmlns="http://www.w3.org/2000/svg">
 <rect x="0" y="0" width="${doc.width}" height="${doc.height}" fill="${scene.background}"/>

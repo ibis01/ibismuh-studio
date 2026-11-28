@@ -78,6 +78,16 @@ export const ORG_SCOPED_MODELS = new Set(
     "renderjob",
     "qcreportrecord",
     "studioevent",
+    // Phase 9 — the webhook dead-letter store (nullable organizationId: an
+    // event may predate tenant resolution; the null-org rows are operator
+    // surfaces — redrive — and are invisible to tenant-scoped reads, which is
+    // the correct posture) and the per-tier render admission counters (org-
+    // owned quota state). Both are written through the raw billing gateway by
+    // tier-limits.ts / billing.ts; the registration keeps any FUTURE
+    // request-scoped access inside the tenant guard (the S136 defense-in-
+    // depth law).
+    "webhookdeadletter",
+    "tierrendercounter",
   ].map((m) => m.toLowerCase())
 );
 

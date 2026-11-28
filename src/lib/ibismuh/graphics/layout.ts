@@ -127,26 +127,142 @@ export const GRAPHICS_LINE_H_RATIO = LINE_H_RATIO;
 // a measurer is actually installed). The seam is deliberately NOT
 // persisted anywhere: it is a per-process capability, the deterministic
 // battery always runs provider-less.
+//
+// Phase 7 — the seam is now INSTALLED IN PRODUCTION by
+// font-metrics.ts (installGraphicsFontMetrics): the provider measures
+// REAL advance widths from the committed Liberation Sans table (the
+// face the render farm's fontconfig resolves the stack below onto),
+// and every solve labels which model judged it through the LAYOUT
+// RECEIPT (below). Provider-less runs stay byte-identical to this file's
+// Phase 6 law — the fallback is retained, but it is LABELED, not hidden.
 export interface GraphicsTextMetricsProvider {
-  /** Width of one text line at sizePx (px) — the caller's real font. */
-  measure(text: string, sizePx: number): number;
-  /** The real face's line-height ratio; absent = the ratio model's 1.4. */
+  /** Width of one text line at sizePx (px) — the caller's real font.
+   *  Phase 7: the optional weight selects the face the composer draws
+   *  (compose.ts's font-weight law — 700 default, the chart labels'
+   *  400); a provider may ignore it (the ratio model is weight-blind). */
+  measure(text: string, sizePx: number, weight?: number): number;
+  /** The real face's line-height ratio; absent = the ratio model's 1.4.
+   *  The installed provider reports the composer's DRAWN line advance
+   *  (the tspan spacing law — what the box must bound), not the face's
+   *  hhea gap (SVG text advances by the composer's spacing). */
   lineHeightRatio?: number;
+  /** Phase 7 — the provider describes itself for the layout receipt
+   *  (the honest-labeling law): which model it runs and which face it
+   *  reads. Absent = the provider does not name itself, and the receipt
+   *  records the ratio fallback's honest nulls. */
+  describeMetrics?(): GraphicsMetricsProvenance;
 }
 let metricsProvider: GraphicsTextMetricsProvider | null = null;
 export function setTextMetricsProvider(p: GraphicsTextMetricsProvider | null): void {
   metricsProvider = p;
 }
 /** Measured width of the widest line (px). Provider present → the real
- *  measurement; absent → the conservative ratio model. */
-export function measureTextWidth(text: string, sizePx: number): number {
-  if (metricsProvider !== null) return metricsProvider.measure(text, sizePx);
+ *  measurement; absent → the conservative ratio model. Provider-less
+ *  behavior is PINNED byte-identical (the existing law) — weight rides
+ *  only when a provider is installed. */
+export function measureTextWidth(text: string, sizePx: number, weight?: number): number {
+  if (metricsProvider !== null) return metricsProvider.measure(text, sizePx, weight);
   return sizePx * CHAR_W_RATIO;
 }
 /** The active line-height ratio (provider's, else the model's). */
 export function activeLineHeightRatio(): number {
   return metricsProvider?.lineHeightRatio ?? LINE_H_RATIO;
 }
+
+// ---------------------------------------------------------------------------
+// THE LAYOUT RECEIPT (Phase 7 — the plan's demand: the font identity and
+// the metric source ride every layout judgment, labeled, never hidden)
+// ---------------------------------------------------------------------------
+
+/** The font family the graphics composer DRAWS with (compose.ts's CSS
+ *  rule rides THIS constant — one source). The render farm's
+ *  fontconfig resolves Arial onto Liberation Sans (Dockerfile:
+ *  fonts-liberation) — the face the committed advance table measures. */
+export const GRAPHICS_TEXT_FONT_STACK = "Arial,Helvetica,sans-serif";
+
+/** Which model produced the numbers. "real-glyph-table" = the committed
+ *  advance table (font-metrics.ts); "ratio-estimate-fallback" = the
+ *  declared 0.55 estimate — legal, but it must SAY so. */
+export type GraphicsMetricSource = "real-glyph-table" | "ratio-estimate-fallback";
+
+/** The provider's self-description (the seam's describeMetrics law).
+ *  `faces` is empty for the ratio fallback (no committed face to name). */
+export interface GraphicsMetricsProvenance {
+  source: GraphicsMetricSource;
+  fontFamily: string;
+  /** One row per committed face the provider reads. */
+  faces: { weightClass: number; fontFile: string; fontSha256: string }[];
+}
+
+/** THE LAYOUT RECEIPT — the plain record of WHAT MEASURED. Emitted by
+ *  the solver (and available to any seam that judges a box): the font
+ *  family, the face file + hash the numbers came from, the weight/size
+ *  profile the receipt's line-height rode, the locale, and — the honest
+ *  part — WHICH MODEL ran and whether it was the fallback. */
+export interface GraphicsLayoutReceipt {
+  fontFamily: string;
+  /** The face file the receipt's weight profile resolves to (repo
+   *  path); null = no committed face (the ratio fallback). */
+  fontFile: string | null;
+  /** The face file's sha256; null = no committed face. */
+  fontSha256: string | null;
+  /** The receipt profile's weight (the compose draw law: text defaults
+   *  to 700, chart labels draw 400). */
+  weight: number;
+  /** The receipt profile's drawn size (px). */
+  sizePx: number;
+  /** sizePx × the ACTIVE line-height ratio — the box height's actual
+   *  multiplier at solve time. */
+  lineHeightPx: number;
+  /** The measurement's locale assumption (the graphics lane's house
+   *  content is ASCII/English — "en"; no doc field exists yet, and the
+   *  receipt says so rather than inventing one). */
+  locale: string;
+  metricSource: GraphicsMetricSource;
+  /** True = the numbers came from the declared estimate, not the face. */
+  fallback: boolean;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** The receipt of the ACTIVE seam state — the builder every emission
+ *  point shares (one builder, one vocabulary). `sizePx`/`weight` name
+ *  the receipt's type profile (the solver passes the doc's headline;
+ *  the compose defaults stand in when absent). Deterministic: reads no
+ *  clock, no fs — only the installed provider's self-description. */
+export function activeLayoutReceipt(
+  opts?: { sizePx?: number; weight?: number; locale?: string }
+): GraphicsLayoutReceipt {
+  const sizePx = round2(opts?.sizePx ?? 48); // the compose default (textSizePx's own floor)
+  const weight = opts?.weight ?? 700; // the compose draw default (compose.ts's weight law)
+  const locale = opts?.locale ?? "en";
+  const prov = metricsProvider?.describeMetrics?.() ?? {
+    source: "ratio-estimate-fallback" as const,
+    fontFamily: GRAPHICS_TEXT_FONT_STACK,
+    faces: [],
+  };
+  // The face the receipt's weight resolves to (chromium's face pick for
+  // a two-face family: ≥600 draws the bold class, else the regular). A
+  // provider with faces always carries both classes of the family.
+  const sorted = [...prov.faces].sort((a, b) => a.weightClass - b.weightClass);
+  const face = sorted.length > 0
+    ? [...sorted].reverse().find((f) => f.weightClass <= weight) ?? sorted[0]
+    : undefined;
+  return {
+    fontFamily: prov.fontFamily,
+    fontFile: face?.fontFile ?? null,
+    fontSha256: face?.fontSha256 ?? null,
+    weight,
+    sizePx,
+    lineHeightPx: round2(sizePx * activeLineHeightRatio()),
+    locale,
+    metricSource: prov.source,
+    fallback: prov.source === "ratio-estimate-fallback",
+  };
+}
+
 /** The compose chart box fraction + the chart label size — the estimator
  *  rides the SAME constants the renderer draws with (one estimate model,
  *  restated from compose.ts's DrawDefaults; the repair math needs them
@@ -181,6 +297,17 @@ function textChars(el: GraphicsElement): string | null {
   return null;
 }
 
+/** The weight the composer DRAWS this element's text with — the
+ *  payload's, else compose.ts's draw default 700 (the payload law:
+ *  text weight ?? GRAPHICS_COMPOSE_DEFAULTS.weight; counters draw the
+ *  same default). Restated here because layout cannot import compose
+ *  (the import would cycle: compose rides this module's font stack) —
+ *  the comment cites the source, the battery pins the pair. */
+function textWeight(el: GraphicsElement): number {
+  if (el.text !== undefined) return el.text.weight ?? 700;
+  return 700; // counters (and every payload-less draw) ride the compose default
+}
+
 function formatCounterEstimate(to: number, unit?: string): string {
   const digits = Math.max(1, Math.floor(Math.log10(Math.max(1, Math.abs(to)))) + 1);
   return "8".repeat(digits) + (unit ?? "");
@@ -208,7 +335,10 @@ export function estimateBox(el: GraphicsElement, doc: GraphicsDoc): EstimatedBox
     const size = textSizePx(el) * scale;
     const lines = textLines(el);
     const lines_ = content.split("\n");
-    const widest = Math.max(...lines_.map((l) => measureTextWidth(l, size)), size * CHAR_W_RATIO);
+    // Phase 7: the measured width rides the element's DRAWN weight (the
+    // provider picks the face); provider-less the weight is ignored and
+    // the ratio model's bytes are untouched (the pinned law).
+    const widest = Math.max(...lines_.map((l) => measureTextWidth(l, size, textWeight(el))), size * CHAR_W_RATIO);
     const w = Math.max(widest, 60);
     const h = size * activeLineHeightRatio() * lines;
     return { x0: x - w / 2, y0: y - h / 2, x1: x + w / 2, y1: y + h / 2 };
@@ -256,6 +386,25 @@ export interface LayoutSolveReport {
   /** The gate-class findings — the QC row's fail set. */
   violations: LayoutFinding[];
   notes: LayoutFinding[];
+  /** Phase 7 — WHAT MEASURED: the font identity + metric source this
+   *  solve judged with (the honest-labeling law). The doc's headline
+   *  profile rides as the receipt's weight/size pair. */
+  receipt: GraphicsLayoutReceipt;
+}
+
+/** The doc's headline profile — the LARGEST drawn text (scaled), the
+ *  element whose box the gates judge hardest; the compose defaults (48
+ *  / 700 — the draw law) stand in when the doc draws no text. */
+function headlineProfile(doc: GraphicsDoc): { sizePx: number; weight: number } {
+  let best: { sizePx: number; weight: number } | null = null;
+  for (const scene of doc.scenes) {
+    for (const el of scene.elements) {
+      if (el.text === undefined && el.counter === undefined) continue;
+      const size = round2(textSizePx(el) * el.at.scale);
+      if (best === null || size > best.sizePx) best = { sizePx: size, weight: textWeight(el) };
+    }
+  }
+  return best ?? { sizePx: 48, weight: 700 }; // the compose defaults (no text in the doc)
 }
 
 /** Solve the layout for a whole doc: per scene, per element, through the
@@ -374,5 +523,9 @@ export function solveGraphicsLayout(doc: GraphicsDoc): LayoutSolveReport {
     scenes,
     violations,
     notes,
+    // Phase 7 — the receipt rides every solve: the QC row names the
+    // metric source, the studio and the repair seam read the same
+    // record, and a provider-less solve SAYS it estimated.
+    receipt: activeLayoutReceipt(headlineProfile(doc)),
   };
 }

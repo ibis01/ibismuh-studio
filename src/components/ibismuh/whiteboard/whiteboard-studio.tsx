@@ -1337,7 +1337,12 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                     </span>
                     {partLocked && <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-200">locked</span>}
                     {scene.choreographyGroups?.[pl.groupId] && (
-                      <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-cyan-200/80">assembly: {scene.choreographyGroups[pl.groupId]}</span>
+                      <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-cyan-200/80">
+                        {/* Phase 5 — the receipt is RICH (preset, one scene
+                            clock, event fingerprint, members, version); the
+                            panel surfaces the assembly name + its counter. */}
+                        assembly: {scene.choreographyGroups[pl.groupId].presetId} · v{scene.choreographyGroups[pl.groupId].version}
+                      </span>
                     )}
                     {scene.groupTransforms?.[pl.groupId] && (
                       <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-200/80">

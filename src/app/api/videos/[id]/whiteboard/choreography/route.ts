@@ -14,7 +14,7 @@ import {
 import { invalidateRenderedArtifacts } from "@/lib/ibismuh/render";
 import { loadVideoLibrary } from "@/lib/ibismuh/whiteboard/asset-store";
 import { buildGeometry, scheduleScene, sceneDurationMs } from "@/lib/ibismuh/whiteboard/timing";
-import { compileCompoundChoreography, resolveCompoundChoreography } from "@/lib/ibismuh/whiteboard/choreography";
+import { compileCompoundChoreography, resolveCompoundChoreography, buildChoreographyGroupReceipt, normalizeChoreographyGroupReceipt } from "@/lib/ibismuh/whiteboard/choreography";
 import { groupMembers, isGroupLocked } from "@/lib/ibismuh/whiteboard/groups";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -114,22 +114,44 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
   // The compile: the group's pen events retimed into the preset's order,
   // written back as EXPLICIT events (senior — the fill law never re-times
-  // them). Non-member events keep their places.
+  // them). Non-member events keep their places. THE EVENT-SET LAW (Phase
+  // 5) rides inside the compiler and fails VISIBLE here: an empty member
+  // event set, or two member strokes claiming one clock window, is a 400
+  // naming the violation (the offending pair, verbatim) — never a silent
+  // reshape.
   const memberKeys = new Set(members.map((pl) => pl.placementId ?? pl.assetId));
-  const compiled = compileCompoundChoreography({
-    preset: resolvedPreset,
-    members: members.map((pl) => ({
-      key: pl.placementId ?? pl.assetId,
-      x: pl.placement.x,
-      y: pl.placement.y,
-    })),
-    events: schedule,
-  });
-  if (compiled.length === 0)
+  let compiled: ReturnType<typeof compileCompoundChoreography>;
+  try {
+    compiled = compileCompoundChoreography({
+      preset: resolvedPreset,
+      members: members.map((pl) => ({
+        key: pl.placementId ?? pl.assetId,
+        x: pl.placement.x,
+        y: pl.placement.y,
+      })),
+      events: schedule,
+    });
+  } catch (err) {
     return NextResponse.json(
-      { error: `Group "${groupId}" carries no drawable strokes — nothing to choreograph` },
+      { error: err instanceof Error ? err.message : "Choreography compile failed" },
       { status: 400 }
     );
+  }
+  // Phase 5 — the receipt is RICH and continues its own counter: the
+  // tolerant read accepts the legacy bare-string shape (old docs) or the
+  // rich record, and this compile stamps previous version + 1 (the first
+  // receipt of a group is version 1).
+  const previousReceipt = normalizeChoreographyGroupReceipt({
+    raw: scene.choreographyGroups?.[groupId],
+    memberKeys: [...memberKeys],
+    events: schedule,
+  });
+  const receipt = buildChoreographyGroupReceipt({
+    presetId: resolvedPreset,
+    memberKeys: [...memberKeys],
+    events: schedule,
+    previousVersion: previousReceipt?.version,
+  });
   const animations = [
     ...scene.animations.filter(
       (e) =>
@@ -148,7 +170,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     ...scene,
     animations,
     choreography: resolvedPreset,
-    choreographyGroups: { ...scene.choreographyGroups, [groupId]: resolvedPreset },
+    choreographyGroups: { ...scene.choreographyGroups, [groupId]: receipt },
   };
 
   // The engine validator against the merged library — the same gate the

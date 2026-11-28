@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "slice": "MP8 — the six-lane evidence slice (the slides lane: the mp7 recorded gap, closed)",
+  "lane": "slides",
+  "baseline": "golden-slides.mp4",
+  "law": "The codec tolerance law (see scripts/benchmark-lib.mts): a re-run of scripts/benchmark-slides.mts must produce ffprobe-IDENTICAL container metadata (codec h264, 480x854, 24 fps, 144 frames, duration within 0.06 s) and a cross-run PSNR at or above 30 dB against this baseline. Byte-identity is never pinned — libx264 is not byte-stable across runs/environments. A DELIBERATE visual change re-baselines on purpose by re-running the benchmark and committing the new baseline — that commit IS the review moment.",
+  "fixture": "A 3-slide hand-authored deck (statement/counter/bars, fixed text, 2000 ms per slide, 24 fps, motion on at intensity 10) through the REAL kinetic pass (renderKineticSlideClips: chromium + slideFrameAt + ffmpeg), concated and delivered at 480x854. Zero AI spend — the LLM deck planner is deliberately not called.",
+  "tolerances": {
+    "containerDurationSec": 0.06,
+    "minCrossRunPsnrDb": 30,
+    "expectedFrames": 144
+  }
+}

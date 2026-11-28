@@ -1,0 +1,22 @@
+{
+  "fontId": "liberation-sans-w400-w700",
+  "family": "Liberation Sans",
+  "cssStack": "Arial,Helvetica,sans-serif",
+  "upem": 2048,
+  "charset": "ASCII 0x20-0x7E",
+  "faces": [
+    {
+      "weightClass": 400,
+      "fontFile": "public/fonts/liberation/LiberationSans-Regular.ttf",
+      "fontSha256": "bade59d822652f76e6941aa87b40a87c13d1cc70db98ededb5011127efafd1d3",
+      "advanceCount": 95
+    },
+    {
+      "weightClass": 700,
+      "fontFile": "public/fonts/liberation/LiberationSans-Bold.ttf",
+      "fontSha256": "1b5f2da6f4cadce4c05b9ecebe3a6fcd374eb95ae443605e799f4c3287978939",
+      "advanceCount": 95
+    }
+  ],
+  "tableSha256": "1546ae0c3ba27a4987edf5c7ce549de44793e92828a818f0c3a40d38f993de51"
+}

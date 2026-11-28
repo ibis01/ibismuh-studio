@@ -49,8 +49,11 @@ import {
   type WhiteboardCompoundSpec,
 } from "../src/lib/ibismuh/whiteboard/compounds";
 import {
+  buildChoreographyGroupReceipt,
+  choreographyEventSetFingerprint,
   compileCompoundChoreography,
   COMPOUND_CHOREOGRAPHY_IDS,
+  normalizeChoreographyGroupReceipt,
   resolveCompoundChoreography,
   type CompoundChoreographyId,
 } from "../src/lib/ibismuh/whiteboard/choreography";
@@ -1206,6 +1209,175 @@ await test("the compile seam stays leaf-pure: no node imports in groups.ts or ch
   const read = (p: string): string => fs.readFileSync(path.resolve(here4, p), "utf8");
   ok(!/from "node:/.test(read("../src/lib/ibismuh/whiteboard/choreography.ts")), "choreography.ts: no node: imports");
   ok(!/from "node:/.test(read("../src/lib/ibismuh/whiteboard/groups.ts")), "groups.ts: no node: imports (the editor's group ops are client-side)");
+});
+
+// --- 14. PHASE 5 — THE RICH CHOREOGRAPHY RECEIPTS AND THE EVENT-SET LAW --------
+//
+// The plan's group receipts carry "timing source, event fingerprint,
+// affected members, and version" — and the choreography law pins "one
+// scene clock; reject overlap or missing event sets". The receipt is
+// GROUP-KEYED and continues its own counter; the Phase 4 bare preset
+// string is the legacy shape and upgrades on parse.
+
+suiteStart("phase 5 — the rich choreography receipts and the event-set law");
+
+await test("the receipt builder stamps the full record: clock, fingerprint, members, version", () => {
+  const { scene, groupId } = instancedScene();
+  const members = membersOf(scene, groupId).map((m) => m.key);
+  const schedule = scheduleScene(scene, 8000, compoundGeo());
+  const receipt = buildChoreographyGroupReceipt({ presetId: "assembly-spiral", memberKeys: members, events: schedule });
+  eq(receipt.presetId, "assembly-spiral", "the preset rides");
+  eq(receipt.timingSource, "scene-clock", "the ONE scene clock is named, not a second scheduler");
+  ok(/^[0-9a-f]{8}$/.test(receipt.eventFingerprint), `the fingerprint is the 8-hex digest shape: ${receipt.eventFingerprint}`);
+  eq(receipt.affectedMembers, [...members].sort(), "the roster IS the group's member keys, sorted");
+  eq(receipt.version, 1, "the first compile stamps version 1");
+  const again = buildChoreographyGroupReceipt({ presetId: "assembly-spiral", memberKeys: members, events: schedule });
+  eq(again.eventFingerprint, receipt.eventFingerprint, "deterministic: same event set → same fingerprint");
+  const next = buildChoreographyGroupReceipt({ presetId: "assembly-cascade", memberKeys: [...members].reverse(), events: schedule, previousVersion: 4 });
+  eq(next.version, 5, "the counter is monotonic: previous 4 → this 5");
+  eq(next.affectedMembers, receipt.affectedMembers, "member-key order does not move the roster (a set, sorted)");
+});
+
+await test("the fingerprint rides the SORTED event set: order never moves it, content always does", () => {
+  const keys = ["b:x#p1#0#500", "a:y#p1#300#500", "c:z#t1#900#400"];
+  eq(choreographyEventSetFingerprint(keys), choreographyEventSetFingerprint([...keys].reverse()), "the set sorts before hashing");
+  ok(choreographyEventSetFingerprint(["a#1#0#100"]) !== choreographyEventSetFingerprint(["a#1#0#200"]), "a moved window moves the fingerprint");
+  ok(choreographyEventSetFingerprint(["a", "b"]) !== choreographyEventSetFingerprint(["a"]), "a changed membership moves the fingerprint");
+  const { scene, groupId } = instancedScene();
+  const members = membersOf(scene, groupId).map((m) => m.key);
+  const schedule = scheduleScene(scene, 8000, compoundGeo());
+  const receipt = buildChoreographyGroupReceipt({ presetId: "assembly-cascade", memberKeys: members, events: schedule });
+  const moved = schedule.map((e, i) => (i === 0 ? { ...e, startMs: e.startMs + 250 } : e));
+  const receiptMoved = buildChoreographyGroupReceipt({ presetId: "assembly-cascade", memberKeys: members, events: moved });
+  ok(receiptMoved.eventFingerprint !== receipt.eventFingerprint, "a re-timed member event moves the receipt's fingerprint");
+});
+
+await test("the event-set law: an empty/missing member event set refuses, fail-visible", () => {
+  const { scene, groupId } = instancedScene();
+  throws(
+    () => compileCompoundChoreography({ preset: "assembly-cascade", members: membersOf(scene, groupId), events: [] }),
+    /empty event set/,
+    "a group with no drawable strokes cannot ride the one scene clock"
+  );
+});
+
+await test("the event-set law: overlapping member windows refuse, the offending pair named", () => {
+  const { scene, parts, groupId } = instancedScene();
+  const overlapping = [
+    { type: "draw_path", assetId: parts[0].assetId, placementId: parts[0].placementId, pathId: "p1", startMs: 0, durationMs: 500 },
+    { type: "draw_path", assetId: parts[1].assetId, placementId: parts[1].placementId, pathId: "p1", startMs: 300, durationMs: 500 },
+  ] as never;
+  throws(
+    () => compileCompoundChoreography({ preset: "assembly-cascade", members: membersOf(scene, groupId), events: overlapping }),
+    new RegExp(`overlap[\\s\\S]*${parts[0].placementId}[\\s\\S]*${parts[1].placementId}`),
+    "the refusal names BOTH members of the offending pair"
+  );
+});
+
+await test("the event-set law: touching windows ride the ONE shared clock window — the fill law's cadence", () => {
+  const { scene, parts, groupId } = instancedScene();
+  const touching = [
+    { type: "draw_path", assetId: parts[0].assetId, placementId: parts[0].placementId, pathId: "p1", startMs: 400, durationMs: 500 },
+    { type: "draw_path", assetId: parts[1].assetId, placementId: parts[1].placementId, pathId: "p1", startMs: 900, durationMs: 500 },
+  ] as never;
+  const compiled = compileCompoundChoreography({ preset: "assembly-cascade", members: membersOf(scene, groupId), events: touching });
+  eq(compiled.length, 2, "back-to-back strokes compile (touching is not overlap)");
+  const earliest = Math.min(...(touching as Array<{ startMs: number }>).map((e) => e.startMs));
+  eq(Math.min(...compiled.map((e) => e.startMs)), earliest, "the compiled band opens at the group's earliest stroke — ONE shared scene-clock window");
+});
+
+await test("legacy receipts normalize: the Phase 4 bare string upgrades to the rich shape on parse", () => {
+  const { base, scene, groupId } = instancedScene();
+  const staged = { ...scene, choreographyGroups: { [groupId]: "assembly-cascade" } };
+  const swap = (x: { id: string }) => (x.id === scene.id ? staged : x);
+  const r = v({ ...base, scenes: base.scenes.map(swap) });
+  ok(r.project !== null, `the legacy receipt validates: ${r.errors.join(" · ")}`);
+  if (!r.project) return;
+  const parsedScene = r.project.scenes[r.project.scenes.length - 1];
+  const receipt = parsedScene.choreographyGroups?.[groupId];
+  ok(receipt !== undefined && typeof receipt !== "string", "the bare string is upgraded to the record shape");
+  if (!receipt || typeof receipt === "string") return;
+  eq(receipt.presetId, "assembly-cascade", "the preset survives the upgrade");
+  eq(receipt.timingSource, "scene-clock", "the clock is named");
+  ok(/^[0-9a-f]{8}$/.test(receipt.eventFingerprint), "the fingerprint derives from what the receipt rides HERE");
+  eq(receipt.affectedMembers, membersOf(scene, groupId).map((m) => m.key).sort(), "the roster derives from the placed members");
+  eq(receipt.version, 1, "the legacy shape carries no counter — the upgrade is the first receipt shape");
+  const reparsed = JSON.parse(JSON.stringify(r.project)) as never;
+  const r2 = v(reparsed);
+  ok(r2.project !== null, `the upgraded doc revalidates clean: ${r2.errors.join(" · ")}`);
+  const scene2 = (r2.project as { scenes: Array<{ choreographyGroups?: Record<string, unknown> }> }).scenes.at(-1);
+  eq(
+    JSON.stringify(scene2?.choreographyGroups),
+    JSON.stringify(r.project.scenes.at(-1)?.choreographyGroups),
+    "the normalized shape is stable across the save/reload round-trip"
+  );
+});
+
+await test("junk rich receipts refuse: off-vocabulary, wrong clock, junk digest, strangers, dead counters", () => {
+  const { base, scene, groupId } = instancedScene();
+  const members = membersOf(scene, groupId).map((m) => m.key).sort();
+  const good = {
+    presetId: "assembly-cascade",
+    timingSource: "scene-clock" as const,
+    eventFingerprint: "0f1e2d3c",
+    affectedMembers: members,
+    version: 1,
+  };
+  const staged = { ...scene, choreographyGroups: { [groupId]: good } };
+  const refuse = (mutate: (t: typeof staged) => unknown, why: string) => {
+    const bad = mutate(staged) as typeof staged;
+    const r = v({ ...base, scenes: base.scenes.map((x) => (x.id === scene.id ? bad : x)) });
+    ok(r.project === null, why);
+  };
+  refuse((t) => ({ ...t, choreographyGroups: { [groupId]: { ...good, presetId: "assembly-spin" } } }), "an off-vocabulary preset refuses");
+  refuse((t) => ({ ...t, choreographyGroups: { [groupId]: { ...good, timingSource: "hand-clock" } } }), "a second clock refuses (the one scene clock)");
+  refuse((t) => ({ ...t, choreographyGroups: { [groupId]: { ...good, eventFingerprint: "not-hex" } } }), "a junk fingerprint refuses");
+  refuse((t) => ({ ...t, choreographyGroups: { [groupId]: { ...good, affectedMembers: [] } } }), "an empty roster refuses");
+  refuse(
+    (t) => ({ ...t, choreographyGroups: { [groupId]: { ...good, affectedMembers: ["ghost-member", ...members.slice(1)] } } }),
+    "a roster naming strangers refuses"
+  );
+  refuse((t) => ({ ...t, choreographyGroups: { [groupId]: { ...good, version: 0 } } }), "version 0 refuses (the counter starts at 1)");
+  refuse((t) => ({ ...t, choreographyGroups: { [groupId]: { ...good, version: 1.5 } } }), "a fractional version refuses");
+  refuse((t) => ({ ...t, choreographyGroups: { [groupId]: { ...good, version: "2" } } }), "a string version refuses");
+  refuse((t) => ({ ...t, choreographyGroups: { [groupId]: 42 } }), "a non-string non-record value refuses");
+});
+
+await test("the counter continues across the legacy seam; the tolerant read refuses junk", () => {
+  const { scene, groupId } = instancedScene();
+  const members = membersOf(scene, groupId).map((m) => m.key);
+  const schedule = scheduleScene(scene, 8000, compoundGeo());
+  const legacy = normalizeChoreographyGroupReceipt({ raw: "assembly-cascade", memberKeys: members, events: schedule });
+  ok(legacy !== null, "the bare string reads");
+  eq(legacy?.version, 1, "legacy normalizes to the first receipt shape");
+  const next = buildChoreographyGroupReceipt({ presetId: "assembly-spiral", memberKeys: members, events: schedule, previousVersion: legacy?.version });
+  eq(next.version, 2, "the next compile continues the counter: 1 → 2");
+  eq(normalizeChoreographyGroupReceipt({ raw: undefined, memberKeys: members, events: schedule }), null, "an absent receipt reads as none");
+  eq(normalizeChoreographyGroupReceipt({ raw: 42, memberKeys: members, events: schedule }), null, "junk refuses");
+  eq(normalizeChoreographyGroupReceipt({ raw: "assembly-spin", memberKeys: members, events: schedule }), null, "an off-vocabulary string refuses");
+  eq(
+    normalizeChoreographyGroupReceipt({ raw: legacy, memberKeys: [...members.slice(1), "ghost-member"], events: schedule }),
+    null,
+    "a rich receipt whose roster is not the group's placed members refuses (a receipt naming strangers is a lie)"
+  );
+});
+
+await test("the route-shaped seam: compile → receipt rides the validator and the round-trip is stable", () => {
+  const { base, scene, groupId } = instancedScene();
+  const schedule = scheduleScene(scene, 8000, realGeo());
+  const members = membersOf(scene, groupId).map((m) => m.key);
+  const compiled = compileCompoundChoreography({ preset: "assembly-edge-in", members: membersOf(scene, groupId), events: schedule });
+  const receipt = buildChoreographyGroupReceipt({ presetId: "assembly-edge-in", memberKeys: members, events: schedule });
+  const staged = {
+    ...scene,
+    animations: compiled,
+    choreography: "assembly-edge-in",
+    choreographyGroups: { [groupId]: receipt },
+  };
+  const r = v({ ...base, scenes: base.scenes.map((x) => (x.id === scene.id ? staged : x)) });
+  ok(r.project !== null, `the rich receipt rides the engine validator: ${r.errors.join(" · ")}`);
+  const parsed = r.project?.scenes.at(-1)?.choreographyGroups?.[groupId];
+  eq(parsed, receipt, "the rich receipt survives validation byte-for-byte (recorded, never recomputed)");
 });
 
 // --- summary ------------------------------------------------------------------

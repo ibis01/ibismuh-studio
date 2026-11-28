@@ -478,12 +478,18 @@ export async function tickQueue(): Promise<void> {
     // a load-time cycle (storage.ts sits below the queue in the graph).
     // S102 — the shared rate limiter's stale windows are swept in the same
     // lazy slot (kept 5 windows for forensics, deleted after).
+    // Phase 9 — the per-tier render quota's day rows join the slot (kept 8
+    // days for forensics; the (org, UTC-day) reset is structural, the sweep
+    // is pure retention).
     if (++storageSweepTick % 60 === 0) {
       void import("./storage")
         .then((m) => m.sweepExpiredStorageReservations())
         .catch(() => {});
       void import("./shared-rate-limit")
         .then((m) => m.sweepRateLimitCounters())
+        .catch(() => {});
+      void import("./tier-limits")
+        .then((m) => m.sweepTierRenderCounters())
         .catch(() => {});
     }
 

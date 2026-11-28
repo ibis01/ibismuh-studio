@@ -81,6 +81,11 @@ import {
   type NativeTransitionType,
 } from "./transitions";
 import { graphicsTracks } from "./tracks";
+// Phase 7 — the render pipeline entry installs the REAL font metrics
+// (the committed Liberation Sans advance table — font-metrics.ts): the
+// process's layout seam measures what chromium will rasterize, and the
+// install is idempotent + pure (a committed-table read, no fs, no DOM).
+import { installGraphicsFontMetrics } from "./font-metrics";
 import { writeGraphicsDoc, type GraphicsDoc } from "./types";
 import { wavDurationSec } from "../wav";
 
@@ -605,6 +610,13 @@ export async function renderGraphics(
   doc: GraphicsDoc,
   opts: RenderGraphicsOptions
 ): Promise<GraphicsRenderResult> {
+  // Phase 7 — the measured-type seam installed ONCE at the pipeline
+  // entry (idempotent): any layout judgment in this process (the QC
+  // lenses a caller runs alongside, future render-path consumers) rides
+  // the committed glyph table — the same numbers the QC gates judged
+  // (the parity law). Provider-less processes keep the ratio fallback,
+  // labeled honestly by the solve receipt.
+  installGraphicsFontMetrics();
   // The VO slots FIRST (S152 — the measured-narration clock needs the
   // durations before the wall reads the clock): normalized at the engine
   // boundary (the S76 loudness contract — in-window slots pass through

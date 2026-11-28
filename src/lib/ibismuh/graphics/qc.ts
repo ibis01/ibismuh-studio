@@ -21,6 +21,14 @@ import { expectedCutsForTimeline, type ExpectedCuts } from "../render-qc";
 import type { TransitionSettings } from "../transitions";
 import { frameAt, graphicsSceneDurationsMs, type GraphicsElementFrame, type GraphicsFrameState } from "./frame";
 import { ASPECT_POLICIES, solveGraphicsLayout } from "./layout";
+// Phase 7 — the matrix judges the layout gates through the REAL glyph
+// table: the install is a committed-table read (pure — no fs, no DOM,
+// no clock; the matrix's purity law is untouched), idempotent, and it
+// makes the GATES' boxes the same boxes the renderer's parity law
+// demands. The solve's receipt (which model + which face) rides the
+// G1-LAY-1 row below — an estimate may never pass itself off as a
+// measurement, and a measured solve names its face.
+import { installGraphicsFontMetrics } from "./font-metrics";
 import { graphicsBudgetReport } from "./preflight";
 import { graphicsTracks } from "./tracks";
 import { GRAPHICS_BUDGETS, type GraphicsDoc, type GraphicsElement, type GraphicsElementKind } from "./types";
@@ -276,6 +284,12 @@ export function graphicsQcMatrix(
   voSceneCount: number,
   voMsBySceneId?: Map<string, number>
 ): GraphicsQcReport {
+  // Phase 7 — the layout gates measure the committed Liberation Sans
+  // table (see font-metrics.ts). Installing HERE (and in the render
+  // entry) keeps the parity law: preview, QC and final judge the SAME
+  // solve with the SAME numbers. Provider-less processes (the
+  // deterministic battery's direct solver calls) are untouched.
+  installGraphicsFontMetrics();
   const rows: GraphicsQcRow[] = [];
 
   // G1-PROJ-1 — the budget wall (re-derived through the preflight's
@@ -431,6 +445,12 @@ export function graphicsQcMatrix(
     const solve = solveGraphicsLayout(doc);
     const gateCount = solve.violations.length;
     const notesCount = solve.notes.length;
+    // Phase 7 — the receipt rides the row: WHICH model measured (the
+    // committed glyph table, or the honestly-labeled ratio fallback)
+    // and which face the numbers came from (file hash, truncated — the
+    // full record sits on the solve report).
+    const r = solve.receipt;
+    const metrics = `metrics ${r.metricSource}: ${r.fontFamily}${r.fontSha256 ? ` [${r.fontSha256.slice(0, 12)}]` : ""}`;
     rows.push(row(
       "G1-LAY-1",
       `Responsive layout gates hold for ${solve.aspect} (${solve.variant}) (WS8)`,
@@ -439,8 +459,8 @@ export function graphicsQcMatrix(
         ? `${doc.scenes.length} scenes, ${notesCount} note(s), variant ${solve.variant}`
         : `${gateCount} gate violation(s), ${notesCount} note(s)`,
       gateCount === 0
-        ? `safe-rect ${Math.round(doc.width * ASPECT_POLICIES[solve.aspect].safeMarginRatio)}px margins, type floor ${ASPECT_POLICIES[solve.aspect].typeFloorPx}px — ${solve.policyNote}`
-        : solve.violations.slice(0, 3).map((v) => `${v.sceneId}/${v.elementId}: ${v.detail}`).join("; ")
+        ? `safe-rect ${Math.round(doc.width * ASPECT_POLICIES[solve.aspect].safeMarginRatio)}px margins, type floor ${ASPECT_POLICIES[solve.aspect].typeFloorPx}px — ${solve.policyNote} — ${metrics}`
+        : `${solve.violations.slice(0, 3).map((v) => `${v.sceneId}/${v.elementId}: ${v.detail}`).join("; ")} — ${metrics}`
     ));
   } catch (err) {
     rows.push(row("G1-LAY-1", "Responsive layout gates (WS8)", "unmeasured",
