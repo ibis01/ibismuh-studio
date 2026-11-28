@@ -30,6 +30,7 @@ import {
   isGroupLocked,
   nudgeCompoundGroup,
   recomposeCompoundGroup,
+  transformCompoundGroup,
   setGroupLock,
   ungroupCompoundGroup,
 } from "@/lib/ibismuh/whiteboard/groups";
@@ -454,6 +455,22 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
       return;
     }
     mutateScene(() => next);
+  };
+
+  // Phase 4 — the canonical group transform: scale / rotate about the
+  // group's current centroid. The accumulated similarity composes into
+  // the scene's transform record, so a later Recompose PRESERVES it (the
+  // override-preservation law) instead of snapping back to the registry.
+  const transformGroup = (scale: number, rotateDeg: number) => {
+    if (!scene || !selGroupId) return;
+    const next = transformCompoundGroup(scene, selGroupId, { dx: 0, dy: 0, scale, rotateDeg });
+    if (!next) {
+      setNotice(isGroupLocked(scene, selGroupId) ? `Group "${selGroupId}" is locked — unlock to transform it` : "This group cannot be transformed");
+      return;
+    }
+    mutateScene(() => next);
+    const rec = next.groupTransforms?.[selGroupId];
+    setNotice(rec ? `Group "${selGroupId}" transformed — scale ×${rec.scale.toFixed(2)}, ${Math.round(rec.rotateDeg)}° (Recompose keeps it)` : "Transformed");
   };
 
   const toggleGroupLock = () => {
@@ -1319,7 +1336,14 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                       {compoundGroups(scene).size > 1 ? ` · ${compoundGroups(scene).size} groups on this board` : ""}
                     </span>
                     {partLocked && <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-200">locked</span>}
-                    {scene.choreography && <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-cyan-200/80">choreography: {scene.choreography}</span>}
+                    {scene.choreographyGroups?.[pl.groupId] && (
+                      <span className="rounded bg-cyan-500/15 px-1.5 py-0.5 text-cyan-200/80">assembly: {scene.choreographyGroups[pl.groupId]}</span>
+                    )}
+                    {scene.groupTransforms?.[pl.groupId] && (
+                      <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-emerald-200/80">
+                        ×{scene.groupTransforms[pl.groupId].scale.toFixed(2)} · {Math.round(scene.groupTransforms[pl.groupId].rotateDeg)}°
+                      </span>
+                    )}
                   </p>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <button onClick={() => nudgeGroup(-20, 0)} disabled={partLocked} className={btnFaint} title="Move the group left">←</button>
@@ -1327,7 +1351,11 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                     <button onClick={() => nudgeGroup(0, 20)} disabled={partLocked} className={btnFaint} title="Move the group down">↓</button>
                     <button onClick={() => nudgeGroup(20, 0)} disabled={partLocked} className={btnFaint} title="Move the group right">→</button>
                     <button onClick={duplicateGroup} disabled={partLocked} className={btnGhost} title="Place an independent copy of the whole compound">Duplicate</button>
-                    <button onClick={recomposeGroup} disabled={partLocked} className={btnGhost} title="Reset the parts to the registry's declared layout at the centroid">Recompose</button>
+                    <button onClick={() => transformGroup(1.1, 0)} disabled={partLocked} className={btnFaint} title="Scale the whole group 10% up about its centroid (Recompose keeps it)">＋</button>
+                    <button onClick={() => transformGroup(1 / 1.1, 0)} disabled={partLocked} className={btnFaint} title="Scale the whole group 10% down about its centroid (Recompose keeps it)">−</button>
+                    <button onClick={() => transformGroup(1, 15)} disabled={partLocked} className={btnFaint} title="Rotate the whole group 15° clockwise about its centroid (Recompose keeps it)">⟳</button>
+                    <button onClick={() => transformGroup(1, -15)} disabled={partLocked} className={btnFaint} title="Rotate the whole group 15° counterclockwise about its centroid (Recompose keeps it)">⟲</button>
+                    <button onClick={recomposeGroup} disabled={partLocked} className={btnGhost} title="Re-apply the registry's declared layout — the group's canonical transform (scale, rotation, moves) is preserved on top of it">Recompose</button>
                     <button onClick={toggleGroupLock} className={partLocked ? btnSolid : btnGhost} title="Lock the group: its parts become inert until unlocked">
                       {partLocked ? "Unlock" : "Lock"}
                     </button>
@@ -1354,7 +1382,19 @@ export default function WhiteboardStudio({ videoId, hasVideo, onRenderQueued }: 
                             ? "Cascade — draw order, back-to-back"
                             : id === "assembly-center-out"
                               ? "Center out — grows from the core"
-                              : "Edge in — builds around the core"}
+                            : id === "assembly-edge-in"
+                              ? "Edge in — builds around the core"
+                            : id === "assembly-clockwise"
+                              ? "Clockwise — sweeps from 3 o'clock"
+                            : id === "assembly-counterclockwise"
+                              ? "Counterclockwise — sweeps the other way"
+                            : id === "assembly-top-down"
+                              ? "Top down — the board reads downward"
+                            : id === "assembly-left-right"
+                              ? "Left right — reading order"
+                            : id === "assembly-alternate"
+                              ? "Alternate — the ends weave inward"
+                              : "Spiral — clockwise wedges, core first"}
                         </option>
                       ))}
                     </select>

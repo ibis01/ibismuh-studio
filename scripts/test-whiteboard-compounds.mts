@@ -52,6 +52,7 @@ import {
   compileCompoundChoreography,
   COMPOUND_CHOREOGRAPHY_IDS,
   resolveCompoundChoreography,
+  type CompoundChoreographyId,
 } from "../src/lib/ibismuh/whiteboard/choreography";
 import {
   deleteCompoundGroup,
@@ -61,6 +62,7 @@ import {
   nudgeCompoundGroup,
   recomposeCompoundGroup,
   setGroupLock,
+  transformCompoundGroup,
   ungroupCompoundGroup,
 } from "../src/lib/ibismuh/whiteboard/groups";
 import {
@@ -937,7 +939,277 @@ await test("compounds.ts, groups.ts and catalog/search.ts carry no node-only imp
   ok(/export function searchRows/.test(searchSrc) && /export function searchCatalog/.test(searchSrc), "search.ts: both entry points exported");
 });
 
+// --- 7. PHASE 4 — THE CANONICAL GROUP TRANSFORM, THE OVERRIDE-PRESERVING
+//        RECOMPOSE, THE GROUP-KEYED RECEIPTS, THE NINE PRESETS ---------------
+
+suiteStart("phase 4 — the canonical group transform and the override law");
+
+// The instanced-group harness: a REAL derived instance id (the derive
+// law — the scaffold may already board the farm), the parts expanded at
+// a fixed origin, and a harness scene carrying ONLY the group's parts
+// (compoundGeo() covers exactly those — the schedule needs no other
+// geometry).
+function instancedScene() {
+  const base = rich();
+  const scene0 = base.scenes[1];
+  const instanceId = deriveCompoundInstanceId(scene0, FARM);
+  const parts = expandCompound(FARM, { x: 400, y: 300, scale: 1, rotateDeg: 0 }, 0, instanceId);
+  const scene = {
+    id: "scene-901",
+    narration: "The group transform harness draws the whole farm.",
+    background: "#ffffff" as const,
+    placements: parts,
+    animations: [],
+    camera: [],
+  };
+  const stagedBase = { ...base, scenes: [...base.scenes, scene] };
+  return { base: stagedBase, parts, scene, groupId: instanceId };
+}
+
+const membersOf = (sc: { placements: Array<{ groupId?: string; placementId?: string; assetId: string; placement: { x: number; y: number; scale: number; rotateDeg: number } }> }, groupId: string) =>
+  sc.placements.filter((p) => p.groupId === groupId).map((p) => ({ key: p.placementId ?? p.assetId, x: p.placement.x, y: p.placement.y }));
+
+await test("the canonical transform composes exactly: no-op sequences reproduce the one-shot state", () => {
+  const { scene: s0, groupId } = instancedScene();
+  const oneShot = transformCompoundGroup(s0, groupId, { dx: 40, dy: -30, scale: 1.5, rotateDeg: 90 });
+  const stepped = transformCompoundGroup(
+    transformCompoundGroup(
+      transformCompoundGroup(s0, groupId, { dx: 40, dy: -30, scale: 1.5, rotateDeg: 90 }),
+      groupId,
+      { dx: 0, dy: 0, scale: 1, rotateDeg: 0 }
+    ),
+    groupId,
+    { dx: 0, dy: 0, scale: 1, rotateDeg: 0 }
+  );
+  if (oneShot === null || stepped === null) {
+    ok(false, "both transform applications succeed");
+    return;
+  }
+  const a = oneShot.placements.filter((p) => p.groupId === groupId).map((p) => p.placement);
+  const b = stepped.placements.filter((p) => p.groupId === groupId).map((p) => p.placement);
+  eq(a.length, b.length, "same member count");
+  let maxDelta = 0;
+  for (let i = 0; i < a.length; i++) {
+    maxDelta = Math.max(maxDelta, Math.abs(a[i].x - b[i].x), Math.abs(a[i].y - b[i].y));
+    eq(a[i].scale, b[i].scale, `member ${i} scale identical`);
+    eq(a[i].rotateDeg, b[i].rotateDeg, `member ${i} rotation identical`);
+  }
+  ok(maxDelta === 0, `the composition is exact, not approximate (max delta ${maxDelta})`);
+});
+
+await test("the transform record rides the scene and the members move as one body", () => {
+  const { scene: s0, groupId } = instancedScene();
+  const before = s0.placements.filter((p) => p.groupId === groupId).map((p) => p.placement);
+  const next = transformCompoundGroup(s0, groupId, { dx: 100, dy: 50, scale: 1.2, rotateDeg: 45 });
+  if (next === null) {
+    ok(false, "the transform applies");
+    return;
+  }
+  const rec = next.groupTransforms?.[groupId];
+  ok(!!rec, "the record is written");
+  if (rec) {
+    ok(Math.abs(rec.scale - 1.2) < 1e-9, "record scale is the applied scale");
+    ok(Math.abs(rec.rotateDeg - 45) < 1e-9, "record rotation is the applied rotation");
+  }
+  const after = next.placements.filter((p) => p.groupId === groupId).map((p) => p.placement);
+  eq(next.placements.filter((p) => p.groupId === undefined).length, s0.placements.filter((p) => p.groupId === undefined).length, "non-members untouched");
+  for (let i = 0; i < before.length; i++) {
+    ok(Math.abs(after[i].scale - before[i].scale * 1.2) < 1e-9, `member ${i} scale accumulated`);
+    ok(Math.abs(after[i].rotateDeg - (before[i].rotateDeg + 45)) < 1e-9, `member ${i} rotation accumulated`);
+  }
+});
+
+await test("nudge delegates to the transform — a nudge composes into the record too", () => {
+  const { scene: s0, groupId } = instancedScene();
+  const next = nudgeCompoundGroup(s0, groupId, -33, 12);
+  if (next === null) {
+    ok(false, "the nudge applies");
+    return;
+  }
+  const rec = next.groupTransforms?.[groupId];
+  ok(!!rec && rec.dx === -33 && rec.dy === 12 && rec.scale === 1 && rec.rotateDeg === 0, "the record carries the translation with identity scale/rotation");
+});
+
+await test("RECOMPOSE PRESERVES THE OVERRIDE: scale, rotation and move survive the declared re-expansion", () => {
+  const { scene: s0, groupId } = instancedScene();
+  const moved = transformCompoundGroup(s0, groupId, { dx: 120, dy: 80, scale: 1.5, rotateDeg: 30 });
+  if (moved === null) {
+    ok(false, "the transform applies");
+    return;
+  }
+  const membersBefore = moved.placements.filter((p) => p.groupId === groupId).map((p) => p.placement);
+  const recomposed = recomposeCompoundGroup(moved, groupId);
+  if (recomposed === null) {
+    ok(false, "the recompose applies");
+    return;
+  }
+  const membersAfter = recomposed.placements.filter((p) => p.groupId === groupId).map((p) => p.placement);
+  let maxDelta = 0;
+  for (let i = 0; i < membersBefore.length; i++) {
+    maxDelta = Math.max(maxDelta, Math.abs(membersBefore[i].x - membersAfter[i].x), Math.abs(membersBefore[i].y - membersAfter[i].y));
+    ok(Math.abs(membersAfter[i].scale - membersBefore[i].scale) < 1e-9, `member ${i} scale survived`);
+    ok(Math.abs(membersAfter[i].rotateDeg - membersBefore[i].rotateDeg) < 1e-9, `member ${i} rotation survived`);
+  }
+  ok(maxDelta <= 2, `recompose lands within rounding of the transformed state (max delta ${maxDelta})`);
+});
+
+await test("recompose WITHOUT a record stays the original law: declared layout at the live centroid", () => {
+  const { scene: s0, parts, groupId } = instancedScene();
+  const recomposed = recomposeCompoundGroup(s0, groupId);
+  if (recomposed === null) {
+    ok(false, "the recompose applies");
+    return;
+  }
+  ok(recomposed.groupTransforms === undefined, "no record was invented");
+  const members = recomposed.placements.filter((p) => p.groupId === groupId);
+  const declared = parts.map((p) => p.placement);
+  let same = true;
+  for (let i = 0; i < members.length; i++) {
+    if (Math.abs(members[i].placement.scale - declared[i].scale) > 0 || Math.abs(members[i].placement.rotateDeg - declared[i].rotateDeg) > 0) same = false;
+  }
+  ok(same, "member scale/rotation are the declared ones (scale 1, rotation 0)");
+});
+
+await test("the transform is fail-closed: locked groups, unknown groups, junk numbers refused", () => {
+  const { scene, groupId } = instancedScene();
+  ok(transformCompoundGroup(scene, "ghost", { dx: 1, dy: 1, scale: 1.1, rotateDeg: 0 }) === null, "unknown group refused");
+  ok(transformCompoundGroup(scene, groupId, { dx: 1, dy: 1, scale: 0, rotateDeg: 0 }) === null, "zero scale refused");
+  ok(transformCompoundGroup(scene, groupId, { dx: 1, dy: 1, scale: -2, rotateDeg: 0 }) === null, "negative scale refused");
+  ok(transformCompoundGroup(scene, groupId, { dx: Number.NaN, dy: 1, scale: 1.1, rotateDeg: 0 }) === null, "NaN refused");
+  ok(transformCompoundGroup(scene, groupId, { dx: 1, dy: Number.POSITIVE_INFINITY, scale: 1.1, rotateDeg: 0 }) === null, "Infinity refused");
+  const locked = setGroupLock(scene, groupId, true);
+  ok(transformCompoundGroup(locked, groupId, { dx: 1, dy: 1, scale: 1.1, rotateDeg: 0 }) === null, "locked group refused");
+  ok(nudgeCompoundGroup(locked, groupId, 1, 1) === null, "nudge inherits the lock law");
+});
+
+await test("delete and ungroup lose only THEIR entries — the other group keeps its record and receipt", () => {
+  const { scene, groupId } = instancedScene();
+  const spec2 = WB_COMPOUND_INDEX.get("money-growth-cycle");
+  if (!spec2) {
+    ok(false, "a second compound spec exists");
+    return;
+  }
+  const parts2 = expandCompound(spec2, { x: 800, y: 300, scale: 1, rotateDeg: 0 }, 0, "money-growth-cycle");
+  const two = { ...scene, placements: [...scene.placements, ...parts2] };
+  const t1 = transformCompoundGroup(two, groupId, { dx: 10, dy: 10, scale: 1.3, rotateDeg: 20 });
+  const t2 = t1 && transformCompoundGroup(t1, "money-growth-cycle", { dx: -10, dy: -10, scale: 0.9, rotateDeg: -20 });
+  if (!t2) {
+    ok(false, "both groups transformed");
+    return;
+  }
+  const staged = { ...t2, choreographyGroups: { [groupId]: "assembly-cascade", "money-growth-cycle": "assembly-edge-in" } };
+  const afterDelete = deleteCompoundGroup(staged, groupId);
+  if (afterDelete === null) {
+    ok(false, "the delete applies");
+    return;
+  }
+  ok(afterDelete.choreography === undefined, "the whole-scene scalar dies with any group");
+  ok(afterDelete.choreographyGroups?.["money-growth-cycle"] === "assembly-edge-in", "the second group's receipt survives");
+  ok(afterDelete.choreographyGroups !== undefined && !(groupId in afterDelete.choreographyGroups), "the deleted group's receipt leaves");
+  ok(afterDelete.groupTransforms?.["money-growth-cycle"] !== undefined, "the second group's transform record survives");
+  ok(afterDelete.groupTransforms !== undefined && !(groupId in afterDelete.groupTransforms), "the deleted group's record leaves");
+  const afterUngroup = ungroupCompoundGroup(afterDelete, "money-growth-cycle");
+  if (afterUngroup === null) {
+    ok(false, "the ungroup applies");
+    return;
+  }
+  ok(afterUngroup.choreographyGroups === undefined, "the last receipt entry leaves the scene (no dead data)");
+  ok(afterUngroup.groupTransforms === undefined, "the last record entry leaves the scene");
+});
+
+await test("the validator accepts the keyed receipts and the transform records, and refuses ghosts and junk", () => {
+  const { base, scene, groupId } = instancedScene();
+  const staged = {
+    ...scene,
+    choreographyGroups: { [groupId]: "assembly-spiral" },
+    groupTransforms: { [groupId]: { anchorX: 400, anchorY: 300, dx: 10, dy: -5, scale: 1.4, rotateDeg: 25 } },
+  };
+  const swap = (x: { id: string }) => (x.id === scene.id ? staged : x);
+  ok(v({ ...base, scenes: base.scenes.map(swap) }).project !== null, "keyed receipts + records validate");
+  const refuse = (mutate: (t: typeof staged) => unknown, why: string) => {
+    const bad = mutate(staged) as typeof staged;
+    ok(v({ ...base, scenes: base.scenes.map((x) => (x.id === scene.id ? bad : x)) }).project === null, why);
+  };
+  refuse((t) => ({ ...t, choreographyGroups: { ghost: "assembly-cascade" } }), "a ghost receipt key is refused");
+  refuse((t) => ({ ...t, choreographyGroups: { [groupId]: "assembly-spin" } }), "an off-vocabulary preset is refused");
+  refuse((t) => ({ ...t, groupTransforms: { [groupId]: { anchorX: 400, anchorY: 300, dx: 10, dy: -5, scale: 0, rotateDeg: 25 } } }), "a zero-scale record is refused");
+  refuse((t) => ({ ...t, groupTransforms: { [groupId]: { anchorX: 400, anchorY: 300, dx: Number.NaN, dy: -5, scale: 1.4, rotateDeg: 25 } } }), "a NaN record is refused");
+  refuse((t) => ({ ...t, groupTransforms: { ghost: { anchorX: 1, anchorY: 1, dx: 0, dy: 0, scale: 1.1, rotateDeg: 0 } } }), "a ghost record key is refused");
+});
+
+suiteStart("phase 4 — the nine presets: every one a deterministic ORDER, pen-safe");
+
+const PRESET_ORDER_CASES: Array<[CompoundChoreographyId, string]> = [
+  ["assembly-cascade", "draw order preserved"],
+  ["assembly-center-out", "nearest the centroid first"],
+  ["assembly-edge-in", "outermost first"],
+  ["assembly-clockwise", "3 o'clock sweep, screen clockwise"],
+  ["assembly-counterclockwise", "the reverse sweep"],
+  ["assembly-top-down", "top to bottom"],
+  ["assembly-left-right", "left to right"],
+  ["assembly-alternate", "the ends weave inward"],
+  ["assembly-spiral", "clockwise wedges, core first"],
+];
+
+await test("every vocabulary id is covered by the battery's case table", () => {
+  eq(PRESET_ORDER_CASES.length, COMPOUND_CHOREOGRAPHY_IDS.length, "one case per preset — no silent vocabulary growth");
+  for (const id of COMPOUND_CHOREOGRAPHY_IDS) ok(PRESET_ORDER_CASES.some(([p]) => p === id), `${id} has a case`);
+});
+
+await test("all nine presets compile off the real schedule and each keeps the pen law", () => {
+  const { scene, groupId } = instancedScene();
+  const geometry = compoundGeo();
+  const schedule = scheduleScene(scene, 8000, geometry);
+  for (const [preset, why] of PRESET_ORDER_CASES) {
+    const compiled = compileCompoundChoreography({ preset, members: membersOf(scene, groupId), events: schedule });
+    ok(compiled.length > 0, `${preset} compiles (${why})`);
+    const ordered = [...compiled].sort((a, b) => a.startMs - b.startMs);
+    let penSafe = true;
+    for (let i = 1; i < ordered.length; i++) {
+      if (ordered[i].startMs < ordered[i - 1].startMs + ordered[i - 1].durationMs) penSafe = false;
+    }
+    ok(penSafe, `${preset} is pen-safe (no stroke overlap)`);
+    const again = compileCompoundChoreography({ preset, members: membersOf(scene, groupId), events: schedule });
+    ok(JSON.stringify(again) === JSON.stringify(compiled), `${preset} is deterministic`);
+  }
+});
+
+await test("the directional presets order as declared (spot checks on a real instanced group)", () => {
+  const { scene, groupId } = instancedScene();
+  const members = membersOf(scene, groupId);
+  const schedule = scheduleScene(scene, 8000, compoundGeo());
+  const firstKey = (preset: CompoundChoreographyId) => {
+    const compiled = compileCompoundChoreography({ preset, members, events: schedule });
+    if (compiled.length === 0) return null;
+    const min = Math.min(...compiled.map((e) => e.startMs));
+    const head = compiled.find((e) => e.startMs === min);
+    return head ? head.placementId ?? head.assetId : null;
+  };
+  const sortedByY = [...members].sort((a, b) => a.y - b.y || members.indexOf(a) - members.indexOf(b));
+  ok(firstKey("assembly-top-down") === sortedByY[0].key, "top-down draws the highest member first");
+  const sortedByX = [...members].sort((a, b) => a.x - b.x || members.indexOf(a) - members.indexOf(b));
+  ok(firstKey("assembly-left-right") === sortedByX[0].key, "left-right draws the leftmost member first");
+  const cx = members.reduce((a, m) => a + m.x, 0) / members.length;
+  const cy = members.reduce((a, m) => a + m.y, 0) / members.length;
+  const sortedByDist = [...members]
+    .map((m, i) => ({ m, i, d: Math.hypot(m.x - cx, m.y - cy) }))
+    .sort((a, b) => a.d - b.d || a.i - b.i);
+  ok(firstKey("assembly-center-out") === sortedByDist[0].m.key, "center-out draws the nearest member first");
+  ok(firstKey("assembly-edge-in") === sortedByDist[sortedByDist.length - 1].m.key, "edge-in draws the outermost member first");
+  const byDraw = members.map((m) => m.key);
+  ok(firstKey("assembly-cascade") === byDraw[0], "cascade starts at the declared head");
+  ok(firstKey("assembly-alternate") === byDraw[0], "alternate starts at the declared head too (the weave begins there)");
+});
+
+await test("the compile seam stays leaf-pure: no node imports in groups.ts or choreography.ts", () => {
+  const here4 = path.dirname(fileURLToPath(import.meta.url));
+  const read = (p: string): string => fs.readFileSync(path.resolve(here4, p), "utf8");
+  ok(!/from "node:/.test(read("../src/lib/ibismuh/whiteboard/choreography.ts")), "choreography.ts: no node: imports");
+  ok(!/from "node:/.test(read("../src/lib/ibismuh/whiteboard/groups.ts")), "groups.ts: no node: imports (the editor's group ops are client-side)");
+});
+
 // --- summary ------------------------------------------------------------------
+
 
 
 console.log(`\n${passed} passed, ${failed} failed`);

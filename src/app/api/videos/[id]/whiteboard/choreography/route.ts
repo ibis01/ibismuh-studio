@@ -140,7 +140,16 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     ),
     ...compiled,
   ];
-  const staged = { ...scene, animations, choreography: resolvedPreset };
+  // Phase 4: the receipt is GROUP-KEYED — this group's key lands in
+  // `choreographyGroups` (a two-group scene keeps both assemblies), and
+  // the legacy whole-scene scalar mirrors the most recent compile for
+  // readers that predate the map (the validator accepts both shapes).
+  const staged = {
+    ...scene,
+    animations,
+    choreography: resolvedPreset,
+    choreographyGroups: { ...scene.choreographyGroups, [groupId]: resolvedPreset },
+  };
 
   // The engine validator against the merged library — the same gate the
   // PUT route rides; its error strings go back verbatim.

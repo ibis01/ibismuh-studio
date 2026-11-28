@@ -17,6 +17,25 @@
 //   assembly-edge-in   — parts assemble outermost-first — the frame
 //                        builds inward around its core.
 //
+// Master plan Phase 4 — six more named orders, every one still just an
+// ORDER over the same member set (the pen law keeps the one clock):
+//
+//   assembly-clockwise       — angle from the centroid ascending: the
+//                              sweep starts at 3 o'clock and turns screen-
+//                              clockwise (the y-down board makes ascending
+//                              atan2 the clockwise sweep).
+//   assembly-counterclockwise— the same sweep, the other way round.
+//   assembly-top-down        — by placed y ascending: the board reads top
+//                              to bottom (ties break to draw order).
+//   assembly-left-right      — by placed x ascending: reading order.
+//   assembly-alternate       — the weave: first, last, second,
+//                              second-last … of the declared draw order —
+//                              the two ends grow toward the middle.
+//   assembly-spiral          — 30-degree angle buckets from the centroid,
+//                              each bucket swept innermost-first — the
+//                              pen circles inward in wedges (clockwise
+//                              buckets ascending, ties to draw order).
+//
 // THE PEN LAW: the hand follows ONE active stroke (timing.ts handAt), so
 // a preset never overlaps strokes — each event keeps its own durationMs
 // and the events pack SEQUENTIALLY with the fill law's own inter-stroke
@@ -42,6 +61,12 @@ export const COMPOUND_CHOREOGRAPHY_IDS = [
   "assembly-cascade",
   "assembly-center-out",
   "assembly-edge-in",
+  "assembly-clockwise",
+  "assembly-counterclockwise",
+  "assembly-top-down",
+  "assembly-left-right",
+  "assembly-alternate",
+  "assembly-spiral",
 ] as const;
 export type CompoundChoreographyId = (typeof COMPOUND_CHOREOGRAPHY_IDS)[number];
 
@@ -108,26 +133,66 @@ export function compileCompoundChoreography(input: {
   const present = input.members.filter((m) => (byMember.get(m.key)?.length ?? 0) > 0);
   if (present.length === 0) return [];
 
-  // The preset's part order. cascade = the declared draw order;
-  // center-out / edge-in = the distance from the members' centroid
-  // (ascending / descending), ties break to the declared order (a stable
-  // sort over the member index).
+  // The preset's part order — every preset is a deterministic ORDER over
+  // the same member set; ties ALWAYS break to the declared draw order (a
+  // stable sort over the member index, so equal geometry never flips).
   const centroidX = present.reduce((a, m) => a + m.x, 0) / present.length;
   const centroidY = present.reduce((a, m) => a + m.y, 0) / present.length;
+  const rows = present.map((m, i) => ({
+    m,
+    i,
+    d: Math.hypot(m.x - centroidX, m.y - centroidY),
+    // Screen-clockwise angle from the centroid (y-down board: ascending
+    // atan2 sweeps 3 o'clock → 6 → 12 → 9 — the visual clockwise order).
+    a: Math.atan2(m.y - centroidY, m.x - centroidX),
+  }));
+  const alternate = (() => {
+    // The weave over the declared draw order: first, last, second,
+    // second-last … (the two ends grow toward the middle).
+    const weave: typeof present = [];
+    let lo = 0;
+    let hi = present.length - 1;
+    let takeLow = true;
+    while (lo <= hi) {
+      weave.push(takeLow ? present[lo] : present[hi]);
+      if (takeLow) lo += 1;
+      else hi -= 1;
+      takeLow = !takeLow;
+    }
+    return weave;
+  })();
   const ordered =
     input.preset === "assembly-cascade"
       ? present
-      : [...present]
-          .map((m, i) => ({
-            m,
-            i,
-            d: Math.hypot(m.x - centroidX, m.y - centroidY),
-          }))
-          .sort((a, b) =>
-            input.preset === "assembly-center-out"
-              ? a.d - b.d || a.i - b.i
-              : b.d - a.d || a.i - b.i
-          )
+      : input.preset === "assembly-alternate"
+        ? alternate
+      : [...rows]
+          .sort((a, b) => {
+            switch (input.preset) {
+              case "assembly-center-out":
+                return a.d - b.d || a.i - b.i;
+              case "assembly-edge-in":
+                return b.d - a.d || a.i - b.i;
+              case "assembly-clockwise":
+                return a.a - b.a || a.i - b.i;
+              case "assembly-counterclockwise":
+                return b.a - a.a || a.i - b.i;
+              case "assembly-top-down":
+                return a.m.y - b.m.y || a.i - b.i;
+              case "assembly-left-right":
+                return a.m.x - b.m.x || a.i - b.i;
+              case "assembly-spiral": {
+                // 30-degree clockwise buckets ascending; inside a bucket
+                // the pen sweeps innermost-first (the wedge fills outward
+                // from its own core).
+                const bucketA = Math.floor(((a.a + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 6));
+                const bucketB = Math.floor(((b.a + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 6));
+                return bucketA - bucketB || a.d - b.d || a.i - b.i;
+              }
+              default:
+                return a.i - b.i;
+            }
+          })
           .map((row) => row.m);
 
   // Sequential packing: the band starts at the group's earliest scheduled

@@ -8135,3 +8135,19 @@ Work Log:
 
 Stage Summary:
 - Deliverable: the ownership decision is discoverable in docs/, linked from the code it governs. No behavior change (doc + comment only); tsc 0, lint 0.
+
+---
+Task ID: MasterPlan-Phase4
+Agent: main (Z.ai)
+Task: Master plan Phase 4 — the canonical GroupTransform, the override-preserving recompose, the group-keyed choreography receipts, and the nine-preset vocabulary.
+
+Work Log:
+- THE CANONICAL TRANSFORM (groups.transformCompoundGroup): translate + uniform scale + rotate about the group's live centroid, all members one body. The accumulated similarity composes EXACTLY into scene.groupTransforms[groupId] — the record's frame anchors at the declared layout's expansion origin (derived at record birth from the spec's own offsets), and every op composes in that anchor frame: s' = s·s₂, Rot' = Rot₂∘Rot, d' = (C−A) + s₂·Rot₂(A+d−C) + d₂. No-op sequences reproduce the one-shot state (battery: max delta 0). Fail-closed: locked/unknown groups, scale ≤ 0, non-finite numbers → null. nudgeCompoundGroup now DELEGATES to it (a pure translation composes too).
+- OVERRIDE-PRESERVING RECOMPOSE: recomposeCompoundGroup re-expands the declared layout AT THE RECORD'S ANCHOR and re-applies the record's FULL similarity (rotate + scale + translate; member scale/rotation accumulate) — a recompose can no longer silently destroy the group's accumulated intent. Without a record the behavior is the original law (byte-equivalent: declared layout at the live centroid). Member-level free drags stay outside the record (documented boundary).
+- GROUP-KEYED RECEIPTS: scene.choreographyGroups maps groupId → presetId (additive; the legacy scalar mirrors the most recent compile; the validator accepts both shapes and refuses ghost keys + off-vocabulary values). The choreography route stamps the group key. delete/ungroup lose ONLY their own entries now (dropMapKey) — a two-group scene keeps both assemblies; the whole-scene scalar still dies with any group (it receipts a whole-scene compile). Empty maps leave the scene (no dead data). FIXED en route: a conditional spread of {} can never delete a scene-carried field — the cleanup is explicit field handling now.
+- THE NINE PRESETS: +6 deterministic orders — clockwise/counterclockwise (atan2 sweep on the y-down board), top-down, left-right, alternate (ends weave inward), spiral (30° wedges, innermost-first). Pen law intact everywhere: presets differ only in ORDER, never in speeds (one clock).
+- THE UI: group toolbar grows scale ±10% and rotate ±15° buttons (the canonical op), per-group "assembly:" and "×s · θ°" chips; the choreography select lists all nine with honest labels.
+- THE BATTERY: 12 new laws (composition exactness, record + one-body math, nudge delegation, override preservation ≤2 rounding, original-law identity, fail-closed refusals, keyed cleanup, validator ghost/junk refusals, vocabulary-table coverage pin, pen-safety + determinism ×9, directional spot checks, leaf-purity) — 46 passed / 0 failed.
+
+Stage Summary:
+- Deliverable: group transforms are canonical and compose; recompose preserves overrides; receipts are group-keyed; the vocabulary is nine. Receipts: tsc 0; lint 0; compound battery 46/0; unit battery 1078/0 (post schema-sync rerun).

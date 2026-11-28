@@ -168,6 +168,40 @@ export interface WhiteboardScene {
    *  name must pass the id charset AND name a group THIS scene actually
    *  places (fail-closed — a lock on a ghost group is dead data). */
   groupLocks?: string[];
+  /** Master plan Phase 4 — the CANONICAL GROUP TRANSFORM RECORD: the
+   *  accumulated similarity (translate + uniform scale + rotate about the
+   *  recorded anchor) each compound group carries on top of the registry's
+   *  declared layout. Written ONLY by groups.transformCompoundGroup (the
+   *  one canonical op); recomposeCompoundGroup re-applies it after the
+   *  declared re-expansion, so a recompose can no longer silently destroy
+   *  the user's group-level intent. Keys are placed groupIds; scale > 0;
+   *  all numbers finite (the validator refuses ghost keys and junk
+   *  numbers). Per-member free drags are NOT this record — they remain
+   *  placement-level edits that recompose resets (the documented repair
+   *  boundary). ABSENT = every group rides the declared layout. */
+  groupTransforms?: Record<string, GroupTransformRecord>;
+  /** Master plan Phase 4 — the GROUP-KEYED choreography receipts: one
+   *  named preset PER compound group (a two-group scene can now carry two
+   *  assemblies). The legacy whole-scene `choreography` scalar stays for
+   *  back-compat (it mirrors the most recent compile); the validator
+   *  checks BOTH against the closed vocabulary, and every map key must
+   *  name a group THIS scene actually places. ABSENT = no per-group
+   *  receipt. */
+  choreographyGroups?: Record<string, string>;
+}
+
+/** One accumulated group transform (see WhiteboardScene.groupTransforms):
+ *  the declared layout expanded at its origin (anchorX, anchorY — the
+ *  expansion origin the record was born from), then scaled by `scale`,
+ *  rotated by `rotateDeg` (degrees, clockwise on the y-down board), and
+ *  translated by (dx, dy). */
+export interface GroupTransformRecord {
+  anchorX: number;
+  anchorY: number;
+  dx: number;
+  dy: number;
+  scale: number;
+  rotateDeg: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -646,6 +680,63 @@ export function validateWhiteboardProject(
       }
       choreography = s.choreography;
     }
+    // Phase 4 — the GROUP-KEYED receipts: same closed vocabulary, one key
+    // per placed compound group (a receipt without its group is still a
+    // lie; a ghost key is dead data).
+    let choreographyGroups: Record<string, string> | undefined;
+    if (s.choreographyGroups !== undefined) {
+      const raw = s.choreographyGroups as Record<string, unknown> | null;
+      const mapOk =
+        raw !== null &&
+        typeof raw === "object" &&
+        !Array.isArray(raw) &&
+        Object.values(raw).every((v) => typeof v === "string" && (COMPOUND_CHOREOGRAPHY_IDS as readonly string[]).includes(v));
+      if (!mapOk) {
+        errors.push(`scene ${i + 1}: choreographyGroups must map placed group ids to compound preset ids (${COMPOUND_CHOREOGRAPHY_IDS.join(", ")})`);
+        continue;
+      }
+      const ghost = Object.keys(raw).find((g) => !sceneGroups.has(g) || !validWhiteboardId(g));
+      if (ghost !== undefined) {
+        errors.push(`scene ${i + 1}: choreographyGroups key "${ghost.slice(0, 40)}" does not name a compound group this scene places (a receipt rides a real group)`);
+        continue;
+      }
+      choreographyGroups = raw as Record<string, string>;
+    }
+    // Phase 4 — the canonical group transform records: every key names a
+    // placed group; every number is finite; scale stays positive (a
+    // mirror/zero/negative scale is not a similarity this board speaks).
+    let groupTransforms: Record<string, GroupTransformRecord> | undefined;
+    if (s.groupTransforms !== undefined) {
+      const raw = s.groupTransforms as Record<string, unknown> | null;
+      const shapeOk =
+        raw !== null &&
+        typeof raw === "object" &&
+        !Array.isArray(raw) &&
+        Object.values(raw).every((v) => {
+          const r = v as Record<string, unknown> | null;
+          return (
+            r !== null &&
+            typeof r === "object" &&
+            Number.isFinite(r.anchorX) &&
+            Number.isFinite(r.anchorY) &&
+            Number.isFinite(r.dx) &&
+            Number.isFinite(r.dy) &&
+            Number.isFinite(r.scale) &&
+            Number.isFinite(r.rotateDeg) &&
+            (r.scale as number) > 0
+          );
+        });
+      if (!shapeOk) {
+        errors.push(`scene ${i + 1}: groupTransforms must map placed group ids to finite {anchorX, anchorY, dx, dy, scale, rotateDeg} records with scale > 0`);
+        continue;
+      }
+      const ghost = Object.keys(raw).find((g) => !sceneGroups.has(g) || !validWhiteboardId(g));
+      if (ghost !== undefined) {
+        errors.push(`scene ${i + 1}: groupTransforms key "${ghost.slice(0, 40)}" does not name a compound group this scene places (a transform rides a real group)`);
+        continue;
+      }
+      groupTransforms = raw as Record<string, GroupTransformRecord>;
+    }
     if (!groupsOk) continue;
     const animations: AnimationEvent[] = [];
     const rawAnimations = Array.isArray(s.animations) ? s.animations : [];
@@ -769,6 +860,8 @@ export function validateWhiteboardProject(
       camera,
       board,
       ...(choreography !== undefined ? { choreography } : {}),
+      ...(choreographyGroups !== undefined ? { choreographyGroups } : {}),
+      ...(groupTransforms !== undefined ? { groupTransforms } : {}),
       ...(groupLocks !== undefined ? { groupLocks } : {}),
     });
   }

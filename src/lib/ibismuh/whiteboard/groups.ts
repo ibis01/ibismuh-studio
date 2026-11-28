@@ -14,8 +14,14 @@
 //                  independent placements; events keep addressing them)
 //   recompose    — the safe repair: the registry's declared layout re-applied
 //                  at the members' centroid, same instance id, same array
-//                  slots (events keep their addresses)
-//   nudge        — the group transform: one delta, every member
+//                  slots (events keep their addresses) — and, Phase 4, the
+//                  group's canonical transform RECORD re-applied on top, so
+//                  a recompose no longer silently destroys the user's
+//                  group-level scale/rotate/move intent
+//   transform    — the CANONICAL group transform (Phase 4): translate +
+//                  uniform scale + rotate about the group's current
+//                  centroid, composed into the scene's groupTransforms
+//                  record; nudge delegates to it
 //   lock/unlock  — the scene's groupLocks roster (the editor refuses
 //                  member mutations on a locked group)
 //
@@ -39,6 +45,7 @@ import {
 import {
   eventPlacementKey,
   placementKey,
+  type GroupTransformRecord,
   type WhiteboardAssetPlacement,
   type WhiteboardScene,
 } from "./storyboard";
@@ -171,13 +178,38 @@ export function deleteCompoundGroup(scene: WhiteboardScene, groupId: string): Wh
   const placements = renumber(
     scene.placements.filter((pl) => pl.groupId !== groupId)
   );
-  return {
+  // Phase 4: the whole-scene scalar receipt dies with ANY group (it
+  // receipts a whole-scene compile), but the GROUP-KEYED map and the
+  // transform record lose only THIS group's entries — the other groups
+  // keep their assemblies and their canonical transforms.
+  const choreographyGroups = dropMapKey(scene.choreographyGroups, groupId);
+  const groupTransforms = dropMapKey(scene.groupTransforms, groupId);
+  // Explicit field handling — a conditional spread of {} can never DELETE
+  // a field carried by the scene spread above.
+  const next: WhiteboardScene = {
     ...scene,
     placements,
     animations: dropMemberEvents(scene, memberKeys),
     groupLocks: scene.groupLocks?.filter((g) => g !== groupId),
     choreography: undefined,
   };
+  if (choreographyGroups === undefined) delete next.choreographyGroups;
+  else next.choreographyGroups = choreographyGroups;
+  if (groupTransforms === undefined) delete next.groupTransforms;
+  else next.groupTransforms = groupTransforms;
+  return next;
+}
+
+/** Drop one key from a scene map record; ABSENT when the result is empty
+ *  (an empty record is dead data — the field leaves the scene). */
+function dropMapKey<K extends string, V>(
+  map: Record<string, V> | undefined,
+  key: K
+): Record<string, V> | undefined {
+  if (map === undefined || !(key in map)) return map;
+  const next = { ...map };
+  delete next[key];
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
 /**
@@ -194,21 +226,37 @@ export function ungroupCompoundGroup(scene: WhiteboardScene, groupId: string): W
     const { groupId: _drop, ...rest } = pl;
     return rest;
   });
-  return {
+  // Phase 4: the group's identity leaves, so its keyed receipts and its
+  // transform record leave with it (the other groups keep theirs; the
+  // whole-scene scalar still dies with any group).
+  const choreographyGroups = dropMapKey(scene.choreographyGroups, groupId);
+  const groupTransforms = dropMapKey(scene.groupTransforms, groupId);
+  const next: WhiteboardScene = {
     ...scene,
     placements,
     groupLocks: scene.groupLocks?.filter((g) => g !== groupId),
     choreography: undefined,
   };
+  if (choreographyGroups === undefined) delete next.choreographyGroups;
+  else next.choreographyGroups = choreographyGroups;
+  if (groupTransforms === undefined) delete next.groupTransforms;
+  else next.groupTransforms = groupTransforms;
+  return next;
 }
 
 /**
- * RECOMPOSE (the safe repair): re-apply the compound's declared layout at
- * the members' centroid — scale 1, rotation 0, the registry's offsets —
- * under the SAME instance id, replacing the member rows in place. Events
+ * RECOMPOSE (the safe repair): re-apply the compound's declared layout —
+ * under the SAME instance id, replacing the member rows in place; events
  * keep addressing the same placement keys (the spec sequence preserves
- * them). Returns null when the group is unknown, locked, or its compound
- * cannot resolve.
+ * them). Phase 4 override law: when the scene carries a canonical
+ * transform RECORD for this group, the declared layout is expanded at the
+ * RECORD's anchor (not the live centroid) and the record's similarity is
+ * re-applied on top — so the group's accumulated scale / rotation /
+ * translation SURVIVES the recompose. Without a record the behavior is
+ * byte-identical to the original law (declared layout at the live
+ * centroid, scale 1, rotation 0). Member-level free drags are not the
+ * record's business — they reset, as documented. Returns null when the
+ * group is unknown, locked, or its compound cannot resolve.
  */
 export function recomposeCompoundGroup(
   scene: WhiteboardScene,
@@ -219,7 +267,13 @@ export function recomposeCompoundGroup(
   if (spec === null) return null;
   const members = groupMembers(scene, groupId);
   if (members.length === 0) return null;
-  const centroid = groupCentroid(scene, groupId);
+  const record = scene.groupTransforms?.[groupId];
+  // With a record the expansion anchors where the transform was born —
+  // re-applying the record then lands the members exactly where the user
+  // put them. Without one, the live centroid (the original law).
+  const centroid = record
+    ? { x: record.anchorX, y: record.anchorY }
+    : groupCentroid(scene, groupId);
   if (centroid === null) return null;
   const parts = expandCompound(
     spec,
@@ -232,9 +286,23 @@ export function recomposeCompoundGroup(
     if (pl.groupId !== groupId) return pl;
     const part = parts[partCursor++];
     if (part === undefined) return pl;
+    if (!record) return { ...pl, placement: part.placement, order: pl.order };
+    // The declared part placement, then the record's FULL similarity on
+    // top: rotate + scale about the anchor, translate, and the member's
+    // own scale/rotation accumulate.
+    const rad = (record.rotateDeg * Math.PI) / 180;
+    const rCos = Math.cos(rad);
+    const rSin = Math.sin(rad);
+    const ox = part.placement.x - record.anchorX;
+    const oy = part.placement.y - record.anchorY;
     return {
       ...pl,
-      placement: part.placement,
+      placement: {
+        x: Math.round(record.anchorX + record.scale * (ox * rCos - oy * rSin) + record.dx),
+        y: Math.round(record.anchorY + record.scale * (ox * rSin + oy * rCos) + record.dy),
+        scale: part.placement.scale * record.scale,
+        rotateDeg: part.placement.rotateDeg + record.rotateDeg,
+      },
       order: pl.order,
     };
   });
@@ -242,8 +310,117 @@ export function recomposeCompoundGroup(
 }
 
 /**
- * NUDGE (the group transform): one delta, every member — the compound
- * moves as one body. Returns null when the group is unknown or locked.
+ * THE CANONICAL GROUP TRANSFORM (Phase 4): translate + uniform scale +
+ * rotate about the group's CURRENT centroid — the compound moves as one
+ * rigid-ish body, and the accumulated similarity is composed into the
+ * scene's `groupTransforms[groupId]` record so a later recompose
+ * reproduces it (the override-preservation law). The record's anchor is
+ * the centroid at the record's birth; every later op composes exactly in
+ * that anchor frame:
+ *
+ *   current visual state  V(p) = A + s·Rot(p − A) + d
+ *   the new op            T:   p → C + s₂·Rot₂(p − C) + d₂   (C = live centroid)
+ *   composed              V'(p) = C + s·s₂·Rot₂Rot(p − A)
+ *                               + s₂·Rot₂(A + d − C) + d₂
+ *
+ * so s' = s·s₂, Rot' = Rot₂∘Rot, d' = (C − A) + s₂·Rot₂(A + d − C) + d₂ —
+ * exact for any op sequence, no drift (the (C − A) term moves the frame
+ * origin back to the anchor). Returns null when the group is unknown,
+ * locked, empty, or the transform is not a similarity this board speaks
+ * (non-finite numbers, scale ≤ 0).
+ */
+export interface GroupTransformInput {
+  dx: number;
+  dy: number;
+  scale: number;
+  rotateDeg: number;
+}
+
+export function transformCompoundGroup(
+  scene: WhiteboardScene,
+  groupId: string,
+  t: GroupTransformInput
+): WhiteboardScene | null {
+  if (isGroupLocked(scene, groupId)) return null;
+  const members = groupMembers(scene, groupId);
+  if (members.length === 0) return null;
+  if (
+    !Number.isFinite(t.dx) ||
+    !Number.isFinite(t.dy) ||
+    !Number.isFinite(t.scale) ||
+    !Number.isFinite(t.rotateDeg) ||
+    t.scale <= 0
+  )
+    return null;
+  // The live centroid in EXACT arithmetic (composition stays drift-free
+  // around it). The RECORD's frame, though, anchors at the declared
+  // layout's EXPANSION ORIGIN — derived at record birth from the spec's
+  // own offsets (first member position − first declared offset) — so a
+  // later recompose can re-expand the declared layout AT THE ANCHOR and
+  // reproduce the birth positions byte-for-byte before re-applying the
+  // similarity. A group the compound registry cannot resolve refuses at
+  // record birth (fail-closed — the same gate duplicate/recompose ride).
+  const cx = members.reduce((a, m) => a + m.placement.x, 0) / members.length;
+  const cy = members.reduce((a, m) => a + m.placement.y, 0) / members.length;
+  const record = scene.groupTransforms?.[groupId];
+  let anchor: { x: number; y: number };
+  if (record) {
+    anchor = { x: record.anchorX, y: record.anchorY };
+  } else {
+    const spec = resolveCompoundGroupId(groupId);
+    if (spec === null) return null;
+    const firstPart = spec.parts[0] as { dx?: number; dy?: number } | undefined;
+    anchor = {
+      x: members[0].placement.x - (firstPart?.dx ?? 0),
+      y: members[0].placement.y - (firstPart?.dy ?? 0),
+    };
+  }
+  const prev = record ?? { anchorX: anchor.x, anchorY: anchor.y, dx: 0, dy: 0, scale: 1, rotateDeg: 0 };
+  const rad = (t.rotateDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  // d' = s₂·Rot₂(A + d − C) + d₂ (the composition law above).
+  const wx = prev.anchorX + prev.dx - cx;
+  const wy = prev.anchorY + prev.dy - cy;
+  const nextRecord: GroupTransformRecord = {
+    anchorX: prev.anchorX,
+    anchorY: prev.anchorY,
+    dx: cx - prev.anchorX + t.scale * (wx * cos - wy * sin) + t.dx,
+    dy: cy - prev.anchorY + t.scale * (wx * sin + wy * cos) + t.dy,
+    scale: prev.scale * t.scale,
+    rotateDeg: prev.rotateDeg + t.rotateDeg,
+  };
+  // Every member's placement rides the OP ITSELF (about the live
+  // centroid) — the same math the visual state receives.
+  const memberKeys = new Set(members.map(placementKey));
+  const placements = scene.placements.map((pl) => {
+    if (!memberKeys.has(placementKey(pl))) return pl;
+    const p = pl.placement;
+    const ox = p.x - cx;
+    const oy = p.y - cy;
+    return {
+      ...pl,
+      placement: {
+        x: Math.round(cx + t.scale * (ox * cos - oy * sin) + t.dx),
+        y: Math.round(cy + t.scale * (ox * sin + oy * cos) + t.dy),
+        scale: p.scale * t.scale,
+        rotateDeg: p.rotateDeg + t.rotateDeg,
+      },
+    };
+  });
+  const groupTransforms = {
+    ...scene.groupTransforms,
+    [groupId]: nextRecord,
+  };
+  return { ...scene, placements, groupTransforms };
+}
+
+/**
+ * NUDGE: one delta, every member — the compound moves as one body.
+ * Phase 4: this DELEGATES to the canonical transform (a pure translation
+ * about the centroid is the identity rotation/scale), so nudges compose
+ * into the transform record too and a recompose preserves them. Returns
+ * null when the group is unknown or locked.
  */
 export function nudgeCompoundGroup(
   scene: WhiteboardScene,
@@ -251,21 +428,5 @@ export function nudgeCompoundGroup(
   dx: number,
   dy: number
 ): WhiteboardScene | null {
-  if (isGroupLocked(scene, groupId)) return null;
-  const members = groupMembers(scene, groupId);
-  if (members.length === 0) return null;
-  const memberKeys = new Set(members.map(placementKey));
-  const placements = scene.placements.map((pl) =>
-    memberKeys.has(placementKey(pl))
-      ? {
-          ...pl,
-          placement: {
-            ...pl.placement,
-            x: Math.round(pl.placement.x + dx),
-            y: Math.round(pl.placement.y + dy),
-          },
-        }
-      : pl
-  );
-  return { ...scene, placements };
+  return transformCompoundGroup(scene, groupId, { dx, dy, scale: 1, rotateDeg: 0 });
 }
