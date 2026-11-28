@@ -1,6 +1,6 @@
 // Node-runtime auth: password storage (PBKDF2 via Web Crypto), login rate
 // limiting, and cookie helpers. Token sign/verify lives in auth-token.ts
-// (edge-safe, no DB) so src/middleware.ts can import it directly.
+// (edge-safe, no DB) so src/proxy.ts can import it directly.
 //
 // The access password is stored in the Setting table under "auth.password" as
 //   pbkdf2$<iterations>$<saltB64>$<hashB64>
@@ -24,7 +24,7 @@ const MIN_PASSWORD_LEN = 8;
 
 // Protection is OPT-IN: the studio stays open until the owner explicitly
 // enables the lock (Settings → Studio access). The Setting row is the source
-// of truth for the UI; a tiny flag file mirrors it for src/middleware.ts,
+// of truth for the UI; a tiny flag file mirrors it for src/proxy.ts,
 // which runs per-request and must not touch the database.
 const LOCK_FLAG = path.join(process.cwd(), "db", "auth.lock");
 
@@ -42,7 +42,7 @@ export async function isAuthEnabled(): Promise<boolean> {
   if (!getAuthSecret()) return false;
   // Serverless (Vercel & co.) activates the gate via IBISMUH_STUDIO_LOCK=1 — the
   // flag file is unwritable there, so the env signal substitutes for it.
-  // Must mirror src/middleware.ts exactly, or the AuthGate reports "disabled"
+  // Must mirror src/proxy.ts exactly, or the AuthGate reports "disabled"
   // while the middleware is already enforcing (app shell renders, every API
   // 401s, and the setup screen never appears).
   if (process.env.IBISMUH_STUDIO_LOCK === "1") return true;

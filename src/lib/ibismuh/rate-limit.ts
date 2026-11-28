@@ -1,5 +1,5 @@
 // Per-IP sliding-window API rate limiting — the coarse public gate that sits
-// in front of auth (wired into src/middleware.ts): a flood gets 429'd whether
+// in front of auth (wired into src/proxy.ts): a flood gets 429'd whether
 // or not it carries a session, while the finer protections (login lockout in
 // auth.ts, the AI-provider budget in budget.ts) layer on top untouched.
 //

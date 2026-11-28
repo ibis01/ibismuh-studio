@@ -2,7 +2,7 @@
 // (docs/production-readiness.md, gate P0.4).
 //
 // The middleware's in-memory buckets are coarse PER-INSTANCE shedding and
-// architecture-correct (edge runtime, DB-banned — see src/middleware.ts).
+// architecture-correct (edge runtime, DB-banned — see src/proxy.ts).
 // The AUTHORITATIVE law is the DB-backed fixed-window counter below:
 // enforced at requireUser (every protected route funnels through it),
 // shared by every instance, surviving deploys. The admission is a raw

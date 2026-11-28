@@ -23,7 +23,7 @@
 # DENIES anonymous pulls from GitHub's shared runner IP pools ("pull access
 # denied … repository does not exist") regardless of backoff. Every image the
 # topology needs is therefore sourced HUB-FREE:
-#   node:20-bookworm-slim + postgres:16-alpine → pulled from the ECR Public
+#   node:24-bookworm-slim + postgres:16-alpine → pulled from the ECR Public
 #     library mirror (public.ecr.aws/docker/library/…) and tagged locally to
 #     the names the Dockerfile / compose expect, so the build and compose
 #     find them in the local cache and never contact Hub. 2026-11-14
@@ -72,7 +72,7 @@ trap cleanup EXIT
 # readable from runners; both manifests verified 200 amd64 when this was
 # wired) — before failing.
 for spec in \
-  "node:20-bookworm-slim|public.ecr.aws/docker/library/node:20-bookworm-slim|mirror.gcr.io/library/node:20-bookworm-slim" \
+  "node:24-bookworm-slim|public.ecr.aws/docker/library/node:24-bookworm-slim|mirror.gcr.io/library/node:24-bookworm-slim" \
   "postgres:16-alpine|public.ecr.aws/docker/library/postgres:16-alpine|mirror.gcr.io/library/postgres:16-alpine"; do
   IFS='|' read -r LOCAL M1 M2 <<< "$spec"
   if docker image inspect "$LOCAL" >/dev/null 2>&1; then

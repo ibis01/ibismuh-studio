@@ -380,11 +380,34 @@ jobs:
       - name: Build (next build + standalone assembly)
         # S56/T-56.1: closes P1-3. The build is env-free (verified: exit 0
         # with NO .env present — pages that need secrets render dynamic).
-        # Turbopack prints 4 known WARNINGS (edge-runtime process.pid in
-        # instrumentation.ts — guarded by the NEXT_RUNTIME check at runtime;
-        # dynamic-fs tracing in the stock/export routes) — warnings only,
-        # exit stays 0; do not "fix" by breaking the runtime guard.
-        run: npm run build
+        # The edge-runtime process.pid warning is guarded by the NEXT_RUNTIME
+        # check at runtime; the dynamic-fs tracing warnings were fixed at
+        # their eight call sites with per-call turbopackIgnore annotations
+        # (99a2ff1) — the guard below keeps them fixed.
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee build.log
+
+      - name: Build-log guard (turbopackIgnore + proxy convention)
+        # Master plan Phase 2: the eight per-call turbopackIgnore annotations
+        # are load-bearing — a NEW dynamic-fs call site without one re-opens
+        # the whole-project tracing warnings, so the log is asserted, not
+        # eyeballed. Also pins the Phase 2 proxy convention: the middleware
+        # deprecation warning must never return (the gate lives at
+        # src/proxy.ts now).
+        run: |
+          set -euo pipefail
+          if grep -q "Dynamic filesystem access" build.log; then
+            echo "FAIL: a dynamic filesystem import lost its turbopackIgnore annotation"
+            grep -n "Dynamic filesystem access" build.log
+            exit 1
+          fi
+          if grep -Fq 'file convention is deprecated' build.log; then
+            echo "FAIL: a file-convention deprecation warning returned"
+            grep -n "file convention is deprecated" build.log
+            exit 1
+          fi
+          echo "guard PASS: zero dynamic-fs tracing warnings, zero convention deprecations"
 
   coverage:
     name: Money-path coverage

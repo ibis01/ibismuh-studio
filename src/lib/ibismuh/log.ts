@@ -99,7 +99,7 @@ function emit(level: LogLevel, bindings: Record<string, unknown>, msg: string, e
  * line to stdout/stderr (pino's destination convention, level 40/50 → stderr);
  * where `process` has no std streams (an edge-runtime bundle, the browser)
  * the console is the only sink and receives the SAME JSON line. One logging
- * law everywhere — middleware.ts can import this module without breaking
+ * law everywhere — proxy.ts can import this module without breaking
  * its no-node:* constraint, and a client bundle degrades instead of crashing.
  */
 function writeLine(level: LogLevel, text: string): void {
@@ -136,7 +136,7 @@ export function createLogger(bindings: Record<string, unknown> = {}): Logger {
 export const log = createLogger({ app: "ibismuh-studio" });
 
 /**
- * S57/T-57.1 — the request correlation header. middleware.ts stamps a fresh
+ * S57/T-57.1 — the request correlation header. proxy.ts stamps a fresh
  * value (crypto.randomUUID) on every /api/* request and echoes it on every
  * response, error responses included; an operator holding a failing
  * response can grep the centralized log for the exact lines that served it.

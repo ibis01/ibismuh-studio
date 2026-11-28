@@ -99,7 +99,7 @@ trail of what shipped then. The current posture is the table above.
 
 | Area | Protection (as shipped 2025-10-28) |
 | --- | --- |
-| API access | **Opt-in.** The studio is OPEN by default. Once the owner enables it (Settings → Studio access), `src/middleware.ts` requires a signed session cookie or Bearer token on every `/api/*` request (except `/api/auth/*`). Wrong/absent credential → 401 JSON. |
+| API access | **Opt-in.** The studio is OPEN by default. Once the owner enables it (Settings → Studio access), `src/proxy.ts` requires a signed session cookie or Bearer token on every `/api/*` request (except `/api/auth/*`). Wrong/absent credential → 401 JSON. |
 | Lock screen | Appears only while protection is ON: first visit to `/` shows a password setup (first run) or sign-in. Passwords: PBKDF2-SHA256, 120k iterations, salted, constant-time compare. |
 | Brute force | 5 failed logins per IP per 10 minutes → 10-minute lockout (in-memory then; DB-backed since S46). |
 | CSRF | Cookie-authenticated mutations with a mismatching `Origin` are rejected (plus `SameSite=Lax`). |

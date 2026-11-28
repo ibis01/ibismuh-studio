@@ -12799,10 +12799,10 @@ await test("S102 THE TRUST LAW: one proxy-trust module, both resolvers delegate,
     tenant.includes("return trustedClientIp(headers)") && !tenant.includes(`split(",")[0]`),
     "tenant.clientIp (the S46 login-lockout key) delegates too — the lockout-poisoning vector is closed at BOTH call sites",
   );
-  const mw = fs.readFileSync("src/middleware.ts", "utf8");
+  const mw = fs.readFileSync("src/proxy.ts", "utf8");
   ok(
     !mw.includes("@/lib/db") && !mw.includes("tenant-db") && !mw.includes("prisma"),
-    "the middleware stays DB-banned (edge runtime) — the in-memory gate is the coarse shed, by design",
+    "the proxy stays DB-banned (Next 16 compiles it to Node, the law holds anyway) — the in-memory gate is the coarse shed, by design",
   );
 });
 
@@ -12890,24 +12890,24 @@ await test("S104 THE CSP LAW: production script-src carries a nonce + strict-dyn
   ok(buildCsp("A", { dev: false }) !== buildCsp("B", { dev: false }), "the header is deterministic per nonce — two requests never share one");
 });
 
-await test("S104 THE OWNERSHIP LAW: middleware owns the CSP, next.config ships no static policy, documents match the middleware", () => {
+await test("S104 THE OWNERSHIP LAW: the proxy owns the CSP, next.config ships no static policy, documents match the proxy", () => {
   const nc = fs.readFileSync("next.config.ts", "utf8");
   ok(
     !nc.includes("Content-Security-Policy"),
     "next.config ships NO static CSP — two policies intersect (most restrictive wins) and would break the nonce-stamped scripts",
   );
-  const mw = fs.readFileSync("src/middleware.ts", "utf8");
+  const mw = fs.readFileSync("src/proxy.ts", "utf8");
   ok(
     mw.includes("buildCsp(nonce") && mw.includes('docHeaders.set("Content-Security-Policy", csp)'),
-    "middleware sets the CSP on the REQUEST headers — the documented Next nonce-stamping mechanism",
+    "the proxy sets the CSP on the REQUEST headers — the documented Next nonce-stamping mechanism",
   );
   ok(
     mw.includes("{ dev: !isProd }"),
-    "middleware passes dev:!isProd — production gets the strict contract (no unsafe-eval) by CONSTRUCTION, dev keeps HMR",
+    "the proxy passes dev:!isProd — production gets the strict contract (no unsafe-eval) by CONSTRUCTION, dev keeps HMR",
   );
   ok(
     mw.includes('"/((?!api/|_next/static|_next/image|_next/hmr|favicon.ico).*)"'),
-    "the matcher covers documents now — they used to bypass middleware entirely and carry the static policy (and the dev HMR websocket upgrade stays out: an edge-layer response can never emit a valid 101)",
+    "the matcher covers documents now — they used to bypass the gate entirely and carry the static policy (and the dev HMR websocket upgrade stays out: an edge-layer response can never emit a valid 101)",
   );
   ok(
     mw.indexOf('pathname.startsWith("/api/")') >= 0 &&

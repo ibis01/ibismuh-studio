@@ -35,7 +35,7 @@
 //
 // NOT STATEFUL, DELIBERATELY: the middleware's per-IP read/write buckets
 // (rate-limit.ts) stay in-memory — middleware is architecture-banned from
-// the DB (see src/middleware.ts), and its 600/90-per-minute tiers are
+// the DB (see src/proxy.ts), and its 600/90-per-minute tiers are
 // coarse shedding, not security state. The durable tier is exactly the
 // credential surfaces above, where an attacker needs thousands of tries
 // and every try must count.

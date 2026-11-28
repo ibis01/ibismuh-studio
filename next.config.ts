@@ -11,7 +11,7 @@ import type { NextConfig } from "next";
 //
 // S104 / P0.5 — the CSP moved OUT of this file: a static header cannot carry
 // a per-request nonce, so middleware now owns the policy entirely
-// (src/middleware.ts + csp.ts — production script-src is 'self' 'nonce-…'
+// (src/proxy.ts + csp.ts — production script-src is 'self' 'nonce-…'
 // 'strict-dynamic', NO unsafe-inline, NO unsafe-eval; style-src keeps its
 // documented unsafe-inline exception). A static CSP here would ALSO apply
 // (browsers intersect multiple policies = most restrictive wins) and break

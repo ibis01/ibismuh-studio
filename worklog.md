@@ -8107,3 +8107,18 @@ Work Log:
 
 Stage Summary:
 - Deliverable: the reproducible baseline is frozen and pinned; phase work may now mutate behavior against this receipt.
+
+---
+Task ID: MasterPlan-Phase2
+Agent: main (Z.ai)
+Task: Master plan Phase 2 — the middleware→proxy convention migration, the turbopackIgnore guard, and the standalone-smoke base fix.
+
+Work Log:
+- THE RENAME: src/middleware.ts → src/proxy.ts (git mv; Next 16's PROXY_FILENAME = 'proxy', the handler resolves mod.proxy when the page is /src/proxy). The exported function is now `proxy`; matcher + config exports are byte-identical; vercel.json fluid stays (Node proxy on Vercel rides the same Fluid requirement).
+- HEADER-EQUIVALENCE RECEIPTS (docs/baselines/mp2-proxy-headers-2026-11-28.txt, live dev server on the new convention): /api/health 200 + fresh nonce CSP (public pass-through); /api/videos unauthenticated 401 + fresh x-request-id + nonce CSP (the gate answers under the new file name); / 200 + document CSP. The unit pins (S102 trust/shared, S104 CSP/ownership laws) now read src/proxy.ts and PASS unchanged — the behavior laws survived the rename byte-for-byte.
+- THE GUARD (ci.yml build job): the build now tees to build.log and a guard step FAILS the job on (a) any "Dynamic filesystem access" tracing warning (the eight per-call turbopackIgnore annotations from 99a2ff1 are load-bearing — a new dynamic-fs call site without one can no longer slip through), (b) any file-convention deprecation warning (the middleware→proxy deprecation must never return).
+- STANDALONE SMOKE BASE FIX: scripts/docker-smoke.sh pre-pulled node:20-bookworm-slim while the Dockerfile's FROM is node:24-bookworm-slim (a CONTRACT since S185/undici 8) — on GitHub runners the build stage could fall through to Docker Hub, the exact failure class S105 was built to avoid. Pre-pull aligned to node:24; the stale comment in prisma/schema.prisma fixed, and the derived SQLite mirror regenerated (npm run db:sync-sqlite) — the S99 byte-identity law caught the drift on the first battery run, exactly as designed.
+- Deliberately not here: .dockerignore + Postgres version alignment + fault injection (Phase 8's slices); the dev-HMR matcher exception is unchanged and pinned.
+
+Stage Summary:
+- Deliverable: the gate lives at src/proxy.ts under the current convention, the build log is asserted (not eyeballed), and the smoke's base image matches the build contract. Receipts: tsc 0; lint 0; unit battery 1078/0; live header receipts pinned.

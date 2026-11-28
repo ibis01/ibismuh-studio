@@ -1,4 +1,4 @@
-// Edge-safe token utilities (NO database imports — usable from src/middleware.ts).
+// Edge-safe token utilities (NO database imports — usable from src/proxy.ts).
 // Tokens are HMAC-SHA256-signed JSON payloads:
 //   <b64url(payload)>.<b64url(signature)>
 // Two scopes: "session" (browser cookie, 7 days) and "api" (Bearer token, 90 days).

@@ -1,0 +1,17 @@
+Ibismuh Studio — proxy-convention header receipts (Phase 2, post-rename)
+Command: curl -D - http://localhost:3000/... (dev server, src/proxy.ts active)
+
+== /api/health (public API) ==
+HTTP/1.1 200 OK
+X-Content-Type-Options: nosniff
+content-security-policy: default-src 'self'; script-src 'self' 'nonce-dfe6c6af-8298-414e-b07d-210af24f7348' 'strict-dynamic' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https:; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
+content-type: application/json
+
+== /api/videos (protected, unauthenticated) ==
+HTTP/1.1 401 Unauthorized
+content-security-policy: default-src 'self'; script-src 'self' 'nonce-6db358d8-f2d5-4e94-a2b4-63d73a2ad7d2' 'strict-dynamic' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https:; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'
+x-request-id: 0ce88e11-4142-433d-a653-0e778f316684
+
+== / (document) ==
+HTTP/1.1 200 OK
+content-security-policy: default-src 'self'; script-src 'self' 'nonce-2b5298b1-92ca-491f-b513-4c2cb514cb45' 'strict-dynamic' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https:; font-src 'self' data:; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'

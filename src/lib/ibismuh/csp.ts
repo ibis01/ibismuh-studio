@@ -4,7 +4,7 @@
 // The old policy (next.config.ts, Stage 1) shipped
 // `script-src 'self' 'unsafe-inline' 'unsafe-eval'` — both holes the audit
 // named. A static next.config header cannot carry a per-request nonce, so
-// the policy moved into middleware (see src/middleware.ts): every request
+// the policy moved into middleware (see src/proxy.ts): every request
 // gets a FRESH nonce, the CSP is set on the REQUEST headers (Next.js reads
 // it there and stamps its own bootstrap scripts with the nonce — the
 // documented mechanism) and on the response.

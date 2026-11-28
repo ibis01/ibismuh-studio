@@ -28,7 +28,7 @@ exists anywhere in the repo.
                 ▼
 ┌────────────────────────────────────────────────────────────────────┐
 │ Next.js 16 standalone server (Node 20) + independent workers       │
-│   ├─ src/middleware.ts — DEFAULT-DENY gatekeeper                   │
+│   ├─ src/proxy.ts — DEFAULT-DENY gatekeeper                   │
 │   │     (6 public auth endpoints + YouTube OAuth callback)         │
 │   ├─ src/app/api/* — 116 route files, tenant-scoped via ALS        │
 │   ├─ src/lib/ibismuh/* — 117 modules, 11 provider files          │
@@ -249,7 +249,7 @@ no parallel budget — the reconciliation's §11 law, held):
                 ▼
 ┌────────────────────────────────────────────────────────────────────┐
 │ Next.js 16 standalone server (Node 20) — stateless                 │
-│   ├─ src/middleware.ts — required API gatekeeper                    │
+│   ├─ src/proxy.ts — required API gatekeeper                    │
 │   │     (auth required by default; public allow-list only)         │
 │   ├─ src/app/api/* — endpoints with zod validation + tenant scoping │
 │   └─ src/lib/ibismuh/* — provider abstraction, services          │

@@ -3,12 +3,12 @@
 // unsafe-inline / unsafe-eval").
 //
 // Runs against the LIVE dev server (the e2e suite's own boot): the document
-// response must carry the middleware's nonce CSP — script-src with a fresh
+// response must carry the proxy's nonce CSP — script-src with a fresh
 // 'nonce-…' and 'strict-dynamic', NEVER 'unsafe-inline' — and Next.js must
 // have stamped its bootstrap scripts with that nonce (the mechanism the
 // whole law rests on). The strict PRODUCTION contract (no unsafe-eval
 // either) is pinned byte-for-byte on the pure builder in the unit suite
-// (buildCsp dev:false) plus the middleware wiring pin ({ dev: !isProd });
+// (buildCsp dev:false) plus the proxy wiring pin ({ dev: !isProd });
 // this runtime spec asserts the MECHANISM, and treats 'unsafe-eval' as
 // legal ONLY when the server under test is a dev server (HMR/react-refresh
 // need it there — csp.ts's documented exception).
@@ -55,7 +55,7 @@ test("the document CSP carries a fresh nonce and never relaxes script-src", asyn
   expect(csp).not.toContain("frame-ancestors"); // deliberate: sandbox iframe embeds
 });
 
-test("Next.js stamps its bootstrap scripts with the middleware nonce", async ({ page }) => {
+test("Next.js stamps its bootstrap scripts with the proxy nonce", async ({ page }) => {
   // The SERVED HTML — not the post-hydration DOM: React rewrites script
   // attributes when it hydrates, so the document's own stamped nonces are
   // only visible in the raw response.
