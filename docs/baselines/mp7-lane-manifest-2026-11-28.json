@@ -1,0 +1,134 @@
+{
+  "schema": "mp7-lane-manifest/1",
+  "generatedAt": "2026-11-28T06:50:06.359Z",
+  "laneContractStamp": {
+    "version": 1,
+    "fingerprint": "00692249bbaa91b6b8664d68a93fca37d1426988e651b5b7fd1039322a14df29"
+  },
+  "lanes": [
+    {
+      "type": "classic",
+      "renderMode": "kenburns",
+      "planner": "script-job",
+      "renderer": "story-compositor",
+      "queueJobKind": "render",
+      "qcProfile": "story-compositor-v1",
+      "goldenMp4": [],
+      "benchmarkScripts": [
+        "scripts/s87-acceptance-battery.mts (arm B: compositor + kenburns)"
+      ]
+    },
+    {
+      "type": "story",
+      "renderMode": "kenburns",
+      "planner": "storyboard-job",
+      "renderer": "story-compositor",
+      "queueJobKind": "render",
+      "qcProfile": "story-compositor-v1",
+      "goldenMp4": [],
+      "benchmarkScripts": [
+        "scripts/s47-continuity-benchmark.mts",
+        "scripts/s54-genre-benchmark.mts"
+      ]
+    },
+    {
+      "type": "whiteboard",
+      "renderMode": "whiteboard",
+      "planner": "whiteboard-engine (beat plan + voice anchors)",
+      "renderer": "whiteboard-engine",
+      "queueJobKind": "whiteboard",
+      "qcProfile": "whiteboard-engine-v1",
+      "goldenMp4": [
+        "scripts/golden/s165/whiteboard-golden.mp4"
+      ],
+      "benchmarkScripts": [
+        "scripts/w1-whiteboard-benchmark.mts",
+        "scripts/s75-e10-benchmark.mts",
+        "scripts/wb-preview-parity.mts"
+      ]
+    },
+    {
+      "type": "graphics2d",
+      "renderMode": "graphics",
+      "planner": "graphics-engine (declarative doc)",
+      "renderer": "graphics-engine",
+      "queueJobKind": "graphics",
+      "qcProfile": "graphics-engine-v1",
+      "goldenMp4": [
+        "scripts/golden/s165/graphics-golden.mp4"
+      ],
+      "benchmarkScripts": [
+        "scripts/s123-graphics-proof.mts"
+      ]
+    },
+    {
+      "type": "character",
+      "renderMode": "kenburns",
+      "planner": "storyboard-job + native-rig channel",
+      "renderer": "story-compositor + native-rig channel",
+      "queueJobKind": "render",
+      "qcProfile": "story-compositor-v1",
+      "goldenMp4": [],
+      "benchmarkScripts": [
+        "scripts/k1-rig-smoke.mts"
+      ]
+    },
+    {
+      "type": "slides",
+      "renderMode": "slides",
+      "planner": "slides-deck (LLM plan) + kinetic pass",
+      "renderer": "slides-deck (+ kinetic clips)",
+      "queueJobKind": "render",
+      "qcProfile": "story-compositor-v1",
+      "goldenMp4": [],
+      "benchmarkScripts": []
+    }
+  ],
+  "goldensNotALane": [
+    "scripts/golden/s165/scene3d-golden.mp4 (scene3d render-mode golden)"
+  ],
+  "contactSheet": {
+    "path": "validation/mp7/sheet-a.png",
+    "sha256": "4fc7000830473e5651dd39327fa32b71c76f06ee3533f387197e7723e9a9c636",
+    "inputs": [
+      "scripts/golden/s165/graphics-golden.mp4",
+      "scripts/golden/s165/scene3d-golden.mp4",
+      "scripts/golden/s165/whiteboard-golden.mp4"
+    ],
+    "deterministic": true
+  },
+  "parityExercise": {
+    "source": "scripts/golden/s165/whiteboard-golden.mp4",
+    "dims": {
+      "width": 640,
+      "height": 360
+    },
+    "identity": {
+      "byteIdentical": true,
+      "meanAbsDelta": 0,
+      "verdict": {
+        "pass": true,
+        "reasons": []
+      }
+    },
+    "crossFrame": {
+      "byteIdentical": false,
+      "meanAbsDelta": 8.389,
+      "fracOverTolerance": 0.10255,
+      "worstChannelDelta": 252,
+      "worstTile": {
+        "col": 4,
+        "row": 3
+      },
+      "verdict": {
+        "pass": false,
+        "reasons": [
+          "mean |Δ| 8.389 exceeds the 3 budget — the frames carry different content, not codec noise",
+          "10.26 % of pixels sit beyond the ±8 tolerance (budget 6.0 %) — a structural divergence, not quantization",
+          "tile (col 4, row 3) carries 73.9 % over-tolerance pixels (budget 50 %) — a CONCENTRATED divergence, not scattered codec edges"
+        ]
+      },
+      "note": "two DIFFERENT moments of one render — the measured structural-difference reference; the codec-band verdict applies to same-content comparisons only"
+    }
+  }
+}

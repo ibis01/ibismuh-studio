@@ -75,6 +75,7 @@
     "test:responsive-layout": "node --import tsx scripts/test-responsive-layout.mts",
     "test:whiteboard-recipes": "node --import tsx scripts/test-whiteboard-recipes.mts",
     "test:query-benchmark": "node --import tsx scripts/test-query-benchmark.mts",
+    "bench:lanes": "node --import tsx scripts/phase7-lane-manifest.mts",
     "test:log-contract": "node scripts/classify-e2e-server-log.mjs --self-test"
   },
   "dependencies": {

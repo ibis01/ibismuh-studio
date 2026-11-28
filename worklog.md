@@ -8181,3 +8181,17 @@ Work Log:
 
 Stage Summary:
 - Deliverable: the estimator is single-sourced and measure-capable, recipes carry a tamper-evident contract stamp, chart data can cite its sources and survives every save. Receipts: tsc 0; lint 0; graphics battery 49/0.
+
+---
+Task ID: MasterPlan-Phase7
+Agent: main (Z.ai)
+Task: Master plan Phase 7 — the contact-sheet generator, the six-lane benchmark manifest, and the parity exercise on real golden frames.
+
+Work Log:
+- THE CONTACT-SHEET GENERATOR (scripts/contact-sheet.mts — the repo's FIRST; verified zero prior contact-sheet machinery): deterministic fixed-timestamp sampling (10–90% ladder), one ffmpeg graph per sheet (scale → pad → xstack), exported buildContactSheet() so the blind-rescore kit and lane benchmarks call it instead of shelling ad hoc. Fail-visible on missing inputs, unreadable streams, empty samples. Two named en-route fixes: CLI flag-value parsing, and a comma-in-expression pad (a bare comma splits filter args — explicit grid dimensions computed in JS instead).
+- THE SIX-LANE MANIFEST (scripts/phase7-lane-manifest.mts, npm run bench:lanes): ONE machine-readable summary — per lane: contract fields, contract stamp (currentLaneContractStamp: fingerprint 00692249bbaa91b6…, v1), golden MP4 presence, benchmark scripts; goldens-not-a-lane recorded honestly (scene3d is a render mode). Receipt: docs/baselines/mp7-lane-manifest-2026-11-28.json.
+- THE PARITY EXERCISE (real decoded golden frames through the real metric): identity (same frame twice) → byteIdentical=true, pass=true; cross-frame (20% vs 80% of the whiteboard golden) → mean|Δ| 8.389, 10.26% over tolerance, pass=false — recorded as the MEASURED structural-difference reference (the codec band applies to same-content comparisons; different content failing the band is the metric working).
+- THE GAPS, RECORDED NOT HIDDEN: slides lane has NO benchmark script; classic/story/character have no golden MP4s (3 of 6 lanes carry goldens). Both facts live in the committed manifest — the next benchmark slice starts from an honest map.
+
+Stage Summary:
+- Deliverable: the phase-7 artifact class exists and is exercised — deterministic contact sheets, a six-lane manifest with the contract stamp, parity numbers from real frames. Receipts: sheet determinism (two builds byte-identical, sha 4fc7000830473e56…); parity identity PASS; manifest committed. tsc 0; lint 0.
