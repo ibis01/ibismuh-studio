@@ -38,6 +38,7 @@ import { JobCancelledError, requestCancel, runWithCancelKey } from "./cancel";
 import type { JobKind } from "./jobs";
 import { HEAVY_JOB_KINDS } from "./video-lanes";
 import type { Prisma } from "@prisma/client";
+import { failpointCheck } from "./failpoints";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -355,6 +356,10 @@ export interface ClaimResult {
  * Returns claimed=false when another worker holds the row (live lease).
  */
 export async function claimJob(jobId: string, workerId: string): Promise<ClaimResult> {
+  // Phase 8 fault-injection seam: an armed "queue.claim" failpoint fires
+  // BEFORE the atomic claim (error → named throw, hang → blocked window);
+  // unset env = zero cost, zero behavior change.
+  failpointCheck("queue.claim");
   const claimed = await withCtxNull(() =>
     rawDatabase.job.updateMany({
       where: { id: jobId, status: "pending" },
@@ -387,6 +392,8 @@ export async function claimJob(jobId: string, workerId: string): Promise<ClaimRe
  * lease (the caller retries next interval; the lease still stands).
  */
 export async function renewLease(jobId: string, leaseToken: number): Promise<boolean> {
+  // Phase 8 fault-injection seam (see claimJob).
+  failpointCheck("queue.lease.renew");
   const renewed = await withCtxNull(() =>
     rawDatabase.job.updateMany({
       where: { id: jobId, leaseToken, status: "running" },

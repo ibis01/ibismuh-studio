@@ -23,7 +23,6 @@
 //
 // Run: node --import tsx scripts/phase7-lane-manifest.mts
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,7 +30,6 @@ import { fileURLToPath } from "node:url";
 import {
   LANE_CONTRACTS,
   LANE_ORDER,
-  computeLaneContractFingerprint,
   currentLaneContractStamp,
 } from "../src/lib/ibismuh/lane-contracts";
 import { compareFrameRgb, parityVerdict } from "../src/lib/ibismuh/whiteboard/parity";

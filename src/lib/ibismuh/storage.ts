@@ -51,6 +51,7 @@ export {
   type StoragePutReservation,
 } from "./storage-quota";
 import { log } from "./log";
+import { failpointCheck } from "./failpoints";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -180,6 +181,9 @@ export async function withLocalFile<T>(key: string, fn: (filePath: string) => Pr
 // Public API
 
 export async function put(key: string, data: Buffer | Uint8Array, opts: PutOptions = {}): Promise<void> {
+  // Phase 8 fault-injection seam: an armed "storage.put" failpoint fires
+  // before the driver write (error → named throw, hang → blocked window).
+  failpointCheck("storage.put");
   const k = normalizeKey(key);
   const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
   const kind = storageDriverKind();

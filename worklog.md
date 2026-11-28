@@ -8195,3 +8195,17 @@ Work Log:
 
 Stage Summary:
 - Deliverable: the phase-7 artifact class exists and is exercised — deterministic contact sheets, a six-lane manifest with the contract stamp, parity numbers from real frames. Receipts: sheet determinism (two builds byte-identical, sha 4fc7000830473e56…); parity identity PASS; manifest committed. tsc 0; lint 0.
+
+---
+Task ID: MasterPlan-Phase8
+Agent: main (Z.ai)
+Task: Master plan Phase 8 — the fault-injection seam, the build-context prune, and the Postgres version alignment (the Docker/PG infra itself pre-existed: the compose topology, the release migration runner with the advisory lock, verified pg backups and restore drills).
+
+Work Log:
+- THE FAULT-INJECTION SEAM (src/lib/ibismuh/failpoints.ts — the repo's FIRST; verified zero prior fault/chaos/inject machinery): env-gated named failpoints (IBISMUH_STUDIO_FAILPOINTS="name:action[=arg];…"), OFF by default (one env read per process), CLOSED namespace (unknown names/actions/malformed parts THROW at parse — a typo never silently disarms armed chaos), named actions error (FaultInjectionError with the spec's message) / hang (bounded window, 10s hard cap) / off. Declared sites wired at exactly ONE call site each: queue.claim (before the atomic claim), queue.lease.renew, storage.put (before the driver write).
+- THE BATTERY (scripts/test-failpoints.mts, npm run test:failpoints, wired into the check chain after test:log-contract): 20 laws — the off law (real writes land with the seam compiled in), fail-closed parsing, the named error throw (its class + site field), the bounded hang + cap, the wiring pin (every declared site exactly once — a removed wiring fails the battery), and the reset law (spec swaps without a reboot).
+- THE BUILD-CONTEXT PRUNE (.dockerignore — it did not exist): the Dockerfile's build stage does COPY . . — the context now carries the SOURCE only (node_modules, .next, db/, backups/, uploads/, validation/, scratch/, .env* excluded; .env.example explicitly kept).
+- THE VERSION ALIGNMENT: docker-compose postgres:16-alpine → postgres:17-alpine — CI's integration job already rides 17 and pg-drill pins the major-match law at 17; the compose topology now matches the tested major (the smoke's own volume is scratch, so the bump is safe).
+
+Stage Summary:
+- Deliverable: the failure surface is injectable by name with laws, the build context is pruned, the PG major is aligned to what CI actually tests. Receipts: failpoints battery 20/0; tsc 0; lint 0. NOT VERIFIED here (sandbox law): docker build/smoke runs — CI-owned (docker-smoke job), unchanged.

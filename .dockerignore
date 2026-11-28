@@ -1,0 +1,29 @@
+# The build-context prune (master plan Phase 8): Dockerfile's build stage
+# does COPY . . — without this file the whole working tree (local DBs,
+# backups, screenshots, gitignored validation evidence, node_modules,
+# build output) ships into the context. The context carries the SOURCE;
+# everything else stays on the host.
+.git
+.gitignore
+node_modules
+npm-debug.log*
+.next
+next-daemon.log
+worker-daemon.log
+dev.log
+db
+backups
+uploads
+validation
+docs/baselines/*.png
+docs/baselines/*.mp4
+scratch
+test-results
+playwright-report
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
