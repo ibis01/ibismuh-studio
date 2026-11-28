@@ -706,6 +706,18 @@ jobs:
         env:
           CI: true
 
+      # Phase 1.4 — the server-log contract receipt (counts by class, pinned
+      # to the commit) rides out as a build artifact even on failure.
+      - name: Upload log-contract receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-log-contract-receipt
+          path: |
+            test-results/log-classification.json
+            test-results/e2e-server.log
+          if-no-files-found: ignore
+
       # S87 slice 5 — the §4.C acceptance battery (the Universal Timeline
       # close): real renders through BOTH engine lanes (the Whiteboard
       # engine's chromium rasterizer + the compositor's kenburns path, zero

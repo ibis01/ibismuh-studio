@@ -9,6 +9,11 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  // Phase 1.4 (master plan after 646c79c) — the server-log contract: the
+  // teardown classifies the harness server's tee'd log and FAILS the run on
+  // forbidden classes (Prisma P2003/FK, uncaught, unexplained 5xx) even when
+  // every browser assertion passed.
+  globalTeardown: "./e2e/log-contract.teardown.ts",
   timeout: 120_000,
   expect: { timeout: 15_000 },
   fullyParallel: false,
@@ -25,7 +30,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev",
+    // Phase 1.4 — the harness owns its server through the tee wrapper so
+    // the log contract has complete server-side evidence. Missing log in
+    // CI is itself a contract failure (fail-visible); a reused external
+    // dev server locally skips the gate with a loud receipt note.
+    command: "node scripts/e2e-web-server.mjs",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
@@ -46,6 +55,17 @@ export default defineConfig({
       // the harness env and the limiter env from drifting apart again).
       IBISMUH_STUDIO_RATE_WRITE: "10000",
       IBISMUH_STUDIO_RATE_READ: "100000",
+      // Phase 1.1 — the integrity spec points chat at a LOCAL stub server
+      // (127.0.0.1, port chosen at runtime) to prove a SUCCESSFUL provider
+      // call meters real tokens. The SSRF guard's documented escape hatch
+      // covers the trusted single-tenant harness only — production keeps
+      // private hosts default-deny. Host-level entries, so any port works.
+      IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS: "1",
+      IBISMUH_STUDIO_PRIVATE_PROVIDER_ALLOWLIST: "127.0.0.1,localhost",
+      // Phase 1.4 — the named log-contract mode and the tee target shared
+      // by the wrapper, the spec's own FK assertion, and the teardown.
+      E2E_SERVER_LOG: "test-results/e2e-server.log",
+      E2E_LOG_CONTRACT: "NO_PROVIDER_FIXTURE",
     },
   },
 });

@@ -34,7 +34,7 @@
     "test:coverage": "node scripts/test-coverage.mjs",
     "worker": "node --import tsx scripts/worker.mts",
     "worker:daemon": "python3 scripts/daemonize.py scripts/worker-daemon.log npm run worker",
-    "check": "npm run typecheck && npm run lint && npm run test && npm run test:whiteboard-trace && npm run test:whiteboard-profiles && npm run test:provider-registry && npm run test:s186-truncation && npm run test:billing && npm run test:storage && npm run test:net-guard && npm run test:tenant-registry && npm run test:tenant-isolation && npm run test:upload-limits && npm run test:api-schemas && npm run test:queue-reliability && npm run lint:budget && npm run test:rate && npm run test:scene-revisions && npm run test:video-lanes && npm run test:lane-drift && npm run test:ui-events && npm run test:drawable-ir && npm run test:plan-contracts && npm run test:catalog && npm run test:whiteboard-placement && npm run test:whiteboard-multipick && npm run test:whiteboard-compounds && npm run test:graphics-design && npm run test:visual-beats && npm run test:responsive-layout && npm run test:whiteboard-recipes && npm run test:query-benchmark && npm run test:stage-cache && npm run test:drill && npm run alert:probe",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run test:whiteboard-trace && npm run test:whiteboard-profiles && npm run test:provider-registry && npm run test:s186-truncation && npm run test:billing && npm run test:storage && npm run test:net-guard && npm run test:tenant-registry && npm run test:tenant-isolation && npm run test:upload-limits && npm run test:api-schemas && npm run test:log-contract && npm run test:queue-reliability && npm run lint:budget && npm run test:rate && npm run test:scene-revisions && npm run test:video-lanes && npm run test:lane-drift && npm run test:ui-events && npm run test:drawable-ir && npm run test:plan-contracts && npm run test:catalog && npm run test:whiteboard-placement && npm run test:whiteboard-multipick && npm run test:whiteboard-compounds && npm run test:graphics-design && npm run test:visual-beats && npm run test:responsive-layout && npm run test:whiteboard-recipes && npm run test:query-benchmark && npm run test:stage-cache && npm run test:drill && npm run alert:probe",
     "test:e2e": "playwright test",
     "test:billing": "node --import tsx scripts/test-billing.mts",
     "test:voicestudio": "node --import tsx scripts/test-voicestudio-adapter.mts",
@@ -74,7 +74,8 @@
     "test:visual-beats": "node --import tsx scripts/test-visual-beats.mts",
     "test:responsive-layout": "node --import tsx scripts/test-responsive-layout.mts",
     "test:whiteboard-recipes": "node --import tsx scripts/test-whiteboard-recipes.mts",
-    "test:query-benchmark": "node --import tsx scripts/test-query-benchmark.mts"
+    "test:query-benchmark": "node --import tsx scripts/test-query-benchmark.mts",
+    "test:log-contract": "node scripts/classify-e2e-server-log.mjs --self-test"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

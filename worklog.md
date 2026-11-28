@@ -8076,3 +8076,20 @@ Work Log:
 
 Stage Summary:
 - Deliverable: Settings is a full-page two-pane surface — sticky rail + full-width content with xl card pairing — verified geometrically at both breakpoints with zero console noise. View-only rework: no route, data, or API behavior touched.
+
+---
+Task ID: MasterPlan-Phase1
+Agent: main (Z.ai)
+Task: Master plan "After 646c79c" Phase 1 (1.1–1.4) — eliminate the two E2E FK integrity defects and enforce a server-log contract so the suite can never green-wash server-side errors again.
+
+Work Log:
+- HARNESS (1.4): Playwright's webServer ran `npm run dev` with its output going nowhere — the server-side evidence of real defects was invisible. The harness now owns its server through scripts/e2e-web-server.mjs (tee wrapper: combined stdout+stderr → test-results/e2e-server.log + console, signal-forwarding, fresh log per run). scripts/classify-e2e-server-log.mjs normalizes dynamic ids (uuid/cuid/email/host/duration — case-sensitive cuid rule so camel identifiers survive) and classifies EVERY line against an explicit named vocabulary; e2e/log-contract.teardown.ts (globalTeardown) fails the run on forbidden or unknown error-signal lines even when all browser assertions passed; CI uploads the receipt (test-results/log-classification.json, pinned to the commit SHA).
+- THE CONTRACT (1.3): the named NO_PROVIDER_FIXTURE mode allows exactly the four documented degradation classes — provider-unavailable, retry, permanent-degraded (incl. the budget.ts chain-failure warn that rides the ok=false row), stale-executor-fencing — and must NOT allow Prisma P2003/FK, uncaught exceptions, or unexpected 5xx. Graceful fallback is declared, never silently reclassified.
+- 1.1 integrity.spec.ts — the UsageRecord probes: a no-provider call degrades honestly (controlled 4xx + labeled degraded payload) AND its ok=false row VERIFIBLY lands via the provider-score evidence poll; a successful provider call meters REAL tokens against a local OpenAI-compatible stub server (SSRF guard's documented harness escape hatch: IBISMUH_STUDIO_ALLOW_PRIVATE_HOSTS=1 + a host-level 127.0.0.1 allowlist in the harness env only — production stays default-deny); the fixture graph (org+user) lives for the worker lifetime and dies ONLY after every metering insert this suite caused is proven landed (the settle law), through the account's own front door. FK enforcement ON everywhere.
+- 1.2 the MusicTrack lifecycle: seed → list → intended flow (a video carries the track from creation) → explicit delete, all FKs held inside one signed-in tenant; the retained graph then cascades away deterministically.
+- CLASSIFIER SELF-LAW: npm run test:log-contract (--self-test, wired into `check` after test:api-schemas) fires every class and caught its own historic bug in the first run — the bare number normalizer ate HTTP status codes (200/401/500 → <n>) and silenced every request line; removed, with the NOTE comment documenting why the rule must never return.
+- FIRST-RUN EVIDENCE: the gate failed its first real run exactly as designed — 40 unclassified benign lines (node NO_COLOR warnings, raw SQL fragments) forced into named classes; then one budget.ts "call failed after attempts" warn was declared under permanent-degraded (the named mode's documented allowance), not amnestied.
+
+Stage Summary:
+- Deliverable: Phase 1 closed — the FK noise can never hide again. Receipts: self-test PASS; tsc 0; lint 0/0; lint:budget PASS; representative local set green (integrity 3 + isolation + csp + smoke) with the log-contract receipt PASS pinned to this commit; CI owns the full 46-test suite + artifact upload on push.
+- Deliberately not here: per-worker timestamp attribution of server lines (the server is one shared process; the gate is global) — recorded as the documented follow-up the plan itself names (4.4 policy).
