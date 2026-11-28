@@ -40,6 +40,7 @@ import {
   type CatalogCompositionPart,
   type CatalogManifest,
 } from "./contracts";
+import { packsForRow } from "./subject-packs";
 
 // ---------------------------------------------------------------------------
 // Category derivation
@@ -124,7 +125,7 @@ export function whiteboardCatalogRows(assets: readonly WhiteboardAsset[]): Catal
     ...(a.tags[1] !== undefined ? { subcategory: a.tags[1] } : {}),
     aliases: [...(a.alts ?? [])],
     concepts: [...a.tags, ...(a.alts ?? [])],
-    subjectPacks: [],
+    subjectPacks: packsForRow({ category: a.tags[0] ?? "generic", concepts: [...a.tags, ...(a.alts ?? [])] }),
     styleFamily: BUILTIN_STYLE_FAMILY,
     complexity: complexityBucket(countWhiteboardStrokes(a.svg)),
     a11y: a.a11y ?? `Hand-drawn ${[...a.tags].join(", ")} illustration.`,
@@ -147,7 +148,7 @@ export function graphicsCatalogRows(
     ...(icon.tags[1] !== undefined ? { subcategory: icon.tags[1] } : {}),
     aliases: [],
     concepts: [...icon.tags],
-    subjectPacks: [],
+    subjectPacks: packsForRow({ category: graphicsCategory(icon.tags), concepts: [...icon.tags] }),
     styleFamily: BUILTIN_STYLE_FAMILY,
     complexity: complexityBucket(icon.paths.length),
     a11y: `Line icon: ${[...icon.tags].join(", ")}.`,
@@ -183,7 +184,7 @@ export function compoundCatalogRows(specs: readonly WhiteboardCompoundSpec[]): C
       category: "composition",
       aliases: [...spec.aliases],
       concepts: [...spec.tags, ...spec.aliases],
-      subjectPacks: [],
+      subjectPacks: packsForRow({ category: "composition", concepts: [...spec.tags, ...spec.aliases] }),
       styleFamily: BUILTIN_STYLE_FAMILY,
       complexity: spec.parts.length >= 5 ? 5 : spec.parts.length >= 3 ? 4 : 3,
       a11y: spec.a11y,

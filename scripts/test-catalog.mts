@@ -40,6 +40,8 @@ import {
   type CatalogManifest,
 } from "../src/lib/ibismuh/catalog/contracts";
 import { builtinCatalogManifest } from "../src/lib/ibismuh/catalog/manifest";
+import { packsForRow, SUBJECT_PACK_IDS, SUBJECT_PACKS } from "../src/lib/ibismuh/catalog/subject-packs";
+import { searchCatalog } from "../src/lib/ibismuh/catalog/search";
 import { ASSETS } from "../src/lib/ibismuh/whiteboard/assets";
 import { WB_COMPOUNDS } from "../src/lib/ibismuh/whiteboard/compounds";
 import {
@@ -445,6 +447,66 @@ await test("every keyword pick's regex matches at least its own concept words", 
     ok(pick !== undefined, `pick for ${s.assetId} exists`);
     ok(pick !== undefined && pick.re.test(s.cue), `"${s.cue}" fires ${s.assetId}`);
   }
+});
+
+// --- 5. PHASE 5 — THE SUBJECT PACKS (the coverage-pack dimension gets its
+//        data; the provenance QA pins ride along) -------------------------------
+
+suiteStart("subject packs — the curated coverage dimension");
+
+await test("every row's subjectPacks name packs from the CLOSED registry", () => {
+  for (const row of manifest.assets) {
+    for (const packId of row.subjectPacks) {
+      ok(SUBJECT_PACK_IDS.includes(packId as (typeof SUBJECT_PACK_IDS)[number]), `${row.lane}:${row.id} pack "${packId}" is registry-born`);
+    }
+  }
+});
+
+await test("every pack in the registry actually covers rows — no dead packs", () => {
+  for (const packId of SUBJECT_PACK_IDS) {
+    const rows = manifest.assets.filter((a) => a.subjectPacks.includes(packId));
+    ok(rows.length >= 10, `pack "${packId}" covers ${rows.length} rows (floor 10)`);
+  }
+});
+
+await test("the derivation is honest: rows carry exactly what the registry rule computes", () => {
+  for (const row of manifest.assets) {
+    const expected = packsForRow({ category: row.category, concepts: row.concepts });
+    ok(
+      JSON.stringify(expected) === JSON.stringify(row.subjectPacks),
+      `${row.lane}:${row.id} packs derive mechanically (${JSON.stringify(row.subjectPacks)})`,
+    );
+  }
+});
+
+await test("the search engine's subjectPack filter returns exactly the derived rows", () => {
+  for (const packId of SUBJECT_PACK_IDS) {
+    const hits = searchCatalog(manifest, { subjectPack: packId, limit: 500 });
+    const derived = manifest.assets.filter((a) => a.subjectPacks.includes(packId));
+    ok(hits.length === derived.length, `pack "${packId}": filter ${hits.length} == derived ${derived.length}`);
+    const hitIds = new Set(hits.map((h) => h.row.id));
+    ok(derived.every((r) => hitIds.has(r.id)), `pack "${packId}": no divergent members`);
+  }
+});
+
+await test("pack membership is deterministic across rebuilds (the fingerprint keeps covering it)", () => {
+  const again = builtinCatalogManifest();
+  for (const row of again.assets) {
+    const first = manifest.assets.find((a) => a.lane === row.lane && a.id === row.id);
+    ok(first !== undefined && JSON.stringify(first.subjectPacks) === JSON.stringify(row.subjectPacks), `${row.lane}:${row.id} packs rebuild-identical`);
+  }
+  ok(SUBJECT_PACKS.length === SUBJECT_PACK_IDS.length, "the registry declares exactly the vocabulary");
+});
+
+await test("provenance QA — the upload lane's provenance contract stays honest (the catalog mirrors it)", () => {
+  // The builtin manifest's rows are all repo-born art: provenance is
+  // declared on EVERY row and license approval is unconditional (the
+  // completeness law pins the fields; this pins the QA posture: no row
+  // is anonymous).
+  const anonymous = manifest.assets.filter((a) => a.provenance !== "hand-authored" && a.provenance !== "traced");
+  ok(anonymous.length === 0, `no anonymous rows (${anonymous.length} found)`);
+  const unapproved = manifest.assets.filter((a) => a.license.approved !== true);
+  ok(unapproved.length === 0, `no unlicensed rows (${unapproved.length} found)`);
 });
 
 // --- report ------------------------------------------------------------------------

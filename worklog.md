@@ -8151,3 +8151,17 @@ Work Log:
 
 Stage Summary:
 - Deliverable: group transforms are canonical and compose; recompose preserves overrides; receipts are group-keyed; the vocabulary is nine. Receipts: tsc 0; lint 0; compound battery 46/0; unit battery 1078/0 (post schema-sync rerun).
+
+---
+Task ID: MasterPlan-Phase5
+Agent: main (Z.ai)
+Task: Master plan Phase 5 — the library coverage packs (the subjectPacks dimension gets its data) and the provenance QA pins.
+
+Work Log:
+- THE REGISTRY: src/lib/ibismuh/catalog/subject-packs.ts — a closed vocabulary of NINE subject packs (agriculture, education, business-finance, health, technology, nature-weather, travel-food, sports-music, everyday), each with a declared membership rule over the row's own metadata (category exact OR any concept exact — so compounds ride domain packs through their declared tags, e.g. smart-farm-system joins agriculture).
+- THE DERIVATION: manifest.ts stamps subjectPacks mechanically via packsForRow on all three row builders (whiteboard, graphics icons, compounds) — rows never hand-author packs, so the manifest stays deterministic and the tamper fingerprint keeps covering the dimension.
+- COVERAGE RECEIPT (census on the builtin manifest, 349 rows): agriculture 23, education 27, business-finance 36, health 19, technology 44, nature-weather 37, travel-food 34, sports-music 15, everyday 67; 84 rows deliberately unpacked (the UI glyph families: status/tools/process/buildings — curated subsets, not a total partition).
+- THE LAWS (test-catalog battery, +6): closed vocabulary (no invented pack ids), no dead packs (floor 10 — measured floor 15), derivation honesty (rows carry exactly what the rule computes), search-filter equality (the subjectPack filter returns exactly the derived rows, no divergent members), rebuild determinism, provenance QA posture (no anonymous rows, no unlicensed rows).
+
+Stage Summary:
+- Deliverable: the pack dimension is real data with laws, not machinery. Receipts: catalog battery 31/0; tsc 0; lint 0.
